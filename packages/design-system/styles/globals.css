@@ -1,0 +1,377 @@
+/* Findable: 폰트 imports — @import는 모든 규칙보다 먼저 와야 함 */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=Instrument+Serif:ital@0;1&family=Noto+Serif+KR:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+@source "../**/*.{ts,tsx}";
+
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Findable v3 — Linear DESIGN.md + Resend Serif 시그니처 (D-039, 2026-05-05) */
+:root {
+  /* Linear 정확 컬러 (DESIGN.md 추출) */
+  --findable-canvas:           #010102;   /* Linear 진짜 검정 + 푸른기 */
+  --findable-surface-1:        #0f1011;   /* 카드·feature·pricing */
+  --findable-surface-2:        #141516;   /* featured tier·hover */
+  --findable-surface-3:        #18191a;   /* sub-nav·dropdown */
+  --findable-surface-4:        #191a1b;   /* 최상위 lift */
+
+  /* Linear ink 4단계 */
+  --findable-ink:              #f7f8f8;   /* 본문·헤드라인 */
+  --findable-ink-muted:        #d0d6e0;   /* 2차 텍스트 */
+  --findable-ink-subtle:       #8a8f98;   /* 3차 (subtle nav) */
+  --findable-ink-tertiary:     #62666d;   /* 4차 (disabled) */
+
+  /* Linear hairline 3단계 */
+  --findable-hairline:           #23252a;
+  --findable-hairline-strong:    #34343a;
+  --findable-hairline-tertiary:  #3e3e44;
+
+  /* D2SF 덱 시그니처 오렌지 (단일 액센트) — D-062 (2026-05-12) */
+  --findable-primary:        #ff7a4d;   /* 덱 --accent */
+  --findable-primary-hover:  #ff9870;   /* 덱 --accent-2 */
+  --findable-primary-focus:  #ff7a4d;
+  --findable-on-primary:     #ffffff;
+
+  /* Inverse (라이트 영역, 거의 안 씀) */
+  --findable-inverse-canvas: #ffffff;
+  --findable-inverse-ink:    #000000;
+
+  /* Findable 한국 변형 (작은 디테일만) */
+  --findable-dancheong:      oklch(0.58 0.110 195);
+  --findable-success:        #27a644;
+
+  /* 글로우 (atmospheric, 선택적) — purple 변수명 유지하되 값은 덱 오렌지 톤 */
+  --findable-glow-blue:      rgba(0, 117, 255, 0.18);
+  --findable-glow-purple:    rgba(255, 122, 77, 0.16);
+
+  /* Adaline 시네마틱 ease */
+  --findable-ease-cinema:    cubic-bezier(0.16, 1, 0.3, 1);
+  --findable-ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --findable-ease-out-soft:  cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* 폰트 패밀리 단축 변수 */
+:root {
+  --findable-font-display: "Fraunces", "Noto Serif KR", "Pretendard Variable", Georgia, serif;
+  --findable-font-display-kr: "Noto Serif KR", "Pretendard Variable", Georgia, serif;
+  --findable-font-sans: "Pretendard Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --findable-font-mono: "GeistMono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* D2SF 덱 워드마크 — "Findable." 로고 전용 (D-062) */
+  --findable-font-wordmark: "Instrument Serif", "Noto Serif KR", Georgia, serif;
+}
+
+/* Findable Hero 모션 keyframes */
+@keyframes findable-fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes findable-fade-up-sm {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes findable-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes findable-scale-in {
+  from { opacity: 0; transform: scale(1.04); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes findable-glow-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.8; }
+}
+
+/* Findable 버튼 inner highlight (Linear 시그니처, D-040) */
+.findable-btn-primary {
+  position: relative;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 12px -4px rgba(0, 0, 0, 0.3);
+}
+
+.findable-btn-primary:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 6px 18px -4px rgba(255, 122, 77, 0.35);
+}
+
+/* Sticky 헤더 backdrop-blur 토글 — JS scroll 감지 */
+.findable-header-scrolled {
+  background-color: rgba(1, 1, 2, 0.92);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Findable brand 그라디언트 프리셋 (research 15) */
+.bg-grad-brand {
+  background-image: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+}
+.text-grad-brand {
+  background: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.bg-grad-mesh-light {
+  background:
+    radial-gradient(at 20% 0%, oklch(0.66 0.18 36 / 0.08), transparent 50%),
+    radial-gradient(at 80% 0%, oklch(0.74 0.16 47 / 0.06), transparent 50%),
+    radial-gradient(at 50% 100%, oklch(0.80 0.13 68 / 0.04), transparent 60%);
+}
+.dark .bg-grad-mesh-dark,
+.bg-grad-mesh-dark {
+  background:
+    radial-gradient(at 20% 0%, oklch(0.68 0.18 36 / 0.16), transparent 50%),
+    radial-gradient(at 80% 0%, oklch(0.74 0.16 47 / 0.12), transparent 50%),
+    radial-gradient(at 50% 100%, oklch(0.82 0.13 68 / 0.09), transparent 60%);
+}
+@keyframes findable-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.findable-mask-l-r {
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --success: oklch(50.8% 0.118 165.612);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+
+  --font-weight-bold: 700;
+
+  /* Findable brand — D2SF 덱 오렌지 그라디언트 패밀리 (D-062, 2026-05-12) */
+  --brand-1: oklch(0.65 0.18 36);   /* 딥 오렌지 (≈ #e4622d) */
+  --brand-2: oklch(0.72 0.16 47);   /* 메인 오렌지 (≈ #ff7a4d 덱 --accent) */
+  --brand-3: oklch(0.80 0.13 68);   /* 웜 앰버 (≈ #ff9870 덱 --accent-2 톤) */
+  --signal-good: oklch(0.72 0.18 155);
+  --signal-warn: oklch(0.78 0.17 75);
+  --signal-bad: oklch(0.65 0.24 25);
+  --grid-line: oklch(0.92 0.005 280 / 0.5);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --success: oklch(50.8% 0.118 165.612);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.439 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+
+  /* Findable brand — dark mode (D2SF 덱 오렌지) */
+  --brand-1: oklch(0.68 0.18 36);
+  --brand-2: oklch(0.74 0.16 47);
+  --brand-3: oklch(0.82 0.13 68);
+  --signal-good: oklch(0.78 0.20 155);
+  --signal-warn: oklch(0.82 0.18 75);
+  --signal-bad: oklch(0.72 0.25 25);
+  --grid-line: oklch(1 0 0 / 0.06);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans), "Pretendard Variable", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* Findable brand 토큰 노출 */
+  --color-brand-1: var(--brand-1);
+  --color-brand-2: var(--brand-2);
+  --color-brand-3: var(--brand-3);
+  --color-signal-good: var(--signal-good);
+  --color-signal-warn: var(--signal-warn);
+  --color-signal-bad: var(--signal-bad);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-success: var(--success);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
+/* This layer is added by shadcn/ui */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* This layer is by next-forge */
+@layer base {
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    @apply border-border;
+  }
+  * {
+    @apply min-w-0;
+  }
+  html {
+    text-rendering: optimizelegibility;
+  }
+  body {
+    @apply min-h-[100dvh];
+  }
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-muted-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+}
+
+/* Typography plugin */
+@utility prose {
+  --tw-prose-body: var(--color-foreground);
+  --tw-prose-headings: var(--color-foreground);
+  --tw-prose-lead: var(--color-muted-foreground);
+  --tw-prose-links: var(--color-primary);
+  --tw-prose-bold: var(--color-foreground);
+  --tw-prose-counters: var(--color-foreground);
+  --tw-prose-bullets: var(--color-muted-foreground);
+  --tw-prose-hr: var(--color-muted-foreground);
+  --tw-prose-quotes: var(--color-muted-foreground);
+  --tw-prose-quote-borders: var(--color-border);
+  --tw-prose-captions: var(--color-muted-foreground);
+  --tw-prose-code: var(--color-foreground);
+  --tw-prose-pre-code: var(--color-foreground);
+  --tw-prose-pre-bg: var(--color-background);
+  --tw-prose-th-borders: var(--color-border);
+  --tw-prose-td-borders: var(--color-border);
+  --tw-prose-invert-body: var(--color-foreground);
+  --tw-prose-invert-headings: var(--color-foreground);
+  --tw-prose-invert-lead: var(--color-muted-foreground);
+  --tw-prose-invert-links: var(--color-primary);
+  --tw-prose-invert-bold: var(--color-foreground);
+  --tw-prose-invert-counters: var(--color-foreground);
+  --tw-prose-invert-bullets: var(--color-foreground);
+  --tw-prose-invert-hr: var(--color-muted-foreground);
+  --tw-prose-invert-quotes: var(--color-muted-foreground);
+  --tw-prose-invert-quote-borders: var(--color-border);
+  --tw-prose-invert-captions: var(--color-muted-foreground);
+  --tw-prose-invert-code: var(--color-foreground);
+  --tw-prose-invert-pre-code: var(--color-foreground);
+  --tw-prose-invert-pre-bg: var(--color-background);
+  --tw-prose-invert-th-borders: var(--color-border);
+  --tw-prose-invert-td-borders: var(--color-border);
+}

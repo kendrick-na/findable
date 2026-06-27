@@ -1,0 +1,191 @@
+{
+  "web": {
+    "global": {
+      "primaryCta": "전문가 상담 예약",
+      "secondaryCta": "무료 진단 받기"
+    },
+    "header": {
+      "home": "홈",
+      "product": {
+        "title": "제품",
+        "description": "한국어와 영어 AI 답변에서 우리 브랜드를 추적합니다.",
+        "pricing": "가격"
+      },
+      "blog": "블로그",
+      "docs": "문서",
+      "contact": "문의",
+      "signIn": "로그인",
+      "signUp": "시작하기"
+    },
+    "home": {
+      "meta": {
+        "title": "AI는 우리 브랜드를 추천하고 있나요?",
+        "description": "ChatGPT · HyperCLOVA · Perplexity · 네이버 · Claude · 다음 · Gemini — 한국어·영어 7개 AI 답변에서 우리 브랜드의 위치를 추적합니다."
+      },
+      "hero": {
+        "announcement": "최신 GEO 리서치 보기",
+        "primaryCta": "무료 진단 받기 (3분)",
+        "secondaryCta": "전문가 상담 예약"
+      },
+      "cases": {
+        "title": "글로벌 K-브랜드와 외국 브랜드 한국 마케팅팀이 선택한 플랫폼"
+      },
+      "features": {
+        "title": "한국 최초 Agentic GEO Platform",
+        "description": "4명의 자율 에이전트가 한국어·영어 7개 AI 엔진에서 우리 브랜드의 가시성을 측정하고 최적화합니다.",
+        "items": [
+          {
+            "title": "7개 엔진 동시 추적",
+            "description": "ChatGPT · Claude · Perplexity · Gemini + HyperCLOVA X · 네이버 · 다음을 한 화면에서. 한국 AI 엔진을 모두 커버하는 유일한 플랫폼입니다."
+          },
+          {
+            "title": "Korean Entity Grounding",
+            "description": "한글·영문·혼용 표기를 모두 통합 추적합니다. K-뷰티·K-패션·외국 브랜드 한국 마케팅팀을 위해 설계되었습니다."
+          },
+          {
+            "title": "무료 도메인 진단",
+            "description": "도메인을 입력하면 3분 안에 1페이지 PDF 리포트를 받습니다. Share of Voice, 경쟁사 순위, Top 3 개선 추천을 한 장에 담았습니다."
+          },
+          {
+            "title": "4명의 자율 에이전트",
+            "description": "민지(한국 GEO 분석가) · Alex(US 벤치마크) · 수진(인용 출처 분석) · 준호(액션 추천) — AI 검색 시대의 마케팅팀입니다."
+          }
+        ]
+      },
+      "stats": {
+        "title": "검색은 SEO에서 GEO로 이미 전환 중입니다",
+        "description": "AI 추천 트래픽은 2025년 전년 대비 357% 성장했습니다. Profound는 2026년 2월 첫 GEO 유니콘($1B)이 되었습니다. 글로벌 GEO 4개사 중 한국 AI 엔진을 커버하는 곳은 0곳입니다.",
+        "items": [
+          {
+            "title": "추적 AI 엔진",
+            "metric": "7",
+            "delta": "0",
+            "type": "unit"
+          },
+          {
+            "title": "한국 엔진 커버리지",
+            "metric": "3",
+            "delta": "0",
+            "type": "unit"
+          },
+          {
+            "title": "GEO 시장 (2034)",
+            "metric": "17020000000",
+            "delta": "45",
+            "type": "currency"
+          },
+          {
+            "title": "AI 추천 트래픽 성장 (2025)",
+            "metric": "357",
+            "delta": "357",
+            "type": "unit"
+          }
+        ]
+      },
+      "testimonials": {
+        "title": "AI에 의해 발견되는 브랜드, AI에 의해 잊혀지는 브랜드.",
+        "items": [
+          {
+            "title": "K-뷰티 글로벌 진출",
+            "description": "ChatGPT가 우리 브랜드와 조선미녀를 영어권에서 어떻게 다르게 언급하는지 처음으로 봤습니다. 한국어·영어 좌우 비교 뷰가 정확히 필요했던 기능입니다.",
+            "author": {
+              "name": "K-뷰티 D2C 브랜드",
+              "image": "https://github.com/haydenbleasel.png"
+            }
+          },
+          {
+            "title": "외국 브랜드 한국 진출",
+            "description": "본사가 한국어 AI 검색 가시성 KPI를 요구했지만, 글로벌 GEO 도구 중 HyperCLOVA·네이버를 커버하는 곳이 없었습니다. Findable이 유일한 선택지였어요.",
+            "author": {
+              "name": "글로벌 브랜드 한국 마케팅팀",
+              "image": "https://github.com/leerob.png"
+            }
+          },
+          {
+            "title": "Profound 가격의 1/5",
+            "description": "Profound $399, Athena $295를 써봤지만, 한국 엔진은 어디도 안 됐습니다. Findable Starter ₩99K로 한국 엔진까지 다 커버합니다.",
+            "author": {
+              "name": "한국 내수 D2C 마케터",
+              "image": "https://github.com/shadcn.png"
+            }
+          },
+          {
+            "title": "측정만 하는 게 아니라 행동까지",
+            "description": "4 에이전트 크루는 단순 측정에 그치지 않습니다. 준호 에이전트가 Princeton GEO 알고리즘 기반으로 콘텐츠 개선안을 제안해줍니다. 보기만 하지 않고 실행합니다.",
+            "author": {
+              "name": "K-패션 마케팅 디렉터",
+              "image": "https://github.com/pontusab.png"
+            }
+          }
+        ]
+      },
+      "faq": {
+        "title": "GEO와 Findable에 대해 자주 묻는 질문",
+        "description": "Generative Engine Optimization은 SEO를 잇는 새로운 표준입니다. AI 답변 속 브랜드 가시성에 대해 알아야 할 핵심을 정리했습니다.",
+        "cta": "더 궁금하신가요? 직접 문의하세요",
+        "items": [
+          {
+            "question": "GEO(Generative Engine Optimization)란 무엇인가요?",
+            "answer": "GEO는 AI 답변 속 브랜드 가시성을 최적화하는 기술입니다. ChatGPT · Claude · Perplexity · Gemini와 HyperCLOVA 같은 한국 엔진에서 우리 브랜드가 어떻게 노출되는지가 핵심 지표가 됩니다. Gartner는 2026년까지 전통 검색이 25% 감소한다고 전망했고, GEO가 새로운 SEO입니다."
+          },
+          {
+            "question": "Findable이 추적하는 AI 엔진은 무엇인가요?",
+            "answer": "총 7개입니다. 글로벌 4개(ChatGPT · Claude · Perplexity · Gemini), 한국 3개(HyperCLOVA X · 네이버 · 다음). 한국 AI 엔진을 모두 커버하는 유일한 플랫폼입니다."
+          },
+          {
+            "question": "Profound·Peec와 어떤 차이가 있나요?",
+            "answer": "Profound · Peec · AthenaHQ · HubSpot AEO 모두 한국 AI 엔진을 추적하지 못합니다. Findable은 한글·영문·혼용 표기를 통합 추적하는 Korean Entity Grounding 기능도 제공합니다."
+          },
+          {
+            "question": "어떤 브랜드에 적합한가요?",
+            "answer": "글로벌 진출 K-뷰티·K-패션, 외국 브랜드 한국 마케팅팀(Apple·LV·Tesla Korea 등), 무신사·29CM 입점 한국 D2C, 한국 B2B SaaS — AI에 의해 발견되어야 하는 모든 브랜드를 위한 플랫폼입니다."
+          },
+          {
+            "question": "가격은 어떻게 되나요?",
+            "answer": "무료 진단(1회, ₩0), Starter 월 ₩99K, Growth 월 ₩390K, Scale 월 ₩990K, Enterprise 연 ₩30M부터. Toss(KRW), PayPal Business(USD), Enterprise는 계좌이체로 결제하실 수 있습니다. (VAT 별도)"
+          }
+        ]
+      },
+      "cta": {
+        "title": "경쟁사 말고 우리 브랜드를, AI가 먼저 답하게.",
+        "description": "3분 무료 진단으로 7개 AI 엔진에서 우리 브랜드의 위치를 확인하세요. 누가 우리를 이기고 있는지, 이번 주에 고쳐야 할 Top 3는 무엇인지 한 번에 확인합니다."
+      }
+    },
+    "blog": {
+      "meta": {
+        "title": "Findable 블로그",
+        "description": "GEO 리서치, K-브랜드 AI 가시성 인사이트, 한국 AI 엔진 심층 분석."
+      }
+    },
+    "contact": {
+      "meta": {
+        "title": "Findable 전문가와 상담하세요",
+        "description": "30분 무료 상담을 예약하세요. 우리 브랜드의 AI 가시성, 경쟁사 포지셔닝, Share of Voice를 빠르게 개선하는 방법을 함께 정리해드립니다."
+      },
+      "hero": {
+        "benefits": [
+          {
+            "title": "실시간 브랜드 진단",
+            "description": "도메인을 7개 엔진에서 실시간으로 돌려가며 결과를 한 장씩 설명합니다. (한국어·영어 동시)"
+          },
+          {
+            "title": "경쟁사 벤치마크",
+            "description": "경쟁사 3~5개를 가져오시면, 우리가 어디에 서 있고 그들이 무엇을 잘하고 있는지 보여드립니다."
+          },
+          {
+            "title": "GEO 액션 플랜",
+            "description": "Princeton KDD'24 GEO 알고리즘과 4 에이전트 추천을 바탕으로 한 30일 실행 계획을 가져가세요."
+          }
+        ],
+        "form": {
+          "title": "미팅 예약",
+          "date": "날짜",
+          "firstName": "이름",
+          "lastName": "성",
+          "resume": "브리프 업로드 (선택)",
+          "cta": "미팅 예약하기"
+        }
+      }
+    }
+  }
+}

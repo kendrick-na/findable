@@ -1,0 +1,191 @@
+{
+  "web": {
+    "global": {
+      "primaryCta": "Talk to an expert",
+      "secondaryCta": "Get a free audit"
+    },
+    "header": {
+      "home": "Home",
+      "product": {
+        "title": "Product",
+        "description": "Track your brand across Korean and English AI answers.",
+        "pricing": "Pricing"
+      },
+      "blog": "Blog",
+      "docs": "Docs",
+      "contact": "Contact",
+      "signIn": "Sign in",
+      "signUp": "Get started"
+    },
+    "home": {
+      "meta": {
+        "title": "Is AI recommending your brand?",
+        "description": "ChatGPT, HyperCLOVA, Perplexity, Naver, Claude, Daum, Gemini — Findable tracks where your brand stands in 7 Korean and English AI answers."
+      },
+      "hero": {
+        "announcement": "Read our latest GEO research",
+        "primaryCta": "Get a free audit (3 min)",
+        "secondaryCta": "Talk to an expert"
+      },
+      "cases": {
+        "title": "Trusted by global K-brands and Korean marketing teams"
+      },
+      "features": {
+        "title": "Korea's first Agentic GEO Platform",
+        "description": "Four autonomous agents measure and optimize your brand visibility across 7 AI engines — in Korean and English.",
+        "items": [
+          {
+            "title": "7-Engine Multi-Market Tracker",
+            "description": "ChatGPT, Claude, Perplexity, Gemini plus HyperCLOVA X, Naver, and Daum — all in one dashboard. The only platform with full Korean AI engine coverage."
+          },
+          {
+            "title": "Korean Entity Grounding",
+            "description": "Track every variant of your brand name — Korean, English, and mixed. Built for K-beauty, K-fashion, and Korean marketing teams of global brands."
+          },
+          {
+            "title": "Free Domain Audit",
+            "description": "Drop in your domain. In 3 minutes, get a 1-page PDF with your Share of Voice, competitor ranking, and top 3 recommendations."
+          },
+          {
+            "title": "4 Autonomous Agents",
+            "description": "Minji (Korean GEO), Alex (US benchmark), Sujin (Citation analysis), Junho (Action recommendations) — your AI marketing team for AI search."
+          }
+        ]
+      },
+      "stats": {
+        "title": "The shift from SEO to GEO is here",
+        "description": "AI referral traffic grew 357% YoY in 2025. Profound became the first GEO unicorn at $1B in February 2026. Korean AI engines are still uncovered by every global competitor — until now.",
+        "items": [
+          {
+            "title": "AI engines tracked",
+            "metric": "7",
+            "delta": "0",
+            "type": "unit"
+          },
+          {
+            "title": "Korean engines covered",
+            "metric": "3",
+            "delta": "0",
+            "type": "unit"
+          },
+          {
+            "title": "GEO market by 2034",
+            "metric": "17020000000",
+            "delta": "45",
+            "type": "currency"
+          },
+          {
+            "title": "AI referral growth (2025)",
+            "metric": "357",
+            "delta": "357",
+            "type": "unit"
+          }
+        ]
+      },
+      "testimonials": {
+        "title": "Brands AI finds. Brands AI forgets.",
+        "items": [
+          {
+            "title": "K-beauty global expansion",
+            "description": "We finally see how ChatGPT mentions our brand vs. Beauty of Joseon in English markets. The Korean and English side-by-side view is exactly what we needed.",
+            "author": {
+              "name": "K-beauty D2C Brand",
+              "image": "https://github.com/haydenbleasel.png"
+            }
+          },
+          {
+            "title": "Foreign brand in Korea",
+            "description": "Our HQ wanted KPIs for Korean AI search visibility. No global GEO tool covers HyperCLOVA or Naver. Findable was the only option.",
+            "author": {
+              "name": "Global Brand Korea Marketing Team",
+              "image": "https://github.com/leerob.png"
+            }
+          },
+          {
+            "title": "1/5 the price of Profound",
+            "description": "We tried Profound at $399 and Athena at $295. Findable Starter at ₩99K does what we need for Korean engines that the others don't even support.",
+            "author": {
+              "name": "Korean D2C Marketer",
+              "image": "https://github.com/shadcn.png"
+            }
+          },
+          {
+            "title": "Agentic, not just monitoring",
+            "description": "The 4-agent crew doesn't just measure — Junho actually suggests content changes based on Princeton's GEO algorithm. We act, not just watch.",
+            "author": {
+              "name": "K-fashion Marketing Director",
+              "image": "https://github.com/pontusab.png"
+            }
+          }
+        ]
+      },
+      "faq": {
+        "title": "Common Questions About GEO and Findable",
+        "description": "Generative Engine Optimization is the new SEO. Here's what you need to know about tracking your brand in AI answers.",
+        "cta": "Have more questions? Talk to us",
+        "items": [
+          {
+            "question": "What is GEO (Generative Engine Optimization)?",
+            "answer": "GEO is the practice of optimizing brand visibility inside AI answers — ChatGPT, Claude, Perplexity, Gemini, and Korean engines like HyperCLOVA. As AI search replaces traditional search (Gartner: -25% by 2026), GEO becomes the new SEO."
+          },
+          {
+            "question": "Which AI engines does Findable track?",
+            "answer": "Seven engines: ChatGPT, Claude, Perplexity, Gemini (English), and HyperCLOVA X, Naver, Daum (Korean). Findable is the only platform with full Korean engine coverage."
+          },
+          {
+            "question": "How is Findable different from Profound or Peec?",
+            "answer": "Profound, Peec, AthenaHQ, HubSpot AEO — none of them track Korean AI engines. Findable also offers Korean Entity Grounding to track all variants of your brand name (Korean, English, mixed)."
+          },
+          {
+            "question": "Who is Findable for?",
+            "answer": "K-beauty and K-fashion brands going global, Korean marketing teams of foreign brands (Apple, LV, Tesla Korea), Korean D2C brands on Musinsa or 29CM, and Korean B2B SaaS — anyone who needs to be found by AI."
+          },
+          {
+            "question": "How does pricing work?",
+            "answer": "Free Audit (1 time, ₩0), Starter ₩99K/month, Growth ₩390K, Scale ₩990K, Enterprise from ₩30M/year. Pay with Toss (KRW), PayPal Business (USD), or Wire Transfer for Enterprise."
+          }
+        ]
+      },
+      "cta": {
+        "title": "Make AI answer with you. Not your competitor.",
+        "description": "Get a free 3-minute audit of your brand across 7 AI engines. See where you rank, who's beating you, and the top 3 things to fix this week."
+      }
+    },
+    "blog": {
+      "meta": {
+        "title": "Findable Blog",
+        "description": "GEO research, K-brand AI visibility insights, and Korean AI engine deep-dives."
+      }
+    },
+    "contact": {
+      "meta": {
+        "title": "Talk to a Findable expert",
+        "description": "Schedule a 30-minute consultation. We'll walk you through your brand's AI visibility, your competitors' positioning, and the fastest path to improving your Share of Voice."
+      },
+      "hero": {
+        "benefits": [
+          {
+            "title": "Live brand audit walk-through",
+            "description": "We run your domain through all 7 engines live and explain every finding — Korean and English."
+          },
+          {
+            "title": "Competitor benchmark",
+            "description": "Bring 3-5 competitors. We show you exactly where you stand and what they're doing right."
+          },
+          {
+            "title": "GEO action plan",
+            "description": "Leave with a concrete 30-day plan based on Princeton's KDD'24 GEO algorithm and our 4-agent recommendations."
+          }
+        ],
+        "form": {
+          "title": "Book a meeting",
+          "date": "Date",
+          "firstName": "First name",
+          "lastName": "Last name",
+          "resume": "Upload brief (optional)",
+          "cta": "Book the meeting"
+        }
+      }
+    }
+  }
+}

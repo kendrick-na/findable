@@ -1,0 +1,321 @@
+/* Findable: Pretendard 한국어 폰트 — research 15. @import는 모든 규칙보다 먼저 와야 함. */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
+@import "tailwindcss";
+@import "tw-animate-css";
+@source "../**/*.{ts,tsx}";
+
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Findable D-033/D-037 자연 일러스트 헤지 컬러 토큰 (2026-05-04 검증) */
+:root {
+  /* 새벽 안개 — Light base */
+  --findable-mist-50: oklch(0.982 0.008 85);
+  --findable-mist-100: oklch(0.955 0.012 80);
+  /* 일출 핑크/피치 — sunrise */
+  --findable-sunrise-300: oklch(0.85 0.075 35);
+  --findable-sunrise-500: oklch(0.72 0.135 28);
+  /* 단청 청록 */
+  --findable-dancheong-500: oklch(0.58 0.110 195);
+  --findable-dancheong-700: oklch(0.42 0.090 200);
+  /* 한지 금박 */
+  --findable-gold-500: oklch(0.78 0.135 85);
+  /* 먹 — dark hedge */
+  --findable-sumi-900: oklch(0.185 0.015 250);
+  --findable-sumi-950: oklch(0.110 0.012 255);
+  /* Adaline 시네마틱 ease (D-037 검증) */
+  --findable-ease-cinema: cubic-bezier(0.16, 1, 0.3, 1);
+  --findable-ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --findable-ease-out-soft: cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* 시간대 동적 톤 — GIC 카피 (D-037) */
+[data-tone="dawn"]  { --findable-hero-bg: var(--findable-sunrise-500); --findable-hero-fg: var(--findable-sumi-900); }
+[data-tone="day"]   { --findable-hero-bg: var(--findable-mist-50);     --findable-hero-fg: var(--findable-sumi-900); }
+[data-tone="dusk"]  { --findable-hero-bg: var(--findable-gold-500);    --findable-hero-fg: var(--findable-sumi-900); }
+[data-tone="night"] { --findable-hero-bg: var(--findable-sumi-950);    --findable-hero-fg: var(--findable-mist-50); }
+
+/* Findable Hero 모션 keyframes (D-037) */
+@keyframes findable-fade-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes findable-fade-up-sm {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes findable-scale-in {
+  from { opacity: 0; transform: scale(1.05); }
+  to   { opacity: 0.85; transform: scale(1); }
+}
+@keyframes findable-pop-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Findable brand 그라디언트 프리셋 (research 15) */
+.bg-grad-brand {
+  background-image: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+}
+.text-grad-brand {
+  background: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.bg-grad-mesh-light {
+  background:
+    radial-gradient(at 20% 0%, oklch(0.55 0.22 280 / 0.08), transparent 50%),
+    radial-gradient(at 80% 0%, oklch(0.62 0.21 305 / 0.06), transparent 50%),
+    radial-gradient(at 50% 100%, oklch(0.70 0.18 195 / 0.04), transparent 60%);
+}
+.dark .bg-grad-mesh-dark,
+.bg-grad-mesh-dark {
+  background:
+    radial-gradient(at 20% 0%, oklch(0.62 0.22 280 / 0.18), transparent 50%),
+    radial-gradient(at 80% 0%, oklch(0.70 0.21 305 / 0.14), transparent 50%),
+    radial-gradient(at 50% 100%, oklch(0.78 0.18 195 / 0.10), transparent 60%);
+}
+@keyframes findable-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.findable-mask-l-r {
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --success: oklch(50.8% 0.118 165.612);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+
+  --font-weight-bold: 700;
+
+  /* Findable brand (research 15) */
+  --brand-1: oklch(0.55 0.22 280);
+  --brand-2: oklch(0.62 0.21 305);
+  --brand-3: oklch(0.70 0.18 195);
+  --signal-good: oklch(0.72 0.18 155);
+  --signal-warn: oklch(0.78 0.17 75);
+  --signal-bad: oklch(0.65 0.24 25);
+  --grid-line: oklch(0.92 0.005 280 / 0.5);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --success: oklch(50.8% 0.118 165.612);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.439 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+
+  /* Findable brand — dark mode */
+  --brand-1: oklch(0.62 0.22 280);
+  --brand-2: oklch(0.70 0.21 305);
+  --brand-3: oklch(0.78 0.18 195);
+  --signal-good: oklch(0.78 0.20 155);
+  --signal-warn: oklch(0.82 0.18 75);
+  --signal-bad: oklch(0.72 0.25 25);
+  --grid-line: oklch(1 0 0 / 0.06);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans), "Pretendard Variable", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* Findable brand 토큰 노출 */
+  --color-brand-1: var(--brand-1);
+  --color-brand-2: var(--brand-2);
+  --color-brand-3: var(--brand-3);
+  --color-signal-good: var(--signal-good);
+  --color-signal-warn: var(--signal-warn);
+  --color-signal-bad: var(--signal-bad);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-success: var(--success);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
+/* This layer is added by shadcn/ui */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* This layer is by next-forge */
+@layer base {
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    @apply border-border;
+  }
+  * {
+    @apply min-w-0;
+  }
+  html {
+    text-rendering: optimizelegibility;
+  }
+  body {
+    @apply min-h-[100dvh];
+  }
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-muted-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+}
+
+/* Typography plugin */
+@utility prose {
+  --tw-prose-body: var(--color-foreground);
+  --tw-prose-headings: var(--color-foreground);
+  --tw-prose-lead: var(--color-muted-foreground);
+  --tw-prose-links: var(--color-primary);
+  --tw-prose-bold: var(--color-foreground);
+  --tw-prose-counters: var(--color-foreground);
+  --tw-prose-bullets: var(--color-muted-foreground);
+  --tw-prose-hr: var(--color-muted-foreground);
+  --tw-prose-quotes: var(--color-muted-foreground);
+  --tw-prose-quote-borders: var(--color-border);
+  --tw-prose-captions: var(--color-muted-foreground);
+  --tw-prose-code: var(--color-foreground);
+  --tw-prose-pre-code: var(--color-foreground);
+  --tw-prose-pre-bg: var(--color-background);
+  --tw-prose-th-borders: var(--color-border);
+  --tw-prose-td-borders: var(--color-border);
+  --tw-prose-invert-body: var(--color-foreground);
+  --tw-prose-invert-headings: var(--color-foreground);
+  --tw-prose-invert-lead: var(--color-muted-foreground);
+  --tw-prose-invert-links: var(--color-primary);
+  --tw-prose-invert-bold: var(--color-foreground);
+  --tw-prose-invert-counters: var(--color-foreground);
+  --tw-prose-invert-bullets: var(--color-foreground);
+  --tw-prose-invert-hr: var(--color-muted-foreground);
+  --tw-prose-invert-quotes: var(--color-muted-foreground);
+  --tw-prose-invert-quote-borders: var(--color-border);
+  --tw-prose-invert-captions: var(--color-muted-foreground);
+  --tw-prose-invert-code: var(--color-foreground);
+  --tw-prose-invert-pre-code: var(--color-foreground);
+  --tw-prose-invert-pre-bg: var(--color-background);
+  --tw-prose-invert-th-borders: var(--color-border);
+  --tw-prose-invert-td-borders: var(--color-border);
+}
