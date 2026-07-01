@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@t3-oss/env-nextjs": "^0.13.10",
-    "basehub": "^9.5.3",
+    "basehub": "^9.6.0",
     "react": "19.2.4",
     "zod": "^4.3.6"
   },
