@@ -9,7 +9,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.41",
     "@browserbasehq/sdk": "^2.10.0",
-    "@browserbasehq/stagehand": "^3.3.0",
+    "@browserbasehq/stagehand": "^3.6.0",
     "@mastra/core": "^1.30.0",
     "@t3-oss/env-nextjs": "^0.13.10",
     "ai": "^6.0.116",
