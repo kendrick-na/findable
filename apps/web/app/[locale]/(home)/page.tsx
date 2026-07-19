@@ -1,6 +1,8 @@
 import { getDictionary } from "@repo/internationalization";
+import { JsonLd } from "@repo/seo/json-ld";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
+import { env } from "@/env";
 import { FooterCTA } from "./components/footer-cta";
 import { Hero } from "./components/hero";
 import { LiveCounter } from "./components/live-counter";
@@ -31,12 +33,51 @@ export const generateMetadata = async ({
 // 5) Showcase — Linear 시그니처 mock 3종 (Audit Tracker · SoV Chart · Code Diff)
 // 6) FooterCTA — Linear cta-banner
 
+// 홈 구조화 데이터(JSON-LD) — GEO/AEO 도그푸딩: AI 답변 엔진이 Findable을
+// "한국 최초 Agentic GEO 플랫폼"으로 인용·이해하도록 SoftwareApplication + Organization 명시.
+// 근거: KAIST OverEdge Day06(기술 SEO·JSON-LD) → docs/_적용/실행백로그. 문구는 dictionary와 동일.
+const siteUrl = env.VERCEL_PROJECT_PRODUCTION_URL
+  ? new URL(`https://${env.VERCEL_PROJECT_PRODUCTION_URL}`).toString()
+  : "https://www.findable.co.kr";
+
 const Home = async ({ params }: HomeProps) => {
   const { locale } = await params;
   const dictionary = await getDictionary(locale);
 
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)]">
+      <JsonLd
+        code={{
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "Findable",
+          applicationCategory: "BusinessApplication",
+          applicationSubCategory:
+            "Generative Engine Optimization (GEO) Platform",
+          operatingSystem: "Web",
+          url: siteUrl,
+          description: dictionary.web.home.meta.description,
+          inLanguage: ["ko", "en"],
+          offers: {
+            "@type": "Offer",
+            price: "0",
+            priceCurrency: "KRW",
+            description: "무료 도메인 진단 (3분, 1페이지 PDF 리포트)",
+          },
+          featureList: [
+            "7개 AI 엔진 동시 추적 (ChatGPT · Claude · Perplexity · Gemini · HyperCLOVA X · 네이버 · 다음)",
+            "Korean Entity Grounding (한글·영문·혼용 표기 통합 추적)",
+            "무료 도메인 진단 및 Share of Voice 리포트",
+            "4명의 자율 에이전트 기반 GEO 측정·최적화",
+          ],
+          provider: {
+            "@type": "Organization",
+            name: "Findable",
+            url: siteUrl,
+            slogan: "한국 최초 Agentic GEO Platform",
+          },
+        }}
+      />
       <Hero dictionary={dictionary} locale={locale} />
       <LiveCounter locale={locale} />
       <ThreePillars locale={locale} />
