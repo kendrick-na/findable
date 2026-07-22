@@ -108,22 +108,47 @@ export async function runBriefingForAuditJob(
       },
     });
 
-    // 첫 프롬프트 = 카테고리형 (경쟁사 순위 측정 가능). runner.ts generateAuditPrompts와 동일 톤.
+    // 네이버 AI 브리핑은 "정보/정답형" 질의에서만 노출된다(2026-07-23 실측).
+    //   ✅ 노출: "{브랜드} 효과" · "{브랜드} 후기" · "{브랜드} 장단점"
+    //   ❌ 미노출: "{브랜드} 추천/어때" · "{카테고리} 추천" · 경쟁사 추천형
+    // 단일 질의는 미노출 위험이 있어 노출률 높은 순으로 여러 유형을 순차 시도하고
+    // 브리핑이 실제로 뜬(errorMessage 없고 응답 존재) 첫 결과를 채택한다.
+    // (Browserbase 무료 동시성 1이라 병렬 대신 순차 — 뜨면 즉시 중단해 호출 절약.)
     const language = jobBefore.language === "en" ? "en" : "ko";
-    const firstPrompt =
+    const brand = resultProcessing.brandName;
+    const candidatePrompts =
       language === "en"
-        ? `Top 5 popular brands similar to ${resultProcessing.brandName}`
-        : `${resultProcessing.brandName}와 같은 카테고리의 인기 브랜드 5가지 추천해줘`;
+        ? [`${brand} review`, `${brand} pros and cons`, `Is ${brand} good`]
+        : [`${brand} 효과`, `${brand} 후기`, `${brand} 장단점`];
 
-    const briefingResponses = await queryAllEngines(
+    let briefingResponses = await queryAllEngines(
       {
-        prompt: firstPrompt,
+        prompt: candidatePrompts[0],
         language,
-        brandName: resultProcessing.brandName,
-        brandVariants: [resultProcessing.brandName],
+        brandName: brand,
+        brandVariants: [brand],
       },
       ["naver-briefing"] as never
     );
+
+    // 첫 질의가 미노출이면 다음 후보로 재시도 (하나라도 뜨면 채택).
+    for (let i = 1; i < candidatePrompts.length; i++) {
+      const first = briefingResponses[0];
+      const shown =
+        first && !first.isStub && !first.errorMessage && first.rawResponse.length > 0;
+      if (shown) {
+        break;
+      }
+      briefingResponses = await queryAllEngines(
+        {
+          prompt: candidatePrompts[i],
+          language,
+          brandName: brand,
+          brandVariants: [brand],
+        },
+        ["naver-briefing"] as never
+      );
+    }
 
     // read-modify-write: crew 자동 실행 등으로 result가 바뀌었을 수 있어 최신 재조회.
     const jobAfter = await database.auditJob.findUnique({
