@@ -335,6 +335,10 @@ export function AuditResultView({ jobId, locale }: Props) {
     if (control.active) return;
     control.active = true;
     let consecutiveErrors = 0;
+    // 백엔드 작업이 processing에 갇혀도(크래시·타임아웃 미처리) 무한 폴링하지 않도록
+    // 경과 시간 상한을 둔다. briefing maxDuration 300s + 여유 = 7분.
+    const startedAt = Date.now();
+    const MAX_POLL_MS = 7 * 60 * 1000;
 
     async function poll() {
       try {
@@ -372,10 +376,12 @@ export function AuditResultView({ jobId, locale }: Props) {
           data.crewStatus === "queued" ||
           data.crewStatus === "processing" ||
           data.result?.briefingStatus === "processing";
-        if (isProcessing) {
+        if (isProcessing && Date.now() - startedAt < MAX_POLL_MS) {
           pollControlRef.current.timeoutId = setTimeout(poll, 4000);
         } else {
-          // 진행 중인 작업이 없으면 루프 종료 → 이후 트리거가 다시 runPoll() 가능.
+          // 진행 중 작업이 없거나 상한 초과 → 루프 종료. 이후 트리거가 다시 runPoll() 가능.
+          // (상한 초과 시 마지막 setJob 값이 processing으로 남아 카드가 "측정 중"을
+          //  유지하지만 폴링은 멈춘다. 사용자는 새로고침으로 재확인 가능.)
           pollControlRef.current.active = false;
         }
       } catch (err) {
@@ -792,7 +798,7 @@ function CompletedView({
           onTriggered={onBriefingTriggered}
         />
 
-        <NaverVsAiGap engineResponses={result.engineResponses} />
+        <NaverVsAiGap engineResponses={result.engineResponses} isKo={isKo} />
 
         <EnginesTabsSection result={result} isKo={isKo} />
 

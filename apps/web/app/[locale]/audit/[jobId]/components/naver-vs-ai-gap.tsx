@@ -28,6 +28,7 @@ interface EngineResponse {
 
 interface Props {
   engineResponses: EngineResponse[];
+  isKo: boolean;
 }
 
 const KOREAN_ENGINES = new Set(["naver", "naver-briefing", "hyperclova", "daum"]);
@@ -58,7 +59,7 @@ function calcAvgPosition(responses: EngineResponse[]) {
   return Math.round((positions.reduce((a, b) => a + b, 0) / positions.length) * 10) / 10;
 }
 
-export function NaverVsAiGap({ engineResponses }: Props) {
+export function NaverVsAiGap({ engineResponses, isKo }: Props) {
   const koreanResponses = engineResponses.filter((r) => KOREAN_ENGINES.has(r.engineId));
   const globalResponses = engineResponses.filter((r) => GLOBAL_ENGINES.has(r.engineId));
 
@@ -79,17 +80,26 @@ export function NaverVsAiGap({ engineResponses }: Props) {
   let headline = "";
   let recommendation = "";
   if (koreanLeads) {
-    headline = `네이버 채널은 ${korean.rate}%인데, 글로벌 AI는 ${global.rate}%입니다.`;
-    recommendation =
-      "한국에서는 잘 발견되지만 글로벌 AI 답변에서는 공백이 큽니다. 영문 콘텐츠·해외 인용 소스 확보가 필요합니다.";
+    headline = isKo
+      ? `네이버 채널은 ${korean.rate}%인데, 글로벌 AI는 ${global.rate}%입니다.`
+      : `Naver channels are at ${korean.rate}%, but global AI is only ${global.rate}%.`;
+    recommendation = isKo
+      ? "한국에서는 잘 발견되지만 글로벌 AI 답변에서는 공백이 큽니다. 영문 콘텐츠·해외 인용 소스 확보가 필요합니다."
+      : "You're well discovered in Korea but have a large gap in global AI answers. Securing English content and overseas citation sources is needed.";
   } else if (globalLeads) {
-    headline = `글로벌 AI는 ${global.rate}%인데, 네이버 채널은 ${korean.rate}%입니다.`;
-    recommendation =
-      "역수출 포지션은 강하지만 한국 사용자는 우리 브랜드를 못 찾습니다. 네이버 AI 브리핑·블로그 SEO 강화가 필요합니다.";
+    headline = isKo
+      ? `글로벌 AI는 ${global.rate}%인데, 네이버 채널은 ${korean.rate}%입니다.`
+      : `Global AI is at ${global.rate}%, but Naver channels are only ${korean.rate}%.`;
+    recommendation = isKo
+      ? "역수출 포지션은 강하지만 한국 사용자는 우리 브랜드를 못 찾습니다. 네이버 AI 브리핑·블로그 SEO 강화가 필요합니다."
+      : "Your global position is strong, but Korean users can't find your brand. Strengthening Naver AI Briefing and blog SEO is needed.";
   } else {
-    headline = `한국·글로벌 AI 답변 가시성이 균형을 이룹니다 (${korean.rate}% vs ${global.rate}%).`;
-    recommendation =
-      "양쪽 채널 모두 안정적으로 측정됩니다. 다음 단계는 점유율 자체를 끌어올리는 콘텐츠 전략입니다.";
+    headline = isKo
+      ? `한국·글로벌 AI 답변 가시성이 균형을 이룹니다 (${korean.rate}% vs ${global.rate}%).`
+      : `Korean and global AI visibility are balanced (${korean.rate}% vs ${global.rate}%).`;
+    recommendation = isKo
+      ? "양쪽 채널 모두 안정적으로 측정됩니다. 다음 단계는 점유율 자체를 끌어올리는 콘텐츠 전략입니다."
+      : "Both channels measure stably. The next step is a content strategy to lift share of voice itself.";
   }
 
   return (
@@ -111,10 +121,12 @@ export function NaverVsAiGap({ engineResponses }: Props) {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
           <div className="mb-3 flex items-center justify-between">
             <span className="font-mono text-[11px] text-zinc-500 uppercase tracking-[0.14em]">
-              한국 채널
+              {isKo ? "한국 채널" : "Korean channels"}
             </span>
             <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-[10px] text-emerald-400">
-              네이버 · 하이퍼클로바 · 다음
+              {isKo
+                ? "네이버 · 하이퍼클로바 · 다음"
+                : "Naver · HyperCLOVA · Daum"}
             </span>
           </div>
           <div className="flex items-end gap-2">
@@ -124,8 +136,11 @@ export function NaverVsAiGap({ engineResponses }: Props) {
             </span>
           </div>
           <div className="mt-2 text-[12px] text-zinc-500">
-            인용 {korean.mentioned} / 측정 {korean.total}
-            {koreanPos !== null && ` · 평균 ${koreanPos}위`}
+            {isKo
+              ? `인용 ${korean.mentioned} / 측정 ${korean.total}`
+              : `Cited ${korean.mentioned} / Measured ${korean.total}`}
+            {koreanPos !== null &&
+              (isKo ? ` · 평균 ${koreanPos}위` : ` · avg #${koreanPos}`)}
           </div>
         </div>
 
@@ -140,14 +155,18 @@ export function NaverVsAiGap({ engineResponses }: Props) {
                   : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
             }`}
           >
-            {koreanLeads && <TrendingDown className="h-3.5 w-3.5" />}
-            {globalLeads && <TrendingUp className="h-3.5 w-3.5" />}
+            {koreanLeads && <TrendingDown aria-hidden="true" className="h-3.5 w-3.5" />}
+            {globalLeads && <TrendingUp aria-hidden="true" className="h-3.5 w-3.5" />}
             <span>
-              {balanced ? "균형" : `${gap > 0 ? "+" : ""}${gap}%p`}
+              {balanced
+                ? isKo
+                  ? "균형"
+                  : "Balanced"
+                : `${gap > 0 ? "+" : ""}${gap}%p`}
             </span>
           </div>
-          <span className="mt-2 hidden font-mono text-[10px] text-zinc-600 uppercase tracking-[0.12em] md:block">
-            Gap
+          <span className="mt-2 font-mono text-[10px] text-zinc-600 uppercase tracking-[0.12em]">
+            {isKo ? "격차" : "Gap"}
           </span>
         </div>
 
@@ -155,7 +174,7 @@ export function NaverVsAiGap({ engineResponses }: Props) {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
           <div className="mb-3 flex items-center justify-between">
             <span className="font-mono text-[11px] text-zinc-500 uppercase tracking-[0.14em]">
-              글로벌 AI
+              {isKo ? "글로벌 AI" : "Global AI"}
             </span>
             <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 font-medium text-[10px] text-indigo-400">
               ChatGPT · Claude · Perplexity · Gemini
@@ -168,8 +187,11 @@ export function NaverVsAiGap({ engineResponses }: Props) {
             </span>
           </div>
           <div className="mt-2 text-[12px] text-zinc-500">
-            인용 {global.mentioned} / 측정 {global.total}
-            {globalPos !== null && ` · 평균 ${globalPos}위`}
+            {isKo
+              ? `인용 ${global.mentioned} / 측정 ${global.total}`
+              : `Cited ${global.mentioned} / Measured ${global.total}`}
+            {globalPos !== null &&
+              (isKo ? ` · 평균 ${globalPos}위` : ` · avg #${globalPos}`)}
           </div>
         </div>
       </div>
