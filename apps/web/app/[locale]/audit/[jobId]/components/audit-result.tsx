@@ -33,7 +33,7 @@ import {
   Zap,
 } from "lucide-react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
 
 interface Props {
@@ -322,10 +322,18 @@ export function AuditResultView({ jobId, locale }: Props) {
   const [job, setJob] = useState<JobResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const auditCapturedRef = useRef(false);
+  // 폴링 루프 제어. 완료 후 멈춘 폴링을 on-demand 트리거(브리핑 등)가 재개할 수 있게
+  // 실행 중인 타이머·취소 플래그를 ref로 들고 있는다.
+  const pollControlRef = useRef<{
+    active: boolean;
+    timeoutId: ReturnType<typeof setTimeout> | null;
+  }>({ active: false, timeoutId: null });
 
-  useEffect(() => {
-    let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const runPoll = useCallback(() => {
+    const control = pollControlRef.current;
+    // 이미 폴링 루프가 돌고 있으면 중복 기동하지 않는다.
+    if (control.active) return;
+    control.active = true;
     let consecutiveErrors = 0;
 
     async function poll() {
@@ -336,7 +344,7 @@ export function AuditResultView({ jobId, locale }: Props) {
           throw new Error(body?.error ?? `HTTP ${response.status}`);
         }
         const data = (await response.json()) as JobResponse;
-        if (cancelled) return;
+        if (!pollControlRef.current.active) return;
         consecutiveErrors = 0;
         setJob(data);
 
@@ -364,25 +372,50 @@ export function AuditResultView({ jobId, locale }: Props) {
           data.crewStatus === "queued" ||
           data.crewStatus === "processing" ||
           data.result?.briefingStatus === "processing";
-        if (isProcessing) timeoutId = setTimeout(poll, 4000);
+        if (isProcessing) {
+          pollControlRef.current.timeoutId = setTimeout(poll, 4000);
+        } else {
+          // 진행 중인 작업이 없으면 루프 종료 → 이후 트리거가 다시 runPoll() 가능.
+          pollControlRef.current.active = false;
+        }
       } catch (err) {
-        if (cancelled) return;
+        if (!pollControlRef.current.active) return;
         consecutiveErrors += 1;
         // 일시적 에러는 최대 3회까지 재시도, 4회 연속 실패 시 화면에 에러 표시
         if (consecutiveErrors >= 4) {
+          pollControlRef.current.active = false;
           setError(err instanceof Error ? err.message : String(err));
         } else {
           // exponential backoff: 4s → 8s → 16s
-          timeoutId = setTimeout(poll, 4000 * 2 ** (consecutiveErrors - 1));
+          pollControlRef.current.timeoutId = setTimeout(
+            poll,
+            4000 * 2 ** (consecutiveErrors - 1)
+          );
         }
       }
     }
     void poll();
-    return () => {
-      cancelled = true;
-      if (timeoutId) clearTimeout(timeoutId);
-    };
   }, [jobId]);
+
+  // 브리핑 트리거 성공 시: 낙관적으로 briefingStatus=processing 반영 + 폴링 재개.
+  const handleBriefingTriggered = useCallback(() => {
+    setJob((prev) =>
+      prev?.result
+        ? { ...prev, result: { ...prev.result, briefingStatus: "processing" } }
+        : prev
+    );
+    runPoll();
+  }, [runPoll]);
+
+  useEffect(() => {
+    pollControlRef.current.active = false;
+    runPoll();
+    const control = pollControlRef.current;
+    return () => {
+      control.active = false;
+      if (control.timeoutId) clearTimeout(control.timeoutId);
+    };
+  }, [runPoll]);
 
   if (error) return <ErrorState message={error} isKo={isKo} />;
   if (!job) return <LoadingState message={isKo ? "결과 불러오는 중…" : "Loading…"} />;
@@ -394,7 +427,12 @@ export function AuditResultView({ jobId, locale }: Props) {
 
   return (
     <>
-      <CompletedView job={job} result={job.result} locale={locale} />
+      <CompletedView
+        job={job}
+        result={job.result}
+        locale={locale}
+        onBriefingTriggered={handleBriefingTriggered}
+      />
       <ViralBar job={job} locale={locale} />
     </>
   );
@@ -730,10 +768,12 @@ function CompletedView({
   job,
   result,
   locale,
+  onBriefingTriggered,
 }: {
   job: JobResponse;
   result: JobResult;
   locale: string;
+  onBriefingTriggered: () => void;
 }) {
   const isKo = locale.startsWith("ko");
   return (
@@ -749,6 +789,7 @@ function CompletedView({
           briefingStatus={result.briefingStatus ?? "not_requested"}
           engineResponses={result.engineResponses}
           isKo={isKo}
+          onTriggered={onBriefingTriggered}
         />
 
         <NaverVsAiGap engineResponses={result.engineResponses} />
@@ -1435,11 +1476,13 @@ function NaverBriefingCard({
   briefingStatus,
   engineResponses,
   isKo,
+  onTriggered,
 }: {
   jobId: string;
   briefingStatus: BriefingStatus;
   engineResponses: JobResult["engineResponses"];
   isKo: boolean;
+  onTriggered: () => void;
 }) {
   if (briefingStatus === "processing") {
     return <NaverBriefingProcessingCard isKo={isKo} />;
@@ -1459,6 +1502,7 @@ function NaverBriefingCard({
       jobId={jobId}
       failed={briefingStatus === "failed"}
       isKo={isKo}
+      onTriggered={onTriggered}
     />
   );
 }
@@ -1467,10 +1511,12 @@ function NaverBriefingTriggerCard({
   jobId,
   failed,
   isKo,
+  onTriggered,
 }: {
   jobId: string;
   failed: boolean;
   isKo: boolean;
+  onTriggered: () => void;
 }) {
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState<string | null>(null);
@@ -1488,7 +1534,9 @@ function NaverBriefingTriggerCard({
         setTriggering(false);
         return;
       }
-      setTimeout(() => setTriggering(false), 1500);
+      // 성공 → 부모가 briefingStatus=processing 낙관 반영 + 폴링 재개.
+      // (완료 화면에서는 폴링이 멈춰 있어 이 신호가 없으면 카드가 갱신되지 않는다.)
+      onTriggered();
     } catch (err) {
       setTriggerError(err instanceof Error ? err.message : String(err));
       setTriggering(false);
@@ -1525,14 +1573,15 @@ function NaverBriefingTriggerCard({
           )}
           {triggerError && <p className="mt-3 text-sm text-red-400">⚠ {triggerError}</p>}
           <Button
-            size="lg"
+            aria-busy={triggering}
             className="mt-4 gap-2"
             disabled={triggering}
             onClick={handleTrigger}
+            size="lg"
           >
             {triggering ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
                 {isKo ? "측정 시작 중…" : "Starting…"}
               </>
             ) : (
@@ -1556,9 +1605,16 @@ function NaverBriefingTriggerCard({
 
 function NaverBriefingProcessingCard({ isKo }: { isKo: boolean }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-zinc-900/60 p-6 md:p-8">
+    <section
+      aria-live="polite"
+      className="rounded-2xl border border-white/10 bg-zinc-900/60 p-6 md:p-8"
+      role="status"
+    >
       <div className="flex items-center gap-4">
-        <RotateCw className="h-6 w-6 animate-spin text-[var(--brand-2)]" />
+        <RotateCw
+          aria-hidden="true"
+          className="h-6 w-6 animate-spin text-[var(--brand-2)]"
+        />
         <div>
           <h3 className="font-bold text-lg text-zinc-50">
             {isKo
@@ -1594,13 +1650,20 @@ function NaverBriefingCompletedCard({
         {isKo ? "네이버 AI 브리핑 측정 완료" : "Naver AI Briefing measured"}
       </div>
       {!briefing || briefing.errorMessage ? (
-        <p className="mt-3 text-sm text-zinc-400 leading-relaxed">
-          {briefing?.errorMessage
-            ? `⚠ ${briefing.errorMessage}`
-            : isKo
-              ? "이 질의에는 네이버 AI 브리핑이 표시되지 않았습니다."
-              : "No Naver AI Briefing appeared for this query."}
-        </p>
+        // "브리핑 미노출"은 측정 실패가 아니라 정상 결과(=GEO 기회)다.
+        // errorMessage 원문(기술 문구)을 ⚠로 노출하지 않고 기회 프레이밍으로 전환.
+        <div className="mt-3 rounded-xl border border-[var(--brand-2)]/20 bg-[var(--brand-2)]/5 p-4">
+          <p className="font-semibold text-sm text-zinc-200">
+            {isKo
+              ? "아직 네이버 AI 브리핑에 노출되지 않았습니다"
+              : "Not yet surfaced in Naver AI Briefing"}
+          </p>
+          <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">
+            {isKo
+              ? "이 질의에서 네이버 AI 브리핑은 아직 우리 브랜드를 인용하지 않았습니다. 경쟁사가 먼저 자리를 잡기 전에, 지금이 바로 네이버 AI 노출을 확보할 기회입니다."
+              : "Naver AI Briefing doesn't cite your brand for this query yet — which is exactly the opening to claim that visibility before competitors do."}
+          </p>
+        </div>
       ) : (
         <>
           <div className="mt-3 flex flex-wrap items-center gap-2">

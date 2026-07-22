@@ -74,6 +74,20 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // 중복 트리거 방지: after() 예약 전에 processing을 먼저 커밋한다.
+    // (crew route와 동일 패턴 — 백그라운드 러너 내부 세팅만으로는 응답 시점까지
+    //  상태가 not_requested로 남아 동시 2요청이 둘 다 통과, Browserbase 중복 호출됨.)
+    // result JSON은 공유되므로 최신 값 위에 briefingStatus만 병합.
+    await database.auditJob.update({
+      where: { id: jobId },
+      data: {
+        result: {
+          ...(job.result as Record<string, unknown>),
+          briefingStatus: "processing",
+        } as never,
+      },
+    });
+
     after(async () => {
       try {
         await runBriefingForAuditJob({ jobId });
