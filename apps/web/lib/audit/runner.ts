@@ -111,33 +111,19 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       )
     );
 
-    // D-060 (2026-05-10) AI 브리핑 분리 운영:
-    //   광고주 audit는 7 엔진만. AI 브리핑은 K-GEO-Bench·Report 데이터셋(admin 로컬 측정)에 포함.
-    //   audit 통합은 인큐베이팅 1개월차 라이브 예정 (Vercel WebSocket 30s timeout 해결 후).
-    const briefingDisabled =
-      process.env.FINDABLE_DISABLE_NAVER_BRIEFING !== "0";
-
-    const briefingResponse = briefingDisabled
-      ? []
-      : await queryAllEngines(
-          {
-            prompt: prompts[0]?.text ?? "",
-            language: prompts[0]?.lang ?? "ko",
-            brandName,
-            brandVariants,
-          },
-          ["naver-briefing"] as unknown as Parameters<typeof queryAllEngines>[1]
-        );
-
-    const allResponses = [...sevenEngineResponses, briefingResponse];
-
-    const flat = allResponses.flat();
+    // D-060 (2026-05-10) → D-2026-07-22 AI 브리핑 완전 분리 (on-demand 버튼):
+    //   본류 audit는 항상 7 엔진만 호출한다. 30초~3분 진단 약속을 코드로 보장.
+    //   네이버 AI 브리핑은 결과 페이지의 별도 버튼으로 on-demand 트리거된다
+    //   (POST /api/audit/[jobId]/briefing → runBriefingForAuditJob).
+    //   briefingStatus 기본값 "not_requested"로 초기화 → UI가 트리거 카드 표시.
+    const flat = sevenEngineResponses.flat();
     const metrics = aggregateAudit(flat);
 
     const result = {
       brandName,
       domain: input.domain,
       promptsCount: prompts.length,
+      briefingStatus: "not_requested" as const,
       engineResponses: flat.map((r) => ({
         engineId: r.engineId,
         brandMentioned: r.brandMentioned,

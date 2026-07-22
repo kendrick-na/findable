@@ -25,6 +25,7 @@ import {
   Mail,
   MessageCircle,
   RotateCw,
+  Search,
   Sparkles,
   Target,
   Users,
@@ -46,6 +47,7 @@ interface Props {
 
 type Severity = "red" | "amber" | "green";
 type CrewStatus = "not_requested" | "queued" | "processing" | "completed" | "failed";
+type BriefingStatus = "not_requested" | "processing" | "completed" | "failed";
 
 interface Finding {
   title: string;
@@ -129,6 +131,7 @@ interface JobResult {
   }>;
   metrics: JobMetrics;
   topRecommendations: string[];
+  briefingStatus?: BriefingStatus;
 }
 interface JobResponse {
   jobId: string;
@@ -154,6 +157,7 @@ const ENGINE_LABELS: Record<string, string> = {
   gemini: "Gemini",
   hyperclova: "HyperCLOVA X",
   naver: "Naver",
+  "naver-briefing": "Naver AI 브리핑",
   daum: "Daum",
 };
 const CHANNEL_LABELS: Record<string, string> = {
@@ -358,7 +362,8 @@ export function AuditResultView({ jobId, locale }: Props) {
           data.status === "queued" ||
           data.status === "processing" ||
           data.crewStatus === "queued" ||
-          data.crewStatus === "processing";
+          data.crewStatus === "processing" ||
+          data.result?.briefingStatus === "processing";
         if (isProcessing) timeoutId = setTimeout(poll, 4000);
       } catch (err) {
         if (cancelled) return;
@@ -738,6 +743,13 @@ function CompletedView({
         <HeroSection job={job} result={result} isKo={isKo} />
 
         <CrewMainSection job={job} locale={locale} />
+
+        <NaverBriefingCard
+          jobId={job.jobId}
+          briefingStatus={result.briefingStatus ?? "not_requested"}
+          engineResponses={result.engineResponses}
+          isKo={isKo}
+        />
 
         <NaverVsAiGap engineResponses={result.engineResponses} />
 
@@ -1409,6 +1421,206 @@ function CrewFailedCard({ jobId, isKo }: { jobId: string; isKo: boolean }) {
         </div>
       </div>
     </section>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Naver AI 브리핑 — on-demand 측정 카드 (D-2026-07-22)
+//   본류 7 엔진과 분리. Browserbase 클라우드 크롬 사용 (느림)이라 버튼으로만 트리거.
+//   briefingStatus별로 트리거/진행중/완료/실패 뷰. CrewTriggerCard 패턴 미러.
+// ──────────────────────────────────────────────────────────────────
+
+function NaverBriefingCard({
+  jobId,
+  briefingStatus,
+  engineResponses,
+  isKo,
+}: {
+  jobId: string;
+  briefingStatus: BriefingStatus;
+  engineResponses: JobResult["engineResponses"];
+  isKo: boolean;
+}) {
+  if (briefingStatus === "processing") {
+    return <NaverBriefingProcessingCard isKo={isKo} />;
+  }
+  if (briefingStatus === "completed") {
+    return (
+      <NaverBriefingCompletedCard
+        jobId={jobId}
+        engineResponses={engineResponses}
+        isKo={isKo}
+      />
+    );
+  }
+  // not_requested · failed → 트리거 카드 (failed는 재시도 안내 병기)
+  return (
+    <NaverBriefingTriggerCard
+      jobId={jobId}
+      failed={briefingStatus === "failed"}
+      isKo={isKo}
+    />
+  );
+}
+
+function NaverBriefingTriggerCard({
+  jobId,
+  failed,
+  isKo,
+}: {
+  jobId: string;
+  failed: boolean;
+  isKo: boolean;
+}) {
+  const [triggering, setTriggering] = useState(false);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
+
+  async function handleTrigger() {
+    setTriggering(true);
+    setTriggerError(null);
+    try {
+      const response = await fetch(`/api/audit/${jobId}/briefing`, {
+        method: "POST",
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setTriggerError(data.error ?? `HTTP ${response.status}`);
+        setTriggering(false);
+        return;
+      }
+      setTimeout(() => setTriggering(false), 1500);
+    } catch (err) {
+      setTriggerError(err instanceof Error ? err.message : String(err));
+      setTriggering(false);
+    }
+  }
+
+  return (
+    <SpotlightCard className="p-6 md:p-8">
+      <div className="flex items-start gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-grad-brand text-white">
+          <Search className="h-6 w-6" />
+        </div>
+        <div className="flex-1">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--brand-2)]">
+            <Sparkles className="h-3 w-3" />
+            {isKo ? "베타 · 무료" : "Beta · Free"}
+          </div>
+          <h3 className="mt-3 font-bold text-xl text-zinc-50 tracking-tight">
+            {isKo
+              ? "네이버 AI 브리핑에서도 측정해보기"
+              : "Measure Naver AI Briefing too"}
+          </h3>
+          <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
+            {isKo
+              ? "네이버 검색의 AI 브리핑 영역에 우리 브랜드가 인용되는지 실측합니다. 클라우드 브라우저로 실제 검색을 수행해 약 30초~1분 소요됩니다."
+              : "Checks whether your brand is cited in Naver's AI Briefing. Runs a real search via cloud browser (~30s-1m)."}
+          </p>
+          {failed && (
+            <p className="mt-3 text-sm text-amber-400">
+              {isKo
+                ? "⚠ 지난번 측정에 실패했습니다. 다시 시도할 수 있어요."
+                : "⚠ Last measurement failed. You can retry."}
+            </p>
+          )}
+          {triggerError && <p className="mt-3 text-sm text-red-400">⚠ {triggerError}</p>}
+          <Button
+            size="lg"
+            className="mt-4 gap-2"
+            disabled={triggering}
+            onClick={handleTrigger}
+          >
+            {triggering ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {isKo ? "측정 시작 중…" : "Starting…"}
+              </>
+            ) : (
+              <>
+                <Search className="h-4 w-4" />
+                {failed
+                  ? isKo
+                    ? "다시 측정하기"
+                    : "Retry measurement"
+                  : isKo
+                    ? "네이버 AI 브리핑 측정"
+                    : "Measure Naver AI Briefing"}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </SpotlightCard>
+  );
+}
+
+function NaverBriefingProcessingCard({ isKo }: { isKo: boolean }) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-zinc-900/60 p-6 md:p-8">
+      <div className="flex items-center gap-4">
+        <RotateCw className="h-6 w-6 animate-spin text-[var(--brand-2)]" />
+        <div>
+          <h3 className="font-bold text-lg text-zinc-50">
+            {isKo
+              ? "네이버 AI 브리핑 측정 중…"
+              : "Measuring Naver AI Briefing…"}
+          </h3>
+          <p className="mt-1 text-sm text-zinc-500">
+            {isKo
+              ? "클라우드 브라우저로 실제 검색을 수행 중입니다. 약 30초~1분."
+              : "Running a real search via cloud browser. ~30s-1m."}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function NaverBriefingCompletedCard({
+  jobId: _jobId,
+  engineResponses,
+  isKo,
+}: {
+  jobId: string;
+  engineResponses: JobResult["engineResponses"];
+  isKo: boolean;
+}) {
+  const briefing = engineResponses.find((r) => r.engineId === "naver-briefing");
+
+  return (
+    <SpotlightCard className="p-6 md:p-8" border="brand">
+      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--brand-2)]">
+        <Search className="h-3.5 w-3.5" />
+        {isKo ? "네이버 AI 브리핑 측정 완료" : "Naver AI Briefing measured"}
+      </div>
+      {!briefing || briefing.errorMessage ? (
+        <p className="mt-3 text-sm text-zinc-400 leading-relaxed">
+          {briefing?.errorMessage
+            ? `⚠ ${briefing.errorMessage}`
+            : isKo
+              ? "이 질의에는 네이버 AI 브리핑이 표시되지 않았습니다."
+              : "No Naver AI Briefing appeared for this query."}
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <MentionBadge
+              mentioned={briefing.brandMentioned}
+              position={briefing.mentionPosition}
+              isStub={briefing.isStub}
+            />
+            <SentimentBadge sentiment={briefing.sentiment} />
+          </div>
+          <p className="mt-4 whitespace-pre-line text-sm text-zinc-300 leading-relaxed">
+            {briefing.isStub
+              ? isKo
+                ? "네이버 AI 브리핑 연결이 아직 활성화되지 않았습니다 (Browserbase 미설정)."
+                : "Naver AI Briefing is not connected yet (Browserbase not configured)."
+              : briefing.excerpt || (isKo ? "(응답 없음)" : "(no response)")}
+          </p>
+        </>
+      )}
+    </SpotlightCard>
   );
 }
 
