@@ -60,14 +60,14 @@
 - a16z 공식 테제 "GEO over SEO" (2025.05), Profound 첫 GEO 유니콘 ($1B, 2026.02)
 
 **한국 시장 특수 문제**:
-1. **한국어 AI 검색 추적 도구 부재** — Profound·Peec·Bluefish·AthenaHQ·HubSpot AEO 등 글로벌 GEO 도구는 모두 한국어 AI 엔진(HyperCLOVA X·Naver·Daum·Cue:) 미커버
+1. **한국어 AI 검색 추적 도구 부재** — Profound·Peec·Bluefish·AthenaHQ·HubSpot AEO 등 글로벌 GEO 도구는 모두 한국어 AI 엔진(HyperCLOVA X·Naver·Daum·네이버 AI Briefing) 미커버 <!-- [확인사실 2026-07-22] Cue:는 종료(2026-04-09)되어 목록에서 제외, 현행 AI Briefing으로 교체 -->
 2. **한국 브랜드의 영어 AI 노출 갭** — 영문 ChatGPT가 K-브랜드를 누락·오인용 (Medicube, 마뗑킴, Channel Talk 등)
 3. **한국 진출 외국 브랜드의 한국어 AI 가시성 측정 도구 0건** — Apple Korea·LV·Tesla 등의 한국 마케팅팀이 본사 보고용 KPI를 만들 수 없음
 4. **한국 GEO SaaS 기관 투자 0건** (2026.04 웹 검증) — 시장 선점 공백
 
 ### 1.4 Why Now
 - AI 검색 사용자: 한국 ChatGPT 1,500만+ (2025.10), Perplexity 200~300만 (SK Telecom 무료 제공)
-- 네이버 검색 점유율 64.39% + HyperCLOVA X·Naver Cue:·Kakao i 한국 자체 AI 엔진 본격 출시
+- 네이버 검색 점유율 64.39% + HyperCLOVA X·네이버 AI Briefing·Kakao i 한국 자체 AI 엔진 본격 출시 <!-- [확인사실 2026-07-22] Naver Cue:는 종료(2026-04-09), 현행 답변 표면은 AI Briefing(하이퍼클로바X 기반) -->
 - 정부 2026 AI 예산 10.1조 원, SaaS 1만 개 육성 정책
 
 ---
@@ -105,11 +105,11 @@
 - ❌ "K-브랜드 글로벌 진출 전용" — 한국 진출 외국 브랜드도 핵심 ICP
 
 ### 2.4 차별화 핵심 (USP 6 — Agentic 추가)
-1. **한국 AI 엔진 독점 커버리지** — HyperCLOVA X · Naver 검색(+Cue: 합성) · Daum (3개)
+1. **한국 AI 엔진 독점 커버리지** — HyperCLOVA X · Naver 검색(+AI Briefing) · Daum (3개) <!-- [확인사실 2026-07-22] "Cue: 합성"→AI Briefing. Cue:는 종료(2026-04-09), 현행 답변 표면 추적 -->
 2. **Korean Entity Grounding** — 한/영/혼용 표기 통합 추적 (Ahrefs Brand Radar 한국어 버전 세계 최초)
 3. **한국어 + 영어 동시 7개 엔진** — Profound 9개·Peec 3개·HubSpot 3개 모두 영어만
 4. **무료 한국어 Audit** — 한국어 도메인·인용 분석은 Findable이 유일
-5. **가격 1/3** — Profound $99 → Findable ₩99K (~$70), AthenaHQ $295 대비 1/4
+5. **가격 경쟁력 (엔터프라이즈 구간)** — Profound $99·AthenaHQ $295 대비 Findable ₩99K(~$70). 단 저가 진입은 Otterly Lite $29 등 더 저렴한 곳 있음 → **"최저가"가 아니라 "한국어 커버리지 대비 합리적 가격"으로 포지셔닝**. 가격은 USP 후순위, 한국어 독점(1번)이 1순위. <!-- Day02 재검증(2026-07-07): "1/3 가격"은 전 구간 아님, Otterly $29 반례. docs/day-02_시장분석 §6-2 -->
 6. **4 자율 에이전트 (Agentic)** — 민지·Alex·수진·준호가 측정→인용 분석→액션 추천을 자동 실행. 측정만 하는 모니터링 도구가 아닌 "행동하는 GEO 플랫폼".
 
 ---
@@ -134,6 +134,10 @@
 | 5 | **한국 의료·교육·금융 이노랩** | 1,500사 | 아웃바운드 (개별 미팅) | 8~16주 |
 | ⏸ v1.5+ | **글로벌·내수 B2B SaaS** | 700사 | 워크플로 기능(CMS·Brand Guardrails) 출시 후 | - |
 
+> 🔍 **[Day02 재검토 제안 — 미확정]** (docs/day-02_시장분석 §6-3)
+> 2순위 **외국 브랜드 한국법인**은 본사가 "한국 AI 가시성"을 KPI로 강제 + 경쟁사 한국 고객 0곳(uncontested) → **강제 수요가 가장 강함**.
+> K-뷰티(1순위)는 인바운드가 쉬우나 강제성은 외국법인이 우위. 세일즈 1·2순위 재고려 가치. ⚠️ 실영업 데이터로 검증 후 확정.
+
 ### 3.2 명시적 비추천 (v1.0)
 - 한국 대기업 (삼성·LG·현대) — Bluefish 자리, RFP 6개월+
 - 국내 내수 SaaS — 시장 인지도 낮음
@@ -145,6 +149,12 @@
 
 ### 4.1 North Star Metric (NSM)
 **Paid ARR (유료 연간 반복 매출)**
+
+> 🔍 **[Day02 재검토 제안 — 미확정]** (2026-07-07, docs/day-02_시장분석 §6-1)
+> Paid ARR은 *결과지표*(lagging). 고객이 실제로 값을 얻는지 보여주는 *선행지표*가 North Star로 더 적합할 수 있음.
+> 제안: **North Star = "주간 실행 액션 수 × SoV 상승"**(`action.executed`×`sov.delta`), Paid ARR은 사업 목표로 분리.
+> 근거: Profound가 "측정만" 제공해 고객 ROI -2.0x. Findable 차별점(Agentic 개선)과 정렬.
+> ⚠️ 방향 결정이라 실고객 검증 후 확정. 지금은 제안만 기록 (원 NSM 유지).
 
 ### 4.2 단계별 KPI
 
@@ -210,7 +220,7 @@
 **기술 흐름**:
 - AI Gateway: 글로벌 4개 (`openai/gpt-5.4`, `anthropic/claude-sonnet-4-7`, `perplexity/sonar`, `google/gemini-2.0`)
 - HyperCLOVA X: 직접 fetch (`HCX-DASH-002`)
-- Naver Search API: 검색 결과 + HyperCLOVA X 합성 (Cue: 90% 재현)
+- Naver Search API: 검색 결과 + HyperCLOVA X 합성 (네이버 AI Briefing 응답 근사) <!-- [확인사실 2026-07-22] "Cue: 90% 재현"은 종료된 엔진 기준이라 무의미. Cue:는 2026-04-09 종료, 현행 추적 대상은 AI Briefing(하이퍼클로바X 기반) -->
 - Daum 검색 API: 결과 fetch
 
 **5일 구현 우선순위**: Day 2 (5/1)
@@ -300,7 +310,9 @@
 ### 6.4 [F11] B2B SaaS 영업 본격 진입
 - 워크플로 기능 추가 후 채널톡·Sendbird·Moloco 등 영업 가동
 
-### 6.5 [F12] Naver Cue: 정식 추적
+### 6.5 [F12] 네이버 AI Briefing 정식 추적
+<!-- 🔍 [2026-07-22 재검토] Naver Cue: 종료(2026-04-09) → 추적 대상을 현행 AI Briefing(하이퍼클로바X 기반)으로 교체. 로드맵 방향(정식 추적)은 유지. [확인사실] -->
+- 대상: 네이버 AI Briefing (구 Cue:는 종료됨)
 - 네이버 파트너 신청 또는 합법 스크래핑 (Vercel Sandbox)
 
 ---
@@ -367,7 +379,7 @@ GEO 추천 엔진과 평가 프레임의 데이터 백본. 상세는 `docs/input
 | 5 | 풀 엔터프라이즈 SDR 조직 | PLG 우선, 5개 레퍼런스 전엔 금지 | - |
 | 6 | SOC 2 Type II 초기 인증 | 글로벌 진출 시점까지 연기 | - |
 | 7 | 자체 크롤러 인프라 | SerpAPI·Firecrawl로 우회 | - |
-| 8 | Naver Cue: 직접 스크래핑 (v1.0) | 약관 위반·민법 750조 리스크 | - |
+| 8 | 네이버 AI Briefing 직접 스크래핑 (v1.0) | 약관 위반·민법 750조 리스크 (구 Cue:는 종료됨) | - |
 
 ---
 
@@ -835,7 +847,7 @@ billing_status TEXT  -- active, trialing, past_due, canceled, expired
 - 이용약관 페이지 (`/terms`)
 
 ### 19.3 법적 리스크
-- ❌ Naver Cue: 직접 스크래핑 (v1.0 제외) — 약관 위반·민법 750조 리스크
+- ❌ 네이버 AI Briefing 직접 스크래핑 (v1.0 제외) — 약관 위반·민법 750조 리스크 <!-- [확인사실 2026-07-22] 구 Cue:는 2026-04-09 종료. 현행 답변 표면은 AI Briefing -->
 - ✅ Naver 공식 검색 API + HyperCLOVA X 합성 (합법)
 - 외주 협력사 NDA 의무
 - 핵심 알고리즘 모듈 분리·접근 제한

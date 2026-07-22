@@ -55,7 +55,7 @@ Findable/
 │   │   │   ├── perplexity.ts
 │   │   │   ├── gemini.ts
 │   │   │   ├── hyperclova.ts
-│   │   │   ├── naver-search.ts   # Cue: 합성용
+│   │   │   ├── naver-search.ts   # AI Briefing 추적용 (구 Cue:는 종료됨)
 │   │   │   └── daum.ts
 │   │   ├── entity-grounding/     # Korean Entity Grounding
 │   │   ├── crew-agents/          # CrewAI 4 에이전트
@@ -115,7 +115,7 @@ Findable/
 | Perplexity (sonar) | AI Gateway | `gateway('perplexity/sonar')` |
 | Gemini (2.0) | AI Gateway | `gateway('google/gemini-2.0')` |
 | HyperCLOVA X | 직접 fetch | CLOVA Studio HCX-DASH-002 |
-| Naver Search | 직접 fetch | 공식 검색 API + HyperCLOVA 합성 (Cue: 90% 재현) |
+| Naver Search | 직접 fetch | 공식 검색 API + HyperCLOVA 합성 (네이버 AI Briefing 근사) <!-- [확인사실 2026-07-22] "Cue: 90% 재현"은 종료된 엔진 기준이라 무의미. Cue: 2026-04-09 종료 → 현행 답변 표면 AI Briefing(하이퍼클로바X 기반) 추적. 코드에 naver-briefing-adapter.ts 구현됨 --> |
 | Daum | 직접 fetch | Kakao Daum 검색 API |
 
 ### 2.6 인증·결제
@@ -343,6 +343,6 @@ export const config: VercelConfig = {
 | 큐 | Vercel Queues | Fluid Compute 위에서 실행 |
 | 인증 | Clerk | Next.js 5분 통합, 한국어 지원 |
 | 모노레포 | Turborepo + pnpm | 표준 |
-| Cue: 통합 | **합성 전략 (v1.0) → 정식 (v1.5)** | 합법 리스크 회피 |
+| 네이버 AI Briefing 통합 | **합성 전략 (v1.0) → 정식 (v1.5)** | 합법 리스크 회피 (구 Cue:는 종료됨) <!-- [확인사실 2026-07-22] Cue: 2026-04-09 종료 → AI Briefing으로 대상 교체 --> |
 
 상세 의사결정 로그는 `DECISIONS.md` 참조.
