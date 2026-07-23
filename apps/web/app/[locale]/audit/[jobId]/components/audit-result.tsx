@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CopilotChat } from "./copilot-chat";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
 
 interface Props {
@@ -789,6 +790,12 @@ function CompletedView({
         <HeroSection job={job} result={result} isKo={isKo} />
 
         <CrewMainSection job={job} locale={locale} />
+
+        {job.crewStatus === "completed" &&
+          job.crewResult?.analysts &&
+          job.crewResult?.strategist && (
+            <CopilotChat jobId={job.jobId} isKo={isKo} />
+          )}
 
         <NaverBriefingCard
           jobId={job.jobId}
