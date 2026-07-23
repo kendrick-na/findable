@@ -1,0 +1,32 @@
+# Vercel은 서버에서 빌드하므로 로컬 의존성·빌드 아티팩트·캐시는 업로드 불필요.
+# (없어서 루트 배포 시 2.9GB 업로드 → 100MB 파일 제한 초과로 실패했음)
+
+# 의존성 (서버에서 재설치)
+node_modules
+**/node_modules
+
+# 빌드 출력 (서버에서 재빌드)
+.next
+**/.next
+.turbo
+**/.turbo
+dist
+**/dist
+out
+**/out
+
+# 로컬 전용 폴더 (배포와 무관)
+홈페이지 레퍼런스
+서브스택_결합_기획
+docs
+Findable
+.python_vendor
+.swift-module-cache
+transcripts
+logs
+audio_chunks
+models
+
+# OS/에디터
+.DS_Store
+**/.DS_Store

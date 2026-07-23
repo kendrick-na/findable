@@ -1,0 +1,5 @@
+# Vercel은 서버에서 빌드하므로 로컬 빌드 산출물·캐시는 업로드 불필요.
+.next
+.turbo
+node_modules
+.DS_Store
