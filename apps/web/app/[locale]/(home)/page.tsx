@@ -6,6 +6,7 @@ import { env } from "@/env";
 import { FooterCTA } from "./components/footer-cta";
 import { Hero } from "./components/hero";
 import { LiveCounter } from "./components/live-counter";
+import { RentVsEquity } from "./components/rent-vs-equity";
 import { Showcase } from "./components/showcase";
 import { StepSections } from "./components/step-sections";
 import { ThreePillars } from "./components/three-pillars";
@@ -34,7 +35,7 @@ export const generateMetadata = async ({
 // 6) FooterCTA — Linear cta-banner
 
 // 홈 구조화 데이터(JSON-LD) — GEO/AEO 도그푸딩: AI 답변 엔진이 Findable을
-// "한국 최초 Agentic GEO 플랫폼"으로 인용·이해하도록 SoftwareApplication + Organization 명시.
+// "네이버까지 진단하는 Agentic GEO 플랫폼"으로 인용·이해하도록 SoftwareApplication + Organization 명시.
 // 근거: KAIST OverEdge Day06(기술 SEO·JSON-LD) → docs/_적용/실행백로그. 문구는 dictionary와 동일.
 const siteUrl = env.VERCEL_PROJECT_PRODUCTION_URL
   ? new URL(`https://${env.VERCEL_PROJECT_PRODUCTION_URL}`).toString()
@@ -74,7 +75,7 @@ const Home = async ({ params }: HomeProps) => {
             "@type": "Organization",
             name: "Findable",
             url: siteUrl,
-            slogan: "한국 최초 Agentic GEO Platform",
+            slogan: "네이버까지 진단하고 고칠 곳까지 알려주는 Agentic GEO 플랫폼",
           },
         }}
       />
@@ -82,6 +83,7 @@ const Home = async ({ params }: HomeProps) => {
       <LiveCounter locale={locale} />
       <ThreePillars locale={locale} />
       <StepSections locale={locale} />
+      <RentVsEquity locale={locale} />
       <Showcase locale={locale} />
       <FooterCTA locale={locale} />
     </div>

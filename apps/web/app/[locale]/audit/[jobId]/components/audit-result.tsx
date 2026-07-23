@@ -36,6 +36,7 @@ import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CopilotChat } from "./copilot-chat";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
+import { TruthMirror } from "./truth-mirror";
 
 interface Props {
   jobId: string;
@@ -788,6 +789,12 @@ function CompletedView({
       {/* main column */}
       <div className="space-y-12 pb-24 lg:pb-12">
         <HeroSection job={job} result={result} isKo={isKo} />
+
+        <TruthMirror
+          brandName={result.brandName}
+          engineResponses={result.engineResponses}
+          isKo={isKo}
+        />
 
         <CrewMainSection job={job} locale={locale} />
 

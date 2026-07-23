@@ -7,24 +7,25 @@ import type { Dictionary } from "@repo/internationalization";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
-// 글로벌 인지도 순서 (검색량/MAU 기준): ChatGPT >> Gemini > Claude > Perplexity > HyperCLOVA(국내1) > 네이버 > 다음
+// 네이버를 맨 앞으로 재배치 (D-2026-07-23 포지셔닝 전환): 유일 방어 공백인
+// "네이버 AI 셀프서브"가 엔진 나열에서 묻히지 않게 최전면에. 나머지는 글로벌 인지도 순.
 const ENGINES_KO = [
+  "네이버",
   "ChatGPT",
   "Gemini",
   "Claude",
   "Perplexity",
   "HyperCLOVA",
-  "네이버",
   "다음",
 ];
 
 const ENGINES_EN = [
+  "Naver",
   "ChatGPT",
   "Gemini",
   "Claude",
   "Perplexity",
   "HyperCLOVA",
-  "Naver",
   "Daum",
 ];
 
@@ -42,9 +43,11 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
   const h1 = isKo
     ? "AI가 우리 브랜드를 먼저 답하게."
     : "Make AI answer about your brand first.";
+  // D-2026-07-23 포지셔닝 전환: "측정 도구" → "네이버까지 진단 + 직접 고칠 곳" 차별점.
+  // "한국 최초"(검증불가 과장) 제거 — GPTO 등 경쟁사가 동일 주장.
   const heroSub = isKo
-    ? "AI 에이전트가 진단하는, 한국 최초 Agentic GEO 최적화 플랫폼."
-    : "Korea's first Agentic GEO optimization platform — diagnosed by AI agents.";
+    ? "측정만 하지 않습니다. 네이버까지 진단하고, 직접 고칠 곳까지 알려드립니다."
+    : "We don't just measure. We diagnose Naver too — and show you exactly what to fix.";
   const heroTagline = isKo
     ? "7개 AI 답변 속 우리 브랜드 점유율, 30초면 진단 끝."
     : "Your brand's share of voice across 7 AI answers — diagnosed in 30 seconds.";

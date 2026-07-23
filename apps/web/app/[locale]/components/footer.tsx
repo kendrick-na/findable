@@ -56,8 +56,8 @@ export const Footer = ({ locale = "ko" }: FooterProps) => {
   const lp = isKo ? "/ko" : "";
   const COLS = isKo ? COLS_KO(lp) : COLS_EN(lp);
   const tagline = isKo
-    ? "AI 답변 속 우리 브랜드를 보이게 만드는, 한국 최초 GEO 플랫폼."
-    : "Korea's first GEO platform — making your brand visible inside AI answers.";
+    ? "AI 답변 속 우리 브랜드를 보이게 만드는, 네이버까지 진단하는 GEO 플랫폼."
+    : "The GEO platform that diagnoses Naver too — making your brand visible inside AI answers.";
   const betaLabel = isKo ? "v1.0 베타 운영 중" : "v1.0 beta — running now";
   const closingLine = isKo
     ? "AI가 우리 브랜드를 먼저 답하게."
