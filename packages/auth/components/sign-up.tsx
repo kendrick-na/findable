@@ -15,7 +15,7 @@ import { SignUp as ClerkSignUp } from "@clerk/nextjs";
  */
 export const SignUp = () => (
   <ClerkSignUp
-    fallbackRedirectUrl="/"
+    fallbackRedirectUrl="/welcome"
     path="/sign-up"
     routing="path"
     signInUrl="/sign-in"

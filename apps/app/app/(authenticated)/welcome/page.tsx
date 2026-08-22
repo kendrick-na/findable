@@ -1,10 +1,13 @@
 import { suggestCompetitors } from "@repo/ai/lib/competitor-suggest";
+import { currentUser } from "@repo/auth/server";
+import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireOrg, scopedBrands } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 import { hasCompletedSetup } from "@/lib/onboarding";
 import { AssignBrandForm } from "../features/brand/assign-brand-form";
+import { getPrimaryEmail } from "../lib/user";
 import { WelcomeFlowServer } from "./welcome-flow-server";
 import { WelcomeIntro } from "./welcome-intro";
 
@@ -36,6 +39,11 @@ type MeasurementOutcome = "failed" | "rate_limited" | "started";
 const toOutcome = (value?: string): MeasurementOutcome =>
   value === "rate_limited" || value === "failed" ? value : "started";
 
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+
 const WelcomePage = async ({
   searchParams,
 }: {
@@ -46,18 +54,37 @@ const WelcomePage = async ({
   if (await hasCompletedSetup()) {
     redirect("/");
   }
-  await requireOrg();
+  const orgId = await requireOrg();
   const brands = await scopedBrands();
   const brand = brands.at(0);
 
   // 1단계 — 브랜드가 아직 없다. 기존 폼을 그대로 쓴다(새 폼을 만들지 않는다).
   if (!brand) {
+    // 무료 공개 진단에서 가입한 사람은 같은 도메인을 다시 입력하지 않는다.
+    const user = await currentUser();
+    const email = user ? getPrimaryEmail(user) : null;
+    const priorAudit = email
+      ? await database.auditJob.findFirst({
+          orderBy: { createdAt: "desc" },
+          select: { domain: true },
+          where: { email, status: "completed" },
+        })
+      : null;
     return (
       <WelcomeIntro t={(await getAppDictionary()).onboarding}>
-        <AssignBrandForm nextHref="/welcome" />
+        <AssignBrandForm
+          initialDomain={priorAudit?.domain}
+          mode="onboarding"
+          nextHref="/welcome"
+        />
       </WelcomeIntro>
     );
   }
+
+  const organization = await database.organization.findUnique({
+    select: { onboardingStep: true },
+    where: { id: orgId },
+  });
 
   // 2~4단계 — 등록이 끝났으니 별칭·경쟁사를 받는다.
   // 🔴 측정이 실제로 돌고 있는지 — 마지막 단계가 이 값으로 **말을 바꾼다**.
@@ -69,11 +96,14 @@ const WelcomePage = async ({
   //   — 측정 전이라 `extractCompetitorLandscape`(저장된 AI 답변 재파싱, 원가 0)를
   //   못 쓴다. 상세=`packages/audit/competitor-suggest.ts` 주석.
   //   ⚠️ 후보만 만든다 — 기본 선택은 화면(welcome-flow.tsx)이 결정한다.
-  const suggestedCompetitors = await suggestCompetitors({
-    brandName: brand.name,
-    domain: brand.domain,
-    industry: brand.industry,
-  });
+  const suggestedCompetitors =
+    (organization?.onboardingStep ?? 2) < 5
+      ? await suggestCompetitors({
+          brandName: brand.name,
+          domain: brand.domain,
+          industry: brand.industry,
+        })
+      : [];
 
   return (
     <WelcomeFlowServer
@@ -81,6 +111,10 @@ const WelcomePage = async ({
       brandId={brand.id}
       brandIndustry={brand.industry}
       brandName={brand.name}
+      initialCompetitors={stringList(brand.competitors)}
+      initialScope={brand.marketScope ?? undefined}
+      initialStep={organization?.onboardingStep ?? 2}
+      initialVariants={stringList(brand.entityVariants)}
       measurement={toOutcome(measurement)}
       suggestedCompetitors={suggestedCompetitors}
     />

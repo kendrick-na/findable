@@ -24,6 +24,10 @@ export const WelcomeFlowServer = async ({
   brandId: string;
   brandIndustry?: string | null;
   brandName: string;
+  initialCompetitors?: string[];
+  initialScope?: string;
+  initialStep?: number;
+  initialVariants?: string[];
   measurement?: "failed" | "rate_limited" | "started";
   suggestedCompetitors?: string[];
 }) => {

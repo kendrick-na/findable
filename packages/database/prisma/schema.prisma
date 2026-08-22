@@ -26,6 +26,9 @@ model Organization {
   billingStatus     BillingStatus    @default(trialing)
   billingCustomerId String? // PortOne billingKey(정기결제) · Toss billingKey · PayPal payerId
   billingProvider   BillingProvider?
+  // 회원가입 이후 브랜드 설정 진행 상태. 측정 성공 여부와 온보딩 완료 여부를 분리한다.
+  onboardingStep        Int       @default(1)
+  onboardingCompletedAt DateTime?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 

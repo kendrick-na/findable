@@ -45,6 +45,8 @@ export interface UpdateBrandProfileInput {
   brandId: string;
   /** 사용자가 확정한 경쟁사명. 안 보내면 무변경. */
   competitors?: string[];
+  /** 마지막 확인을 마쳤는지. 측정 성공 여부와 별도로 저장한다. */
+  completeOnboarding?: boolean;
   /** 내 브랜드 표기 변형. 예: ["아모레", "Amorepacific"]. 안 보내면 무변경. */
   entityVariants?: string[];
   /**
@@ -58,6 +60,8 @@ export interface UpdateBrandProfileInput {
    *   그 불변식은 `brand-assign-detected-scope.test.ts` 의 「엔진 분모 불변」이 문다.
    */
   marketScope?: string;
+  /** 다음에 다시 들어왔을 때 복귀할 단계(2~5). */
+  onboardingStep?: number;
 }
 
 export type UpdateBrandProfileResult = { ok: true } | { error: string };
@@ -116,13 +120,32 @@ export const updateBrandProfile = async (
   if (scope) {
     data.marketScope = scope;
   }
-  if (Object.keys(data).length === 0) {
+  const onboardingStep = Math.min(
+    5,
+    Math.max(2, Math.trunc(input.onboardingStep ?? 2))
+  );
+  const updateOnboarding =
+    input.completeOnboarding || input.onboardingStep !== undefined;
+  if (Object.keys(data).length === 0 && !updateOnboarding) {
     // 보낼 게 없으면 DB 를 건드리지 않는다(건너뛰기 = 성공).
     return { ok: true };
   }
 
   try {
-    await database.brand.update({ where: { id: owned.id }, data });
+    if (Object.keys(data).length > 0) {
+      await database.brand.update({ where: { id: owned.id }, data });
+    }
+    if (updateOnboarding) {
+      await database.organization.update({
+        where: { id: owned.organizationId },
+        data: {
+          onboardingStep,
+          onboardingCompletedAt: input.completeOnboarding
+            ? new Date()
+            : undefined,
+        },
+      });
+    }
     revalidatePath("/brand");
     revalidatePath("/");
     return { ok: true };

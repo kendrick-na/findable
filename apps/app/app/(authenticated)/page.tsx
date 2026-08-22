@@ -4,11 +4,13 @@ import { auth, currentUser } from "@repo/auth/server";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   scopedAnnotations,
   scopedLatestRunTracking,
   scopedTracking,
 } from "@/lib/db/scoped";
+import { hasCompletedSetup } from "@/lib/onboarding";
 import { BrandSwitcher } from "./components/brand-switcher";
 import { DashboardEmptyState } from "./components/dashboard-empty-state-server";
 import { DashboardKpis } from "./components/dashboard-kpis";
@@ -47,6 +49,9 @@ const App = async ({ searchParams }: AppProperties) => {
   const user = await currentUser();
   const email = user ? getPrimaryEmail(user) : null;
   const { orgId } = await auth();
+  if (orgId && !(await hasCompletedSetup())) {
+    redirect("/welcome");
+  }
   const plan = await getCurrentPlan();
 
   // 내 측정 = 이메일로 실행한 무료진단(www) ∪ 조직으로 실행한 측정(app).

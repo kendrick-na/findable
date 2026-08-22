@@ -23,8 +23,9 @@ export const CreateOrgGate = () => (
         워크스페이스를 만들어 시작하세요
       </h1>
       <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-        측정·브랜드·리포트는 워크스페이스(조직) 단위로 저장돼요. 회사나 팀
-        이름으로 만들어 두면 팀원을 초대해 함께 볼 수 있어요.
+        측정·브랜드·리포트는 워크스페이스 단위로 저장돼요. 여기에는 회사나 팀
+        이름을 적어주세요. 공개할 브랜드명과 도메인은 다음 단계에서 따로
+        확인합니다.
       </p>
     </div>
     <CreateOrganization

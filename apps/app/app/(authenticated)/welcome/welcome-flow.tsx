@@ -124,6 +124,10 @@ interface WelcomeFlowProps {
    * ⚠️ 고객은 이걸 **고칠 수 있다**. 고쳐도 측정 엔진은 줄지 않는다(분모 불변).
    */
   detected: { confidence: string; reason: string; scope: string };
+  initialCompetitors?: string[];
+  initialScope?: string;
+  initialStep?: number;
+  initialVariants?: string[];
   /**
    * 1단계에서 측정이 **실제로 시작됐는지**(N-44 교차검증에서 잡은 거짓말).
    *
@@ -141,9 +145,11 @@ interface WelcomeFlowProps {
    */
   onSave: (input: {
     brandId: string;
-    competitors: string[];
-    entityVariants: string[];
-    marketScope: string;
+    competitors?: string[];
+    completeOnboarding?: boolean;
+    entityVariants?: string[];
+    marketScope?: string;
+    onboardingStep?: number;
   }) => Promise<{ ok: true } | { error: string }>;
   /** AI 가 제안한 경쟁사(있으면). ⛔ **담긴 상태가 아니다** — 후보일 뿐이다. */
   suggestedCompetitors?: string[];
@@ -277,10 +283,23 @@ const FINISH_KEYS: Record<
   failed: { description: "doneFailed", title: "savedTitle" },
 };
 
+const getInitialCompetitors = (
+  initialStep: number,
+  initialCompetitors: string[],
+  suggestedCompetitors: string[]
+) =>
+  initialStep >= 4 && initialCompetitors.length > 0
+    ? initialCompetitors
+    : suggestedCompetitors;
+
 export const WelcomeFlow = ({
   brandId,
   brandName,
   detected,
+  initialCompetitors = [],
+  initialScope,
+  initialStep = 2,
+  initialVariants = [],
   measurement = "started",
   onSave,
   t,
@@ -288,16 +307,17 @@ export const WelcomeFlow = ({
 }: WelcomeFlowProps) => {
   const router = useRouter();
   // 2단계에서 시작한다(1단계 = 브랜드 등록은 이미 끝났다).
-  const [step, setStep] = useState(2);
+  const [step, setStep] = useState(Math.min(5, Math.max(2, initialStep)));
   // 추정값에서 시작한다 — 고객이 그대로 두면 추정이 확정된다(프로파운드 f049 형태).
-  const [scope, setScope] = useState(detected.scope);
-  const [variants, setVariants] = useState<string[]>([]);
+  const [scope, setScope] = useState(initialScope ?? detected.scope);
+  const [variants, setVariants] = useState<string[]>(initialVariants);
   // 🔴 2026-08-21(👤 결정) — 제안을 **기본으로 채워둔다**(예전엔 기본 미선택).
   //   Otterly 사고(자동채움 후 오분류를 그대로 밀어붙임)와 다른 점: 화면에서
   //   하나씩 X로 빼기 쉽고(ChipList), 잘못된 제안은 그대로 두는 게 아니라
   //   지우는 게 기본 동작이 되도록 안내 문구(competitorLede)를 맞춘다.
-  const [competitors, setCompetitors] =
-    useState<string[]>(suggestedCompetitors);
+  const [competitors, setCompetitors] = useState<string[]>(
+    getInitialCompetitors(initialStep, initialCompetitors, suggestedCompetitors)
+  );
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -313,20 +333,43 @@ export const WelcomeFlow = ({
     setDraft("");
   };
 
-  /** 마지막 단계 — 저장하고 대시보드로. 실패해도 **측정은 이미 돌고 있다**. */
+  const saveAndGo = async (
+    nextStep: number,
+    profile: Partial<{
+      competitors: string[];
+      entityVariants: string[];
+      marketScope: string;
+    }> = {}
+  ) => {
+    setSaving(true);
+    const result = await onSave({
+      brandId,
+      onboardingStep: nextStep,
+      ...profile,
+    });
+    setSaving(false);
+    if ("error" in result) {
+      toast.error(result.error, { description: t.saveFailedHint });
+      return;
+    }
+    setStep(nextStep);
+  };
+
+  /** 마지막 단계 — 설정 완료 사실까지 저장하고 대시보드로. */
   const finish = async () => {
     setSaving(true);
     const result = await onSave({
       brandId,
+      completeOnboarding: true,
       competitors,
       entityVariants: variants,
       marketScope: scope,
+      onboardingStep: 5,
     });
     setSaving(false);
     if ("error" in result) {
-      // 🔴 저장 실패가 온보딩을 막지 않는다 — 브랜드·측정은 이미 만들어졌다.
-      //   여기서 붙잡으면 사용자는 나갈 길이 없다.
       toast.error(result.error, { description: t.saveFailedHint });
+      return;
     }
     router.push("/");
   };
@@ -350,8 +393,12 @@ export const WelcomeFlow = ({
         }
         current={2}
         description={t.scopeLede}
-        primary={{ label: t.next as string, onClick: () => setStep(3) }}
-        skip={{ label: t.skip as string, onClick: () => setStep(3) }}
+        primary={{
+          disabled: saving,
+          label: saving ? (t.saving as string) : (t.next as string),
+          onClick: () => saveAndGo(3, { marketScope: scope }),
+        }}
+        skip={{ label: t.skip as string, onClick: () => saveAndGo(3) }}
         stepOfTemplate={t.stepOf as string}
         title={t.scopeTitle}
         total={TOTAL}
@@ -400,8 +447,12 @@ export const WelcomeFlow = ({
         }
         current={3}
         description={(t.aliasLede ?? "").replace("{brand}", brandName)}
-        primary={{ label: t.next as string, onClick: () => setStep(4) }}
-        skip={{ label: t.skip as string, onClick: () => setStep(4) }}
+        primary={{
+          disabled: saving,
+          label: saving ? (t.saving as string) : (t.next as string),
+          onClick: () => saveAndGo(4, { entityVariants: variants }),
+        }}
+        skip={{ label: t.skip as string, onClick: () => saveAndGo(4) }}
         stepOfTemplate={t.stepOf as string}
         title={t.aliasTitle}
         total={TOTAL}
@@ -460,8 +511,12 @@ export const WelcomeFlow = ({
             ? t.competitorLede
             : t.competitorLedeEmpty
         }
-        primary={{ label: t.next as string, onClick: () => setStep(5) }}
-        skip={{ label: t.skip as string, onClick: () => setStep(5) }}
+        primary={{
+          disabled: saving,
+          label: saving ? (t.saving as string) : (t.next as string),
+          onClick: () => saveAndGo(5, { competitors }),
+        }}
+        skip={{ label: t.skip as string, onClick: () => saveAndGo(5) }}
         stepOfTemplate={t.stepOf as string}
         title={t.competitorTitle}
         total={TOTAL}

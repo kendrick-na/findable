@@ -53,8 +53,16 @@ const GATE_FN = stripComments(read("lib/onboarding.ts"));
 const EDITOR = stripComments(
   read("app/(authenticated)/features/brand/brand-profile-editor.tsx")
 );
+const SIGN_UP = stripComments(
+  read("../../packages/auth/components/sign-up.tsx")
+);
+const DASHBOARD = stripComments(read("app/(authenticated)/page.tsx"));
 
 describe("온보딩 여정 연결 — 한 곳이라도 끊기면 문다", () => {
+  it("⓪ 신규 가입 직후 대시보드가 아니라 `/welcome` 으로 간다", () => {
+    expect(SIGN_UP).toContain('fallbackRedirectUrl="/welcome"');
+  });
+
   it("① 조직 생성 직후 `/welcome` 으로 간다 (대시보드로 떨구지 않는다)", () => {
     // 예전 값 `"/"` 로 되돌리면 = 텅 빈 대시보드에 떨어뜨리는 옛 문제로 회귀.
     expect(GATE).toContain('afterCreateOrganizationUrl="/welcome"');
@@ -87,14 +95,28 @@ describe("온보딩 여정 연결 — 한 곳이라도 끊기면 문다", () => 
     expect(FLOW).toContain('router.push("/")');
   });
 
-  it("⛔ 저장 실패가 사용자를 가두지 않는다 (측정은 이미 돌고 있다)", () => {
-    // 실패해도 `router.push` 가 `if` 밖에 있어야 한다 — 안에 있으면 갇힌다.
+  it("⛔ 완료 저장 실패를 성공처럼 처리하지 않는다 (재시도 가능)", () => {
     const finish = FLOW.slice(FLOW.indexOf("const finish"));
     const body = finish.slice(0, finish.indexOf("};"));
     const errIdx = body.indexOf("toast.error");
+    const returnIdx = body.indexOf("return;", errIdx);
     const pushIdx = body.indexOf('router.push("/")');
     expect(errIdx).toBeGreaterThan(-1);
-    expect(pushIdx).toBeGreaterThan(errIdx);
+    expect(returnIdx).toBeGreaterThan(errIdx);
+    expect(pushIdx).toBeGreaterThan(returnIdx);
+  });
+
+  it("중간 이탈자는 다음 로그인 때 `/welcome` 으로 복귀한다", () => {
+    expect(DASHBOARD).toContain("hasCompletedSetup");
+    expect(DASHBOARD).toContain('redirect("/welcome")');
+    expect(FLOW).toContain("onboardingStep");
+    expect(FLOW).toContain("completeOnboarding");
+  });
+
+  it("첫 화면은 온보딩 모드로 선택 입력을 뒤 단계에 둔다", () => {
+    expect(WELCOME).toContain('mode="onboarding"');
+    expect(FORM).toContain('mode === "onboarding"');
+    expect(FORM).toContain("showIdentity");
   });
 
   it("⛔ 모든 중간 단계는 건너뛸 수 있다 (관문을 만들지 않는다)", () => {

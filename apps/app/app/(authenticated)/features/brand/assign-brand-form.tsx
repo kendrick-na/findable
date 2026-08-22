@@ -89,18 +89,35 @@ const INDUSTRY_OPTIONS: Array<{ value: string; label: string }> = [
  *   **2~5단계를 영영 못 본다**(실측으로 잡은 흐름 끊김).
  *   ⚠️ 폼을 복제해서 해결하지 않는다 — 복제하면 두 화면의 검증·측정 로직이 갈린다.
  */
-export const AssignBrandForm = ({ nextHref }: { nextHref?: string } = {}) => {
+interface AssignBrandFormProps {
+  /** 무료 진단에서 이어온 도메인. 사용자가 다시 입력하지 않게 한다. */
+  initialDomain?: string;
+  /** 온보딩에서는 선택 입력을 뒤 단계로 넘기고 도메인→이름 확인만 보여준다. */
+  mode?: "management" | "onboarding";
+  nextHref?: string;
+}
+
+export const AssignBrandForm = ({
+  initialDomain = "",
+  mode = "management",
+  nextHref,
+}: AssignBrandFormProps = {}) => {
+  const isOnboarding = mode === "onboarding";
   // Radix Select 는 네이티브 form 에 값을 싣지 않으므로 상태로 들고 액션에 직접 넘긴다
   // (audit-form.tsx 의 측정 언어 Select 와 동일 패턴).
   const [industry, setIndustry] = useState("auto");
   // 감지 패널(아래)이 도메인에 반응해야 해서 상태로 든다. `name="domain"` 은 그대로 두어
   //   서버 액션이 읽는 경로(FormData)는 바꾸지 않는다 — 제출 경로 무변경.
-  const [domain, setDomain] = useState("");
+  const [domain, setDomain] = useState(initialDomain);
   // 🔴 2026-08-21(10번) — 이름 칸도 상태로 든다(이전엔 비제어 input, 필수화하며
   //   자동 채움이 필요해져 제어로 전환). `name="name"` 은 그대로라 제출 경로 무변경.
   const [name, setName] = useState("");
   // 사용자가 이름 칸을 직접 건드렸으면 자동 채움이 그 값을 덮지 않는다.
   const [nameTouched, setNameTouched] = useState(false);
+  // 첫 화면은 도메인 하나로 시작하고, 입력을 마치면 이름 확인을 점진적으로 연다.
+  const [showIdentity, setShowIdentity] = useState(
+    !isOnboarding || Boolean(initialDomain)
+  );
   /**
    * 도메인 입력을 마쳤을 때(blur) 정적 사전에서 이름을 자동 채운다
    * (Scrunch "Confirm your details" 패턴 — 경쟁사 실측 근거는 위 §관련 파일 주석).
@@ -109,6 +126,7 @@ export const AssignBrandForm = ({ nextHref }: { nextHref?: string } = {}) => {
    */
   const handleDomainBlur = async () => {
     const trimmed = domain.trim();
+    setShowIdentity(Boolean(trimmed));
     if (!trimmed || nameTouched || name.trim()) {
       return;
     }
@@ -117,6 +135,20 @@ export const AssignBrandForm = ({ nextHref }: { nextHref?: string } = {}) => {
       setName(suggested);
     }
   };
+  useEffect(() => {
+    if (!(initialDomain && domain === initialDomain && !nameTouched && !name)) {
+      return;
+    }
+    let cancelled = false;
+    suggestBrandName(initialDomain).then((suggested) => {
+      if (!(cancelled || nameTouched) && suggested) {
+        setName(suggested);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [domain, initialDomain, name, nameTouched]);
   // 🔴 2026-08-21 복원 — null(미선택) 이면 아래 자동 감지값(`detected.scope`)을 쓴다.
   //   사용자가 직접 고르면 그 값이 감지값을 덮는다(선택이 감지보다 우선).
   const [marketScopeOverride, setMarketScopeOverride] = useState<string | null>(
@@ -232,17 +264,29 @@ export const AssignBrandForm = ({ nextHref }: { nextHref?: string } = {}) => {
       <div className="flex flex-col gap-2">
         <Label htmlFor="brand-domain">도메인</Label>
         <Input
-          autoComplete="off"
+          autoComplete="url"
           id="brand-domain"
           name="domain"
           onBlur={handleDomainBlur}
           onChange={(e) => setDomain(e.target.value)}
+          onKeyDown={(e) => {
+            if (isOnboarding && e.key === "Enter" && !showIdentity) {
+              e.preventDefault();
+              setShowIdentity(Boolean(domain.trim()));
+              e.currentTarget.blur();
+            }
+          }}
           placeholder="예: amorepacific.com"
           required
           value={domain}
         />
+        {initialDomain ? (
+          <p className="text-muted-foreground text-xs">
+            무료 진단에서 입력한 도메인을 가져왔어요. 다르면 수정해 주세요.
+          </p>
+        ) : null}
       </div>
-      {detected ? (
+      {detected && !isOnboarding ? (
         <div
           aria-live="polite"
           className="flex flex-col gap-1 rounded-md border border-[color:var(--findable-border,#2a2d31)] bg-[color:var(--findable-surface-2,rgba(255,255,255,0.03))] p-3"
@@ -272,89 +316,95 @@ export const AssignBrandForm = ({ nextHref }: { nextHref?: string } = {}) => {
           </p>
         </div>
       ) : null}
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="brand-market-scope">
-          타깃 시장{" "}
-          <span className="font-normal text-[color:var(--findable-ink-tertiary,#7e8289)]">
-            (선택)
-          </span>
-        </Label>
-        {/* 🔴 2026-08-21 복원 — 언어축 재설계 완료(위 MARKET_SCOPE_OPTIONS 주석 참조).
+      {isOnboarding ? null : (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="brand-market-scope">
+            타깃 시장{" "}
+            <span className="font-normal text-[color:var(--findable-ink-tertiary,#7e8289)]">
+              (선택)
+            </span>
+          </Label>
+          {/* 🔴 2026-08-21 복원 — 언어축 재설계 완료(위 MARKET_SCOPE_OPTIONS 주석 참조).
             비워두면(placeholder) 위 감지값을 그대로 쓴다. */}
-        <Select
-          onValueChange={setMarketScopeOverride}
-          value={marketScopeOverride ?? undefined}
-        >
-          <SelectTrigger className="w-full" id="brand-market-scope">
-            <SelectValue placeholder="자동 감지 사용" />
-          </SelectTrigger>
-          <SelectContent>
-            {MARKET_SCOPE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-muted-foreground text-xs">
-          한국인은 ChatGPT도 한국어로 많이 써요. "국내 중심"을 골라도
-          ChatGPT·Claude 같은 글로벌 AI가 빠지지 않아요 — 어떤 AI인지가 아니라
-          어떤 언어로 물었는지로 나눠요.
-        </p>
-      </div>
-      <div className="flex flex-col gap-2">
-        {/* 🔴 2026-08-21(10번) — **선택 → 필수**로 전환(👤 결정). 이름이 비면 도메인
+          <Select
+            onValueChange={setMarketScopeOverride}
+            value={marketScopeOverride ?? undefined}
+          >
+            <SelectTrigger className="w-full" id="brand-market-scope">
+              <SelectValue placeholder="자동 감지 사용" />
+            </SelectTrigger>
+            <SelectContent>
+              {MARKET_SCOPE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-muted-foreground text-xs">
+            한국인은 ChatGPT도 한국어로 많이 써요. "국내 중심"을 골라도
+            ChatGPT·Claude 같은 글로벌 AI가 빠지지 않아요 — 어떤 AI인지가 아니라
+            어떤 언어로 물었는지로 나눠요.
+          </p>
+        </div>
+      )}
+      {showIdentity ? (
+        <div className="flex flex-col gap-2">
+          {/* 🔴 2026-08-21(10번) — **선택 → 필수**로 전환(👤 결정). 이름이 비면 도메인
             문자열이 그대로 측정 프롬프트에 박힌다(`sulwhasoo.com 추천해줘`) — 실측으로
             확인된 측정 품질 저하(N-49). "브랜드 이름"이라는 말이 좁게 읽혀 스킵되기
             쉬웠으므로, 별도 브랜드명이 없는 회사도 자연스럽게 채우도록 질문·placeholder를
             "우리를 부르는 이름"으로 넓힌다(HIG "offer choices/examples instead of
             blind text entry" — 질문 자체를 없애는 대신 답하기 쉽게 만드는 쪽). */}
-        <Label htmlFor="brand-name">뭐라고 부르나요?</Label>
-        <Input
-          autoComplete="off"
-          id="brand-name"
-          name="name"
-          onChange={(e) => {
-            setNameTouched(true);
-            setName(e.target.value);
-          }}
-          placeholder="예: 설화수, 무신사 · 브랜드명이 따로 없다면 회사명(예: OO전자)"
-          required
-          value={name}
-        />
-        <p className="text-muted-foreground text-xs">
-          {name && !nameTouched
-            ? "도메인으로 자동으로 채웠어요. 다르면 고쳐주세요."
-            : "AI에게 물어볼 때 쓰는 이름이에요. 회사명과 브랜드명이 다르면 실제로 더 많이 불리는 쪽을 적어주세요."}
-        </p>
-      </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="brand-industry">업종</Label>
-        {/* 🔴 S7-c(2026-08-11) — `SelectTrigger` 기본값이 **`w-fit`**(design-system)이라
+          <Label htmlFor="brand-name">뭐라고 부르나요?</Label>
+          <Input
+            autoComplete="off"
+            id="brand-name"
+            name="name"
+            onChange={(e) => {
+              setNameTouched(true);
+              setName(e.target.value);
+            }}
+            placeholder="예: 설화수, 무신사 · 브랜드명이 따로 없다면 회사명(예: OO전자)"
+            required
+            value={name}
+          />
+          <p className="text-muted-foreground text-xs">
+            {name && !nameTouched
+              ? "도메인으로 자동으로 채웠어요. 다르면 고쳐주세요."
+              : "AI에게 물어볼 때 쓰는 이름이에요. 회사명과 브랜드명이 다르면 실제로 더 많이 불리는 쪽을 적어주세요."}
+          </p>
+        </div>
+      ) : null}
+      {isOnboarding ? null : (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="brand-industry">업종</Label>
+          {/* 🔴 S7-c(2026-08-11) — `SelectTrigger` 기본값이 **`w-fit`**(design-system)이라
             위의 브랜드 이름·도메인 입력칸(전폭)과 폭이 어긋났다. 같은 폼의 같은 등급
             입력인데 생김새가 달라 "덜 중요한 칸"으로 읽힌다(NN/g 4 일관성).
             → 전폭으로 맞춘다. */}
-        <Select onValueChange={setIndustry} value={industry}>
-          <SelectTrigger className="w-full" id="brand-industry">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {INDUSTRY_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {/* 🔴 S4(2026-08-11) — 예전 문구 「업종에 따라 **개선 처방의 채널**이
+          <Select onValueChange={setIndustry} value={industry}>
+            <SelectTrigger className="w-full" id="brand-industry">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {INDUSTRY_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {/* 🔴 S4(2026-08-11) — 예전 문구 「업종에 따라 **개선 처방의 채널**이
             달라집니다」. '처방'·'채널' 둘 다 내부 용어이고, 이 화면에서는 처방을
             아직 본 적이 없어 **참조할 대상조차 없다**. 게다가 이 문장만 '~합니다'체라
             화면의 나머지(해요체)와 말투가 어긋났다(진단 §원인④ · NN/g 2·4). */}
-        <p className="text-muted-foreground text-xs">
-          업종에 따라 어디를 고쳐야 하는지가 달라져요(네이버 블로그·뉴스·위키
-          등). 자동 감지가 틀렸다면 직접 골라주세요.
-        </p>
-      </div>
+          <p className="text-muted-foreground text-xs">
+            업종에 따라 어디를 고쳐야 하는지가 달라져요(네이버 블로그·뉴스·위키
+            등). 자동 감지가 틀렸다면 직접 골라주세요.
+          </p>
+        </div>
+      )}
       {state.error ? (
         <p
           // `--findable-danger` 는 **존재하지 않는 토큰**이었다(globals.css 실측·2026-08-07).
@@ -366,15 +416,17 @@ export const AssignBrandForm = ({ nextHref }: { nextHref?: string } = {}) => {
         </p>
       ) : null}
 
-      <div className="flex justify-end">
-        <Button
-          className="findable-btn-primary"
-          disabled={isPending}
-          type="submit"
-        >
-          {isPending ? "등록하고 측정을 시작하는 중…" : "등록하고 측정 시작"}
-        </Button>
-      </div>
+      {showIdentity ? (
+        <div className="flex justify-end">
+          <Button
+            className="findable-btn-primary"
+            disabled={isPending}
+            type="submit"
+          >
+            {isPending ? "등록하고 측정을 시작하는 중…" : "등록하고 측정 시작"}
+          </Button>
+        </div>
+      ) : null}
     </form>
   );
 };

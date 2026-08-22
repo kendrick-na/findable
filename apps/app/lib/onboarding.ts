@@ -42,12 +42,18 @@ export async function hasCompletedSetup(): Promise<boolean> {
     return false;
   }
 
-  // `Tracking` = 정식 측정이 돈 org = 이미 제품을 쓰고 있는 사람 → 온보딩 대상 아님.
-  //   ⚠️ 존재 여부만 본다(`select: {id}`) — 📕N-39: 무거운 컬럼을 같이 읽어 6.2초를
-  //     태운 사고가 있었다.
-  const tracking = await database.tracking.findFirst({
-    select: { id: true },
-    where: { brand: { organizationId: orgId } },
-  });
-  return tracking !== null;
+  // 완료 버튼을 누른 사실과 측정 성공 여부는 서로 다르다. 측정이 실패하거나 오늘 한도에
+  // 걸려도 사용자가 설정을 끝냈다면 다음 로그인에서 다시 온보딩에 가두지 않는다.
+  // 기존 고객은 새 컬럼이 null이어도 Tracking으로 그대로 통과한다.
+  const [organization, tracking] = await Promise.all([
+    database.organization.findUnique({
+      select: { onboardingCompletedAt: true },
+      where: { id: orgId },
+    }),
+    database.tracking.findFirst({
+      select: { id: true },
+      where: { brand: { organizationId: orgId } },
+    }),
+  ]);
+  return Boolean(organization?.onboardingCompletedAt) || tracking !== null;
 }
