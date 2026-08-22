@@ -6,96 +6,108 @@ import { Reveal } from "./reveal";
 
 const PILLARS_KO = [
   {
-    fig: "FIG 0.1",
     title: "글로벌+한국 AI 동시에",
     body: "ChatGPT · Gemini · Claude부터 HyperCLOVA · 네이버까지. 한국어 AI 3개를 잡는 건 Findable이 유일합니다.",
     illustration: (
-      <svg viewBox="0 0 200 140" className="h-full w-full" fill="none">
+      <svg
+        aria-hidden="true"
+        className="h-full w-full"
+        fill="none"
+        viewBox="0 0 200 140"
+      >
         {/* 아이소메트릭 검색창 */}
         <g
+          opacity="0.6"
           stroke="currentColor"
           strokeWidth="1.2"
-          opacity="0.6"
           transform="translate(20 50) rotate(-15) skewX(-20)"
         >
-          <rect x="0" y="0" width="160" height="40" rx="4" />
-          <line x1="0" y1="14" x2="160" y2="14" />
+          <rect height="40" rx="4" width="160" x="0" y="0" />
+          <line x1="0" x2="160" y1="14" y2="14" />
           <circle cx="14" cy="7" r="2.5" />
           <circle cx="22" cy="7" r="2.5" />
           <circle cx="30" cy="7" r="2.5" />
-          <line x1="14" y1="28" x2="120" y2="28" />
+          <line x1="14" x2="120" y1="28" y2="28" />
         </g>
         {/* 그래프 노드 */}
-        <g stroke="currentColor" strokeWidth="1" opacity="0.4">
+        <g opacity="0.4" stroke="currentColor" strokeWidth="1">
           <circle cx="160" cy="30" r="4" />
           <circle cx="180" cy="60" r="4" />
           <circle cx="140" cy="100" r="4" />
           <circle cx="170" cy="115" r="4" />
-          <line x1="160" y1="30" x2="180" y2="60" />
-          <line x1="180" y1="60" x2="140" y2="100" />
-          <line x1="140" y1="100" x2="170" y2="115" />
+          <line x1="160" x2="180" y1="30" y2="60" />
+          <line x1="180" x2="140" y1="60" y2="100" />
+          <line x1="140" x2="170" y1="100" y2="115" />
         </g>
       </svg>
     ),
   },
   {
-    fig: "FIG 0.2",
     title: "자율 에이전트가 24시간",
     body: "AI 에이전트가 측정·분석·추천까지 알아서 처리합니다. 마케터는 결과만 확인하면 됩니다.",
     illustration: (
-      <svg viewBox="0 0 200 140" className="h-full w-full" fill="none">
+      <svg
+        aria-hidden="true"
+        className="h-full w-full"
+        fill="none"
+        viewBox="0 0 200 140"
+      >
         {/* 중심 노드 */}
-        <g stroke="currentColor" strokeWidth="1.2" opacity="0.6">
-          <rect x="80" y="55" width="40" height="30" rx="4" />
-          <line x1="80" y1="65" x2="120" y2="65" />
-          <circle cx="86" cy="60" r="1.5" fill="currentColor" />
-          <circle cx="92" cy="60" r="1.5" fill="currentColor" />
-          <circle cx="98" cy="60" r="1.5" fill="currentColor" />
+        <g opacity="0.6" stroke="currentColor" strokeWidth="1.2">
+          <rect height="30" rx="4" width="40" x="80" y="55" />
+          <line x1="80" x2="120" y1="65" y2="65" />
+          <circle cx="86" cy="60" fill="currentColor" r="1.5" />
+          <circle cx="92" cy="60" fill="currentColor" r="1.5" />
+          <circle cx="98" cy="60" fill="currentColor" r="1.5" />
         </g>
         {/* 4 에이전트 위성 */}
-        <g stroke="currentColor" strokeWidth="1" opacity="0.4">
+        <g opacity="0.4" stroke="currentColor" strokeWidth="1">
           <circle cx="40" cy="30" r="10" />
           <circle cx="160" cy="30" r="10" />
           <circle cx="40" cy="110" r="10" />
           <circle cx="160" cy="110" r="10" />
-          <line x1="50" y1="35" x2="80" y2="60" strokeDasharray="3 2" />
-          <line x1="150" y1="35" x2="120" y2="60" strokeDasharray="3 2" />
-          <line x1="50" y1="105" x2="80" y2="80" strokeDasharray="3 2" />
-          <line x1="150" y1="105" x2="120" y2="80" strokeDasharray="3 2" />
+          <line strokeDasharray="3 2" x1="50" x2="80" y1="35" y2="60" />
+          <line strokeDasharray="3 2" x1="150" x2="120" y1="35" y2="60" />
+          <line strokeDasharray="3 2" x1="50" x2="80" y1="105" y2="80" />
+          <line strokeDasharray="3 2" x1="150" x2="120" y1="105" y2="80" />
         </g>
       </svg>
     ),
   },
   {
-    fig: "FIG 0.3",
     title: "측정만 하지 않아요",
     body: "분석 결과를 바로 콘텐츠에 반영하고, 다시 측정해 결과를 봅니다. 인용이 빠르게 쌓여요.",
     illustration: (
-      <svg viewBox="0 0 200 140" className="h-full w-full" fill="none">
+      <svg
+        aria-hidden="true"
+        className="h-full w-full"
+        fill="none"
+        viewBox="0 0 200 140"
+      >
         {/* 시간 축 */}
-        <g stroke="currentColor" strokeWidth="1" opacity="0.4">
-          <line x1="20" y1="120" x2="180" y2="120" />
-          <line x1="20" y1="115" x2="20" y2="125" />
-          <line x1="100" y1="115" x2="100" y2="125" />
-          <line x1="180" y1="115" x2="180" y2="125" />
+        <g opacity="0.4" stroke="currentColor" strokeWidth="1">
+          <line x1="20" x2="180" y1="120" y2="120" />
+          <line x1="20" x2="20" y1="115" y2="125" />
+          <line x1="100" x2="100" y1="115" y2="125" />
+          <line x1="180" x2="180" y1="115" y2="125" />
         </g>
         {/* 상승 그래프 */}
-        <g stroke="currentColor" strokeWidth="1.2" opacity="0.7">
+        <g opacity="0.7" stroke="currentColor" strokeWidth="1.2">
           <path d="M 20 100 L 60 85 L 100 70 L 140 45 L 180 25" fill="none" />
-          <circle cx="20" cy="100" r="2.5" fill="currentColor" />
-          <circle cx="60" cy="85" r="2.5" fill="currentColor" />
-          <circle cx="100" cy="70" r="2.5" fill="currentColor" />
-          <circle cx="140" cy="45" r="2.5" fill="currentColor" />
-          <circle cx="180" cy="25" r="2.5" fill="currentColor" />
+          <circle cx="20" cy="100" fill="currentColor" r="2.5" />
+          <circle cx="60" cy="85" fill="currentColor" r="2.5" />
+          <circle cx="100" cy="70" fill="currentColor" r="2.5" />
+          <circle cx="140" cy="45" fill="currentColor" r="2.5" />
+          <circle cx="180" cy="25" fill="currentColor" r="2.5" />
         </g>
         {/* 인용 마크 */}
         <g
+          opacity="0.5"
           stroke="currentColor"
           strokeWidth="1"
-          opacity="0.5"
           transform="translate(150 5)"
         >
-          <text fontFamily="serif" fontSize="20" fill="currentColor">
+          <text fill="currentColor" fontFamily="serif" fontSize="20">
             "
           </text>
         </g>
@@ -134,21 +146,16 @@ export const ThreePillars = ({ locale = "ko" }: ThreePillarsProps) => {
     <section className="bg-[var(--findable-canvas)] px-8 pt-8 pb-14 md:pt-10 md:pb-16">
       <div className="mx-auto max-w-[1200px]">
         <div className="mb-12 max-w-[720px]">
-          <p
-            className="text-[12px] uppercase tracking-[0.18em] text-[var(--findable-primary)]"
-            style={{ fontFamily: "var(--findable-font-sans)" }}
-          >
-            Why Findable
-          </p>
           <h2
-            className="mt-4 max-w-[900px] text-[var(--findable-ink)]"
+            className="max-w-[900px] text-[var(--findable-ink)]"
             style={{
               fontFamily: isKo
                 ? "var(--findable-font-display-kr)"
                 : "var(--findable-font-display)",
               fontSize: "clamp(32px, 4vw, 48px)",
               lineHeight: 1.15,
-              letterSpacing: "-0.025em",
+              // 한글은 정사각 격자 → 자간 0 (영문만 좁힌다)
+              letterSpacing: isKo ? "0" : "-0.025em",
               fontWeight: 500,
               wordBreak: "keep-all",
             }}
@@ -157,16 +164,15 @@ export const ThreePillars = ({ locale = "ko" }: ThreePillarsProps) => {
           </h2>
         </div>
 
-        <Reveal stagger={100} className="grid gap-8 md:grid-cols-3">
+        <Reveal
+          className="findable-glass-field grid gap-8 md:grid-cols-3"
+          stagger={60}
+        >
           {PILLARS.map((p) => (
             <article
-              key={p.fig}
+              className="findable-glass group relative overflow-hidden rounded-xl p-8 transition before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/15 before:to-transparent"
               data-reveal-item
-              className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-[var(--findable-surface-1)] p-8 transition before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/15 before:to-transparent hover:border-white/[0.12]"
-              style={{
-                boxShadow:
-                  "0 1px 0 0 rgba(255,255,255,0.03) inset, 0 24px 48px -16px rgba(0,0,0,0.5)",
-              }}
+              key={p.title}
             >
               {/* 일러스트 박스 — 미세한 dot grid + radial mask */}
               <div
@@ -182,23 +188,18 @@ export const ThreePillars = ({ locale = "ko" }: ThreePillarsProps) => {
                 <div className="relative z-10 h-full p-2">{p.illustration}</div>
               </div>
 
-              {/* FIG 번호 */}
-              <p
-                className="mt-6 text-[10px] uppercase tracking-[0.18em] text-[var(--findable-ink-tertiary)]"
-                style={{ fontFamily: "var(--findable-font-mono)" }}
-              >
-                {p.fig}
-              </p>
-
               <h3
-                className="mt-2 text-[18px] text-[var(--findable-ink)]"
-                style={{ fontFamily: "var(--findable-font-sans)", fontWeight: 500 }}
+                className="mt-6 text-[18px] text-[var(--findable-ink)]"
+                style={{
+                  fontFamily: "var(--findable-font-sans)",
+                  fontWeight: 500,
+                }}
               >
                 {p.title}
               </h3>
 
               <p
-                className="mt-3 text-[14px] leading-[1.6] text-[var(--findable-ink-muted)]"
+                className="mt-3 text-[14px] text-[var(--findable-ink-muted)] leading-[1.6]"
                 style={{ fontFamily: "var(--findable-font-sans)" }}
               >
                 {p.body}

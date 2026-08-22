@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Findable Hero 헤드라인 3안 미리보기</title>
+    <style>
+    /* ============================================================
+     Findable 실제 디자인 토큰 (packages/design-system/styles/globals.css 발췌)
+     ⚠️ 이 파일은 미리보기 목업이며 실제 랜딩 코드가 아님.
+     ============================================================ */
+    :root {
+      --findable-canvas: #010102;
+      --findable-surface-1: #0f1011;
+      --findable-surface-2: #141516;
+      --findable-ink: #f7f8f8;
+      --findable-ink-muted: #d0d6e0;
+      --findable-ink-subtle: #8a8f98;
+      --findable-ink-tertiary: #62666d;
+      --findable-hairline: #23252a;
+      --findable-hairline-strong: #34343a;
+      --findable-primary: #ff7a4d;
+      --findable-primary-hover: #ff9870;
+      --findable-glow-purple: rgba(255, 122, 77, 0.16);
+      --findable-ease-cinema: cubic-bezier(0.16, 1, 0.3, 1);
+      --findable-ease-out-soft: cubic-bezier(0, 0, 0.2, 1);
+
+      /* 폰트: 실제는 Fraunces/Noto Serif KR/Instrument Serif/Pretendard.
+       외부 의존 없이 근사 시스템 폰트로 대체 [근사] */
+      --findable-font-display-kr:
+        "Nanum Myeongjo", "Apple SD Gothic Neo", Georgia, "Noto Serif KR", serif;
+      --findable-font-sans:
+        -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI",
+        "Pretendard Variable", sans-serif;
+      --findable-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+      --findable-font-wordmark:
+        "Instrument Serif", Georgia, "Noto Serif KR", serif;
+    }
+
+    :root[data-theme="light"] {
+      --findable-canvas: #ffffff;
+      --findable-surface-1: #f6f7f8;
+      --findable-surface-2: #eef0f2;
+      --findable-ink: #0b0c0e;
+      --findable-ink-muted: #3a3f47;
+      --findable-ink-subtle: #6b7078;
+      --findable-ink-tertiary: #9aa0a8;
+      --findable-hairline: #e5e7ea;
+      --findable-hairline-strong: #d6d9dd;
+      --findable-glow-purple: rgba(255, 122, 77, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+      padding: 0;
+      margin: 0;
+    }
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+    body {
+      font-family: var(--findable-font-sans);
+      -webkit-font-smoothing: antialiased;
+      color: var(--findable-ink);
+      background: #050506;
+    }
+    :root[data-theme="light"] body {
+      background: #dcdee1;
+    }
+
+    /* ---- 상단 목업 경고 배너 + 테마 토글 ---- */
+    .mock-banner {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      font-family: var(--findable-font-sans);
+      font-size: 13px;
+      font-weight: 700;
+      color: #1a0d07;
+      background: #ff7a4d;
+      box-shadow: 0 2px 20px rgba(0, 0, 0, 0.35);
+    }
+    .mock-banner span {
+      line-height: 1.4;
+    }
+    .toggle-btn {
+      flex-shrink: 0;
+      padding: 5px 12px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      color: #1a0d07;
+      white-space: nowrap;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.25);
+      border: 1px solid rgba(26, 13, 7, 0.35);
+      border-radius: 6px;
+    }
+    .toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.45);
+    }
+
+    /* ---- 안 라벨 ---- */
+    .variant-label {
+      max-width: 1200px;
+      padding: 0 24px;
+      margin: 44px auto 0;
+    }
+    .variant-label .tag {
+      display: inline-block;
+      padding: 3px 10px;
+      font-family: var(--findable-font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: #1a0d07;
+      letter-spacing: 0.04em;
+      background: #ff7a4d;
+      border-radius: 5px;
+    }
+    .variant-label .title {
+      margin-top: 10px;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--findable-ink);
+    }
+    .variant-label .desc {
+      margin-top: 4px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--findable-ink-subtle);
+    }
+    .variant-label .rec {
+      margin-left: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--findable-primary);
+    }
+
+    /* ---- Hero 카드 (실제 랜딩 재현) ---- */
+    .hero-frame {
+      max-width: 1200px;
+      padding: 0 24px;
+      margin: 14px auto 0;
+    }
+    .hero {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+      color: var(--findable-ink);
+      background: var(--findable-canvas);
+      border: 1px solid var(--findable-hairline);
+      border-radius: 16px;
+    }
+    .glow {
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 60%;
+      pointer-events: none;
+      background: radial-gradient(
+        ellipse 80% 50% at 50% 0%,
+        var(--findable-glow-purple),
+        transparent 60%
+      );
+    }
+
+    /* nav */
+    .nav {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--findable-hairline);
+    }
+    .wordmark {
+      display: inline-flex;
+      align-items: baseline;
+      font-family: var(--findable-font-wordmark);
+      font-size: 24px;
+      line-height: 1;
+      color: var(--findable-ink);
+      letter-spacing: -0.01em;
+    }
+    .wordmark i {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      margin-left: 5px;
+      background: var(--findable-primary);
+    }
+    .nav-links {
+      display: none;
+      gap: 26px;
+    }
+    .nav-links a {
+      font-size: 14px;
+      color: var(--findable-ink-subtle);
+      text-decoration: none;
+    }
+    .nav-links a:hover {
+      color: var(--findable-ink);
+    }
+    .nav-right {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .langtoggle {
+      display: none;
+      gap: 2px;
+      align-items: center;
+      padding: 4px 6px;
+      font-family: var(--findable-font-mono);
+      font-size: 12px;
+      border: 1px solid var(--findable-hairline);
+      border-radius: 6px;
+    }
+    .langtoggle .on {
+      padding: 2px 6px;
+      color: var(--findable-ink);
+      background: var(--findable-surface-2);
+      border-radius: 4px;
+    }
+    .langtoggle .off {
+      padding: 2px 6px;
+      color: var(--findable-ink-tertiary);
+    }
+    .nav-signin {
+      display: none;
+      padding: 6px 12px;
+      font-size: 14px;
+      color: var(--findable-ink);
+      text-decoration: none;
+      border-radius: 6px;
+    }
+    .nav-demo {
+      display: inline-flex;
+      align-items: center;
+      height: 36px;
+      padding: 0 14px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--findable-canvas);
+      text-decoration: none;
+      background: var(--findable-ink);
+      border-radius: 6px;
+    }
+
+    /* hero content */
+    .content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 1100px;
+      padding: 48px 24px 52px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .pill {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 5px 12px;
+      font-size: 12px;
+      color: var(--findable-ink-muted);
+      background: var(--findable-surface-2);
+      border: 1px solid var(--findable-hairline-strong);
+      border-radius: 999px;
+    }
+    .pill .dot {
+      width: 6px;
+      height: 6px;
+      background: var(--findable-primary);
+      border-radius: 999px;
+      animation: pulse 2s var(--findable-ease-out-soft) infinite;
+    }
+    @keyframes pulse {
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.35;
+      }
+    }
+
+    h1.hero-h1 {
+      max-width: 980px;
+      margin-top: 30px;
+      font-family: var(--findable-font-display-kr);
+      font-size: clamp(30px, 4.4vw, 62px);
+      font-weight: 600;
+      line-height: 1.12;
+      color: var(--findable-ink);
+      letter-spacing: -0.035em;
+    }
+    .hero-sub {
+      max-width: 640px;
+      margin-top: 22px;
+      font-size: clamp(16px, 2.2vw, 20px);
+      font-weight: 600;
+      line-height: 1.45;
+      color: var(--findable-ink);
+    }
+    .hero-tag {
+      max-width: 680px;
+      margin-top: 16px;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--findable-ink-muted);
+    }
+    .ctas {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      margin-top: 34px;
+    }
+    .btn-primary {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      height: 44px;
+      padding: 0 18px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--findable-canvas);
+      text-decoration: none;
+      background: var(--findable-ink);
+      border-radius: 8px;
+    }
+    .btn-primary:hover {
+      background: var(--findable-ink-muted);
+    }
+    .btn-primary svg {
+      width: 14px;
+      height: 14px;
+    }
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 44px;
+      padding: 0 18px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--findable-ink-muted);
+      text-decoration: none;
+      border-radius: 8px;
+    }
+    .btn-ghost:hover {
+      color: var(--findable-ink);
+      background: var(--findable-surface-1);
+    }
+
+    .engines {
+      display: flex;
+      flex-wrap: wrap;
+      row-gap: 12px;
+      column-gap: 30px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 56px;
+    }
+    .engines .lbl {
+      font-size: 11px;
+      color: var(--findable-ink-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .engines .eng {
+      font-family: var(--findable-font-mono);
+      font-size: 13px;
+      color: var(--findable-ink-subtle);
+    }
+    /* 네이버 강조 — 3안 공통 서사 핵심(맨 앞) */
+    .engines .eng.first {
+      font-weight: 600;
+      color: var(--findable-primary);
+    }
+
+    @media (min-width: 768px) {
+      .nav-links {
+        display: flex;
+      }
+      .langtoggle {
+        display: flex;
+      }
+      .nav-signin {
+        display: inline-block;
+      }
+      .ctas {
+        flex-direction: row;
+      }
+    }
+
+    .foot {
+      max-width: 1200px;
+      padding: 0 24px;
+      margin: 40px auto 60px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--findable-ink-tertiary);
+      text-align: center;
+    }
+    </style>
+  </head>
+  <body>
+    <div class="mock-banner">
+      <span
+        >⚠️ 미리보기 목업 — 실제 홈페이지 아님. 방향 비교용 (실제 랜딩 코드
+        hero.tsx 불변)</span
+      >
+      <button class="toggle-btn" id="themeBtn" onclick="toggleTheme()">
+        ☀︎ 라이트
+      </button>
+    </div>
+
+    <!-- ============ A안 ============ -->
+    <div class="variant-label">
+      <span class="tag">A안</span><span class="rec">★ 추천</span>
+      <div class="title">네이버 셀프서브 직격</div>
+      <div class="desc">
+        "직접 보고 직접 고치세요" — 셀프서브 행동 + 네이버 커버리지 + 광고 대비
+        자산 프레이밍을 한 문장에 압축.
+      </div>
+    </div>
+    <div class="hero-frame">
+      <div class="hero">
+        <div class="glow"></div>
+        <nav class="nav">
+          <a class="wordmark" href="#" onclick="return false"
+            >Findable<i></i></a
+          >
+          <div class="nav-links">
+            <a href="#" onclick="return false">제품</a>
+            <a href="#" onclick="return false">데모</a>
+            <a href="#" onclick="return false">요금제</a>
+            <a href="#" onclick="return false">리소스</a>
+          </div>
+          <div class="nav-right">
+            <div class="langtoggle">
+              <span class="on">KO</span><span class="off">EN</span>
+            </div>
+            <a class="nav-signin" href="#" onclick="return false">로그인</a>
+            <a class="nav-demo" href="#" onclick="return false">데모 신청</a>
+          </div>
+        </nav>
+        <div class="content">
+          <span class="pill"><span class="dot"></span>Findable v1.0 베타</span>
+          <h1 class="hero-h1">
+            네이버 AI가 당신 브랜드를 어떻게 말하는지, 직접 보고 직접 고치세요.
+          </h1>
+          <p class="hero-sub">
+            네이버·ChatGPT·Perplexity가 당신을 인용하는 방식을 셀프서브로
+            진단하고, 매달 태우는 광고 대신 복리로 쌓이는 AI 노출 자산을
+            만듭니다.
+          </p>
+          <div class="ctas">
+            <a class="btn-primary" href="#" onclick="return false"
+              >내 브랜드 AI 진단 시작 (무료)
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </a>
+            <a class="btn-ghost" href="#" onclick="return false"
+              >네이버 리포트 예시 보기</a
+            >
+          </div>
+          <div class="engines">
+            <span class="lbl">진단 대상 AI</span>
+            <span class="eng first">네이버</span>
+            <span class="eng">ChatGPT</span>
+            <span class="eng">Perplexity</span>
+            <span class="eng">Claude</span>
+            <span class="eng">Gemini</span>
+            <span class="eng">HyperCLOVA</span>
+            <span class="eng">다음</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ B안 ============ -->
+    <div class="variant-label">
+      <span class="tag">B안</span>
+      <div class="title">페인(팩트 오정합) 직격</div>
+      <div class="desc">
+        "AI가 당신을 틀리게 안다" — 즉각적 불안·문제 인식으로 후킹. 진단
+        지표(정합률·점유율)를 근거로 제시.
+      </div>
+    </div>
+    <div class="hero-frame">
+      <div class="hero">
+        <div class="glow"></div>
+        <nav class="nav">
+          <a class="wordmark" href="#" onclick="return false"
+            >Findable<i></i></a
+          >
+          <div class="nav-links">
+            <a href="#" onclick="return false">제품</a>
+            <a href="#" onclick="return false">데모</a>
+            <a href="#" onclick="return false">요금제</a>
+            <a href="#" onclick="return false">리소스</a>
+          </div>
+          <div class="nav-right">
+            <div class="langtoggle">
+              <span class="on">KO</span><span class="off">EN</span>
+            </div>
+            <a class="nav-signin" href="#" onclick="return false">로그인</a>
+            <a class="nav-demo" href="#" onclick="return false">데모 신청</a>
+          </div>
+        </nav>
+        <div class="content">
+          <span class="pill"><span class="dot"></span>Findable v1.0 베타</span>
+          <h1 class="hero-h1">AI는 지금 당신 브랜드를 틀리게 알고 있습니다.</h1>
+          <p class="hero-sub">
+            팩트정합률·인용 점유율·경쟁사 대비 위치를 한 화면에서 확인하고,
+            어디를 고치면 AI가 당신을 정확히 인용하는지까지 알려줍니다.
+          </p>
+          <div class="ctas">
+            <a class="btn-primary" href="#" onclick="return false"
+              >AI가 나를 어떻게 말하는지 보기
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </a>
+            <a class="btn-ghost" href="#" onclick="return false">데모 보기</a>
+          </div>
+          <div class="engines">
+            <span class="lbl">진단 대상 AI</span>
+            <span class="eng first">네이버</span>
+            <span class="eng">ChatGPT</span>
+            <span class="eng">Perplexity</span>
+            <span class="eng">Claude</span>
+            <span class="eng">Gemini</span>
+            <span class="eng">HyperCLOVA</span>
+            <span class="eng">다음</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ C안 ============ -->
+    <div class="variant-label">
+      <span class="tag">C안</span>
+      <div class="title">소유권/자산 서사 직격</div>
+      <div class="desc">
+        "사는 게 아니라 쌓는 것" — SEO/광고=임대 vs GEO=지분 대비로 카테고리
+        재정의. 서사·설득형, 개념 이해 필요.
+      </div>
+    </div>
+    <div class="hero-frame">
+      <div class="hero">
+        <div class="glow"></div>
+        <nav class="nav">
+          <a class="wordmark" href="#" onclick="return false"
+            >Findable<i></i></a
+          >
+          <div class="nav-links">
+            <a href="#" onclick="return false">제품</a>
+            <a href="#" onclick="return false">데모</a>
+            <a href="#" onclick="return false">요금제</a>
+            <a href="#" onclick="return false">리소스</a>
+          </div>
+          <div class="nav-right">
+            <div class="langtoggle">
+              <span class="on">KO</span><span class="off">EN</span>
+            </div>
+            <a class="nav-signin" href="#" onclick="return false">로그인</a>
+            <a class="nav-demo" href="#" onclick="return false">데모 신청</a>
+          </div>
+        </nav>
+        <div class="content">
+          <span class="pill"><span class="dot"></span>Findable v1.0 베타</span>
+          <h1 class="hero-h1">AI 노출은 사는 게 아니라 쌓는 겁니다.</h1>
+          <p class="hero-sub">
+            SEO·광고가 매달 지불하는 임대라면, GEO는 브랜드에 적립되는
+            지분입니다. 네이버까지 커버하는 깊이로 그 지분을 쌓습니다.
+          </p>
+          <div class="ctas">
+            <a class="btn-primary" href="#" onclick="return false"
+              >내 AI 노출 자산 쌓기 시작
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </a>
+            <a class="btn-ghost" href="#" onclick="return false"
+              >임대 vs 적립 알아보기</a
+            >
+          </div>
+          <div class="engines">
+            <span class="lbl">진단 대상 AI</span>
+            <span class="eng first">네이버</span>
+            <span class="eng">ChatGPT</span>
+            <span class="eng">Perplexity</span>
+            <span class="eng">Claude</span>
+            <span class="eng">Gemini</span>
+            <span class="eng">HyperCLOVA</span>
+            <span class="eng">다음</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      Findable Hero 헤드라인 A/B/C 비교 목업 · 색·폰트는 실제 design-system 토큰
+      반영(폰트만 시스템 근사)<br>
+      실제 랜딩(hero.tsx·dictionary)은 수정되지 않았습니다.
+    </div>
+
+    <script>
+    "use strict";
+    function toggleTheme() {
+      var root = document.documentElement;
+      var dark = root.getAttribute("data-theme") !== "light";
+      root.setAttribute("data-theme", dark ? "light" : "dark");
+      document.getElementById("themeBtn").textContent = dark
+        ? "☾ 다크"
+        : "☀︎ 라이트";
+    }
+    </script>
+  </body>
+</html>

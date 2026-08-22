@@ -1,7 +1,12 @@
 import { getDictionary } from "@repo/internationalization";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
+import { Header } from "../components/header";
 import { ContactForm } from "./components/contact-form";
+
+// ⚡ ISR (2026-07-30 성능): dynamic API 사용 0 → 1시간 캐시(CDN). [locale] 전 페이지
+//   매 요청 SSR이던 문제의 페이지 단위 해소. 카피 변경은 재배포로 반영.
+export const revalidate = 3600;
 
 interface ContactProps {
   params: Promise<{
@@ -15,14 +20,23 @@ export const generateMetadata = async ({
   const { locale } = await params;
   const dictionary = await getDictionary(locale);
 
-  return createMetadata(dictionary.web.contact.meta);
+  return createMetadata({
+    ...dictionary.web.contact.meta,
+    locale,
+    pathname: "/contact",
+  });
 };
 
 const Contact = async ({ params }: ContactProps) => {
   const { locale } = await params;
   const dictionary = await getDictionary(locale);
 
-  return <ContactForm dictionary={dictionary} />;
+  return (
+    <>
+      <Header dictionary={dictionary} />
+      <ContactForm dictionary={dictionary} locale={locale} />
+    </>
+  );
 };
 
 export default Contact;

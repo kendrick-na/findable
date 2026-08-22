@@ -74,13 +74,13 @@ export async function getPayment(paymentId: string): Promise<PortOnePayment> {
       },
       // 60초 timeout 권장 (포트원 V2 가이드)
       signal: AbortSignal.timeout(60_000),
-    },
+    }
   );
 
   const data = await res.json();
   if (!res.ok) {
     throw new Error(
-      `PortOne payment lookup failed: ${data.code ?? res.status} ${data.message ?? ""}`,
+      `PortOne payment lookup failed: ${data.code ?? res.status} ${data.message ?? ""}`
     );
   }
 
@@ -116,13 +116,13 @@ export async function preRegisterPayment(input: {
         currency: input.currency,
       }),
       signal: AbortSignal.timeout(60_000),
-    },
+    }
   );
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(
-      `PortOne pre-register failed: ${data.code ?? res.status} ${data.message ?? ""}`,
+      `PortOne pre-register failed: ${data.code ?? res.status} ${data.message ?? ""}`
     );
   }
 }
@@ -131,4 +131,195 @@ export async function preRegisterPayment(input: {
 export function isPortOneConfigured(): boolean {
   const { PORTONE_API_SECRET } = keys();
   return Boolean(PORTONE_API_SECRET);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// 정기결제(빌링키) — 2026-08-11 세션N-18
+//
+// 카카오페이 심사관 요청: *"사이트 내 정기결제 상품이 없으면 심사 진행이 어렵다"*
+//   → 테스트 채널(CID `TCSUBSCRIP`)로 정기결제 상품·결제흐름을 실제로 구현한다.
+//
+// 흐름: 브라우저 `requestIssueBillingKey` (빌링키 발급)
+//        → 서버가 빌링키로 첫 결제 `POST /payments/{paymentId}/billing-key`
+//        → 이후 갱신은 결제 예약(`/payments/{id}/schedule`) — 라이브 전환 후 켠다.
+//
+// 🔴 **해지 시 예약 취소를 반드시 함께** 할 것(`DELETE /payment-schedules`).
+//   빌링키만 지우고 예약을 남기면 포트원 리커버리가 계속 청구를 시도한다(무한 과금 사고).
+//   → `cancelBillingKeySchedules()` 를 먼저 부르고 `deleteBillingKey()` 를 부른다.
+// ──────────────────────────────────────────────────────────────────
+
+/** 빌링키로 즉시 결제. 성공하면 결제된 실제 금액(KRW)을 돌려준다. */
+export async function payWithBillingKey(input: {
+  billingKey: string;
+  channelKey: string;
+  currency: string;
+  customerEmail?: string;
+  customerName: string;
+  orderName: string;
+  paymentId: string;
+  totalAmount: number;
+}): Promise<void> {
+  const { PORTONE_API_SECRET } = keys();
+  if (!PORTONE_API_SECRET) {
+    throw new Error("PORTONE_API_SECRET is not configured");
+  }
+
+  const res = await fetch(
+    `${PORTONE_API_BASE}/payments/${encodeURIComponent(input.paymentId)}/billing-key`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `PortOne ${PORTONE_API_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        billingKey: input.billingKey,
+        channelKey: input.channelKey,
+        orderName: input.orderName,
+        customer: {
+          fullName: input.customerName,
+          email: input.customerEmail,
+        },
+        amount: { total: input.totalAmount },
+        currency: input.currency,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    }
+  );
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(
+      `PortOne billing-key payment failed: ${data.code ?? res.status} ${data.message ?? ""}`
+    );
+  }
+}
+
+/**
+ * 다음 회차 결제를 **예약**한다(2회차 이후 자동 청구).
+ *
+ * 왜 필요한가: `payWithBillingKey` 는 **그 순간 1회**만 청구한다. 예약을 걸지 않으면
+ *   "구독"이라 팔면서 2회차부터 청구가 없는 상태가 된다(표시와 실제가 다름).
+ *
+ * 🔴 **라이브 전환 전에는 호출하지 말 것.** 카카오페이 심사 회신(2026-08-11)에
+ *   「2회차 이후 자동 청구는 라이브 채널키로 전환한 뒤 연결할 예정」이라고 고지했다.
+ *   테스트 채널은 실제 청구가 없어 동작 검증도 안 된다.
+ *   → 지금은 **정의만 해 두고 호출부를 연결하지 않는다**(승인 후 연결).
+ *
+ * ⚠️ `paymentId` 는 **매 회차 새 값**이어야 한다. 같은 값으로 두 번 예약하면
+ *   포트원이 `PAYMENT_SCHEDULE_ALREADY_EXISTS` 로 거절한다.
+ *
+ * 근거(2026-08-12 공식 문서 확인): `POST /payments/{paymentId}/schedule`
+ *   · https://developers.portone.io/api/rest-v2/payment.paymentSchedule
+ */
+export async function schedulePaymentWithBillingKey(input: {
+  billingKey: string;
+  channelKey: string;
+  currency: string;
+  customerEmail?: string;
+  customerName: string;
+  orderName: string;
+  paymentId: string;
+  /** 청구 시각. 과거 시각이면 포트원이 거절한다. */
+  timeToPay: Date;
+  totalAmount: number;
+}): Promise<void> {
+  const { PORTONE_API_SECRET } = keys();
+  if (!PORTONE_API_SECRET) {
+    throw new Error("PORTONE_API_SECRET is not configured");
+  }
+
+  const res = await fetch(
+    `${PORTONE_API_BASE}/payments/${encodeURIComponent(input.paymentId)}/schedule`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `PortOne ${PORTONE_API_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        payment: {
+          billingKey: input.billingKey,
+          channelKey: input.channelKey,
+          orderName: input.orderName,
+          customer: {
+            fullName: input.customerName,
+            email: input.customerEmail,
+          },
+          amount: { total: input.totalAmount },
+          currency: input.currency,
+        },
+        timeToPay: input.timeToPay.toISOString(),
+      }),
+      signal: AbortSignal.timeout(60_000),
+    }
+  );
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(
+      `PortOne payment schedule failed: ${data.code ?? res.status} ${data.message ?? ""}`
+    );
+  }
+}
+
+/**
+ * 이 빌링키에 걸린 **결제 예약을 전부 취소**한다(해지 1단계).
+ * 🔴 빌링키 삭제보다 **먼저** 부를 것 — 순서가 바뀌면 남은 예약이 계속 청구를 시도한다.
+ */
+export async function cancelBillingKeySchedules(
+  billingKey: string
+): Promise<void> {
+  const { PORTONE_API_SECRET } = keys();
+  if (!PORTONE_API_SECRET) {
+    throw new Error("PORTONE_API_SECRET is not configured");
+  }
+
+  const res = await fetch(`${PORTONE_API_BASE}/payment-schedules`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `PortOne ${PORTONE_API_SECRET}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ billingKey }),
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  // 예약이 하나도 없으면 404/400 이 올 수 있다 — 해지 자체는 계속 진행해야 하므로 삼킨다.
+  if (!res.ok && res.status !== 404) {
+    const data = await res.json().catch(() => ({}));
+    // 취소할 예약이 없다는 뜻이면 정상으로 본다.
+    if (data.type !== "PAYMENT_SCHEDULE_NOT_FOUND") {
+      throw new Error(
+        `PortOne schedule cancel failed: ${data.code ?? res.status} ${data.message ?? ""}`
+      );
+    }
+  }
+}
+
+/** 빌링키 삭제(해지 2단계). 🔴 `cancelBillingKeySchedules` 이후에 부를 것. */
+export async function deleteBillingKey(billingKey: string): Promise<void> {
+  const { PORTONE_API_SECRET } = keys();
+  if (!PORTONE_API_SECRET) {
+    throw new Error("PORTONE_API_SECRET is not configured");
+  }
+
+  const res = await fetch(
+    `${PORTONE_API_BASE}/billing-keys/${encodeURIComponent(billingKey)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `PortOne ${PORTONE_API_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(60_000),
+    }
+  );
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(
+      `PortOne billing key delete failed: ${data.code ?? res.status} ${data.message ?? ""}`
+    );
+  }
 }

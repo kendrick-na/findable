@@ -12,11 +12,11 @@ export const FooterCTA = () => {
       {/* 인왕제색도 배경 — 다크 톤 */}
       <div className="pointer-events-none absolute inset-0 opacity-50 mix-blend-soft-light">
         <Image
-          src="/illustrations/jeong-seon-footer.webp"
           alt="정선 「인왕제색도」"
+          className="object-cover"
           fill
           sizes="100vw"
-          className="object-cover"
+          src="/illustrations/jeong-seon-footer.webp"
         />
       </div>
 
@@ -27,7 +27,7 @@ export const FooterCTA = () => {
       />
 
       <div className="relative mx-auto flex min-h-[80vh] max-w-5xl flex-col items-center justify-center px-6 py-32 text-center text-[color:var(--findable-mist-50)]">
-        <p className="text-xs font-mono uppercase tracking-[0.18em] text-[color:var(--findable-gold-500)]/80">
+        <p className="font-mono text-[color:var(--findable-gold-500)]/80 text-xs uppercase tracking-[0.18em]">
           Free Audit · 3분 진단
         </p>
         <h2
@@ -41,7 +41,7 @@ export const FooterCTA = () => {
           <br />
           AI에게 어떻게 보이고 있을까요?
         </h2>
-        <p className="mt-8 max-w-xl text-lg text-[color:var(--findable-mist-50)]/70">
+        <p className="mt-8 max-w-xl text-[color:var(--findable-mist-50)]/70 text-lg">
           7개 AI 엔진에서 우리 브랜드의 위치를 측정하고,
           <br />
           한국어 가시성 모트를 검증합니다.
@@ -50,8 +50,8 @@ export const FooterCTA = () => {
         <div className="mt-12 flex flex-col items-center gap-3 sm:flex-row">
           <Button
             asChild
-            size="lg"
             className="gap-2 rounded-full bg-[color:var(--findable-mist-50)] px-8 text-[color:var(--findable-sumi-950)] hover:bg-[color:var(--findable-mist-50)]/90"
+            size="lg"
           >
             <Link href="/audit">
               3분 무료 진단 시작
@@ -60,15 +60,15 @@ export const FooterCTA = () => {
           </Button>
           <Button
             asChild
-            variant="outline"
-            size="lg"
             className="gap-2 rounded-full border-[color:var(--findable-mist-50)]/30 bg-transparent px-7 text-[color:var(--findable-mist-50)] backdrop-blur-md hover:bg-[color:var(--findable-mist-50)]/10"
+            size="lg"
+            variant="outline"
           >
             <Link href="/contact">전문가 상담 예약</Link>
           </Button>
         </div>
 
-        <div className="mt-20 flex items-center gap-6 text-xs text-[color:var(--findable-mist-50)]/50">
+        <div className="mt-20 flex items-center gap-6 text-[color:var(--findable-mist-50)]/50 text-xs">
           <span>이메일만 있으면 OK</span>
           <span className="h-1 w-1 rounded-full bg-current" />
           <span>카드 등록 불필요</span>

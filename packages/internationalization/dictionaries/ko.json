@@ -15,140 +15,14 @@
       "docs": "문서",
       "contact": "문의",
       "signIn": "로그인",
-      "signUp": "시작하기"
+      "signUp": "시작하기",
+      "openMenu": "메뉴 열기",
+      "closeMenu": "메뉴 닫기"
     },
     "home": {
       "meta": {
         "title": "AI는 우리 브랜드를 추천하고 있나요?",
-        "description": "ChatGPT · HyperCLOVA · Perplexity · 네이버 · Claude · 다음 · Gemini — 한국어·영어 7개 AI 답변에서 우리 브랜드의 위치를 추적합니다."
-      },
-      "hero": {
-        "announcement": "최신 GEO 리서치 보기",
-        "primaryCta": "무료 진단 받기 (3분)",
-        "secondaryCta": "전문가 상담 예약"
-      },
-      "cases": {
-        "title": "글로벌 K-브랜드와 외국 브랜드 한국 마케팅팀이 선택한 플랫폼"
-      },
-      "features": {
-        "title": "네이버까지 진단하고, 고칠 곳까지 알려주는 Agentic GEO",
-        "description": "4명의 자율 에이전트가 한국어·영어 7개 AI 엔진에서 우리 브랜드의 가시성을 측정하고 최적화합니다.",
-        "items": [
-          {
-            "title": "7개 엔진 동시 추적",
-            "description": "ChatGPT · Claude · Perplexity · Gemini + HyperCLOVA X · 네이버 · 다음을 한 화면에서. 한국 AI 엔진을 모두 커버하는 유일한 플랫폼입니다."
-          },
-          {
-            "title": "Korean Entity Grounding",
-            "description": "한글·영문·혼용 표기를 모두 통합 추적합니다. K-뷰티·K-패션·외국 브랜드 한국 마케팅팀을 위해 설계되었습니다."
-          },
-          {
-            "title": "무료 도메인 진단",
-            "description": "도메인을 입력하면 3분 안에 1페이지 PDF 리포트를 받습니다. Share of Voice, 경쟁사 순위, Top 3 개선 추천을 한 장에 담았습니다."
-          },
-          {
-            "title": "4명의 자율 에이전트",
-            "description": "민지(한국 GEO 분석가) · Alex(US 벤치마크) · 수진(인용 출처 분석) · 준호(액션 추천) — AI 검색 시대의 마케팅팀입니다."
-          }
-        ]
-      },
-      "stats": {
-        "title": "검색은 SEO에서 GEO로 이미 전환 중입니다",
-        "description": "AI 추천 트래픽은 2025년 전년 대비 357% 성장했습니다. Profound는 2026년 2월 첫 GEO 유니콘($1B)이 되었습니다. 글로벌 GEO 4개사 중 한국 AI 엔진을 커버하는 곳은 0곳입니다.",
-        "items": [
-          {
-            "title": "추적 AI 엔진",
-            "metric": "7",
-            "delta": "0",
-            "type": "unit"
-          },
-          {
-            "title": "한국 엔진 커버리지",
-            "metric": "3",
-            "delta": "0",
-            "type": "unit"
-          },
-          {
-            "title": "GEO 시장 (2034)",
-            "metric": "17020000000",
-            "delta": "45",
-            "type": "currency"
-          },
-          {
-            "title": "AI 추천 트래픽 성장 (2025)",
-            "metric": "357",
-            "delta": "357",
-            "type": "unit"
-          }
-        ]
-      },
-      "testimonials": {
-        "title": "AI에 의해 발견되는 브랜드, AI에 의해 잊혀지는 브랜드.",
-        "items": [
-          {
-            "title": "K-뷰티 글로벌 진출",
-            "description": "ChatGPT가 우리 브랜드와 조선미녀를 영어권에서 어떻게 다르게 언급하는지 처음으로 봤습니다. 한국어·영어 좌우 비교 뷰가 정확히 필요했던 기능입니다.",
-            "author": {
-              "name": "K-뷰티 D2C 브랜드",
-              "image": "https://github.com/haydenbleasel.png"
-            }
-          },
-          {
-            "title": "외국 브랜드 한국 진출",
-            "description": "본사가 한국어 AI 검색 가시성 KPI를 요구했지만, 글로벌 GEO 도구 중 HyperCLOVA·네이버를 커버하는 곳이 없었습니다. Findable이 유일한 선택지였어요.",
-            "author": {
-              "name": "글로벌 브랜드 한국 마케팅팀",
-              "image": "https://github.com/leerob.png"
-            }
-          },
-          {
-            "title": "Profound 가격의 1/5",
-            "description": "Profound $399, Athena $295를 써봤지만, 한국 엔진은 어디도 안 됐습니다. Findable Starter ₩99K로 한국 엔진까지 다 커버합니다.",
-            "author": {
-              "name": "한국 내수 D2C 마케터",
-              "image": "https://github.com/shadcn.png"
-            }
-          },
-          {
-            "title": "측정만 하는 게 아니라 행동까지",
-            "description": "4 에이전트 크루는 단순 측정에 그치지 않습니다. 준호 에이전트가 Princeton GEO 알고리즘 기반으로 콘텐츠 개선안을 제안해줍니다. 보기만 하지 않고 실행합니다.",
-            "author": {
-              "name": "K-패션 마케팅 디렉터",
-              "image": "https://github.com/pontusab.png"
-            }
-          }
-        ]
-      },
-      "faq": {
-        "title": "GEO와 Findable에 대해 자주 묻는 질문",
-        "description": "Generative Engine Optimization은 SEO를 잇는 새로운 표준입니다. AI 답변 속 브랜드 가시성에 대해 알아야 할 핵심을 정리했습니다.",
-        "cta": "더 궁금하신가요? 직접 문의하세요",
-        "items": [
-          {
-            "question": "GEO(Generative Engine Optimization)란 무엇인가요?",
-            "answer": "GEO는 AI 답변 속 브랜드 가시성을 최적화하는 기술입니다. ChatGPT · Claude · Perplexity · Gemini와 HyperCLOVA 같은 한국 엔진에서 우리 브랜드가 어떻게 노출되는지가 핵심 지표가 됩니다. Gartner는 2026년까지 전통 검색이 25% 감소한다고 전망했고, GEO가 새로운 SEO입니다."
-          },
-          {
-            "question": "Findable이 추적하는 AI 엔진은 무엇인가요?",
-            "answer": "총 7개입니다. 글로벌 4개(ChatGPT · Claude · Perplexity · Gemini), 한국 3개(HyperCLOVA X · 네이버 · 다음). 한국 AI 엔진을 모두 커버하는 유일한 플랫폼입니다."
-          },
-          {
-            "question": "Profound·Peec와 어떤 차이가 있나요?",
-            "answer": "Profound · Peec · AthenaHQ · HubSpot AEO 모두 한국 AI 엔진을 추적하지 못합니다. Findable은 한글·영문·혼용 표기를 통합 추적하는 Korean Entity Grounding 기능도 제공합니다."
-          },
-          {
-            "question": "어떤 브랜드에 적합한가요?",
-            "answer": "글로벌 진출 K-뷰티·K-패션, 외국 브랜드 한국 마케팅팀(Apple·LV·Tesla Korea 등), 무신사·29CM 입점 한국 D2C, 한국 B2B SaaS — AI에 의해 발견되어야 하는 모든 브랜드를 위한 플랫폼입니다."
-          },
-          {
-            "question": "가격은 어떻게 되나요?",
-            "answer": "무료 진단(1회, ₩0), Starter 월 ₩99K, Growth 월 ₩390K, Scale 월 ₩990K, Enterprise 연 ₩30M부터. Toss(KRW), PayPal Business(USD), Enterprise는 계좌이체로 결제하실 수 있습니다. (VAT 별도)"
-          }
-        ]
-      },
-      "cta": {
-        "title": "경쟁사 말고 우리 브랜드를, AI가 먼저 답하게.",
-        "description": "3분 무료 진단으로 7개 AI 엔진에서 우리 브랜드의 위치를 확인하세요. 누가 우리를 이기고 있는지, 이번 주에 고쳐야 할 Top 3는 무엇인지 한 번에 확인합니다."
+        "description": "ChatGPT · HyperCLOVA · Perplexity · 네이버 · Claude · 다음 · Gemini. 한국어·영어 7개 AI 답변에서 우리 브랜드의 위치를 추적합니다."
       }
     },
     "blog": {
@@ -186,6 +60,239 @@
           "cta": "미팅 예약하기"
         }
       }
+    }
+  },
+  "app": {
+    "nav": {
+      "overview": "한눈에",
+      "actions": "할 일",
+      "measure": "측정",
+      "history": "이력",
+      "more": "더보기",
+      "primaryScreens": "주요 화면"
+    },
+    "common": {
+      "loading": "불러오는 중…",
+      "retry": "다시 시도",
+      "upgrade": "업그레이드"
+    },
+    "emptyState": {
+      "heading": "내 브랜드는 AI 답변에 얼마나 등장할까요?",
+      "lede": "고객은 이제 검색창이 아니라 AI에게 물어봐요. 주요 AI가 내 브랜드를 어떻게 말하는지 확인하고, 더 잘 말하도록 도와드려요.",
+      "reclaimTitle": "이미 무료 진단을 받아보셨나요?",
+      "reclaimBody": "진단 결과는 그때 입력한 이메일 주소로 이어져요.",
+      "reclaimSignedIn": "(으)로 로그인해 있어요. 다른 주소로 진단하셨다면 그 주소로 로그인해 주세요.",
+      "reclaimSignedInPrefix": "지금은",
+      "reclaimAnonymous": "다른 주소로 진단하셨다면 그 주소로 로그인해 주세요.",
+      "stepLabel": "{n}단계",
+      "step1Title": "브랜드 등록",
+      "step1Body": "웹사이트 주소만 넣으면 돼요.",
+      "step2Title": "등록하면 바로 물어봐요",
+      "step2Body": "ChatGPT·Perplexity 등 주요 AI가 우리를 말하는지 확인해요.",
+      "step3Title": "결과 받아보기",
+      "step3Body": "얼마나 말하는지, 어디를 출처로 거는지, 뭘 고치면 되는지 알려드려요.",
+      "cta": "브랜드 등록하고 측정 시작",
+      "sampleCta": "결과 예시 먼저 보기",
+      "footnote": "약 1~3분 소요 · 무료 플랜으로 시작 · 예시는 실제 측정한 진단이에요"
+    },
+    "onboarding": {
+      "stepOf": "{current}단계 / {total}단계",
+      "next": "다음",
+      "skip": "건너뛰기",
+      "add": "추가",
+      "emptyHint": "아직 없어요. 비워두고 넘어가도 괜찮아요.",
+      "introTitle": "어떤 브랜드를 측정할까요?",
+      "introLede": "도메인 하나만 넣으면 됩니다. 업종·타깃 시장은 도메인에서 자동으로 추정하고, 필요하면 나중에 바꿀 수 있어요.",
+      "introWhyTitle": "왜 도메인만 받나요?",
+      "introWhyBody": "가입할 때 열 가지를 묻는 서비스도 있지만, 많이 물을수록 잘못 넣을 여지가 커집니다. 우리는 도메인에서 업종·타깃 시장을 추정하고, 추정한 근거를 화면에 함께 보여드려요. 틀렸으면 그 자리에서 고치면 됩니다.",
+      "introEngines": "측정은 ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바까지 함께 봅니다. 어떤 시장을 고르든 이 엔진들이 빠지지 않아요.",
+      "scopeTitle": "어느 시장을 보고 계신가요?",
+      "scopeLede": "도메인을 보고 아래처럼 추정했어요. 맞으면 그대로 두고 넘어가세요.",
+      "scopeLabel": "타깃 시장",
+      "scopeDetected": "자동 추정",
+      "scopeWhyTitle": "왜 이렇게 잡았나요?",
+      "scopeLowConfidence": " 확신이 낮은 편이라, 맞는지 한 번 봐주세요.",
+      "scopeEnginesNote": "어느 쪽을 고르든 측정하는 AI는 같습니다 — ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바를 모두 봅니다. 이 선택은 개선 방법을 어느 채널 중심으로 안내할지에만 쓰여요.",
+      "scopeKorea": "국내 중심",
+      "scopeGlobal": "해외 중심",
+      "scopeBoth": "국내·해외 함께",
+      "aliasTitle": "우리를 이렇게도 부릅니다",
+      "aliasLede": "AI 답변에서 {brand}을(를) 다르게 부를 수 있어요. 떠오르는 대로 적어주세요.",
+      "aliasLabel": "다른 이름 · 영문 표기",
+      "aliasPlaceholder": "예: Amorepacific",
+      "aliasWhyTitle": "왜 물어보나요?",
+      "aliasWhyBody": "AI는 같은 브랜드를 한글로도, 영문으로도 부릅니다. 두 표기를 따로 세면 우리 브랜드가 실제보다 적게 나온 것처럼 보여요. 여기 적어두면 하나로 합쳐서 셉니다.",
+      "competitorTitle": "이 브랜드들과 비교됩니다",
+      "competitorLede": "AI가 파악한 경쟁 브랜드를 미리 담아뒀어요. 틀린 게 있으면 빼주세요.",
+      "competitorLedeEmpty": "비교할 브랜드를 직접 적어주세요. 비워두고 넘어가도 괜찮아요.",
+      "competitorSuggestion": "더 담을 수 있는 후보",
+      "competitorAddLabel": "직접 추가",
+      "competitorPlaceholder": "예: 올리브영",
+      "competitorWhyTitle": "이 값은 어디에 쓰이나요?",
+      "competitorWhyBody": "AI 답변에 등장하는 경쟁 브랜드를 셀 때, 한글·영문 표기를 하나로 묶는 데 씁니다. 여기 없는 경쟁사를 가리지는 않아요 — 우리가 몰랐던 경쟁사도 그대로 보여드립니다.",
+      "doneTitle": "다 됐어요",
+      "doneStarted": "측정은 이미 시작됐어요. 보통 1~3분 걸려요.",
+      "savedTitle": "설정을 저장했어요",
+      "doneRateLimited": "오늘은 이미 측정했어요. 대시보드에서 기존 결과를 볼 수 있어요.",
+      "doneFailed": "브랜드는 등록됐지만 측정을 시작하지 못했어요. 대시보드에서 다시 시도할 수 있어요.",
+      "doneAsideTitle": "이제부터 매일 확인해요",
+      "doneAsideBody": "ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바까지, 매일 자동으로 브랜드 관련 프롬프트를 실행해 노출도 변화를 기록해요.",
+      "donePreviewLabel": "예시 화면이에요 · 실제 결과가 아니에요",
+      "donePreviewCaption": "측정이 쌓이면 이렇게 노출도 추이를 볼 수 있어요",
+      "featurePreviewTitle": "측정이 쌓이면 더 볼 수 있어요",
+      "compare": "경쟁사 비교",
+      "featureCompareDesc": "AI 답변에서 우리와 경쟁사가 각각 얼마나 나오는지 비교해요",
+      "sources": "출처 링크",
+      "featureSourcesDesc": "AI가 어떤 페이지를 근거로 우리를 말하는지 확인해요",
+      "alerts": "추적 알림",
+      "featureAlertsDesc": "노출도가 크게 바뀌면 알려드려요",
+      "summaryBrand": "브랜드",
+      "summaryMarket": "타깃 시장",
+      "summaryAliases": "다른 이름 {count}개",
+      "summaryCompetitors": "비교할 브랜드 {count}개",
+      "goDashboard": "대시보드로 가기",
+      "saving": "저장 중…",
+      "saveFailedHint": "설정은 나중에 바꿀 수 있어요.",
+      "removeItem": "{item} 제거",
+      "editorSummary": "이름·경쟁사 설정",
+      "editorCounts": "별칭 {aliases} · 경쟁사 {competitors}",
+      "editorAliasTitle": "우리를 부르는 다른 이름",
+      "editorAliasHint": "AI가 한글·영문을 따로 세지 않도록 합칩니다. 예: Amorepacific",
+      "editorAliasAria": "다른 이름 추가",
+      "editorCompetitorTitle": "비교할 브랜드",
+      "editorCompetitorHint": "여기 없는 경쟁사를 가리지는 않아요 — 표기를 합치는 데만 씁니다.",
+      "editorCompetitorAria": "경쟁사 추가",
+      "editorEmpty": "아직 없어요.",
+      "editorSave": "저장",
+      "editorSaved": "저장했어요. 다음 측정부터 반영돼요.",
+      "editorDirtyHint": "저장하면 다음 측정부터 반영돼요."
+    },
+    "content": {
+      "navLabel": "내 콘텐츠",
+      "eyebrow": "MEASURE → PUBLISH → MEASURE",
+      "title": "측정 결과를 인용 가능한 콘텐츠로 바꾸세요",
+      "description": "Findable이 최근 SEO·GEO 진단 근거로 초안을 만들고, 고객사가 직접 고친 뒤 승인하면 품질 검사를 거쳐 공개 발행합니다.",
+      "generate": "최근 액션으로 초안 만들기",
+      "brandLabel": "초안을 만들 브랜드",
+      "createBlank": "새 글 쓰기",
+      "addBrand": "브랜드 등록하기",
+      "statAll": "전체 콘텐츠",
+      "statReview": "검수 대기",
+      "statPublished": "공개 발행",
+      "listTitle": "콘텐츠 워크플로",
+      "listHint": "최근 수정순",
+      "searchContent": "제목·요약·태그 검색",
+      "filterStatus": "상태 필터",
+      "allStatuses": "모든 상태",
+      "filterButton": "찾기",
+      "emptyTitle": "아직 만들어진 콘텐츠가 없어요",
+      "emptyDescription": "브랜드 측정을 마치면 최근 content_fix 액션과 실측 근거로 첫 초안을 만들 수 있어요.",
+      "editorTitle": "콘텐츠 편집",
+      "editorDescription": "측정 근거를 확인하고 과장되거나 확인할 수 없는 표현을 직접 고쳐주세요.",
+      "back": "콘텐츠 목록",
+      "openPublished": "발행 글 보기",
+      "evidenceLabel": "이 초안을 만든 측정 근거",
+      "qualityLabel": "최근 품질 검사",
+      "titleLabel": "제목",
+      "excerptLabel": "목록과 검색 결과에 보일 요약",
+      "bodyLabel": "본문 Markdown",
+      "formatToolbar": "본문 서식 도구",
+      "formatBold": "굵게",
+      "formatHeading": "소제목",
+      "formatLink": "링크",
+      "formatImage": "이미지",
+      "formatQuote": "인용",
+      "typeLabel": "콘텐츠 유형",
+      "typeResearch": "리서치",
+      "typeGuide": "실전 가이드",
+      "typeCase": "사례",
+      "typeAnalysis": "분석",
+      "seriesLabel": "시리즈",
+      "seriesPlaceholder": "예: Findable Research",
+      "tagsLabel": "태그 · 쉼표로 구분",
+      "tagsPlaceholder": "SEO, GEO, AI 검색",
+      "searchSettings": "검색·공유 설정",
+      "seoTitleLabel": "SEO 제목 · 비우면 글 제목 사용",
+      "seoDescriptionLabel": "검색 설명 · 비우면 요약 사용",
+      "coverUrlLabel": "대표 이미지 URL",
+      "coverAltLabel": "이미지 대체 텍스트",
+      "readerPreview": "독자 미리보기",
+      "googlePreview": "Google 미리보기",
+      "save": "수정본 저장",
+      "saving": "저장 중…",
+      "saved": "수정본을 저장했어요",
+      "approve": "검수하고 발행 요청",
+      "approving": "검사 중…",
+      "moderationSubmitted": "운영 검수로 보냈어요",
+      "moderationWaiting": "운영팀이 원문과 근거를 검토하고 있습니다. 공개 전까지 검색엔진에는 노출되지 않습니다.",
+      "withdrawReview": "검수 요청 철회하고 수정",
+      "withdrawingReview": "철회 중…",
+      "withdrawnReview": "검수 요청을 철회했어요",
+      "revisionReason": "운영팀 수정 요청",
+      "moderationTitle": "콘텐츠 검수",
+      "moderationDescription": "신규 퍼블리셔와 품질 경고가 있는 글을 공개 전에 확인합니다.",
+      "moderationEmpty": "운영 검수를 기다리는 콘텐츠가 없어요.",
+      "moderationApprove": "승인하고 발행",
+      "moderationConfirm": "원문 전체와 측정 근거·원출처를 직접 확인했습니다.",
+      "moderationNotePlaceholder": "수정 요청 사유 (반려 시 필수)",
+      "moderationReviewOriginal": "원문·근거 전체 검토 →",
+      "moderationReject": "수정 요청",
+      "createOfficial": "Findable 리서치 초안",
+      "officialDrafts": "Findable 공식 초안",
+      "status": {
+        "draft": "초안",
+        "publisher_review": "퍼블리셔 검토",
+        "quality_check": "품질 검사",
+        "moderation_review": "운영 검수",
+        "scheduled": "예약됨",
+        "published": "발행됨",
+        "archived": "보관됨"
+      }
+    },
+    "sidebar": {
+      "adminAudits": "진단 목록",
+      "adminContent": "콘텐츠 검수",
+      "adminEvidence": "조치 전후 근거",
+      "adminMeasure": "측정 콘솔",
+      "adminOps": "운영 현황",
+      "adminOrgs": "가입 조직",
+      "adminPartners": "파트너 승인",
+      "alerts": "추적 알림",
+      "billing": "요금제·업그레이드",
+      "brandMeasure": "브랜드·측정",
+      "compare": "경쟁사 비교",
+      "content": "내 콘텐츠",
+      "publicInsights": "공개 인사이트",
+      "currentPlan": "현재 플랜",
+      "dashboard": "대시보드",
+      "export": "데이터 내보내기",
+      "groupAccount": "계정",
+      "groupAct": "실행",
+      "groupAdmin": "관리자",
+      "groupAnalyze": "분석",
+      "groupInsight": "인사이트",
+      "groupMeasure": "측정",
+      "history": "측정 이력",
+      "lockedHint": "{plan}에서 해제",
+      "prompts": "추적 질문",
+      "sources": "출처 링크",
+      "support": "문의",
+      "todo": "지금 할 일"
+    },
+    "exportDialog": {
+      "title": "데이터 내보내기",
+      "description": "측정 데이터를 CSV로 받아요. 기간과 포함할 컬럼을 골라주세요.",
+      "periodLabel": "기간",
+      "period7": "최근 7일",
+      "period30": "최근 30일",
+      "period90": "최근 90일",
+      "periodAll": "전체 기간",
+      "columnsLabel": "포함할 컬럼",
+      "columnsBase": "측정일시·브랜드·엔진·언급여부·순위·감성·점유율 (기본)",
+      "includeSources": "인용출처 추가 (AI가 근거로 든 URL 목록)",
+      "cancel": "그만두기",
+      "download": "다운로드",
+      "downloading": "받는 중…"
     }
   }
 }

@@ -9,9 +9,15 @@ import { type ReactNode, useEffect, useState } from "react";
 type Tone = "dawn" | "day" | "dusk" | "night";
 
 const TONE_BY_HOUR = (h: number): Tone => {
-  if (h < 7) return "dawn";
-  if (h < 17) return "day";
-  if (h < 20) return "dusk";
+  if (h < 7) {
+    return "dawn";
+  }
+  if (h < 17) {
+    return "day";
+  }
+  if (h < 20) {
+    return "dusk";
+  }
   return "night";
 };
 
@@ -37,8 +43,8 @@ export const HeroTone = ({ children }: HeroToneProps) => {
 
   return (
     <section
-      data-tone={tone}
       className="relative w-full overflow-hidden bg-[color:var(--findable-hero-bg)] transition-colors duration-1000"
+      data-tone={tone}
       style={{ transitionTimingFunction: "var(--findable-ease-cinema)" }}
     >
       {/* 산수화 배경 — scale-in 2s */}
@@ -52,12 +58,12 @@ export const HeroTone = ({ children }: HeroToneProps) => {
         }}
       >
         <Image
-          src={`/illustrations/jeong-seon-${tone}.webp`}
           alt="정선 「금강전도」 — 한국 산수화"
+          className="object-cover"
           fill
           priority
           sizes="100vw"
-          className="object-cover"
+          src={`/illustrations/jeong-seon-${tone}.webp`}
         />
       </div>
 

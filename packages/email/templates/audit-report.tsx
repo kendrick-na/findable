@@ -20,13 +20,17 @@ import type * as React from "react";
 interface AuditReportEmailProps {
   readonly brandName: string;
   readonly domain: string;
-  readonly geoScore: number; // 0~100
-  readonly tierLabel: string; // "리더" / "경쟁 가능" / "막 시작" / "AI에서 안 보임"
   readonly enginesMentioned: number; // 4
   readonly enginesTotal: number; // 7
-  readonly resultUrl: string; // https://findable.co.kr/ko/audit/[jobId]
+  readonly geoScore: number; // 0~100
   readonly pdfUrl?: string;
-  readonly topActions?: Array<{ rank: number; title: string; timeframe: string }>;
+  readonly resultUrl: string; // https://findable.co.kr/ko/audit/[jobId]
+  readonly tierLabel: string; // "리더" / "경쟁 가능" / "막 시작" / "AI에서 안 보임"
+  readonly topActions?: Array<{
+    rank: number;
+    title: string;
+    timeframe: string;
+  }>;
 }
 
 export const AuditReportEmail = ({
@@ -94,7 +98,8 @@ export const AuditReportEmail = ({
                   📊 핵심 결과
                 </Text>
                 <Text className="m-0 mb-1 text-sm text-zinc-700">
-                  • AI 엔진 {enginesTotal}개 중 {enginesMentioned}개에서 우리 브랜드가 등장했습니다.
+                  • AI 엔진 {enginesTotal}개 중 {enginesMentioned}개에서 우리
+                  브랜드가 등장했습니다.
                 </Text>
                 <Text className="m-0 mb-4 text-sm text-zinc-700">
                   • GEO 점수 {geoScore}점 — {tierLabel}
@@ -108,8 +113,8 @@ export const AuditReportEmail = ({
                     </Text>
                     {topActions.slice(0, 3).map((action) => (
                       <Section
-                        key={action.rank}
                         className="mb-3 rounded-md border border-zinc-200 bg-zinc-50 p-4"
+                        key={action.rank}
                       >
                         <Text className="m-0 mb-1 font-mono text-xs text-zinc-500">
                           #{String(action.rank).padStart(2, "0")} ·{" "}
@@ -128,15 +133,15 @@ export const AuditReportEmail = ({
                 {/* CTA 버튼 */}
                 <Section className="text-center">
                   <Button
+                    className="rounded-md bg-zinc-900 px-6 py-3 font-medium text-sm text-white"
                     href={resultUrl}
-                    className="rounded-md bg-zinc-900 px-6 py-3 font-medium text-white text-sm"
                   >
                     전체 결과 보기 →
                   </Button>
                   {pdfUrl && (
                     <Text className="mt-3 text-xs text-zinc-500">
                       또는{" "}
-                      <a href={pdfUrl} className="text-zinc-900 underline">
+                      <a className="text-zinc-900 underline" href={pdfUrl}>
                         PDF 다운로드
                       </a>
                     </Text>

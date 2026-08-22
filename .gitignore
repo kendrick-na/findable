@@ -283,3 +283,24 @@ NEXT_SESSION.md
 .cursorrules
 docs/inputs/
 
+
+# 로컬 백업 (git 이력에서 제외 — 원본은 폴더에 물리 보관)
+
+# 로컬 백업 (어느 폴더든) — git 이력 제외, 원본은 폴더에 물리 보관
+**/_백업/
+문제제기_영상/
+
+# 카카오페이 심사 보완 자료 — 테스트 계정 비밀번호 포함(외부 공유 금지)
+_카카오페이_심사보완/
+
+# 화면기록 영상 — 용량 크므로 저장소 제외(로컬 보관)
+docs/_적용/_영상/
+docs/_경쟁사_UIUX/*/_원본영상/
+*.[mM][oO][vV]
+*.[mM][pP]4
+
+# Storybook 빌드 산출물·스크린샷·Clerk 세션(라이브 쿠키)
+apps/app/screenshots
+playwright/.clerk
+playwright/.auth
+.env*

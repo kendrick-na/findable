@@ -6,10 +6,10 @@
 import { useEffect, useRef, useState } from "react";
 
 interface Stat {
-  value: number;
-  suffix: string;
   label: string;
   sub: string;
+  suffix: string;
+  value: number;
 }
 
 interface DarkHedgeStatsProps {
@@ -36,7 +36,9 @@ const Tile = ({ stat }: { stat: Stat }) => {
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
@@ -56,7 +58,7 @@ const Tile = ({ stat }: { stat: Stat }) => {
           requestAnimationFrame(tick);
         }
       },
-      { threshold: 0.3 },
+      { threshold: 0.3 }
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -64,8 +66,8 @@ const Tile = ({ stat }: { stat: Stat }) => {
 
   return (
     <div
-      ref={ref}
       className="flex flex-col gap-2 bg-[color:var(--findable-sumi-950)] p-6 transition-colors hover:bg-[color:var(--findable-sumi-900)] md:p-8"
+      ref={ref}
     >
       <div
         className="font-medium text-5xl tracking-tight md:text-6xl"

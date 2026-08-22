@@ -29,7 +29,7 @@ export const Hero = ({ dictionary }: HeroProps) => {
       {/* Multiply blend overlay — 산수화 위 콘텐츠 가독성 향상 */}
       <div
         aria-hidden
-        className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[var(--findable-hero-bg)]/40 pointer-events-none z-[1]"
+        className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-b from-transparent via-transparent to-[var(--findable-hero-bg)]/40"
       />
 
       {/* 컨텐츠 */}
@@ -43,8 +43,8 @@ export const Hero = ({ dictionary }: HeroProps) => {
           }}
         >
           <Link
+            className="inline-flex items-center gap-2 rounded-full border border-[color:var(--findable-hero-fg)]/15 bg-[color:var(--findable-hero-bg)]/60 px-4 py-1.5 font-medium text-[color:var(--findable-hero-fg)] text-sm backdrop-blur-md transition-all hover:scale-[1.02] hover:bg-[color:var(--findable-hero-bg)]/80"
             href="/blog"
-            className="inline-flex items-center gap-2 rounded-full border border-[color:var(--findable-hero-fg)]/15 bg-[color:var(--findable-hero-bg)]/60 px-4 py-1.5 text-sm font-medium text-[color:var(--findable-hero-fg)] backdrop-blur-md transition-all hover:scale-[1.02] hover:bg-[color:var(--findable-hero-bg)]/80"
           >
             <Sparkles className="h-3.5 w-3.5" />
             <span>한국 최초 Agentic GEO Platform</span>
@@ -54,7 +54,7 @@ export const Hero = ({ dictionary }: HeroProps) => {
 
         {/* 헤드라인 — 페이드업 400ms */}
         <h1
-          className="mt-10 max-w-4xl font-serif text-[clamp(2.5rem,6vw,5.5rem)] font-medium leading-[1.05] tracking-tight text-[color:var(--findable-hero-fg)] opacity-0"
+          className="mt-10 max-w-4xl font-medium font-serif text-[clamp(2.5rem,6vw,5.5rem)] text-[color:var(--findable-hero-fg)] leading-[1.05] tracking-tight opacity-0"
           style={{
             animation:
               "findable-fade-up 0.8s var(--findable-ease-cinema) 0.4s forwards",
@@ -69,7 +69,7 @@ export const Hero = ({ dictionary }: HeroProps) => {
 
         {/* 영문 sub */}
         <p
-          className="mt-4 max-w-2xl text-lg text-[color:var(--findable-hero-fg)]/70 opacity-0"
+          className="mt-4 max-w-2xl text-[color:var(--findable-hero-fg)]/70 text-lg opacity-0"
           style={{
             animation:
               "findable-fade-up-sm 0.6s var(--findable-ease-out-soft) 0.7s forwards",
@@ -79,11 +79,11 @@ export const Hero = ({ dictionary }: HeroProps) => {
         </p>
 
         {/* 7 AI 엔진 — stagger 80ms */}
-        <div className="mt-8 flex flex-wrap justify-center gap-x-3 gap-y-2 text-sm text-[color:var(--findable-hero-fg)]/80 md:text-base">
+        <div className="mt-8 flex flex-wrap justify-center gap-x-3 gap-y-2 text-[color:var(--findable-hero-fg)]/80 text-sm md:text-base">
           {ENGINES.map((engine, i) => (
             <span
-              key={engine}
               className="opacity-0"
+              key={engine}
               style={{
                 animation: `findable-fade-up-sm 0.4s var(--findable-ease-out-soft) ${1.0 + i * 0.08}s forwards`,
               }}
@@ -104,13 +104,19 @@ export const Hero = ({ dictionary }: HeroProps) => {
               "findable-pop-in 0.5s var(--findable-ease-out-quint) 1.5s forwards",
           }}
         >
-          <Button asChild size="lg" className="gap-2 rounded-full px-7">
+          <Button asChild className="gap-2 rounded-full px-7" size="lg">
             <Link href="/audit">
-              {dictionary?.web?.home?.hero?.primaryCta ?? "무료 진단 받기 (3분)"}
+              {dictionary?.web?.home?.hero?.primaryCta ??
+                "무료 진단 받기 (3분)"}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
-          <Button asChild variant="outline" size="lg" className="gap-2 rounded-full px-7 backdrop-blur-md">
+          <Button
+            asChild
+            className="gap-2 rounded-full px-7 backdrop-blur-md"
+            size="lg"
+            variant="outline"
+          >
             <Link href={env.NEXT_PUBLIC_APP_URL}>
               {dictionary?.web?.home?.hero?.secondaryCta ?? "전문가 상담"}
             </Link>
@@ -124,10 +130,10 @@ export const Hero = ({ dictionary }: HeroProps) => {
             animation: "findable-fade-up-sm 0.4s linear 1.8s forwards",
           }}
         >
-          <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--findable-hero-fg)]/50">
+          <p className="text-[color:var(--findable-hero-fg)]/50 text-xs uppercase tracking-[0.18em]">
             Trusted by leading K-Beauty Brands
           </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-[color:var(--findable-hero-fg)]/40">
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[color:var(--findable-hero-fg)]/40 text-sm">
             <span>메디큐브</span>
             <span>아누아</span>
             <span>조선미녀</span>

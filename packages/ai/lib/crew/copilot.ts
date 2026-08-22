@@ -7,22 +7,45 @@
 // 서버 스트리밍 라우트(apps/web .../chat/route.ts)에서 이 모듈의
 // COPILOT_MODEL_ID + buildCopilotSystemPrompt()를 재사용한다.
 //
-// 인증: crew와 동일하게 AI Gateway 경유 (VERCEL_OIDC_TOKEN / AI_GATEWAY_API_KEY).
+// 인증: crew와 동일 — Letsur 키 우선, 없으면 AI Gateway 폴백.
+// (2026-07-30 결함감사 §21: 이전엔 코파일럿만 무조건 gateway()를 타서, crew는
+//  Letsur로 잘 돌아도 코파일럿은 Gateway 크레딧 0에 걸려 빈 스트림(200)만 반환
+//  → UI 무한 스피너. resolveCrewModel로 crew와 같은 라우팅을 쓴다.)
 
+import { createOpenAI } from "@ai-sdk/openai";
 import { gateway, streamText } from "ai";
 import type { AnalystOutput, StrategistOutput } from "./agents";
 import { FINDABLE_MODEL_DEFAULT } from "./agents";
+
+// crew(agents.ts resolveCrewModel)와 동일 라우팅 — Letsur 키 있으면 Letsur 직접,
+// 없으면 Vercel Gateway 폴백. (agents.ts 함수는 export 시 Mastra 타입 충돌이 있어
+// 여기 자체 보유. 모델 슬러그 규칙: Letsur=하이픈, Gateway=점 표기.)
+const LETSUR_COPILOT_MODEL_ID =
+  process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
+
+function copilotModel() {
+  const letsurKey = process.env.LETSUR_API_KEY;
+  if (letsurKey) {
+    const letsur = createOpenAI({
+      baseURL: "https://gw.letsur.ai/v1",
+      apiKey: letsurKey,
+    });
+    return letsur(LETSUR_COPILOT_MODEL_ID);
+  }
+  return gateway(COPILOT_MODEL_ID);
+}
 
 // 코파일럿 모델 — crew 기본 모델과 동일 슬러그. 환경변수로 override 가능.
 export const COPILOT_MODEL_ID: string =
   process.env.FINDABLE_COPILOT_MODEL ?? FINDABLE_MODEL_DEFAULT;
 
 /**
- * AI Gateway 인증 가능 여부 (orchestrator와 동일 우선순위).
- * 미설정 시 라우트가 503으로 폴백해 stub 안내.
+ * 코파일럿 호출 가능 여부 — Letsur 직접 키 또는 AI Gateway 인증 중 하나면 됨
+ * (crew orchestrator와 동일 우선순위). 미설정 시 라우트가 503으로 폴백해 stub 안내.
  */
 export function isCopilotConfigured(): boolean {
   return (
+    Boolean(process.env.LETSUR_API_KEY) ||
     Boolean(process.env.AI_GATEWAY_API_KEY) ||
     Boolean(process.env.VERCEL_OIDC_TOKEN) ||
     process.env.FINDABLE_FORCE_LIVE === "1"
@@ -149,7 +172,8 @@ export function streamCopilotResponse(
   messages: CopilotChatMessage[]
 ): Response {
   const stream = streamText({
-    model: gateway(COPILOT_MODEL_ID),
+    // crew와 동일 라우팅: Letsur 키 있으면 Letsur, 없으면 Gateway 폴백(§21).
+    model: copilotModel(),
     system: buildCopilotSystemPrompt(ctx),
     messages,
   });

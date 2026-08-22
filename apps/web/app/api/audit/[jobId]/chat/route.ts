@@ -16,6 +16,8 @@ import {
   isCopilotConfigured,
   streamCopilotResponse,
 } from "@repo/ai/lib/crew";
+// 🔴 분모 단일 진실(세션N-28) — 결과 화면·OG 이미지와 같은 함수를 쓴다.
+import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -52,6 +54,13 @@ interface StoredMetrics {
 interface StoredResult {
   brandName?: string;
   domain?: string;
+  /** 🔴 분모 계산용(세션N-28). `metrics.enginesCovered` 는 **응답 1건당 1원소**라
+   *  `.length` 를 엔진 수로 쓰면 안 된다(실측 29 vs 실제 7곳). */
+  engineResponses?: Array<{
+    engineId: string;
+    errorMessage?: string | null;
+    isStub?: boolean;
+  }>;
   metrics?: StoredMetrics;
 }
 
@@ -60,8 +69,14 @@ function buildMetricsSummary(result: StoredResult): string {
   if (!m) {
     return "(측정 지표 없음)";
   }
-  const covered = m.enginesCovered?.length ?? 0;
-  const mentioned = m.enginesWithMention?.length ?? 0;
+  // 🔴🔴 세션N-28 — 여기가 **AI 에게 거짓 맥락을 먹이고 있었다**.
+  //   `enginesCovered.length` 는 **응답 수**(프롬프트×엔진)라 실측 **29**인데,
+  //   프롬프트에 *"언급된 엔진: 7/29개"* 로 나갔다. 엔진은 7곳뿐이다.
+  //   → 분자·분모 모두 **엔진 단위**로 맞춘다. 분모는 결과 화면과 같은 단일 진실 함수.
+  const covered = result.engineResponses
+    ? countMeasurementCoverage(result.engineResponses).measured
+    : new Set(m.enginesCovered ?? []).size;
+  const mentioned = new Set(m.enginesWithMention ?? []).size;
   const s = m.sentimentDistribution;
   const domains =
     m.topCitedDomains && m.topCitedDomains.length > 0
@@ -72,7 +87,9 @@ function buildMetricsSummary(result: StoredResult): string {
       : "없음";
   return [
     `SoV(점유율): ${m.sov ?? 0}/100`,
-    `언급된 엔진: ${mentioned}/${covered}개 (${(m.enginesWithMention ?? []).join(", ") || "없음"})`,
+    // 단위를 문장에 박는다 — AI 가 "엔진 수"와 "응답 수"를 섞으면 답변이 거짓이 된다.
+    `언급된 엔진: 측정 성공 ${covered}곳 중 ${mentioned}곳 (${[...new Set(m.enginesWithMention ?? [])].join(", ") || "없음"})`,
+    `총 측정 응답 수: ${m.enginesCovered?.length ?? 0}건 (프롬프트 × 엔진 — 엔진 수와 다름)`,
     `평균 언급 위치: ${m.averageMentionPosition ?? "N/A"}`,
     s
       ? `감성: 긍정 ${s.positive} / 중립 ${s.neutral} / 부정 ${s.negative}`

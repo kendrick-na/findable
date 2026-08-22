@@ -1,10 +1,20 @@
-// Findable Showcase — Linear 시그니처 mock 3종 풀 화면 데모
-// AuditTrackerMock + SoVChart + AuditDiff
+// Findable Showcase — 실측 데이터 2종 풀 화면 데모
+// SoVChart(k-geo-bench) + CitationSources
 // D-060 (2026-05-11): locale 분기 추가
+//
+// 🔴 2026-08-17 세션N-41 — 가짜 목업 2개를 지웠다(`AuditTrackerMock`·`AuditDiff`,
+//   파일도 함께 삭제). 실측 근거:
+//   ① 랜딩 모바일 11,463px 중 Showcase 가 3,637px = **32%** 로 최대 단일 섹션이었다
+//   ② 그중 가짜 목업 2개가 1,609px(Monitor 703 + Diffs 906) → 지워서 **9,854px** 로 내렸다
+//   ③ 남긴 2개는 `sample={false}` = **실측 데이터**다. Sources(인용출처)는
+//      *"내 사이트만 고쳐선 AI 답변이 안 바뀐다"* 의 유일한 직접 증거라 지우면 안 된다.
+//   ⭐ 부수 효과: 랜딩에서 「예시 화면」 배지가 **0개**가 됐다 —
+//      가짜를 치우면 남은 게 진짜라는 게 배지 없이도 성립한다.
+//   ⚠️ Monitor 섹션의 `/audit` CTA 1개가 같이 사라졌다. 히어로 2 · 푸터 1 ·
+//      rent-vs-equity 1 = **4개가 남아** 전환 경로는 끊기지 않는다(삭제 전 실측).
 
 import { ArrowRight } from "lucide-react";
-import { AuditDiff } from "./audit-diff";
-import { AuditTrackerMock } from "./audit-tracker-mock";
+import { CitationSources } from "./citation-sources";
 import { SoVChart } from "./sov-chart";
 
 interface ShowcaseProps {
@@ -13,78 +23,96 @@ interface ShowcaseProps {
 
 export const Showcase = ({ locale = "ko" }: ShowcaseProps) => {
   const isKo = locale.startsWith("ko");
-  const lp = isKo ? "/ko" : "";
   const copy = isKo
     ? {
-        s1Title: "모든 진단을 한 곳에서, 에이전트와 함께.",
-        s1Sub: "진행 중인 모든 진단·인용 갭·추천 액션을 워크스페이스 한 곳에서 추적합니다.",
-        s1Cta: "무료로 진단받기",
+        s1Cta: "무료로 시작하기",
         s2Title: "우리 브랜드 답변 점유율, 한눈에.",
-        s2Sub: "7개 AI가 답할 때마다 우리 브랜드와 경쟁 브랜드가 얼마나 인용되는지 시각화합니다.",
-        s3Title: "적용 전과 후, 바로 비교해보세요.",
-        s3Sub: "Findable이 제안한 콘텐츠 변경이 인용 점수와 점유율에 어떤 영향을 줄지 미리 봅니다.",
+        s2Sub:
+          "7개 AI가 답할 때마다 우리 브랜드와 경쟁 브랜드가 얼마나 인용되는지 시각화합니다.",
+        s4Title: "AI는 우리 홈페이지를 잘 안 봅니다.",
+        s4Sub:
+          "실제로 측정해보면 AI가 브랜드를 말할 때 근거로 삼는 건 대부분 네이버 블로그와 위키입니다. 어디를 고쳐야 하는지가 여기서 갈립니다.",
       }
     : {
-        s1Title: "All your audits in one place — with agents.",
-        s1Sub: "Track every in-progress audit, citation gap, and recommended action in a single workspace.",
-        s1Cta: "Get a free audit",
+        s1Cta: "Start free",
         s2Title: "Your brand's share of voice, at a glance.",
-        s2Sub: "Every time 7 AI engines answer, see how often your brand and competitors get cited.",
-        s3Title: "Compare before and after, instantly.",
-        s3Sub: "Preview how Findable's suggested content changes affect citation scores and share of voice.",
+        s2Sub:
+          "Every time 7 AI engines answer, see how often your brand and competitors get cited.",
+        s4Title: "AI barely reads your homepage.",
+        s4Sub:
+          "When we measure it, the sources AI leans on are mostly Naver blogs and wikis. That's where the work actually is.",
       };
 
   return (
     <section
-      id="showcase"
       className="relative bg-[var(--findable-canvas)] px-8 pt-4 pb-12 md:pt-6 md:pb-16"
+      id="showcase"
       style={{ scrollMarginTop: "72px" }}
     >
       <div className="mx-auto max-w-[1280px]">
-        {/* Section 1: Audit Tracker — 작동하는 CTA */}
+        {/* Section 1: SoV Chart — 실측(k-geo-bench v0.1).
+            CTA 는 원래 삭제된 Monitor 섹션에 있었다 → 첫 섹션인 여기로 옮겼다. */}
         <div className="mb-20">
           <SectionHeader
-            num="5.0"
-            label="Monitor"
-            title={copy.s1Title}
-            sub={copy.s1Sub}
             cta={copy.s1Cta}
-            ctaHref={`${lp}/audit`}
+            ctaHref={`${process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr"}/sign-up`}
             isKo={isKo}
-          />
-          <AuditTrackerMock locale={locale} />
-        </div>
-
-        {/* Section 2: SoV Chart */}
-        <div className="mb-20">
-          <SectionHeader
-            num="6.0"
             label="Insights"
-            title={copy.s2Title}
             sub={copy.s2Sub}
-            isKo={isKo}
+            title={copy.s2Title}
           />
-          <SoVChart locale={locale} />
+          <MockFrame isKo={isKo} sample={false}>
+            <SoVChart locale={locale} />
+          </MockFrame>
         </div>
 
-        {/* Section 3: Audit Diff */}
+        {/* Section 3: 인용 출처 — 🔴 실측. 우리 차별점의 가장 직접적인 증거인데
+            지금까지 랜딩 어디에도 없었다(로그인 후 화면에만 있었다).
+            형식 근거 = Peec f005(실제 도메인 + 인용수 + 역할 태그). */}
         <div>
           <SectionHeader
-            num="7.0"
-            label="Diffs"
-            title={copy.s3Title}
-            sub={copy.s3Sub}
             isKo={isKo}
+            label="Sources"
+            sub={copy.s4Sub}
+            title={copy.s4Title}
           />
-          <AuditDiff />
+          <MockFrame isKo={isKo} sample={false}>
+            <CitationSources locale={locale} />
+          </MockFrame>
         </div>
       </div>
     </section>
   );
 };
 
+// 🔴 2026-08-16 — `sample` 을 옵션으로 뺐다.
+//   SoV 차트가 **실측 데이터**(k-geo-bench v0.1)로 바뀌었는데 「예시 화면」 배지가 붙어 있으면
+//   진짜 데이터를 스스로 가짜라고 말하는 꼴이다.
+//   ⛔ v4 §6 확정사항 5: *"Peec 은 진짜 데이터에 `Sample` 이라 써서 스스로 신뢰를 깎는다"* —
+//   같은 실수를 하지 않는다. 차트는 자체 헤더에 「실측 · 출처」를 단다.
+const MockFrame = ({
+  children,
+  isKo = true,
+  sample = true,
+}: {
+  children: React.ReactNode;
+  isKo?: boolean;
+  sample?: boolean;
+}) => (
+  <div className="relative">
+    {sample ? (
+      <span
+        className="absolute top-3 right-3 z-10 rounded-full border border-[var(--findable-hairline-strong)] bg-[var(--findable-surface-2)] px-2.5 py-1 text-[11px] text-[var(--findable-ink-subtle)]"
+        style={{ fontFamily: "var(--findable-font-sans)" }}
+      >
+        {isKo ? "예시 화면" : "Sample UI"}
+      </span>
+    ) : null}
+    {children}
+  </div>
+);
+
 const SectionHeader = ({
-  num,
   label,
   title,
   sub,
@@ -92,7 +120,6 @@ const SectionHeader = ({
   ctaHref,
   isKo = true,
 }: {
-  num: string;
   label: string;
   title: string;
   sub: string;
@@ -103,11 +130,10 @@ const SectionHeader = ({
   <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
     <div className="max-w-[700px]" style={{ wordBreak: "keep-all" }}>
       <p
-        className="flex items-center gap-2 text-[12px] uppercase tracking-[0.18em]"
+        className="text-[12px] text-[var(--findable-primary)] uppercase tracking-[0.18em]"
         style={{ fontFamily: "var(--findable-font-mono)" }}
       >
-        <span className="text-[var(--findable-primary)]">{num}</span>
-        <span className="text-[var(--findable-ink-subtle)]">— {label}</span>
+        {label}
       </p>
       <h2
         className="mt-4 text-[var(--findable-ink)]"
@@ -117,7 +143,8 @@ const SectionHeader = ({
             : "var(--findable-font-display)",
           fontSize: "clamp(26px, 3.2vw, 36px)",
           lineHeight: 1.2,
-          letterSpacing: "-0.02em",
+          // 한글은 정사각 격자 → 자간 0 (영문만 좁힌다)
+          letterSpacing: isKo ? "0" : "-0.02em",
           fontWeight: 500,
           wordBreak: "keep-all",
         }}
@@ -125,16 +152,19 @@ const SectionHeader = ({
         {title}
       </h2>
       <p
-        className="mt-4 text-[15px] leading-[1.6] text-[var(--findable-ink-muted)]"
-        style={{ fontFamily: "var(--findable-font-sans)", wordBreak: "keep-all" }}
+        className="mt-4 text-[15px] text-[var(--findable-ink-muted)] leading-[1.6]"
+        style={{
+          fontFamily: "var(--findable-font-sans)",
+          wordBreak: "keep-all",
+        }}
       >
         {sub}
       </p>
     </div>
     {cta && ctaHref && (
       <a
-        href={ctaHref}
         className="inline-flex items-center gap-1.5 text-[14px] text-[var(--findable-primary)] transition hover:gap-2.5"
+        href={ctaHref}
         style={{ fontFamily: "var(--findable-font-sans)" }}
       >
         {cta}

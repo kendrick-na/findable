@@ -6,12 +6,13 @@
 // 같은 jobId에 대해 이미 processing/completed면 409 반환 (중복 트리거 방지).
 // Runtime: Node.js, maxDuration 300s (Browserbase 클라우드 크롬은 느림).
 
+import { runBriefingForAuditJob } from "@repo/audit/briefing-runner";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
+import { checkBotId } from "botid/server";
 import type { NextRequest } from "next/server";
 import { after, NextResponse } from "next/server";
-import { runBriefingForAuditJob } from "@/lib/audit/briefing-runner";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -23,6 +24,17 @@ interface RouteParams {
 type BriefingStatus = "not_requested" | "processing" | "completed" | "failed";
 
 export async function POST(_request: NextRequest, { params }: RouteParams) {
+  // BotID — 브리핑은 Browserbase 세션(분당 과금)을 쓰므로 자동화 요청을 먼저 막는다.
+  // (등록 경로 = instrumentation-client.ts `/api/audit/*/briefing`)
+  const verification = await checkBotId();
+  if (verification.isBot) {
+    log.warn("audit.briefing.bot_blocked", {});
+    return NextResponse.json(
+      { error: "자동화된 요청으로 확인되어 차단되었습니다." },
+      { status: 403 }
+    );
+  }
+
   const { jobId } = await params;
   log.info("audit.briefing.requested", { jobId });
 

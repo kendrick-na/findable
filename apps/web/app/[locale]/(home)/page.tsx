@@ -3,6 +3,7 @@ import { JsonLd } from "@repo/seo/json-ld";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import { env } from "@/env";
+import { Credibility } from "./components/credibility";
 import { FooterCTA } from "./components/footer-cta";
 import { Hero } from "./components/hero";
 import { LiveCounter } from "./components/live-counter";
@@ -17,13 +18,20 @@ interface HomeProps {
   }>;
 }
 
+// ⚡ ISR (2026-07-30 성능): [locale] 동적 파라미터라 www 전 페이지가 매 요청 SSR로 돌고 있었다
+//   (cache-control: no-store, x-vercel-cache: MISS 고정 → 콜드 TTFB ~1.5s).
+//   홈은 dynamic API(headers/cookies/searchParams) 사용 0 → 30분 ISR로 CDN 캐시.
+//   LiveCounter의 DB 카운트도 이 주기로 갱신(컴포넌트 파일의 revalidate export는 무효였음).
+export const revalidate = 1800;
+
 export const generateMetadata = async ({
   params,
 }: HomeProps): Promise<Metadata> => {
   const { locale } = await params;
   const dictionary = await getDictionary(locale);
 
-  return createMetadata(dictionary.web.home.meta);
+  // locale·pathname 을 주면 hreflang(ko·en)+canonical+OG locale 이 생성된다(2026-08-08).
+  return createMetadata({ ...dictionary.web.home.meta, locale, pathname: "/" });
 };
 
 // Findable v4 홈 (D-040 Linear 풀 시그니처, 2026-05-05 / D-044 LiveCounter 추가, 2026-05-07)
@@ -75,12 +83,17 @@ const Home = async ({ params }: HomeProps) => {
             "@type": "Organization",
             name: "Findable",
             url: siteUrl,
-            slogan: "네이버까지 진단하고 고칠 곳까지 알려주는 Agentic GEO 플랫폼",
+            slogan:
+              "네이버까지 진단하고 고칠 곳까지 알려주는 Agentic GEO 플랫폼",
           },
         }}
       />
       <Hero dictionary={dictionary} locale={locale} />
       <LiveCounter locale={locale} />
+      {/* 🔴 경쟁사가 **고객 로고 벽**을 두는 자리(Profound 18개·Scrunch 500개사).
+          우리는 고객 0명이라 그대로 흉내내면 날조가 된다 →
+          선정·수상 + "만든 팀이 해온 일" 로 대체. 상세 규율은 컴포넌트 주석. */}
+      <Credibility locale={locale} />
       <ThreePillars locale={locale} />
       <StepSections locale={locale} />
       <RentVsEquity locale={locale} />

@@ -140,4 +140,7 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+  // 위치를 직접 계산해야 하는 소비자용(예: 온보딩 투어의 스포트라이트 카드) —
+  // `DialogContent`는 화면 중앙 고정이라 재사용 못 한다. 스타일 없는 raw Content.
+  DialogPrimitive,
 }

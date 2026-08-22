@@ -11,7 +11,102 @@
 
 import { Button } from "@repo/design-system/components/ui/button";
 import { Loader2, MessageCircle, SendHorizonal } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+// ── 경량 마크다운 표시 ─────────────────────────────────────────
+// 모델 답변이 마크다운(#·**·---·목록)으로 오는데 원문 기호가 말풍선에
+// 그대로 보이는 문제(2026-07-30 사용자 지적)의 표시측 해소.
+// 표·링크까지 다루는 풀 렌더러 의존성은 챗 말풍선엔 과투자라 도입하지 않고,
+// 실제로 등장하는 패턴(헤딩·굵게·구분선)만 변환한다. 스트리밍 중에도 동작.
+
+const HR_RE = /^\s*-{3,}\s*$/;
+const HEADING_RE = /^\s*#{1,4}\s+(.*)$/;
+
+/** `**굵게**` 인라인만 <strong>으로. 홀수 개 `**`는 마지막 조각을 평문 처리. */
+function renderInline(text: string): ReactNode {
+  const parts = text.split("**");
+  if (parts.length < 3) {
+    return text;
+  }
+  return parts.map((part, i) =>
+    i % 2 === 1 && i < parts.length - (parts.length % 2 === 0 ? 1 : 0) ? (
+      // biome-ignore lint/suspicious/noArrayIndexKey: 조각 순서가 곧 정체성(스트리밍 텍스트)
+      <strong className="font-semibold text-zinc-50" key={i}>
+        {part}
+      </strong>
+    ) : (
+      part
+    )
+  );
+}
+
+function LineBlock({ line }: { line: string }) {
+  if (HR_RE.test(line)) {
+    return <hr className="my-2 border-white/10" />;
+  }
+  const heading = line.match(HEADING_RE);
+  if (heading) {
+    return (
+      <p className="mt-2 font-semibold text-zinc-50">
+        {renderInline(heading[1] ?? "")}
+      </p>
+    );
+  }
+  if (line.trim().length === 0) {
+    return <div aria-hidden className="h-2" />;
+  }
+  return <p className="whitespace-pre-wrap">{renderInline(line)}</p>;
+}
+
+function MarkdownLite({ content }: { content: string }) {
+  return (
+    <div className="space-y-1">
+      {content.split("\n").map((line, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: 스트리밍 텍스트 — 줄 순서가 곧 정체성
+        <LineBlock key={i} line={line} />
+      ))}
+    </div>
+  );
+}
+
+function MessageBody({
+  message,
+}: {
+  message: { content: string; role: "user" | "assistant" };
+}) {
+  if (!message.content) {
+    return <Loader2 className="h-4 w-4 animate-spin text-[var(--brand-2)]" />;
+  }
+  if (message.role === "assistant") {
+    return <MarkdownLite content={message.content} />;
+  }
+  return <span className="whitespace-pre-wrap">{message.content}</span>;
+}
+
+/** 순수 텍스트 스트림을 끝까지 읽으며 누적값을 콜백으로 전달. 최종 누적 문자열 반환. */
+async function readTextStream(
+  body: ReadableStream<Uint8Array>,
+  onAccumulate: (acc: string) => void
+): Promise<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let acc = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    acc += decoder.decode(value, { stream: true });
+    onAccumulate(acc);
+  }
+  return acc;
+}
 
 interface Props {
   isKo: boolean;
@@ -34,6 +129,9 @@ const SUGGESTIONS_EN = [
   "Why aren't we showing up on Naver?",
   "Where are we weakest vs competitors?",
 ];
+/* 아이콘만 있는 전송 버튼의 접근성 이름 (스크린리더가 "버튼"으로만 읽던 것) */
+const SEND_LABELS_KO = { busy: "답변 생성 중", idle: "질문 보내기" };
+const SEND_LABELS_EN = { busy: "Generating answer", idle: "Send question" };
 
 export function CopilotChat({ jobId, isKo }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -94,18 +192,21 @@ export function CopilotChat({ jobId, isKo }: Props) {
           throw new Error(data.error ?? `HTTP ${res.status}`);
         }
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let acc = "";
         // 순수 텍스트 스트림 — 청크를 그대로 이어붙여 assistant 턴을 갱신
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
-          acc += decoder.decode(value, { stream: true });
+        const acc = await readTextStream(res.body, (partial) => {
           setMessages((prev) =>
-            prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m))
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: partial } : m
+            )
+          );
+        });
+        // 200인데 토큰이 0개(모델 호출이 비동기로 실패해 빈 스트림만 닫힌 경우,
+        // 결함감사 §21) — 빈 말풍선을 남기지 말고 에러로 처리한다.
+        if (acc.trim().length === 0) {
+          throw new Error(
+            isKo
+              ? "응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요."
+              : "No response received. Please try again."
           );
         }
       } catch (err) {
@@ -124,10 +225,11 @@ export function CopilotChat({ jobId, isKo }: Props) {
         setStreaming(false);
       }
     },
-    [jobId, messages, streaming]
+    [jobId, messages, streaming, isKo]
   );
 
   const suggestions = isKo ? SUGGESTIONS_KO : SUGGESTIONS_EN;
+  const sendLabels = isKo ? SEND_LABELS_KO : SEND_LABELS_EN;
 
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur-sm">
@@ -137,7 +239,7 @@ export function CopilotChat({ jobId, isKo }: Props) {
           <MessageCircle className="h-4 w-4" />
         </div>
         <div>
-          <div className="font-mono text-[10px] text-[var(--brand-2)] uppercase tracking-[0.18em]">
+          <div className="font-medium text-[var(--brand-2)] text-xs">
             {isKo ? "GEO 코파일럿" : "GEO Copilot"}
           </div>
           <div className="text-sm text-zinc-300">
@@ -155,7 +257,7 @@ export function CopilotChat({ jobId, isKo }: Props) {
       >
         {messages.length === 0 ? (
           <div className="space-y-3">
-            <p className="text-sm text-zinc-500 leading-relaxed">
+            <p className="text-sm text-zinc-400 leading-relaxed">
               {isKo
                 ? "4 에이전트 진단 결과를 바탕으로 답합니다. 예를 들어:"
                 : "Answers grounded in your 4-agent diagnosis. For example:"}
@@ -188,11 +290,7 @@ export function CopilotChat({ jobId, isKo }: Props) {
                     : "max-w-[90%] rounded-2xl rounded-bl-sm bg-zinc-800/60 px-4 py-2.5 text-sm text-zinc-200 leading-relaxed"
                 }
               >
-                {m.content ? (
-                  <span className="whitespace-pre-wrap">{m.content}</span>
-                ) : (
-                  <Loader2 className="h-4 w-4 animate-spin text-[var(--brand-2)]" />
-                )}
+                <MessageBody message={m} />
               </div>
             </div>
           ))
@@ -210,13 +308,14 @@ export function CopilotChat({ jobId, isKo }: Props) {
         }}
       >
         <input
-          className="flex-1 rounded-md border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[var(--brand-2)] focus:outline-none disabled:opacity-50"
+          className="flex-1 rounded-md border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-400 focus:border-[var(--brand-2)] focus:outline-none disabled:opacity-50"
           disabled={streaming}
           onChange={(e) => setInput(e.target.value)}
           placeholder={isKo ? "질문을 입력하세요…" : "Type your question…"}
           value={input}
         />
         <Button
+          aria-label={streaming ? sendLabels.busy : sendLabels.idle}
           className="gap-1.5"
           disabled={streaming || !input.trim()}
           size="sm"

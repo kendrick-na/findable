@@ -4,7 +4,7 @@
 // D-060 (2026-05-12): 헤더 언어 토글 추가
 
 import type { Dictionary } from "@repo/internationalization";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 import Link from "next/link";
 
 // 네이버를 맨 앞으로 재배치 (D-2026-07-23 포지셔닝 전환): 유일 방어 공백인
@@ -47,31 +47,49 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
   // "한국 최초"(검증불가 과장) 제거 — GPTO 등 경쟁사가 동일 주장.
   const heroSub = isKo
     ? "측정만 하지 않습니다. 네이버까지 진단하고, 직접 고칠 곳까지 알려드립니다."
-    : "We don't just measure. We diagnose Naver too — and show you exactly what to fix.";
+    : "We don't just measure. We diagnose Naver too, and show you exactly what to fix.";
   const heroTagline = isKo
-    ? "7개 AI 답변 속 우리 브랜드 점유율, 30초면 진단 끝."
-    : "Your brand's share of voice across 7 AI answers — diagnosed in 30 seconds.";
-  const ctaPrimary = isKo ? "무료로 진단받기" : "Get a free audit";
-  const ctaDemo = isKo ? "데모 보기" : "View demo";
+    ? "7개 AI 답변 속 우리 브랜드 점유율, 3분이면 진단 끝."
+    : "Your brand's share of voice across 7 AI answers, diagnosed in 3 minutes.";
+  const ctaPrimary = isKo ? "무료로 시작하기" : "Start for free";
+  // secondary CTA는 primary(진단)와 목적지가 겹치지 않게 요금제로 분리.
+  const ctaSecondary = isKo ? "요금제 보기" : "See pricing";
   const enginesLabel = isKo ? "진단 대상 AI" : "Engines covered";
-  const betaLabel = isKo ? "Findable v1.0 베타" : "Findable v1.0 beta";
-  // 데모 = GEO 측정 대시보드 (app.findable.co.kr). 로그인 후 진입.
-  const dashboardHref = "https://app.findable.co.kr";
+  // 고객사례 드롭다운 하위 링크 (사례·리포트·리서치)
+  const customerMenu = isKo
+    ? {
+        label: "고객사례",
+        children: [
+          { label: "케이스 스터디", href: `${lp}/case/a-brand` },
+          { label: "GEO 리포트", href: `${lp}/report/k-beauty-geo-2026q2` },
+          { label: "벤치마크 리서치", href: `${lp}/research/k-geo-bench-v0_1` },
+        ],
+      }
+    : {
+        label: "Customers",
+        children: [
+          { label: "Case study", href: `${lp}/case/a-brand` },
+          { label: "GEO report", href: `${lp}/report/k-beauty-geo-2026q2` },
+          { label: "Benchmark", href: `${lp}/research/k-geo-bench-v0_1` },
+        ],
+      };
+  // 단일 링크 nav 항목 (제품·요금제·리소스). 고객사례는 별도 드롭다운으로 렌더.
   const navItems = isKo
-    ? [
-        { label: "제품", href: "#product" },
-        { label: "데모", href: dashboardHref },
-        { label: "요금제", href: `${lp}/pricing` },
-        { label: "리소스", href: `${lp}/blog` },
-      ]
-    : [
-        { label: "Product", href: "#product" },
-        { label: "Demo", href: dashboardHref },
-        { label: "Pricing", href: `${lp}/pricing` },
-        { label: "Resources", href: `${lp}/blog` },
-      ];
+    ? {
+        product: { label: "제품", href: "#product" },
+        pricing: { label: "요금제", href: `${lp}/pricing` },
+        resources: { label: "리소스", href: `${lp}/blog` },
+      }
+    : {
+        product: { label: "Product", href: "#product" },
+        pricing: { label: "Pricing", href: `${lp}/pricing` },
+        resources: { label: "Resources", href: `${lp}/blog` },
+      };
   const navSignIn = isKo ? "로그인" : "Sign in";
-  const navDemo = isKo ? "데모 신청" : "Book a demo";
+  // 우상단 primary CTA는 무료 진단으로 통일 (기존 데모 신청 → 진단).
+  const navAudit = isKo ? "무료로 시작" : "Start free";
+  const navLinkClass =
+    "text-[14px] text-[var(--findable-ink-subtle)] transition hover:text-[var(--findable-ink)]";
   return (
     <section className="relative w-full overflow-hidden bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
       {/* 상단 atmospheric 라벤더 글로우 (Resend 패턴) */}
@@ -79,16 +97,17 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[60vh]"
         style={{
-          background: `radial-gradient(ellipse 80% 50% at 50% 0%, var(--findable-glow-purple), transparent 60%)`,
+          background:
+            "radial-gradient(ellipse 80% 50% at 50% 0%, var(--findable-glow-purple), transparent 60%)",
         }}
       />
 
       {/* TOP NAV — Hero 안 인라인 (sticky 제거, 디자인 안정 우선) */}
       <header className="relative z-50 flex h-14 items-center justify-between border-[var(--findable-hairline)] border-b px-8">
         <Link
-          href={lp || "/"}
-          className="inline-flex items-baseline text-[var(--findable-ink)] transition hover:opacity-80"
           aria-label="Findable"
+          className="inline-flex items-baseline text-[var(--findable-ink)] transition hover:opacity-80"
+          href={lp || "/"}
         >
           <span
             className="text-[24px] leading-none"
@@ -106,17 +125,47 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
           />
         </Link>
 
-        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-7 md:flex">
-          {navItems.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="text-[14px] text-[var(--findable-ink-subtle)] transition hover:text-[var(--findable-ink)]"
-              style={{ fontFamily: "var(--findable-font-sans)" }}
+        <nav
+          className="hidden items-center gap-8 md:flex"
+          style={{ fontFamily: "var(--findable-font-sans)" }}
+        >
+          <Link className={navLinkClass} href={navItems.product.href}>
+            {navItems.product.label}
+          </Link>
+
+          {/* 고객사례 드롭다운: CSS group-hover + focus-within (키보드 접근 포함) */}
+          <div className="group relative flex w-fit items-center">
+            <button
+              aria-haspopup="menu"
+              className={`inline-flex items-center gap-1 ${navLinkClass} group-focus-within:text-[var(--findable-ink)] group-hover:text-[var(--findable-ink)]`}
+              type="button"
             >
-              {l.label}
-            </Link>
-          ))}
+              {customerMenu.label}
+              <ChevronDown className="h-3.5 w-3.5 opacity-70 transition group-focus-within:rotate-180 group-hover:rotate-180" />
+            </button>
+            <div
+              className="findable-glass !absolute invisible top-full left-1/2 z-50 mt-2 w-52 -translate-x-1/2 translate-y-1 rounded-lg p-1.5 opacity-0 transition-all duration-150 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100"
+              role="menu"
+            >
+              {customerMenu.children.map((c) => (
+                <Link
+                  className="block rounded-md px-3 py-2 text-[13px] text-[var(--findable-ink-subtle)] transition hover:bg-white/[0.06] hover:text-[var(--findable-ink)]"
+                  href={c.href}
+                  key={c.href}
+                  role="menuitem"
+                >
+                  {c.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <Link className={navLinkClass} href={navItems.pricing.href}>
+            {navItems.pricing.label}
+          </Link>
+          <Link className={navLinkClass} href={navItems.resources.href}>
+            {navItems.resources.label}
+          </Link>
         </nav>
 
         <div className="flex items-center gap-2">
@@ -128,75 +177,63 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
             {/* 플레인 <a> 사용 — Next.js prefetch가 /ko·/en 미들웨어를 트리거해
                 Next-Locale 쿠키를 덮어쓰는 문제 방지 (D-061) */}
             <a
-              href="/ko"
               className={`rounded px-1.5 py-0.5 transition ${
                 isKo
                   ? "bg-[var(--findable-surface-2)] text-[var(--findable-ink)]"
                   : "text-[var(--findable-ink-tertiary)] hover:text-[var(--findable-ink)]"
               }`}
+              href="/ko"
             >
               KO
             </a>
             <a
-              href="/en"
               className={`rounded px-1.5 py-0.5 transition ${
-                !isKo
-                  ? "bg-[var(--findable-surface-2)] text-[var(--findable-ink)]"
-                  : "text-[var(--findable-ink-tertiary)] hover:text-[var(--findable-ink)]"
+                isKo
+                  ? "text-[var(--findable-ink-tertiary)] hover:text-[var(--findable-ink)]"
+                  : "bg-[var(--findable-surface-2)] text-[var(--findable-ink)]"
               }`}
+              href="/en"
             >
               EN
             </a>
           </div>
           <a
-            href="https://app.findable.co.kr/sign-in"
             className="hidden rounded-md px-3 py-1.5 text-[14px] text-[var(--findable-ink)] transition hover:bg-[var(--findable-surface-1)] sm:inline-block"
+            href={`${process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr"}/sign-in`}
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             {navSignIn}
           </a>
           <Link
-            href={`${lp}/contact`}
             className="findable-btn-primary flex h-9 items-center rounded-md bg-[var(--findable-ink)] px-3.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-ink-muted)]"
+            href={`${process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr"}/sign-up`}
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
-            {navDemo}
+            {navAudit}
           </Link>
         </div>
       </header>
 
       {/* HERO CONTENT */}
-      <div className="relative z-10 mx-auto flex max-w-[1200px] flex-col items-center px-8 pt-12 pb-12 text-center md:pt-16 md:pb-14">
-        {/* Eyebrow pill (정적 라벨, 클릭 불가) */}
-        <div
-          className="opacity-0"
-          style={{
-            animation:
-              "findable-fade-up-sm 0.5s var(--findable-ease-out-soft) 0.1s forwards",
-          }}
-        >
-          <span
-            className="inline-flex items-center gap-2 rounded-full border border-[var(--findable-hairline-strong)] bg-[var(--findable-surface-2)] px-3 py-1 text-[12px] text-[var(--findable-ink-muted)]"
-            style={{ fontFamily: "var(--findable-font-sans)" }}
-          >
-            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--findable-primary)]" />
-            {betaLabel}
-          </span>
-        </div>
-
+      <div className="relative z-10 mx-auto flex max-w-[1200px] flex-col items-center px-8 pt-16 pb-12 text-center md:pt-24 md:pb-14">
         {/* H1 — Toss 톤 명사구 단언 */}
         <h1
-          className="mt-8 max-w-[1100px] opacity-0"
+          className="max-w-[1100px] opacity-0"
           style={{
             fontFamily: isKo
               ? "var(--findable-font-display-kr)"
               : "var(--findable-font-display)",
             fontSize: "clamp(40px, 5.5vw, 80px)",
             lineHeight: 1.08,
-            letterSpacing: "-0.035em",
+            // 한글은 정사각 격자라 자간을 좁히면 글자가 붙는다 → 한국어에선 0
+            letterSpacing: isKo ? "0" : "-0.035em",
             fontWeight: 500,
+            // 🔴 2026-08-15 모션 실측 — 0.8s+0.2s delay = 1.0s 였다.
+            //   MD3 공식 토큰(json/motion.json): extra-long(700ms~)은 일반 UI 에 쓰지 않는다.
+            //   경쟁사 실측(60fps 프레임차분): Profound 헤드라인 전환 83~100ms.
+            //   → long2(500ms) + delay 0.1s = 0.6s 로 압축.
             animation:
-              "findable-fade-up 0.8s var(--findable-ease-cinema) 0.2s forwards",
+              "findable-fade-up 0.5s var(--findable-ease-out-soft) 0.1s forwards",
           }}
         >
           {h1}
@@ -209,7 +246,7 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
             fontFamily: "var(--findable-font-sans)",
             fontWeight: 500,
             animation:
-              "findable-fade-up 0.6s var(--findable-ease-cinema) 0.35s forwards",
+              "findable-fade-up 0.4s var(--findable-ease-out-soft) 0.2s forwards",
           }}
         >
           {heroSub}
@@ -217,11 +254,11 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
 
         {/* Sub — 25초 검증 사실 + 30일 제거 */}
         <p
-          className="mt-4 max-w-[680px] text-[16px] leading-[1.6] text-[var(--findable-ink-muted)] opacity-0"
+          className="mt-4 max-w-[680px] text-[16px] text-[var(--findable-ink-muted)] leading-[1.6] opacity-0"
           style={{
             fontFamily: "var(--findable-font-sans)",
             animation:
-              "findable-fade-up 0.6s var(--findable-ease-out-soft) 0.5s forwards",
+              "findable-fade-up 0.4s var(--findable-ease-out-soft) 0.28s forwards",
           }}
         >
           {heroTagline}
@@ -231,24 +268,26 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
         <div
           className="mt-10 flex flex-col items-center gap-2.5 opacity-0 sm:flex-row"
           style={{
+            // 🔴 CTA 는 이 페이지의 주 행동이다. 이전엔 0.5s+0.7s = **1.2초 뒤에야 나타났다**
+            //   → 그 전까지 방문자는 누를 것이 없다. 가장 먼저 손에 잡혀야 하므로 0.36s 로 당긴다.
             animation:
-              "findable-fade-up 0.5s var(--findable-ease-out-quint) 0.7s forwards",
+              "findable-fade-up 0.36s var(--findable-ease-out-soft) 0.36s forwards",
           }}
         >
           <Link
-            href={`${lp}/audit`}
             className="findable-btn-primary flex h-10 items-center gap-2 rounded-md bg-[var(--findable-ink)] px-4 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-ink-muted)]"
+            href={`${process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr"}/sign-up`}
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             {ctaPrimary}
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
           <Link
-            href={dashboardHref}
             className="flex h-10 items-center rounded-md px-4 font-medium text-[14px] text-[var(--findable-ink-muted)] transition hover:bg-[var(--findable-surface-1)] hover:text-[var(--findable-ink)]"
+            href={`${lp}/pricing`}
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
-            {ctaDemo}
+            {ctaSecondary}
           </Link>
         </div>
 
@@ -257,19 +296,19 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
           className="mt-20 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 opacity-0"
           style={{
             animation:
-              "findable-fade-up-sm 0.5s var(--findable-ease-out-soft) 0.9s forwards",
+              "findable-fade-up-sm 0.35s var(--findable-ease-out-soft) 0.45s forwards",
           }}
         >
           <span
-            className="text-[11px] uppercase tracking-[0.18em] text-[var(--findable-ink-tertiary)]"
+            className="text-[11px] text-[var(--findable-ink-tertiary)] uppercase tracking-[0.18em]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             {enginesLabel}
           </span>
           {ENGINES.map((engine) => (
             <span
-              key={engine}
               className="text-[13px] text-[var(--findable-ink-subtle)]"
+              key={engine}
               style={{ fontFamily: "var(--findable-font-mono)" }}
             >
               {engine}

@@ -13,7 +13,7 @@ console.log(
 );
 console.log("");
 
-if (!process.env.BROWSERBASE_API_KEY || !process.env.BROWSERBASE_PROJECT_ID) {
+if (!(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID)) {
   console.error("환경변수 미설정. node --env-file=.env.local 옵션 필요.");
   process.exit(1);
 }
@@ -49,7 +49,7 @@ try {
   const startGoto = Date.now();
   await page.goto(searchUrl, {
     waitUntil: "domcontentloaded",
-    timeoutMs: 30000,
+    timeoutMs: 30_000,
   });
   console.log(`✅ goto 성공 (${Date.now() - startGoto}ms)\n`);
 

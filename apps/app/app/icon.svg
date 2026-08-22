@@ -1,0 +1,9 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Findable [F.] mark — D2SF 덱 .findable-mark(Findable 워드마크 + #FF7A4D 사각 점)의 축약형.
+       세리프 F는 Instrument Serif → Georgia 폴백 스택. 색: #FF7A4D, 투명 배경. -->
+  <text x="1.5" y="25.5"
+        font-family="'Instrument Serif', Georgia, 'Times New Roman', serif"
+        font-size="30" font-weight="400" fill="#FF7A4D"
+        letter-spacing="-0.5">F</text>
+  <rect x="21.2" y="21.5" width="4.3" height="4.3" fill="#FF7A4D"/>
+</svg>

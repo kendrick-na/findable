@@ -10,9 +10,19 @@ const STATS = [
     label: "SoV 정직 산정",
     sub: "기존 100% 거품 제거",
   },
-  { value: 7, suffix: "개", label: "AI 엔진 동시 호출", sub: "한국 3 + 글로벌 4" },
+  {
+    value: 7,
+    suffix: "개",
+    label: "AI 엔진 동시 호출",
+    sub: "한국 3 + 글로벌 4",
+  },
   { value: 3, suffix: "분", label: "무료 진단 시간", sub: "도메인 입력 한 번" },
-  { value: 0, suffix: "건", label: "한국어 GEO 경쟁", sub: "기관 투자 0건 (4-22 검증)" },
+  {
+    value: 0,
+    suffix: "건",
+    label: "한국어 GEO 경쟁",
+    sub: "기관 투자 0건 (4-22 검증)",
+  },
 ];
 
 export const DarkHedge = () => {
@@ -34,7 +44,7 @@ export const DarkHedge = () => {
       <div className="relative mx-auto max-w-6xl px-6 py-24 md:py-32">
         <div className="grid gap-16 md:grid-cols-2 md:gap-12">
           <div>
-            <p className="text-xs font-mono uppercase tracking-[0.18em] text-[color:var(--findable-gold-500)]">
+            <p className="font-mono text-[color:var(--findable-gold-500)] text-xs uppercase tracking-[0.18em]">
               한국어 GEO 카테고리 1위
             </p>
             <h2
@@ -50,10 +60,9 @@ export const DarkHedge = () => {
                 AI가 먼저 답하게.
               </span>
             </h2>
-            <p className="mt-6 max-w-md text-lg leading-relaxed text-[color:var(--findable-mist-50)]/70">
+            <p className="mt-6 max-w-md text-[color:var(--findable-mist-50)]/70 text-lg leading-relaxed">
               Princeton KDD'24 GEO + ICLR'26 AutoGEO 백본 위에
-              <br />
-              4 자율 에이전트가 작동하는 한국 최초 Agentic GEO Platform.
+              <br />4 자율 에이전트가 작동하는 한국 최초 Agentic GEO Platform.
             </p>
           </div>
 
@@ -69,10 +78,9 @@ export const DarkHedge = () => {
                 '"Pretendard Variable", Pretendard, "Noto Serif KR", serif',
             }}
           >
-            "Korean Entity Grounding은 K-뷰티 글로벌 마케팅의 숨은
-            무기입니다."
+            "Korean Entity Grounding은 K-뷰티 글로벌 마케팅의 숨은 무기입니다."
           </p>
-          <footer className="mt-5 text-sm text-[color:var(--findable-mist-50)]/55">
+          <footer className="mt-5 text-[color:var(--findable-mist-50)]/55 text-sm">
             — 메디큐브 마케팅팀 (베타 검증)
           </footer>
         </blockquote>

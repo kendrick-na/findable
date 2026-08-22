@@ -1,8 +1,7 @@
-// K-GEO-Bench v0.1 — 한국어 GEO 측정 첫 공개 데이터셋 (D-056, 2026-05-08)
+// K-GEO-Bench v0.1 — 한국어 GEO 측정 공개 데이터셋 (D-056, 2026-05-08)
 //
 // 본질:
-//   Princeton GEO-Bench (KDD'24, 영문 10K 데이터)의 한국어 첫 공개 버전.
-//   K-뷰티 5사 × 7+1 AI 엔진 × 4 프롬프트 = 140 측정 응답.
+//   K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트 = 140 측정 응답.
 //
 // 정직성:
 //   - 5사는 모두 공개 K-뷰티 D2C 브랜드 (고객 아님, 측정 대상)
@@ -14,15 +13,31 @@
 //   - 네이버 D3 R&D 협업
 //   - 양상환 B6 "기술 진입장벽"
 
-import { ArrowRight, Database, Download, ExternalLink, FileJson, GraduationCap } from "lucide-react";
-import type { Metadata } from "next";
+import { JsonLd } from "@repo/seo/json-ld";
+import { createMetadata } from "@repo/seo/metadata";
+import {
+  ArrowRight,
+  Database,
+  Download,
+  ExternalLink,
+  FileJson,
+  GraduationCap,
+} from "lucide-react";
 import Link from "next/link";
 
-export const metadata: Metadata = {
-  title: "K-GEO-Bench v0.1 — Findable Open Dataset for Korean GEO Research",
-  description:
-    "한국어 GEO 측정 첫 공개 데이터셋. K-뷰티 5사 × 8 AI 엔진 × 4 프롬프트 = 140 측정 응답. CC BY 4.0.",
-};
+const DESCRIPTION =
+  "한국어 GEO 측정 공개 데이터셋. K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트 = 140 측정 응답. CC BY 4.0.";
+const PATHNAME = "/research/k-geo-bench-v0_1";
+const SITE_URL = "https://www.findable.co.kr";
+const CANONICAL = `${SITE_URL}/ko${PATHNAME}`;
+
+export const generateMetadata = () =>
+  createMetadata({
+    title: "K-GEO-Bench v0.1 · Korean GEO Open Dataset",
+    description: DESCRIPTION,
+    locale: "ko",
+    pathname: PATHNAME,
+  });
 
 export const revalidate = 3600;
 
@@ -31,7 +46,7 @@ const DATASET_INFO = {
   releasedAt: "2026-05-08",
   records: 5,
   totalResponses: 140,
-  engines: 8,
+  engines: 7,
   prompts: 4,
   license: "CC BY 4.0",
   jsonlSize: "17 KB",
@@ -39,40 +54,95 @@ const DATASET_INFO = {
 };
 
 const BRAND_SUMMARY = [
-  { name: "메디큐브", slug: "medicube", category: "더마 코스메틱", sov: 93, jobId: "57fbfad0-2ba1-47b8-b2d9-fa6e5f4e36b7" },
-  { name: "라운드랩", slug: "roundlab", category: "클린 스킨케어", sov: 93, jobId: "257c1723-5d63-46c1-977c-ff361b8e600e" },
-  { name: "아누아", slug: "anua", category: "진정·민감", sov: 96, jobId: "3cad5f14-ef15-44a4-b5f6-dd55745c60db" },
-  { name: "조선미녀", slug: "beautyofjoseon", category: "한방·미니멀", sov: 92, jobId: "e6d206df-7e40-4007-ab73-b249a813e603" },
-  { name: "달바", slug: "dalba", category: "글로벌 D2C", sov: 92, jobId: "44b63810-3851-4047-b99f-726904dc0f38" },
+  {
+    name: "메디큐브",
+    slug: "medicube",
+    category: "더마 코스메틱",
+    sov: 93,
+    jobId: "57fbfad0-2ba1-47b8-b2d9-fa6e5f4e36b7",
+  },
+  {
+    name: "라운드랩",
+    slug: "roundlab",
+    category: "클린 스킨케어",
+    sov: 93,
+    jobId: "257c1723-5d63-46c1-977c-ff361b8e600e",
+  },
+  {
+    name: "아누아",
+    slug: "anua",
+    category: "진정·민감",
+    sov: 96,
+    jobId: "3cad5f14-ef15-44a4-b5f6-dd55745c60db",
+  },
+  {
+    name: "조선미녀",
+    slug: "beautyofjoseon",
+    category: "한방·미니멀",
+    sov: 92,
+    jobId: "e6d206df-7e40-4007-ab73-b249a813e603",
+  },
+  {
+    name: "달바",
+    slug: "dalba",
+    category: "글로벌 D2C",
+    sov: 92,
+    jobId: "44b63810-3851-4047-b99f-726904dc0f38",
+  },
 ];
 
 const FINDINGS = [
   {
     title: "K-뷰티 카테고리는 한국어·영문 AI 모두에서 강세",
     detail:
-      "5사 평균 SoV 93.2/100. 글로벌 4 엔진(ChatGPT·Claude·Perplexity·Gemini)과 한국 엔진(HyperCLOVA X·네이버) 모두 높은 인용률. K-뷰티 글로벌 진출이 영문 LLM 학습 데이터에 안정적으로 반영된 결과.",
+      "5사 평균 SoV는 93.2/100이었습니다. 글로벌 4개 엔진(ChatGPT·Claude·Perplexity·Gemini)과 한국 엔진(HyperCLOVA X·네이버) 응답에서 브랜드 언급이 관찰됐습니다. 이 표본만으로 원인을 단정하지 않습니다.",
   },
   {
-    title: "다음(Daum)은 K-뷰티 카테고리 약세 — 카카오 검색 인덱스 갭",
+    title: "다음(Daum)은 K-뷰티 카테고리 약세: 카카오 검색 인덱스 갭",
     detail:
-      "5사 모두 다음에서 인용률 50% 이하. 카카오 검색 API의 K-뷰티 콘텐츠 인덱스 부족으로 추정. 광고주 한국 검색 채널 다각화 시 진입장벽.",
+      "다음의 5사 평균 브랜드 언급률은 55%로 다른 측정 엔진보다 낮았습니다. 아누아는 75%여서 브랜드별 차이도 확인됐습니다. 원인은 이번 데이터만으로 판단할 수 없습니다.",
   },
   {
-    title: "아누아가 5사 중 1위 (SoV 96/100) — Amazon 토너 1위가 영문 LLM에 반영",
+    title: "아누아가 5사 중 가장 높은 SoV 96/100을 기록",
     detail:
-      "Anua Heartleaf 77 Soothing Toner = Amazon 페이셜 토너 1위. ChatGPT 영문 답변에서 K-뷰티 추천 시 자주 등장. 글로벌 진출 K-뷰티의 LLM 가시성 영향이 측정 단계에서 검증됨.",
+      "아누아는 이 표본에서 SoV 96/100을 기록했습니다. 제품 유통·리뷰·웹 문서 중 무엇이 결과에 영향을 줬는지는 별도의 출처 분석과 반복 측정이 필요합니다.",
   },
 ];
 
 export default function KGeoBenchPage() {
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
+      <JsonLd
+        code={{
+          "@context": "https://schema.org",
+          "@type": "Dataset",
+          name: "K-GEO-Bench v0.1",
+          description: DESCRIPTION,
+          url: CANONICAL,
+          datePublished: "2026-05-08",
+          inLanguage: "ko",
+          license: "https://creativecommons.org/licenses/by/4.0/",
+          creator: { "@type": "Organization", name: "Findable", url: SITE_URL },
+          distribution: [
+            {
+              "@type": "DataDownload",
+              encodingFormat: "application/x-ndjson",
+              contentUrl: `${SITE_URL}/api/data/k-geo-bench-v0_1`,
+            },
+            {
+              "@type": "DataDownload",
+              encodingFormat: "application/json",
+              contentUrl: `${SITE_URL}/api/data/k-geo-bench-v0_1?format=json`,
+            },
+          ],
+        }}
+      />
       {/* Hero */}
       <section className="relative w-full overflow-hidden border-[var(--findable-hairline)] border-b">
         <div className="mx-auto max-w-5xl px-6 pt-24 pb-16 md:pt-32 md:pb-20">
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <span
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[var(--findable-ink-tertiary)]"
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] px-3 py-1 text-[11px] text-[var(--findable-ink-tertiary)] uppercase tracking-[0.18em]"
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               <GraduationCap className="h-3 w-3" />
@@ -92,35 +162,35 @@ export default function KGeoBenchPage() {
             K-GEO-Bench v0.1
             <br />
             <span className="text-[var(--findable-primary)]">
-              한국어 GEO 측정 첫 공개 데이터셋
+              한국어 GEO 측정 공개 데이터셋
             </span>
           </h1>
           <p
             className="max-w-2xl text-[18px] text-[var(--findable-ink-muted)] leading-[1.6]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
-            Princeton KDD&apos;24 GEO-Bench의 한국어 환경 적용판. K-뷰티 5사 × 8 AI
-            엔진 × 4 프롬프트 = 140 측정 응답. 한국어 LLM 학습 풀이 영문 대비 50배 좁은
-            환경에서, 한국어 GEO 연구·개발의 출발선이 되는 공개 데이터셋입니다.
+            K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트로 수집한 140개 측정 응답입니다.
+            한국어 AI 검색 가시성을 재현하고 비교할 수 있도록 측정 결과와 조건을
+            공개합니다.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              href="/api/data/k-geo-bench-v0_1"
-              className="inline-flex items-center gap-2 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-white transition hover:bg-[var(--findable-primary-hover)]"
-              style={{ fontFamily: "var(--findable-font-sans)" }}
-              prefetch={false}
+              className="inline-flex items-center gap-2 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
               download
+              href="/api/data/k-geo-bench-v0_1"
+              prefetch={false}
+              style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               <Download className="h-4 w-4" />
               JSONL 다운로드 (17 KB)
             </Link>
             <Link
-              href="/api/data/k-geo-bench-v0_1?format=json"
               className="inline-flex items-center gap-2 rounded-md border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-ink)] transition hover:border-[var(--findable-primary)]/40"
-              style={{ fontFamily: "var(--findable-font-sans)" }}
-              prefetch={false}
               download
+              href="/api/data/k-geo-bench-v0_1?format=json"
+              prefetch={false}
+              style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               <FileJson className="h-4 w-4" />
               JSON 다운로드 (31 KB)
@@ -133,7 +203,7 @@ export default function KGeoBenchPage() {
       <section className="border-[var(--findable-hairline)] border-b">
         <div className="mx-auto max-w-5xl px-6 py-12">
           <span
-            className="mb-2 inline-block text-[11px] uppercase tracking-[0.18em] text-[var(--findable-ink-tertiary)]"
+            className="mb-2 inline-block text-[11px] text-[var(--findable-ink-tertiary)] uppercase tracking-[0.18em]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             1.0 · Dataset Info
@@ -142,7 +212,7 @@ export default function KGeoBenchPage() {
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            5 brands · 8 engines · 4 prompts = 140 responses.
+            5 brands · 7 engines · 4 prompts = 140 responses.
           </h2>
           <div className="grid grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
             <div>
@@ -209,7 +279,7 @@ export default function KGeoBenchPage() {
       <section className="border-[var(--findable-hairline)] border-b">
         <div className="mx-auto max-w-5xl px-6 py-12">
           <span
-            className="mb-2 inline-block text-[11px] uppercase tracking-[0.18em] text-[var(--findable-ink-tertiary)]"
+            className="mb-2 inline-block text-[11px] text-[var(--findable-ink-tertiary)] uppercase tracking-[0.18em]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             2.0 · Measurement Targets
@@ -223,9 +293,9 @@ export default function KGeoBenchPage() {
           <div className="space-y-2">
             {BRAND_SUMMARY.map((b) => (
               <Link
-                key={b.slug}
-                href={`/ko/audit/${b.jobId}`}
                 className="group flex items-center justify-between gap-4 rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-4 transition hover:border-[var(--findable-primary)]/40"
+                href={`/ko/audit/${b.jobId}`}
+                key={b.slug}
               >
                 <div className="flex items-center gap-4">
                   <span
@@ -242,9 +312,7 @@ export default function KGeoBenchPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span
-                    className="rounded-full bg-[var(--findable-primary)]/10 px-3 py-1 font-mono text-[12px] text-[var(--findable-primary)]"
-                  >
+                  <span className="rounded-full bg-[var(--findable-primary)]/10 px-3 py-1 font-mono text-[12px] text-[var(--findable-primary)]">
                     SoV {b.sov}
                   </span>
                   <ExternalLink className="h-4 w-4 text-[var(--findable-ink-muted)] transition group-hover:text-[var(--findable-primary)]" />
@@ -259,7 +327,7 @@ export default function KGeoBenchPage() {
       <section className="border-[var(--findable-hairline)] border-b">
         <div className="mx-auto max-w-5xl px-6 py-12">
           <span
-            className="mb-2 inline-block text-[11px] uppercase tracking-[0.18em] text-[var(--findable-ink-tertiary)]"
+            className="mb-2 inline-block text-[11px] text-[var(--findable-ink-tertiary)] uppercase tracking-[0.18em]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             3.0 · Key Findings
@@ -273,12 +341,10 @@ export default function KGeoBenchPage() {
           <div className="space-y-4">
             {FINDINGS.map((f, i) => (
               <article
-                key={f.title}
                 className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6"
+                key={f.title}
               >
-                <span
-                  className="mb-2 inline-block font-mono text-[11px] text-[var(--findable-primary)] uppercase tracking-[0.12em]"
-                >
+                <span className="mb-2 inline-block font-mono text-[11px] text-[var(--findable-primary)] uppercase tracking-[0.12em]">
                   Finding {i + 1}
                 </span>
                 <h3
@@ -303,7 +369,7 @@ export default function KGeoBenchPage() {
       <section className="border-[var(--findable-hairline)] border-b">
         <div className="mx-auto max-w-5xl px-6 py-12">
           <span
-            className="mb-2 inline-block text-[11px] uppercase tracking-[0.18em] text-[var(--findable-ink-tertiary)]"
+            className="mb-2 inline-block text-[11px] text-[var(--findable-ink-tertiary)] uppercase tracking-[0.18em]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             4.0 · Usage & License
@@ -312,7 +378,7 @@ export default function KGeoBenchPage() {
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            CC BY 4.0 — 자유 활용·재배포 가능, 출처 표기 필수.
+            CC BY 4.0. 자유 활용·재배포 가능, 출처 표기 필수.
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             <article className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6">
@@ -329,8 +395,9 @@ export default function KGeoBenchPage() {
                 className="text-[14px] text-[var(--findable-ink-muted)] leading-relaxed"
                 style={{ fontFamily: "var(--findable-font-sans)" }}
               >
-                한국어 LLM 평가, GEO 알고리즘 검증, K-뷰티 산업 분석. Princeton GEO-Bench
-                포맷 호환 — 영문·한국어 비교 연구에 직접 활용 가능.
+                한국어 LLM 평가, GEO 방법 검토, K-뷰티 산업 분석에 활용할 수
+                있습니다. 필드 정의와 측정 조건은 내려받은 파일에서 확인할 수
+                있습니다.
               </p>
             </article>
             <article className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6">
@@ -348,7 +415,8 @@ export default function KGeoBenchPage() {
                 style={{ fontFamily: "var(--findable-font-sans)" }}
               >
                 인큐베이팅 6개월 동안 K-뷰티 50사 → v0.5 (2026.09).
-                K-뷰티·K-패션·K-콘텐츠 200사 → v1.0 (2026.12). 네이버 R&D 공동 발표 검토.
+                K-뷰티·K-패션·K-콘텐츠 200사 → v1.0 (2026.12). 네이버 R&D 공동
+                발표 검토.
               </p>
             </article>
           </div>
@@ -368,8 +436,8 @@ export default function KGeoBenchPage() {
               지금 같이 만듭니다.
             </h2>
             <Link
+              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
               href="/ko/audit"
-              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-white transition hover:bg-[var(--findable-primary-hover)]"
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               우리 브랜드 측정 추가

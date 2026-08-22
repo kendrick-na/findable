@@ -14,7 +14,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Findable 로고 — 옵션 B 5안",
+  title: "Findable 로고 · 옵션 B 5안",
 };
 
 export default function LogoPreviewPage() {
@@ -23,80 +23,93 @@ export default function LogoPreviewPage() {
       <div className="mx-auto max-w-7xl px-6 py-12">
         <header className="mb-12">
           <h1 className="font-bold text-4xl text-zinc-50 tracking-tight">
-            Findable 로고 — 옵션 B 5안
+            Findable 로고 · 옵션 B 5안
           </h1>
           <p className="mt-3 text-zinc-400">
-            사용자가 좋아한 9개 레퍼런스(Claude·Linear·Antimetal·DUNA·SpaceX) 톤을 수학 함수로
-            직접 차용. 추상 메타포 제거, path ≤ 8 강제.
+            사용자가 좋아한 9개 레퍼런스(Claude·Linear·Antimetal·DUNA·SpaceX)
+            톤을 수학 함수로 직접 차용. 추상 메타포 제거, path ≤ 8 강제.
           </p>
         </header>
 
         <div className="space-y-12">
           <Concept
             letter="F1"
-            name="Sparkle 12-ray (Claude 톤)"
             metaphor="12개 방사형 ray. 끝이 가늘어지는 sparkle. AI 답변 빛처럼 퍼지는 Findable."
+            name="Sparkle 12-ray (Claude 톤)"
             reference="Claude (12 방사 ray)"
             symbol={<LogoF1 size={96} />}
             symbolWordmark={
               <div className="flex items-center gap-3">
                 <LogoF1 size={36} />
-                <span className="font-semibold text-2xl text-zinc-50 tracking-tight">Findable</span>
+                <span className="font-semibold text-2xl text-zinc-50 tracking-tight">
+                  Findable
+                </span>
               </div>
             }
           />
 
           <Concept
             letter="F2"
-            name="Circle + Triple Slash (Linear 톤)"
             metaphor="외곽 원 + 3개 평행 사선. AI 우주(원) 안에 4 에이전트(선)가 작동."
+            name="Circle + Triple Slash (Linear 톤)"
             reference="Linear (원 + 사선)"
             symbol={<LogoF2 size={96} />}
             symbolWordmark={
               <div className="flex items-center gap-3">
                 <LogoF2 size={36} />
-                <span className="font-semibold text-2xl text-zinc-50 tracking-tight">Findable</span>
+                <span className="font-semibold text-2xl text-zinc-50 tracking-tight">
+                  Findable
+                </span>
               </div>
             }
           />
 
           <Concept
             letter="F3"
-            name="F-Dots 6점 (Antimetal 톤)"
             metaphor="6개 점이 F 형태로 배치. 이름 직결성 + Antimetal 미니멀."
+            name="F-Dots 6점 (Antimetal 톤)"
             reference="Antimetal (점 클러스터)"
             symbol={<LogoF3 size={96} />}
             symbolWordmark={
               <div className="flex items-center gap-3">
                 <LogoF3 size={36} />
-                <span className="font-semibold text-2xl text-zinc-50 tracking-tight">Findable</span>
+                <span className="font-semibold text-2xl text-zinc-50 tracking-tight">
+                  Findable
+                </span>
               </div>
             }
           />
 
           <Concept
             letter="F4"
-            name="8-point Asterisk (DUNA 톤)"
             metaphor="4개 선이 90°/45° 교차해 8각 별 형성. AI 답변 속 빛."
+            name="8-point Asterisk (DUNA 톤)"
             reference="DUNA (✱ 8각 별)"
             symbol={<LogoF4 size={96} />}
             symbolWordmark={
               <div className="flex items-center gap-3">
                 <LogoF4 size={36} />
-                <span className="font-semibold text-2xl text-zinc-50 tracking-tight">Findable</span>
+                <span className="font-semibold text-2xl text-zinc-50 tracking-tight">
+                  Findable
+                </span>
               </div>
             }
           />
 
           <Concept
             letter="F5"
-            name="Wordmark + Tiny F (SpaceX 톤)"
             metaphor="심볼 없이 워드마크. F 위 작은 강조점. 가장 안전하고 글로벌."
+            name="Wordmark + Tiny F (SpaceX 톤)"
             reference="SpaceX (워드마크 only)"
             symbol={<LogoF5 size={96} />}
             symbolWordmark={
               <div className="font-bold text-3xl text-zinc-50 tracking-[0.02em]">
-                F<span className="relative">i<span className="absolute -top-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[var(--brand-2)]" /></span>ndable
+                F
+                <span className="relative">
+                  i
+                  <span className="absolute -top-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[var(--brand-2)]" />
+                </span>
+                ndable
               </div>
             }
           />
@@ -128,20 +141,20 @@ function Concept({
   return (
     <section className="rounded-2xl border border-white/10 bg-zinc-900/60 p-8">
       <div className="mb-3 flex items-baseline gap-3">
-        <span className="font-mono text-xs uppercase tracking-[0.2em] text-[var(--brand-2)]">
+        <span className="font-mono text-[var(--brand-2)] text-xs uppercase tracking-[0.2em]">
           {letter}
         </span>
         <h2 className="font-bold text-2xl text-zinc-50">{name}</h2>
       </div>
       <p className="mb-2 text-sm text-zinc-300 leading-relaxed">{metaphor}</p>
-      <p className="mb-6 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+      <p className="mb-6 font-mono text-[10px] text-zinc-500 uppercase tracking-[0.18em]">
         🔍 차용 톤: {reference}
       </p>
 
       <div className="grid gap-4 lg:grid-cols-5">
         {/* 헤더 40px */}
         <div className="rounded-xl border border-white/10 bg-zinc-950/50 p-5">
-          <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+          <div className="mb-3 font-mono text-[10px] text-zinc-500 uppercase tracking-[0.18em]">
             헤더 40px
           </div>
           <div className="flex h-16 items-center">{symbolWordmark}</div>
@@ -149,7 +162,7 @@ function Concept({
 
         {/* 96px */}
         <div className="rounded-xl border border-white/10 bg-zinc-950/50 p-5">
-          <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+          <div className="mb-3 font-mono text-[10px] text-zinc-500 uppercase tracking-[0.18em]">
             심볼 96px
           </div>
           <div className="flex h-24 items-center justify-center">
@@ -159,7 +172,7 @@ function Concept({
 
         {/* favicon 32 */}
         <div className="rounded-xl border border-white/10 bg-zinc-950/50 p-5">
-          <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+          <div className="mb-3 font-mono text-[10px] text-zinc-500 uppercase tracking-[0.18em]">
             Favicon 32px
           </div>
           <div className="flex h-24 items-center justify-center">
@@ -169,7 +182,7 @@ function Concept({
 
         {/* favicon 16 (stress test) */}
         <div className="rounded-xl border border-white/10 bg-zinc-950/50 p-5">
-          <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+          <div className="mb-3 font-mono text-[10px] text-zinc-500 uppercase tracking-[0.18em]">
             16px stress
           </div>
           <div className="flex h-24 items-center justify-center">
@@ -179,7 +192,7 @@ function Concept({
 
         {/* 라이트 모드 */}
         <div className="rounded-xl border border-zinc-300 bg-white p-5">
-          <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+          <div className="mb-3 font-mono text-[10px] text-zinc-500 uppercase tracking-[0.18em]">
             라이트
           </div>
           <div className="flex h-24 items-center justify-center gap-3">
@@ -219,7 +232,14 @@ function LogoF1({ size = 96 }: { size?: number }) {
   });
 
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height={size}
+      viewBox="0 0 100 100"
+      width={size}
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path d={rays.join(" ")} />
     </svg>
   );
@@ -235,14 +255,28 @@ function LogoF2({ size = 96 }: { size?: number }) {
   // 원 내부에서 -25 ~ +25 길이
   // 3개 사선 평행, 수직 간격 12
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height={size}
+      viewBox="0 0 100 100"
+      width={size}
+      xmlns="http://www.w3.org/2000/svg"
+    >
       {/* 외곽 원 */}
-      <circle cx="50" cy="50" r="44" stroke="currentColor" strokeWidth="4" fill="none" />
+      <circle
+        cx="50"
+        cy="50"
+        fill="none"
+        r="44"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
       {/* 3개 평행 사선 */}
-      <g stroke="currentColor" strokeWidth="4" strokeLinecap="round">
-        <line x1="28" y1="62" x2="72" y2="38" />
-        <line x1="32" y1="50" x2="68" y2="30" />
-        <line x1="36" y1="38" x2="64" y2="22" />
+      <g stroke="currentColor" strokeLinecap="round" strokeWidth="4">
+        <line x1="28" x2="72" y1="62" y2="38" />
+        <line x1="32" x2="68" y1="50" y2="30" />
+        <line x1="36" x2="64" y1="38" y2="22" />
       </g>
     </svg>
   );
@@ -260,7 +294,14 @@ function LogoF3({ size = 96 }: { size?: number }) {
   // 중간 가로: (28,52) (44,52)
   // 세로 끝: (28,78)
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height={size}
+      viewBox="0 0 100 100"
+      width={size}
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <circle cx="28" cy="22" r="6" />
       <circle cx="54" cy="22" r="6" />
       <circle cx="28" cy="38" r="5" />
@@ -278,16 +319,23 @@ function LogoF3({ size = 96 }: { size?: number }) {
 
 function LogoF4({ size = 96 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} fill="none" xmlns="http://www.w3.org/2000/svg">
-      <g stroke="currentColor" strokeWidth="6" strokeLinecap="round">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height={size}
+      viewBox="0 0 100 100"
+      width={size}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <g stroke="currentColor" strokeLinecap="round" strokeWidth="6">
         {/* 가로 */}
-        <line x1="14" y1="50" x2="86" y2="50" />
+        <line x1="14" x2="86" y1="50" y2="50" />
         {/* 세로 */}
-        <line x1="50" y1="14" x2="50" y2="86" />
+        <line x1="50" x2="50" y1="14" y2="86" />
         {/* 우상향 대각 */}
-        <line x1="24.5" y1="75.5" x2="75.5" y2="24.5" />
+        <line x1="24.5" x2="75.5" y1="75.5" y2="24.5" />
         {/* 좌상향 대각 */}
-        <line x1="24.5" y1="24.5" x2="75.5" y2="75.5" />
+        <line x1="24.5" x2="75.5" y1="24.5" y2="75.5" />
       </g>
     </svg>
   );
@@ -301,7 +349,14 @@ function LogoF4({ size = 96 }: { size?: number }) {
 function LogoF5({ size = 96 }: { size?: number }) {
   // Anthropic 톤 — 24×24 viewBox, 두꺼운 F 한 글자
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height={size}
+      viewBox="0 0 24 24"
+      width={size}
+      xmlns="http://www.w3.org/2000/svg"
+    >
       {/* F: 세로획 + 위 가로획 + 중간 가로획 */}
       <path d="M5 3h14v3.5H8.5v4H17V14H8.5v7H5z" />
     </svg>

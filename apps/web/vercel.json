@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "bunVersion": "1.x",
   "ignoreCommand": "node scripts/skip-ci.js",
   "functions": {
     "app/api/audit/route.ts": {
@@ -11,6 +10,27 @@
     },
     "app/api/audit/[jobId]/crew/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/auto-refresh-tracking/route.ts": {
+      "maxDuration": 300
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily-ops-digest",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/sweep-stuck-jobs",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/auto-refresh-tracking",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/content-publishing",
+      "schedule": "0 18 * * *"
+    }
+  ]
 }

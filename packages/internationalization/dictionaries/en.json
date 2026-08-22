@@ -15,140 +15,14 @@
       "docs": "Docs",
       "contact": "Contact",
       "signIn": "Sign in",
-      "signUp": "Get started"
+      "signUp": "Get started",
+      "openMenu": "Open menu",
+      "closeMenu": "Close menu"
     },
     "home": {
       "meta": {
         "title": "Is AI recommending your brand?",
-        "description": "ChatGPT, HyperCLOVA, Perplexity, Naver, Claude, Daum, Gemini — Findable tracks where your brand stands in 7 Korean and English AI answers."
-      },
-      "hero": {
-        "announcement": "Read our latest GEO research",
-        "primaryCta": "Get a free audit (3 min)",
-        "secondaryCta": "Talk to an expert"
-      },
-      "cases": {
-        "title": "Trusted by global K-brands and Korean marketing teams"
-      },
-      "features": {
-        "title": "Agentic GEO that diagnoses Naver too — and tells you what to fix",
-        "description": "Four autonomous agents measure and optimize your brand visibility across 7 AI engines — in Korean and English.",
-        "items": [
-          {
-            "title": "7-Engine Multi-Market Tracker",
-            "description": "ChatGPT, Claude, Perplexity, Gemini plus HyperCLOVA X, Naver, and Daum — all in one dashboard. The only platform with full Korean AI engine coverage."
-          },
-          {
-            "title": "Korean Entity Grounding",
-            "description": "Track every variant of your brand name — Korean, English, and mixed. Built for K-beauty, K-fashion, and Korean marketing teams of global brands."
-          },
-          {
-            "title": "Free Domain Audit",
-            "description": "Drop in your domain. In 3 minutes, get a 1-page PDF with your Share of Voice, competitor ranking, and top 3 recommendations."
-          },
-          {
-            "title": "4 Autonomous Agents",
-            "description": "Minji (Korean GEO), Alex (US benchmark), Sujin (Citation analysis), Junho (Action recommendations) — your AI marketing team for AI search."
-          }
-        ]
-      },
-      "stats": {
-        "title": "The shift from SEO to GEO is here",
-        "description": "AI referral traffic grew 357% YoY in 2025. Profound became the first GEO unicorn at $1B in February 2026. Korean AI engines are still uncovered by every global competitor — until now.",
-        "items": [
-          {
-            "title": "AI engines tracked",
-            "metric": "7",
-            "delta": "0",
-            "type": "unit"
-          },
-          {
-            "title": "Korean engines covered",
-            "metric": "3",
-            "delta": "0",
-            "type": "unit"
-          },
-          {
-            "title": "GEO market by 2034",
-            "metric": "17020000000",
-            "delta": "45",
-            "type": "currency"
-          },
-          {
-            "title": "AI referral growth (2025)",
-            "metric": "357",
-            "delta": "357",
-            "type": "unit"
-          }
-        ]
-      },
-      "testimonials": {
-        "title": "Brands AI finds. Brands AI forgets.",
-        "items": [
-          {
-            "title": "K-beauty global expansion",
-            "description": "We finally see how ChatGPT mentions our brand vs. Beauty of Joseon in English markets. The Korean and English side-by-side view is exactly what we needed.",
-            "author": {
-              "name": "K-beauty D2C Brand",
-              "image": "https://github.com/haydenbleasel.png"
-            }
-          },
-          {
-            "title": "Foreign brand in Korea",
-            "description": "Our HQ wanted KPIs for Korean AI search visibility. No global GEO tool covers HyperCLOVA or Naver. Findable was the only option.",
-            "author": {
-              "name": "Global Brand Korea Marketing Team",
-              "image": "https://github.com/leerob.png"
-            }
-          },
-          {
-            "title": "1/5 the price of Profound",
-            "description": "We tried Profound at $399 and Athena at $295. Findable Starter at ₩99K does what we need for Korean engines that the others don't even support.",
-            "author": {
-              "name": "Korean D2C Marketer",
-              "image": "https://github.com/shadcn.png"
-            }
-          },
-          {
-            "title": "Agentic, not just monitoring",
-            "description": "The 4-agent crew doesn't just measure — Junho actually suggests content changes based on Princeton's GEO algorithm. We act, not just watch.",
-            "author": {
-              "name": "K-fashion Marketing Director",
-              "image": "https://github.com/pontusab.png"
-            }
-          }
-        ]
-      },
-      "faq": {
-        "title": "Common Questions About GEO and Findable",
-        "description": "Generative Engine Optimization is the new SEO. Here's what you need to know about tracking your brand in AI answers.",
-        "cta": "Have more questions? Talk to us",
-        "items": [
-          {
-            "question": "What is GEO (Generative Engine Optimization)?",
-            "answer": "GEO is the practice of optimizing brand visibility inside AI answers — ChatGPT, Claude, Perplexity, Gemini, and Korean engines like HyperCLOVA. As AI search replaces traditional search (Gartner: -25% by 2026), GEO becomes the new SEO."
-          },
-          {
-            "question": "Which AI engines does Findable track?",
-            "answer": "Seven engines: ChatGPT, Claude, Perplexity, Gemini (English), and HyperCLOVA X, Naver, Daum (Korean). Findable is the only platform with full Korean engine coverage."
-          },
-          {
-            "question": "How is Findable different from Profound or Peec?",
-            "answer": "Profound, Peec, AthenaHQ, HubSpot AEO — none of them track Korean AI engines. Findable also offers Korean Entity Grounding to track all variants of your brand name (Korean, English, mixed)."
-          },
-          {
-            "question": "Who is Findable for?",
-            "answer": "K-beauty and K-fashion brands going global, Korean marketing teams of foreign brands (Apple, LV, Tesla Korea), Korean D2C brands on Musinsa or 29CM, and Korean B2B SaaS — anyone who needs to be found by AI."
-          },
-          {
-            "question": "How does pricing work?",
-            "answer": "Free Audit (1 time, ₩0), Starter ₩99K/month, Growth ₩390K, Scale ₩990K, Enterprise from ₩30M/year. Pay with Toss (KRW), PayPal Business (USD), or Wire Transfer for Enterprise."
-          }
-        ]
-      },
-      "cta": {
-        "title": "Make AI answer with you. Not your competitor.",
-        "description": "Get a free 3-minute audit of your brand across 7 AI engines. See where you rank, who's beating you, and the top 3 things to fix this week."
+        "description": "ChatGPT, HyperCLOVA, Perplexity, Naver, Claude, Daum, Gemini. Findable tracks where your brand stands in 7 Korean and English AI answers."
       }
     },
     "blog": {
@@ -166,7 +40,7 @@
         "benefits": [
           {
             "title": "Live brand audit walk-through",
-            "description": "We run your domain through all 7 engines live and explain every finding — Korean and English."
+            "description": "We run your domain through all 7 engines live and explain every finding, in Korean and English."
           },
           {
             "title": "Competitor benchmark",
@@ -186,6 +60,239 @@
           "cta": "Book the meeting"
         }
       }
+    }
+  },
+  "app": {
+    "nav": {
+      "overview": "Overview",
+      "actions": "To do",
+      "measure": "Measure",
+      "history": "History",
+      "more": "More",
+      "primaryScreens": "Primary screens"
+    },
+    "common": {
+      "loading": "Loading…",
+      "retry": "Try again",
+      "upgrade": "Upgrade"
+    },
+    "emptyState": {
+      "heading": "How often does your brand show up in AI answers?",
+      "lede": "Customers now ask AI instead of typing into a search box. See how the major AI engines talk about your brand — and get help making them talk about it better.",
+      "reclaimTitle": "Already ran a free audit?",
+      "reclaimBody": "Your audit results follow the email address you entered at the time.",
+      "reclaimSignedIn": ". If you ran the audit with a different address, please sign in with that one.",
+      "reclaimSignedInPrefix": "You are signed in as",
+      "reclaimAnonymous": "If you ran the audit with a different address, please sign in with that one.",
+      "stepLabel": "Step {n}",
+      "step1Title": "Add your brand",
+      "step1Body": "Just your website address is enough.",
+      "step2Title": "We ask right away",
+      "step2Body": "We check whether ChatGPT, Perplexity and other major AI engines mention you.",
+      "step3Title": "Get your results",
+      "step3Body": "How often they mention you, which sources they cite, and what to fix.",
+      "cta": "Add a brand and start measuring",
+      "sampleCta": "See an example result first",
+      "footnote": "About 1–3 minutes · Starts on the free plan · The example is a real measurement"
+    },
+    "onboarding": {
+      "stepOf": "Step {current} of {total}",
+      "next": "Next",
+      "skip": "Skip",
+      "add": "Add",
+      "emptyHint": "Nothing yet. You can skip this.",
+      "introTitle": "Which brand should we measure?",
+      "introLede": "Just your domain. We infer industry and target market from it, and you can change them later.",
+      "introWhyTitle": "Why only the domain?",
+      "introWhyBody": "Some tools ask ten questions at signup, but the more you ask, the more there is to get wrong. We infer industry and target market from your domain and show you why we decided that way. If it is wrong, fix it right there.",
+      "introEngines": "We measure ChatGPT, Claude, Perplexity and Gemini alongside Naver, Daum and HyperCLOVA. No matter which market you pick, none of these are dropped.",
+      "scopeTitle": "Which market are you in?",
+      "scopeLede": "We inferred this from your domain. If it looks right, just continue.",
+      "scopeLabel": "Target market",
+      "scopeDetected": "Auto-detected",
+      "scopeWhyTitle": "Why this one?",
+      "scopeLowConfidence": " Confidence is low, so please double-check.",
+      "scopeEnginesNote": "Whichever you pick, the AI engines stay the same — ChatGPT, Claude, Perplexity, Gemini, Naver, Daum and HyperCLOVA. This choice only shapes which channels we recommend.",
+      "scopeKorea": "Korea-focused",
+      "scopeGlobal": "Global-focused",
+      "scopeBoth": "Korea and global",
+      "aliasTitle": "We also go by these names",
+      "aliasLede": "AI answers may call {brand} by other names. Add whatever comes to mind.",
+      "aliasLabel": "Other names · English spelling",
+      "aliasPlaceholder": "e.g. Amorepacific",
+      "aliasWhyTitle": "Why do we ask?",
+      "aliasWhyBody": "AI refers to the same brand in both Korean and English. Counting the two spellings separately makes your brand look less visible than it is. List them here and we count them as one.",
+      "competitorTitle": "You are compared against these brands",
+      "competitorLede": "We've pre-filled competitors AI identified. Remove any that don't fit.",
+      "competitorLedeEmpty": "Add the brands you want to compare against. You can leave this empty and move on.",
+      "competitorSuggestion": "More candidates you can add",
+      "competitorAddLabel": "Add your own",
+      "competitorPlaceholder": "e.g. Olive Young",
+      "competitorWhyTitle": "Where is this used?",
+      "competitorWhyBody": "We use it to merge Korean and English spellings when counting competitors in AI answers. It never hides competitors that are missing from this list — we still show the ones you did not know about.",
+      "doneTitle": "All set",
+      "doneStarted": "Measurement has already started. It usually takes 1-3 minutes.",
+      "savedTitle": "Settings saved",
+      "doneRateLimited": "You already measured today. You can see the existing results on your dashboard.",
+      "doneFailed": "Your brand was registered but measurement could not start. You can retry from the dashboard.",
+      "doneAsideTitle": "From now on, we check every day",
+      "doneAsideBody": "We automatically run brand prompts every day across ChatGPT, Claude, Perplexity, Gemini, and Naver, Daum, HyperCLOVA X, tracking how your visibility changes.",
+      "donePreviewLabel": "Example screen · not your real results",
+      "donePreviewCaption": "Once measurements build up, you'll see visibility trends like this",
+      "featurePreviewTitle": "More becomes available as measurements build up",
+      "compare": "Competitors",
+      "featureCompareDesc": "Compare how often AI mentions you versus competitors",
+      "sources": "Cited sources",
+      "featureSourcesDesc": "See which pages AI cites when it talks about you",
+      "alerts": "Alerts",
+      "featureAlertsDesc": "Get notified when your visibility shifts significantly",
+      "summaryBrand": "Brand",
+      "summaryMarket": "Target market",
+      "summaryAliases": "{count} other names",
+      "summaryCompetitors": "{count} brands to compare",
+      "goDashboard": "Go to dashboard",
+      "saving": "Saving…",
+      "saveFailedHint": "You can change these settings later.",
+      "removeItem": "Remove {item}",
+      "editorSummary": "Names & competitors",
+      "editorCounts": "{aliases} aliases · {competitors} competitors",
+      "editorAliasTitle": "Other names we go by",
+      "editorAliasHint": "So AI does not count Korean and English spellings separately. e.g. Amorepacific",
+      "editorAliasAria": "Add another name",
+      "editorCompetitorTitle": "Brands to compare",
+      "editorCompetitorHint": "Competitors missing from this list are never hidden — we only use it to merge spellings.",
+      "editorCompetitorAria": "Add competitor",
+      "editorEmpty": "Nothing yet.",
+      "editorSave": "Save",
+      "editorSaved": "Saved. It applies from the next measurement.",
+      "editorDirtyHint": "Saving applies from the next measurement."
+    },
+    "content": {
+      "navLabel": "My content",
+      "eyebrow": "MEASURE → PUBLISH → MEASURE",
+      "title": "Turn measurement evidence into citable content",
+      "description": "Findable drafts from your latest SEO/GEO evidence. You edit and approve it, then quality checks run before public publication.",
+      "generate": "Draft from latest action",
+      "brandLabel": "Brand for this draft",
+      "createBlank": "Write a new post",
+      "addBrand": "Add a brand",
+      "statAll": "All content",
+      "statReview": "Awaiting review",
+      "statPublished": "Published",
+      "listTitle": "Content workflow",
+      "listHint": "Recently updated",
+      "searchContent": "Search title, summary, or tag",
+      "filterStatus": "Status filter",
+      "allStatuses": "All statuses",
+      "filterButton": "Filter",
+      "emptyTitle": "No content has been created yet",
+      "emptyDescription": "Complete a brand measurement to create the first draft from its latest content action and measured evidence.",
+      "editorTitle": "Edit content",
+      "editorDescription": "Review the measurement basis and correct anything exaggerated or unverifiable before approval.",
+      "back": "Content list",
+      "openPublished": "View published article",
+      "evidenceLabel": "Measurement evidence behind this draft",
+      "qualityLabel": "Latest quality check",
+      "titleLabel": "Title",
+      "excerptLabel": "Summary shown in listings and search",
+      "bodyLabel": "Body Markdown",
+      "formatToolbar": "Body formatting tools",
+      "formatBold": "Bold",
+      "formatHeading": "Heading",
+      "formatLink": "Link",
+      "formatImage": "Image",
+      "formatQuote": "Quote",
+      "typeLabel": "Content type",
+      "typeResearch": "Research",
+      "typeGuide": "Practical guide",
+      "typeCase": "Case study",
+      "typeAnalysis": "Analysis",
+      "seriesLabel": "Series",
+      "seriesPlaceholder": "e.g. Findable Research",
+      "tagsLabel": "Tags · comma separated",
+      "tagsPlaceholder": "SEO, GEO, AI search",
+      "searchSettings": "Search & sharing",
+      "seoTitleLabel": "SEO title · defaults to article title",
+      "seoDescriptionLabel": "Search description · defaults to summary",
+      "coverUrlLabel": "Cover image URL",
+      "coverAltLabel": "Image alt text",
+      "readerPreview": "Reader preview",
+      "googlePreview": "Google preview",
+      "save": "Save revision",
+      "saving": "Saving…",
+      "saved": "Revision saved",
+      "approve": "Review and request publication",
+      "approving": "Checking…",
+      "moderationSubmitted": "Sent for editorial moderation",
+      "moderationWaiting": "The editorial team is reviewing the full article and evidence. It remains hidden from search until publication.",
+      "withdrawReview": "Withdraw review and edit",
+      "withdrawingReview": "Withdrawing…",
+      "withdrawnReview": "Review request withdrawn",
+      "revisionReason": "Editorial revision request",
+      "moderationTitle": "Content moderation",
+      "moderationDescription": "Review new publishers and quality warnings before public publication.",
+      "moderationEmpty": "No content is waiting for editorial moderation.",
+      "moderationApprove": "Approve and publish",
+      "moderationConfirm": "I reviewed the full article, measurement evidence, and original sources.",
+      "moderationNotePlaceholder": "Revision reason (required when returning)",
+      "moderationReviewOriginal": "Review full article and evidence →",
+      "moderationReject": "Request changes",
+      "createOfficial": "New Findable research draft",
+      "officialDrafts": "Findable official drafts",
+      "status": {
+        "draft": "Draft",
+        "publisher_review": "Publisher review",
+        "quality_check": "Quality check",
+        "moderation_review": "Editorial moderation",
+        "scheduled": "Scheduled",
+        "published": "Published",
+        "archived": "Archived"
+      }
+    },
+    "sidebar": {
+      "adminAudits": "Audits",
+      "adminContent": "Content moderation",
+      "adminEvidence": "Before/after evidence",
+      "adminMeasure": "Measurement console",
+      "adminOps": "Operations",
+      "adminOrgs": "Organizations",
+      "adminPartners": "Partner approvals",
+      "alerts": "Alerts",
+      "billing": "Plan & upgrade",
+      "brandMeasure": "Brand & measurement",
+      "compare": "Competitors",
+      "content": "My content",
+      "publicInsights": "Public insights",
+      "currentPlan": "Current plan",
+      "dashboard": "Dashboard",
+      "export": "Export data",
+      "groupAccount": "Account",
+      "groupAct": "Act",
+      "groupAdmin": "Admin",
+      "groupAnalyze": "Analyze",
+      "groupInsight": "Insights",
+      "groupMeasure": "Measure",
+      "history": "Measurement history",
+      "lockedHint": "Unlocks on {plan}",
+      "prompts": "Tracked questions",
+      "sources": "Cited sources",
+      "support": "Support",
+      "todo": "What to do now"
+    },
+    "exportDialog": {
+      "title": "Export data",
+      "description": "Download your measurement data as CSV. Choose a period and columns.",
+      "periodLabel": "Period",
+      "period7": "Last 7 days",
+      "period30": "Last 30 days",
+      "period90": "Last 90 days",
+      "periodAll": "All time",
+      "columnsLabel": "Columns to include",
+      "columnsBase": "Date, brand, engine, mentioned, rank, sentiment, share (default)",
+      "includeSources": "Include cited sources (URLs the AI cited as evidence)",
+      "cancel": "Cancel",
+      "download": "Download",
+      "downloading": "Downloading…"
     }
   }
 }

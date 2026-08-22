@@ -1,0 +1,1 @@
+ALTER TABLE "NewsletterDelivery" ADD COLUMN "attempts" INTEGER NOT NULL DEFAULT 0;

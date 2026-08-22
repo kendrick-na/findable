@@ -10,7 +10,7 @@
 async function main() {
   const apiKey = process.env.BROWSERBASE_API_KEY;
   const projectId = process.env.BROWSERBASE_PROJECT_ID;
-  if (!apiKey || !projectId) {
+  if (!(apiKey && projectId)) {
     console.error("❌ BROWSERBASE 키 미설정");
     process.exit(1);
   }
@@ -33,7 +33,7 @@ async function main() {
     const context = browser.contexts()[0];
     const page = context.pages()[0] ?? (await context.newPage());
     const url = `https://search.naver.com/search.naver?query=${encodeURIComponent(query)}`;
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
     await page.waitForTimeout(5000);
 
     const diag = await page.evaluate(() => {
@@ -58,8 +58,8 @@ async function main() {
       const broad = [
         '[class*="ai"]',
         '[class*="AI"]',
-        '[data-block-id]',
-        '[data-meta-area]',
+        "[data-block-id]",
+        "[data-meta-area]",
         "[data-module-name]",
       ];
       const broadHits: { sel: string; count: number; sample: string[] }[] = [];
@@ -70,13 +70,14 @@ async function main() {
           count: els.length,
           sample: els
             .slice(0, 8)
-            .map(
-              (e) =>
-                (e.getAttribute("class") ||
-                  e.getAttribute("data-block-id") ||
-                  e.getAttribute("data-meta-area") ||
-                  e.getAttribute("data-module-name") ||
-                  "?").slice(0, 60)
+            .map((e) =>
+              (
+                e.getAttribute("class") ||
+                e.getAttribute("data-block-id") ||
+                e.getAttribute("data-meta-area") ||
+                e.getAttribute("data-module-name") ||
+                "?"
+              ).slice(0, 60)
             ),
         });
       }
@@ -93,7 +94,9 @@ async function main() {
 
     console.log(`title: ${diag.title}`);
     console.log(`body 길이: ${diag.bodyLen}`);
-    console.log(`"AI 브리핑" 단어 존재: ${diag.hasAiBriefingWord ? "✅ 있음" : "❌ 없음"}`);
+    console.log(
+      `"AI 브리핑" 단어 존재: ${diag.hasAiBriefingWord ? "✅ 있음" : "❌ 없음"}`
+    );
     console.log("\n--- 어댑터 셀렉터 매치 ---");
     for (const m of diag.adapterMatch) {
       console.log(`  ${m.found ? "✅" : "❌"} ${m.sel}  (len ${m.len})`);
@@ -101,12 +104,16 @@ async function main() {
     console.log("\n--- 넓은 후보 스캔 (신규 셀렉터 힌트) ---");
     for (const b of diag.broadHits) {
       console.log(`  ${b.sel}: ${b.count}개`);
-      for (const s of b.sample) console.log(`      · ${s}`);
+      for (const s of b.sample) {
+        console.log(`      · ${s}`);
+      }
     }
 
     console.log("\n=== 판정 ===");
     if (!diag.hasAiBriefingWord) {
-      console.log("→ 페이지에 'AI 브리핑' 단어 자체가 없음. 이 질의는 브리핑 미노출(정상).");
+      console.log(
+        "→ 페이지에 'AI 브리핑' 단어 자체가 없음. 이 질의는 브리핑 미노출(정상)."
+      );
     } else if (diag.adapterMatch.some((m) => m.found && m.len > 100)) {
       console.log("→ 셀렉터 유효 + 브리핑 존재. 어댑터 정상 동작해야 함.");
     } else {

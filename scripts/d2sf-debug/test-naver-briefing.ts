@@ -21,7 +21,9 @@ async function main() {
   );
   console.log("");
 
-  if (!process.env.BROWSERBASE_API_KEY || !process.env.BROWSERBASE_PROJECT_ID) {
+  if (
+    !(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID)
+  ) {
     console.error("환경변수 미설정. .env.local 확인.");
     process.exit(1);
   }
@@ -57,7 +59,7 @@ async function main() {
     const startGoto = Date.now();
     await page.goto(searchUrl, {
       waitUntil: "domcontentloaded",
-      timeoutMs: 30000,
+      timeoutMs: 30_000,
     });
     console.log(`✅ goto 성공 (${Date.now() - startGoto}ms)\n`);
 

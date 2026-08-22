@@ -43,7 +43,9 @@ async function main() {
 
   console.log("=== 결과 ===");
   console.log(`  소요:        ${elapsed}ms`);
-  console.log(`  isStub:      ${res.isStub}  ${res.isStub ? "← Browserbase 미연결/비활성" : ""}`);
+  console.log(
+    `  isStub:      ${res.isStub}  ${res.isStub ? "← Browserbase 미연결/비활성" : ""}`
+  );
   console.log(`  errorMessage:${res.errorMessage ?? "(없음)"}`);
   console.log(`  brandMentioned: ${res.brandMentioned}`);
   console.log(`  mentionPosition:${res.mentionPosition ?? "-"}`);
@@ -62,7 +64,9 @@ async function main() {
       "⚠️  errorMessage 반환 — 브리핑 미노출(정상) 또는 셀렉터 무효화 가능. rawResponse/메시지로 구분 필요."
     );
   } else if (res.rawResponse.length > 0) {
-    console.log("✅  실측 성공 — 네이버 AI 브리핑 응답을 정상 추출. 셀렉터 유효.");
+    console.log(
+      "✅  실측 성공 — 네이버 AI 브리핑 응답을 정상 추출. 셀렉터 유효."
+    );
   } else {
     console.log("❓  응답 비어있음 — 셀렉터 점검 필요.");
   }

@@ -6,12 +6,12 @@ import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface Step {
-  num: string;
-  ko: string;
-  en: string;
-  title: string;
   body: string;
   bullets: string[];
+  en: string;
+  ko: string;
+  num: string;
+  title: string;
 }
 
 interface StepsClientProps {
@@ -34,10 +34,12 @@ export const StepsClient = ({ steps }: StepsClientProps) => {
           setActive(idx);
         }
       },
-      { threshold: [0.4, 0.6], rootMargin: "-10% 0px -30% 0px" },
+      { threshold: [0.4, 0.6], rootMargin: "-10% 0px -30% 0px" }
     );
     for (const el of sectionsRef.current) {
-      if (el) observer.observe(el);
+      if (el) {
+        observer.observe(el);
+      }
     }
     return () => observer.disconnect();
   }, []);
@@ -45,21 +47,21 @@ export const StepsClient = ({ steps }: StepsClientProps) => {
   return (
     <>
       {/* Sticky 인디케이터 — next-forge Header(h~64px) 아래 배치 */}
-      <nav className="sticky top-16 z-20 border-b border-[color:var(--findable-sumi-900)]/8 bg-[color:var(--findable-mist-50)]/95 backdrop-blur-xl">
+      <nav className="sticky top-16 z-20 border-[color:var(--findable-sumi-900)]/8 border-b bg-[color:var(--findable-mist-50)]/95 backdrop-blur-xl">
         <ol className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-5 md:gap-6">
           {steps.map((s, i) => {
             const isActive = i === active;
             const isPast = i < active;
             return (
               <li
-                key={s.num}
                 className="flex flex-1 items-center gap-3 transition-all duration-700"
+                key={s.num}
                 style={{
                   transitionTimingFunction: "var(--findable-ease-cinema)",
                 }}
               >
                 <span
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-medium transition-all duration-700 ${
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border font-medium text-xs transition-all duration-700 ${
                     isActive
                       ? "scale-110 border-[color:var(--findable-sumi-900)] bg-[color:var(--findable-sumi-900)] text-[color:var(--findable-mist-50)] shadow-lg"
                       : isPast
@@ -74,7 +76,7 @@ export const StepsClient = ({ steps }: StepsClientProps) => {
                 </span>
                 <div className="hidden flex-col md:flex">
                   <span
-                    className={`text-sm font-medium transition-opacity duration-500 ${
+                    className={`font-medium text-sm transition-opacity duration-500 ${
                       isActive
                         ? "text-[color:var(--findable-sumi-900)]"
                         : "text-[color:var(--findable-sumi-900)]/40"
@@ -110,16 +112,16 @@ export const StepsClient = ({ steps }: StepsClientProps) => {
       {/* 4 화면 */}
       {steps.map((s, i) => (
         <article
+          className="flex min-h-[90vh] items-center px-6 py-24"
+          data-step-idx={i}
           key={s.num}
           ref={(el) => {
             sectionsRef.current[i] = el;
           }}
-          data-step-idx={i}
-          className="flex min-h-[90vh] items-center px-6 py-24"
         >
           <div className="mx-auto grid w-full max-w-6xl gap-12 md:grid-cols-2 md:gap-16">
             <div>
-              <p className="text-sm font-mono uppercase tracking-[0.18em] text-[color:var(--findable-sumi-900)]/40">
+              <p className="font-mono text-[color:var(--findable-sumi-900)]/40 text-sm uppercase tracking-[0.18em]">
                 {s.num} / 04
               </p>
               <h2
@@ -131,20 +133,20 @@ export const StepsClient = ({ steps }: StepsClientProps) => {
               >
                 {s.ko}
               </h2>
-              <p className="mt-2 font-serif text-2xl italic text-[color:var(--findable-sumi-900)]/45">
+              <p className="mt-2 font-serif text-2xl text-[color:var(--findable-sumi-900)]/45 italic">
                 {s.en}
               </p>
               <h3 className="mt-10 font-semibold text-2xl leading-snug">
                 {s.title}
               </h3>
-              <p className="mt-4 text-lg leading-relaxed text-[color:var(--findable-sumi-900)]/70">
+              <p className="mt-4 text-[color:var(--findable-sumi-900)]/70 text-lg leading-relaxed">
                 {s.body}
               </p>
               <ul className="mt-8 space-y-3">
                 {s.bullets.map((bullet) => (
                   <li
-                    key={bullet}
                     className="flex items-start gap-3 text-[15px] text-[color:var(--findable-sumi-900)]/80"
+                    key={bullet}
                   >
                     <span className="mt-2 h-1 w-1 flex-shrink-0 rounded-full bg-[color:var(--findable-dancheong-500)]" />
                     <span>{bullet}</span>
@@ -161,10 +163,10 @@ export const StepsClient = ({ steps }: StepsClientProps) => {
                 </span>
               </div>
               <div className="absolute right-6 bottom-6 left-6 rounded-xl border border-[color:var(--findable-sumi-900)]/10 bg-[color:var(--findable-mist-50)]/80 p-4 backdrop-blur-md">
-                <p className="text-xs font-mono text-[color:var(--findable-sumi-900)]/60">
+                <p className="font-mono text-[color:var(--findable-sumi-900)]/60 text-xs">
                   STEP {s.num}
                 </p>
-                <p className="mt-1 font-medium text-sm text-[color:var(--findable-sumi-900)]">
+                <p className="mt-1 font-medium text-[color:var(--findable-sumi-900)] text-sm">
                   {s.ko} — {s.en}
                 </p>
               </div>

@@ -7,6 +7,7 @@
     "analyze": "prisma generate --no-hints --schema=./prisma/schema.prisma",
     "build": "prisma generate --no-hints --schema=./prisma/schema.prisma",
     "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "smoke:content-platform": "bun --env-file=../../.env.local prisma/smoke-content-platform.ts",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {

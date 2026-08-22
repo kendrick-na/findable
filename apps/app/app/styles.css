@@ -1,2 +1,52 @@
-@import "tailwindcss";
+/* ⚠️ tailwindcss를 여기서 다시 import하지 말 것.
+   globals.css가 폰트 @import(줄1~3) 다음에 이미 tailwindcss를 import한다.
+   여기서 먼저 import하면 Tailwind 규칙 ~5,000줄이 폰트 @import보다 앞에 인라인되어
+   "@import must precede all rules" CSS 파싱 에러로 dev 서버가 500을 낸다.
+   apps/web도 globals.css만 import하는 방식(정상 동작). */
 @import "@repo/design-system/styles/globals.css";
+
+/* @repo/auth 컴포넌트(브랜드 로그인/회원가입)의 Tailwind 클래스도 스캔 대상에 포함.
+   없으면 arbitrary-value 배경(bg-[color:var(--findable-primary)] 등)이 purge됨. */
+@source "../../../packages/auth/components/**/*.{ts,tsx}";
+
+/* ── 대시보드 브랜드 카드 ──────────────────────────────────
+   홈(.findable-glass)은 glow가 강해 "작업 공간"인 대시보드엔 과함.
+   surface-1 위에 hairline 테두리 + 상단 안쪽 하이라이트로 차분하게 "떠 있는" 느낌만.
+   회색/검정 이분법 제거: 순검정 대신 canvas·surface 단계로 깊이. */
+.findable-card {
+  position: relative;
+  background: var(--findable-surface-1);
+  border: 1px solid var(--findable-hairline);
+  border-radius: 0.875rem;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.03),
+    0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  transition:
+    border-color 0.2s var(--findable-ease-out-soft, ease),
+    background 0.2s var(--findable-ease-out-soft, ease);
+}
+
+/* hover 시 살짝 밝아짐(인터랙티브 카드용). 정적 KPI엔 안 붙임. */
+.findable-card-interactive:hover {
+  background: var(--findable-surface-2);
+  border-color: var(--findable-hairline-strong);
+}
+
+/* 강조 카드(업그레이드 사다리 등): 오렌지 hairline + 은은한 glow. */
+.findable-card-accent {
+  position: relative;
+  background: var(--findable-surface-1);
+  border: 1px solid color-mix(in srgb, var(--findable-primary) 30%, transparent);
+  border-radius: 0.875rem;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 122, 77, 0.08),
+    0 0 40px -12px var(--findable-glow-purple);
+}
+
+/* 🔴 라이트 폴백 제거 (2026-08-07 세션N-9).
+   이 블록은 카드 **배경만** #ffffff 로 바꾸고 글자색(--findable-ink: #f7f8f8)은
+   그대로 뒀다 → OS 가 라이트인 사용자에게 **흰 배경 + 흰 글씨**. 실측 대비율 ≈ 1.01:1
+   (WCAG 최소 4.5:1). 대시보드에서 가장 중요한 주 숫자가 안 보였다.
+   → 대시보드는 app/layout.tsx 에서 forcedTheme="dark" 로 고정했으므로 이 폴백은
+     필요 없을 뿐 아니라 **해로웠다**. 라이트 테마가 필요해지면 카드 배경만이 아니라
+     잉크4·표면4·헤어라인3 토큰을 한 벌로 재정의해야 한다(부분 폴백 금지). */

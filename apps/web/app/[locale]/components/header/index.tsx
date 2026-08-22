@@ -55,7 +55,7 @@ export const Header = ({ dictionary }: HeaderProps) => {
 
   const [isOpen, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 left-0 z-40 w-full border-b bg-background">
+    <header className="sticky top-0 left-0 z-40 w-full border-[var(--findable-hairline)] border-b bg-[var(--findable-canvas)]">
       <div className="container relative mx-auto flex min-h-20 flex-row items-center gap-4 lg:grid lg:grid-cols-3">
         <div className="hidden flex-row items-center justify-start gap-4 lg:flex">
           <NavigationMenu className="flex items-start justify-start">
@@ -109,16 +109,21 @@ export const Header = ({ dictionary }: HeaderProps) => {
             </NavigationMenuList>
           </NavigationMenu>
         </div>
-        <div className="flex items-baseline lg:justify-center">
+        {/* shrink-0 — 200% 확대(195px)에서 워드마크가 34px 로 짓눌려 글자가
+            삐져나갔다(WCAG 1.4.10). 로고는 줄지 않고 오른쪽 묶음이 줄어야 한다. */}
+        <div className="flex shrink-0 items-baseline lg:justify-center">
           <span
-            className="whitespace-nowrap text-[22px] leading-none"
-            style={{ fontFamily: "var(--findable-font-wordmark)", letterSpacing: "-0.01em" }}
+            className="whitespace-nowrap text-[22px] text-[var(--findable-ink)] leading-none"
+            style={{
+              fontFamily: "var(--findable-font-wordmark)",
+              letterSpacing: "-0.01em",
+            }}
           >
             Findable
           </span>
           <span className="ml-[5px] inline-block h-[5px] w-[5px] bg-[var(--findable-primary)]" />
         </div>
-        <div className="flex w-full justify-end gap-4">
+        <div className="flex w-full min-w-0 justify-end gap-4">
           <Button asChild className="hidden md:inline" variant="ghost">
             <Link href="/contact">{dictionary.web.header.contact}</Link>
           </Button>
@@ -140,13 +145,24 @@ export const Header = ({ dictionary }: HeaderProps) => {
             </Link>
           </Button>
         </div>
-        <div className="flex items-center gap-2 lg:hidden">
+        {/* shrink-0 — 언어·메뉴 버튼 2개(각 40px)가 들어갈 폭을 확보한다.
+            없으면 부모가 50px 로 짓눌려 메뉴 버튼이 화면 밖(right=424)으로 나갔다. */}
+        <div className="flex shrink-0 items-center gap-2 lg:hidden">
           <LanguageSwitcher />
-          <Button onClick={() => setOpen(!isOpen)} variant="ghost">
+          <Button
+            aria-expanded={isOpen}
+            aria-label={
+              isOpen
+                ? dictionary.web.header.closeMenu
+                : dictionary.web.header.openMenu
+            }
+            onClick={() => setOpen(!isOpen)}
+            variant="ghost"
+          >
             {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
           {isOpen && (
-            <div className="container absolute top-20 right-0 flex w-full flex-col gap-8 border-t bg-background py-4 shadow-lg">
+            <div className="container absolute top-20 right-0 flex w-full flex-col gap-8 border-[var(--findable-hairline)] border-t bg-[var(--findable-canvas)] py-4 shadow-lg">
               {navigationItems.map((item) => (
                 <div key={item.title}>
                   <div className="flex flex-col gap-2">

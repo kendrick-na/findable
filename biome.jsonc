@@ -8,9 +8,33 @@
     "rules": {
       "performance": {
         "noBarrelFile": "off"
+      },
+      "correctness": {
+        // 🔴 오탐이라 끈다 — 이 저장소 주석은 한국어 마크다운을 쓴다.
+        //   `*"당신이 기다릴 것이 이렇게 생겼다"*` 의 **강조 별표**를 JSDoc 의
+        //   여분 별표로 오인한다. 자동수정하면 강조가 지워져 **주석이 훼손**된다.
+        //   (이 저장소는 주석에 사고 이력을 남기는 규율이 있어 손실이 크다)
+        "useSingleJsDocAsterisk": "off"
       }
     }
   },
+  "overrides": [
+    {
+      // 🔴 테스트에는 `useTopLevelRegex` 를 걸지 않는다(N-45).
+      //   이유: ① **성능 규칙인데 성능에 영향이 없다** — 615개 실행 3.6초, 끌어올려도 같다.
+      //        ② 끌어올리면 `toMatch(PUSH_NEXTHREF_RE)` 처럼 **뭘 검사하는지가 이름 뒤로 숨는다**.
+      //           이 저장소 가드는 "그 자리에서 읽히는 것"이 강점이다.
+      //   ⚠️ 제품 코드에는 그대로 켜져 있다 — 여기서 끄는 건 테스트뿐이다.
+      "includes": ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "useTopLevelRegex": "off"
+          }
+        }
+      }
+    }
+  ],
   "files": {
     "includes": [
       "**/*",

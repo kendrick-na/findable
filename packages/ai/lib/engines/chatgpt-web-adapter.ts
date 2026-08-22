@@ -11,12 +11,13 @@
 //
 // ⚠️ OpenAI ToS 회색지대: 자동화는 약관 위반 소지. 베타 단계 트래픽 제한 권장.
 
+import { sanitizeEngineText } from "./sanitize";
 import type { CitedSource, EngineAdapter, EngineResponse } from "./types";
 import {
   detectBrandMention,
-  estimateMentionPosition,
   estimateSentiment,
   estimateShareOfVoice,
+  mentionPositionFields,
 } from "./utils";
 
 const STUB_NOTICE =
@@ -28,6 +29,7 @@ function makeStubResponse(prompt: string, durationMs: number): EngineResponse {
     rawResponse: `${STUB_NOTICE}\n질의: ${prompt.slice(0, 200)}`,
     brandMentioned: false,
     mentionPosition: null,
+    mentionListSize: null,
     sentiment: null,
     citedSources: [],
     shareOfVoice: null,
@@ -65,7 +67,9 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
   }
 
   // Stagehand 동적 import — 패키지 누락이나 OS 문제로 실패해도 어댑터는 살아있음.
-  let StagehandClass: typeof import("@browserbasehq/stagehand").Stagehand | null = null;
+  let StagehandClass:
+    | typeof import("@browserbasehq/stagehand").Stagehand
+    | null = null;
   try {
     const mod = await import("@browserbasehq/stagehand");
     StagehandClass = mod.Stagehand;
@@ -75,6 +79,7 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
       rawResponse: "",
       brandMentioned: false,
       mentionPosition: null,
+      mentionListSize: null,
       sentiment: null,
       citedSources: [],
       shareOfVoice: null,
@@ -86,7 +91,10 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
 
   const options: Required<ChatGPTWebOptions> = {
     headless: process.env.FINDABLE_CHATGPT_WEB_HEADLESS !== "0",
-    timeoutMs: Number.parseInt(process.env.FINDABLE_CHATGPT_WEB_TIMEOUT_MS ?? "60000", 10),
+    timeoutMs: Number.parseInt(
+      process.env.FINDABLE_CHATGPT_WEB_TIMEOUT_MS ?? "60000",
+      10
+    ),
   };
 
   const useBrowserbase = Boolean(
@@ -126,16 +134,21 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
     });
 
     // act()는 자연어로 페이지 조작. UI 변경에 robust.
-    await stagehand.act(`composer 입력란을 클릭하고 다음 텍스트를 입력해라: "${query.prompt}"`);
+    await stagehand.act(
+      `composer 입력란을 클릭하고 다음 텍스트를 입력해라: "${query.prompt}"`
+    );
     await stagehand.act("send 버튼을 클릭해서 메시지를 전송해라");
 
     // 응답 완료 대기 — "stop generating" 버튼이 사라지거나 새 어시스턴트 메시지가 안정화될 때까지
     await page.waitForTimeout(8000); // 첫 청크 대기
     try {
       // "regenerate" 또는 "copy" 같은 완료 시그널이 나타나기를 기다림
-      await page.waitForSelector('[data-testid="copy-turn-action-button"], button[aria-label*="Copy"]', {
-        timeout: options.timeoutMs - 8000,
-      });
+      await page.waitForSelector(
+        '[data-testid="copy-turn-action-button"], button[aria-label*="Copy"]',
+        {
+          timeout: options.timeoutMs - 8000,
+        }
+      );
     } catch {
       // 셀렉터 변경되었을 수 있음 → 그냥 진행, extract가 본문을 가져옴
     }
@@ -144,7 +157,11 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
     // zod 의존성 주입을 피하기 위해 v3의 jsonSchemaToZod 우회: Stagehand는 z 자체 받음
     const { z } = await import("zod");
     const schema = z.object({
-      answer: z.string().describe("ChatGPT의 마지막 답변 본문 전체 텍스트 (markdown 포함, sidebar/header 제외)"),
+      answer: z
+        .string()
+        .describe(
+          "ChatGPT의 마지막 답변 본문 전체 텍스트 (markdown 포함, sidebar/header 제외)"
+        ),
       citedUrls: z
         .array(z.string())
         .describe("답변 안에 인용된 URL 목록. 없으면 빈 배열")
@@ -156,7 +173,10 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
       schema as never
     );
 
-    const text = (extracted as { answer?: string }).answer ?? "";
+    // 세션N-13: 판정·저장·표시가 같은 정제 텍스트를 쓰게 한다(공용 sanitize).
+    const text = sanitizeEngineText(
+      (extracted as { answer?: string }).answer ?? ""
+    );
     const urls = (extracted as { citedUrls?: string[] }).citedUrls ?? [];
 
     const citedSources: CitedSource[] = urls
@@ -169,16 +189,24 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
       })
       .filter((s): s is CitedSource => s !== null);
 
-    const mention = detectBrandMention(text, query.brandName, query.brandVariants);
+    const mention = detectBrandMention(
+      text,
+      query.brandName,
+      query.brandVariants
+    );
 
     return {
       engineId: "chatgpt-web",
       rawResponse: text,
       brandMentioned: mention.mentioned,
-      mentionPosition: estimateMentionPosition(text, query.brandName, query.brandVariants),
+      ...mentionPositionFields(text, query.brandName, query.brandVariants),
       sentiment: estimateSentiment(text, query.brandName),
       citedSources,
-      shareOfVoice: estimateShareOfVoice(text, query.brandName, query.brandVariants),
+      shareOfVoice: estimateShareOfVoice(
+        text,
+        query.brandName,
+        query.brandVariants
+      ),
       errorMessage: null,
       durationMs: Date.now() - start,
       isStub: false,
@@ -189,6 +217,7 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
       rawResponse: "",
       brandMentioned: false,
       mentionPosition: null,
+      mentionListSize: null,
       sentiment: null,
       citedSources: [],
       shareOfVoice: null,
