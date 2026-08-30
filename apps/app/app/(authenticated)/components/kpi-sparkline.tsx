@@ -1,6 +1,7 @@
 "use client";
 
-import { Line, LineChart, ResponsiveContainer } from "recharts";
+import { useId } from "react";
+import { Area, AreaChart } from "recharts";
 
 // ──────────────────────────────────────────────────
 // 1-6 스파크라인 (원안 §10 1단계) — 📕UIUX_대개선_기획서_2026-08-06.md §3-1
@@ -44,6 +45,7 @@ export const KpiSparkline = ({
   color,
   lowerIsBetter = false,
 }: KpiSparklineProps) => {
+  const gradientId = `sparkline-${useId().replace(/:/g, "")}`;
   if (values.length < MIN_POINTS) {
     return null;
   }
@@ -54,22 +56,32 @@ export const KpiSparkline = ({
   }));
 
   return (
-    <div aria-hidden="true" className="h-8 w-full">
-      <ResponsiveContainer height="100%" width="100%">
-        <LineChart
-          data={data}
-          margin={{ top: 2, right: 0, bottom: 2, left: 0 }}
-        >
-          <Line
-            dataKey="value"
-            dot={false}
-            isAnimationActive={false}
-            stroke={color}
-            strokeWidth={1.5}
-            type="monotone"
-          />
-        </LineChart>
-      </ResponsiveContainer>
+    <div aria-hidden="true" className="h-9 w-full overflow-hidden rounded-sm">
+      <AreaChart
+        data={data}
+        height={36}
+        margin={{ top: 2, right: 0, bottom: 2, left: 0 }}
+        width={120}
+      >
+        <defs>
+          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <Area
+          dataKey="value"
+          dot={false}
+          fill={`url(#${gradientId})`}
+          fillOpacity={1}
+          isAnimationActive={false}
+          stroke={color}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.75}
+          type="monotone"
+        />
+      </AreaChart>
     </div>
   );
 };
