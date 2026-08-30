@@ -92,7 +92,8 @@ describe("EmptyState (공용)", () => {
  *   → 없는 것을 약속하는 표시 정직성 결함(설계 v3 원인②).
  *   같은 저장소의 `brand/page.tsx` 는 `completed` 일 때만 링크를 걸고 있어 **자기모순**이었다.
  *
- * ⚠️ 문구가 아니라 **계약**을 고정한다: "완료가 아니면 결과로 가는 링크가 없다".
+ * ⚠️ 상태별 목적지는 다르다: 대기·측정 중은 실시간 상태, 실패·완료는 내부 상세.
+ * 무료진단 공개 페이지로 조직 이력을 내보내지 않는다.
  */
 const jobFixture = (status: string, id: string) =>
   ({
@@ -104,31 +105,36 @@ const jobFixture = (status: string, id: string) =>
   }) as never;
 
 describe("AuditHistoryList 상태별 결과 링크", () => {
-  test("🔴 실패·대기·측정중 행에는 결과 링크가 없다", () => {
-    for (const status of ["failed", "queued", "processing"]) {
+  test("대기·측정중 행은 실제 상태 화면으로 연결한다", () => {
+    for (const status of ["queued", "processing"]) {
       const { container } = render(
         <AuditHistoryList jobs={[jobFixture(status, `job-${status}`)]} />
       );
-      // 없는 결과로 가는 링크가 하나도 없어야 한다.
-      expect(container.querySelectorAll("a").length).toBe(0);
-      expect(container.textContent).not.toContain("결과 보기");
+      const link = container.querySelector("a");
+      expect(link?.getAttribute("href")).toContain(
+        `/brand/measuring?job=job-${status}`
+      );
+      expect(container.textContent).toContain("실시간 상태 보기");
     }
   });
 
-  test("실패 행은 왜 결과가 없는지 알려준다 (막다른 침묵 금지)", () => {
+  test("실패 행은 내부 상세의 실패 사유로 연결한다", () => {
     const { container } = render(
       <AuditHistoryList jobs={[jobFixture("failed", "job-failed")]} />
     );
-    expect(container.textContent).toContain("측정에 실패해서 결과가 없어요");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe(
+      "/history/job-failed"
+    );
+    expect(container.textContent).toContain("실패 사유 보기");
   });
 
-  test("완료 행에만 결과 링크와 CTA 가 있다", () => {
+  test("완료 행은 정식 공개 리포트로 연결한다", () => {
     const { container } = render(
       <AuditHistoryList jobs={[jobFixture("completed", "job-done")]} />
     );
     const link = container.querySelector("a");
     expect(link?.getAttribute("href")).toContain("/ko/audit/job-done");
-    expect(container.textContent).toContain("결과 보기");
+    expect(container.textContent).toContain("측정 상세");
   });
 });
 

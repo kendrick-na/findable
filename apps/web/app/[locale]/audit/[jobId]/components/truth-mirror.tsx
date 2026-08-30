@@ -21,6 +21,7 @@
 
 "use client";
 
+import { objectParticle } from "@repo/audit/actions";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { ChevronDown, Quote } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -120,7 +121,7 @@ export function TruthMirror({ brandName, engineResponses, isKo }: Props) {
   const hiddenCount = ordered.length - initial.length;
 
   const headline = isKo
-    ? `측정한 AI ${measured.length}개 중 ${known.length}개가 ${brand}를 알고 있습니다`
+    ? `측정한 AI ${measured.length}개 중 ${known.length}개가 ${brand}${objectParticle(brand)} 알고 있습니다`
     : `${known.length} of ${measured.length} measured AIs know ${brand}`;
 
   let accuracyTone: Tone = "bad";
@@ -136,8 +137,8 @@ export function TruthMirror({ brandName, engineResponses, isKo }: Props) {
       <div className="flex items-center gap-2 font-medium text-[var(--brand-2)] text-xs">
         <Quote className="h-3.5 w-3.5" />
         {isKo
-          ? "진실의 거울 · AI가 아는 당신"
-          : "Truth Mirror · How AI knows you"}
+          ? "진실의 거울 · 엔진별 인지 요약"
+          : "Truth Mirror · Engine recognition summary"}
       </div>
 
       {/* 헤드라인 + 자기채점 정합률 */}
@@ -156,8 +157,8 @@ export function TruthMirror({ brandName, engineResponses, isKo }: Props) {
               ? // 🔴 N-45: 브리핑이 본류에 들어오면서 *"같은 질문에"* 가 **사실이 아니게 됐다** —
                 //   브리핑만 정보형(효과·후기·장단점)으로 묻는다. 카드마다 그 사실을 밝히지만,
                 //   섹션 설명이 「같은 질문」이라고 단정하면 그게 먼저 읽힌다.
-                "잠재고객이 AI에게 물었을 때 받는 답을 그대로 보는 섹션입니다. 각 AI가 우리 브랜드를 어떻게 설명하는지 원문을 나란히 보세요 — “당신을 모름”이 뜨거나 서술이 틀린 엔진이 GEO 개선 1순위입니다."
-              : "This is what prospects actually get when they ask AI. Compare each engine's verbatim answer side by side — engines that don't know you, or describe you wrong, are your top GEO targets."}
+                "각 AI가 브랜드를 알고 있는지와 대표 표현을 한눈에 비교합니다. ‘당신을 모름’ 또는 잘못된 설명이 뜬 엔진이 GEO 개선 1순위예요. 전문은 아래 ‘측정 원문’에서 확인하세요."
+              : "Compare whether each AI recognizes the brand and how it describes it. Engines that do not know you or describe you incorrectly are the first GEO priorities. Full responses appear in Measurement evidence below."}
           </p>
           {errored > 0 && (
             <p className="mt-1.5 text-xs text-zinc-400">
@@ -559,46 +560,24 @@ function ExpandableQuote({
   isKo: boolean;
   brandName: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const body = text || (isKo ? "(응답 없음)" : "(no response)");
-  // 🔴 세션N-28 ①(👤 승인) — 클램프를 **10줄 → 3줄**로 줄인다.
-  //
-  //   문제: 같은 원문이 **이 섹션과 「엔진별 응답」 탭에 두 번** 렌더된다
-  //   (실측: 문장 「어떤 "엔비디아"를 추천받고…」가 페이지 본문에 정확히 2회).
-  //
-  //   ⭐ 답은 "지우기"가 아니라 **역할 분업**이다. 두 섹션은 목적이 다르다:
-  //     · 진실의 거울 = *"AI 7곳이 우릴 이렇게 말한다"* → **충격·비교**(맛보기면 된다)
-  //     · 엔진별 응답 = *"ChatGPT 는 정확히 뭐랬지"* → **정독·검증**(전문이 필요하다)
-  //   10줄×7장은 둘 다 못 한다 — 스크롤이 길어져 비교가 안 되고, 어차피 잘려서 정독도 안 된다.
-  //   3줄이면 **7개 답이 한 화면에 나란히** 놓여 "제각각 말한다"가 눈으로 보인다.
-  //
-  //   ⚠️ **원문은 지우지 않는다.** `전체 보기 ▼` 가 그대로라 원하는 사람은 여기서 다 본다
-  //   (기존 주석의 경고 유지: 원문이 진실거울의 증거다). 되돌리려면 이 숫자만 바꾸면 된다.
+  // 진실의 거울은 엔진별 판정의 비교 요약이다. 원문 전문은 아래 `측정 원문`에만 둬
+  // 같은 답변을 두 번 읽게 하지 않는다.
   const clampable = body.length > 120;
 
   return (
     <div>
       <blockquote
-        className={`whitespace-pre-line border-[var(--brand-2)]/30 border-l-2 pl-3 text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere] ${
-          clampable && !expanded ? "line-clamp-3" : ""
-        }`}
+        className="line-clamp-3 whitespace-pre-line border-[var(--brand-2)]/30 border-l-2 pl-3 text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]"
       >
         {highlightBrand(body, brandName)}
       </blockquote>
       {clampable && (
-        <button
-          className="mt-2 text-[var(--brand-2)] text-xs underline-offset-2 hover:underline"
-          onClick={() => setExpanded((v) => !v)}
-          type="button"
-        >
-          {expanded
-            ? isKo
-              ? "접기 ▲"
-              : "Collapse ▲"
-            : isKo
-              ? "전체 보기 ▼"
-              : "Show full answer ▼"}
-        </button>
+        <p className="mt-2 text-xs text-zinc-500">
+          {isKo
+            ? "전문은 아래 ‘측정 원문’에서 확인할 수 있어요."
+            : "Read the full response in Measurement evidence below."}
+        </p>
       )}
     </div>
   );

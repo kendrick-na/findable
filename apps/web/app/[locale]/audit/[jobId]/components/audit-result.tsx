@@ -36,7 +36,7 @@ import {
   isMeasurementFailure,
 } from "@repo/audit/measurement-coverage";
 import { detailedRankLabel } from "@repo/audit/rank-label";
-import { inferBrandSize } from "@repo/audit/revenue-impact";
+import { buildMeasurementImpact } from "@repo/audit/revenue-impact";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { Button } from "@repo/design-system/components/ui/button";
 import {
@@ -493,6 +493,8 @@ interface AxisScore {
   labelKo: string;
   max: number;
   score: number;
+  /** 원점수(가중치 점수)만 보여줄 축인가. 실측 비율과 점수 환산치를 섞지 않는다. */
+  showPercent?: boolean;
 }
 
 // 화면 배치 = 인과 순서(driver → dependents → independents).
@@ -534,16 +536,17 @@ function fiveAxisScores(metrics: JobMetrics, isKo: boolean): FiveAxisView {
   //   → 계산은 건드리지 않고 **라벨이 척도를 정확히 말하게** 고친다(표시층 해결).
   const driver: AxisScore = {
     key: "recognition",
-    labelKo: "얼마나 자주 우리를 말하나",
-    labelEn: "Mention frequency",
+    labelKo: "인지 축 점수",
+    labelEn: "Recognition score",
     score: recognition,
     max: 20,
+    showPercent: false,
     //   🔬 분모 확인: `usableResponses = metrics.enginesCovered.length` 이고 이 배열은
     //   **응답 1건당 1원소**다(화면의 "총 29회 측정"이 같은 값 — :1408). 엔진 종류 수는
     //   `enginesCoveredUnique.length`(=8) 로 별개다. 즉 이 축의 분모는 **응답 수(29)** 가 맞다.
     hint: isKo
-      ? `실제 답변 ${answeredCount}개에서 우리가 나온 비율`
-      : `Share of ${answeredCount} successful answers that mentioned you`,
+      ? `실제 답변 ${answeredCount}개 기준 등장률 ${Math.round(metrics.sov)}%를 20점으로 환산`
+      : `Converted from a ${Math.round(metrics.sov)}% appearance rate across ${answeredCount} successful answers`,
   };
 
   const dependents: AxisScore[] = [
@@ -1325,6 +1328,13 @@ function CompletedView({
   // 계산은 `@repo/audit/measurement-coverage` 단일 진실을 쓴다(규칙 복제 금지).
   const coverage = countMeasurementCoverage(result.engineResponses);
   const { measured, attempted } = coverage;
+  const impact = buildMeasurementImpact({
+    appearanceRate: result.metrics.sov,
+    coverage: {
+      mentioned: new Set(result.metrics.enginesWithMention).size,
+      total: measured,
+    },
+  });
 
   // 🔴 **측정 성공 0건이면 결과가 아니라 "측정 실패"를 말한다** (2026-08-10 세션N-14).
   //   못 잰 것을 "0점"으로 부르면 안 된다 — 체온계가 안 켜졌는데 "체온 0도"라고 적는 격이다.
@@ -1355,14 +1365,7 @@ function CompletedView({
           attemptedEngines={attempted}
           // 전수감사 §A-1: 규모 초기값을 측정 신호(인지 엔진 비율·SoV)로 추정.
           // small 하드코딩이 SK하이닉스에 "₩63만/월"을 보여줬던 결함의 수정.
-          defaultSizeKey={inferBrandSize(
-            (() => {
-              const measured = new Set(result.metrics.enginesCovered).size;
-              const mentioned = new Set(result.metrics.enginesWithMention).size;
-              return measured > 0 ? mentioned / measured : 0;
-            })(),
-            result.metrics.sov
-          )}
+          defaultSizeKey={impact.sizeKey}
           isKo={isKo}
           // 🔴 **분모를 항상 밝힌다** (2026-08-10 세션N-14).
           //   이 카드는 `sov` 하나로 손실을 추정하는데, 그 `sov` 가 **몇 개 엔진에서
@@ -2081,9 +2084,8 @@ function FiveAxisBar({ axis, isKo }: { axis: AxisScore; isKo: boolean }) {
             기여하는 몫이 그것이고, 실효 상한으로 채우면 인지 30% 브랜드의 감성 바가
             가득 차서 "감성 우수"로 보이는 정반대 오독이 생긴다. */}
         <span className="font-mono text-zinc-400 tabular-nums">
-          {Math.round(pct)}%
+          {axis.showPercent === false ? null : `${Math.round(pct)}% `}
           <span className="text-zinc-400">
-            {" "}
             ({axis.score}/
             {axis.dependsOnRecognition && axis.effectiveMax !== undefined
               ? axis.effectiveMax
@@ -3697,12 +3699,14 @@ function EnginesTabsSection({
     <section>
       <div className="mb-5">
         <div className="font-medium text-xs text-zinc-400">
-          {isKo ? "엔진별 대표 응답" : "Representative response by engine"}
+          {isKo
+            ? "측정 원문 · 엔진별 대표 답변"
+            : "Measurement evidence · representative answer by engine"}
         </div>
         <p className="mt-1.5 text-xs text-zinc-500 leading-relaxed">
           {isKo
-            ? `이 리포트에는 엔진마다 대표 응답 1개를 보여드려요. ${result.promptsCount}개 질문별 전체 원문·날짜별 변화는 가입 후 대시보드의 ‘추적 질문’에서 관리할 수 있어요.`
-            : `This report shows one representative response per engine. Manage all responses across ${result.promptsCount} prompts and dates in the dashboard after sign-up.`}
+            ? `위 ‘진실의 거울’의 판정 근거가 되는 대표 원문입니다. 이 리포트에는 엔진마다 1개만 보여드리며, ${result.promptsCount}개 질문별 전체 원문·날짜별 변화는 대시보드의 ‘추적 질문’에서 관리할 수 있어요.`
+            : `These are the representative source responses behind the Truth Mirror. This report shows one per engine; manage all responses across ${result.promptsCount} prompts and dates in the dashboard after sign-up.`}
         </p>
       </div>
       <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900/60 backdrop-blur-sm">

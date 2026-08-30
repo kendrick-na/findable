@@ -1,8 +1,5 @@
 import {
-  DEFAULT_ASSUMPTIONS,
-  estimateRevenueImpact,
-  inferBrandSize,
-  SIZE_PRESETS,
+  buildMeasurementImpact,
 } from "@repo/audit/revenue-impact";
 import { Info, TrendingUp } from "lucide-react";
 import Link from "next/link";
@@ -14,14 +11,9 @@ export function DashboardImpactEstimate({
   coverage: { mentioned: number; total: number };
   sov: number;
 }) {
-  const recognitionRate =
-    coverage.total > 0 ? coverage.mentioned / coverage.total : 0;
-  const sizeKey = inferBrandSize(recognitionRate, sov);
-  const preset = SIZE_PRESETS[sizeKey];
-  const estimate = estimateRevenueImpact(sov, {
-    ...DEFAULT_ASSUMPTIONS,
-    monthlyAiQueries: preset.monthlyAiQueries,
-    cpcKrw: preset.cpcKrw,
+  const { estimate } = buildMeasurementImpact({
+    appearanceRate: sov,
+    coverage,
   });
 
   return (

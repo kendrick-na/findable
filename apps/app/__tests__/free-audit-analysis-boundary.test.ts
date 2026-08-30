@@ -35,7 +35,7 @@ describe("무료 진단 심층 분석 표기", () => {
   });
 
   it("엔진별 대표 응답을 여러 질문 전체 원문처럼 보이게 하지 않는다", () => {
-    expect(auditResult).toContain("엔진별 대표 응답");
+    expect(auditResult).toContain("측정 원문 · 엔진별 대표 답변");
     expect(auditResult).toContain("질문별 전체 원문·날짜별 변화");
   });
 });

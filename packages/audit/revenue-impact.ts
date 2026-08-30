@@ -137,6 +137,32 @@ export interface RevenueImpactEstimate {
   targetSov: number;
 }
 
+/**
+ * 대시보드와 공개 리포트가 같은 회차를 서로 다른 규모로 환산하지 않도록 하는
+ * 유입 추정의 단일 진입점이다.
+ */
+export function buildMeasurementImpact({
+  appearanceRate,
+  coverage,
+}: {
+  appearanceRate: number;
+  coverage: { mentioned: number; total: number };
+}): { estimate: RevenueImpactEstimate; sizeKey: BrandSizeKey } {
+  const recognitionRate =
+    coverage.total > 0 ? coverage.mentioned / coverage.total : 0;
+  const sizeKey = inferBrandSize(recognitionRate, appearanceRate);
+  const preset = SIZE_PRESETS[sizeKey];
+
+  return {
+    sizeKey,
+    estimate: estimateRevenueImpact(appearanceRate, {
+      ...DEFAULT_ASSUMPTIONS,
+      monthlyAiQueries: preset.monthlyAiQueries,
+      cpcKrw: preset.cpcKrw,
+    }),
+  };
+}
+
 // 범위 계수: 추정 불확실성(±40%)을 명시적으로 넓게. 과대약속 방지.
 const UNCERTAINTY = 0.4;
 

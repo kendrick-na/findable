@@ -20,6 +20,10 @@ import { DashboardKpis } from "./components/dashboard-kpis";
 import { DashboardImpactEstimate } from "./components/dashboard-impact-estimate";
 import { DashboardDeepAnalysis } from "./components/dashboard-deep-analysis";
 import { DashboardRunContext } from "./components/dashboard-run-context";
+import {
+  DashboardSystemStatus,
+  DashboardSystemStatusSkeleton,
+} from "./components/dashboard-system-status";
 import { Header } from "./components/header";
 import { auditJobScope } from "./lib/audit-job-scope";
 import { NextActionsCard } from "./components/next-actions-card";
@@ -352,6 +356,16 @@ const App = async ({ searchParams }: AppProperties) => {
                 coverage={data.coverage}
                 sov={data.latestSov}
               />
+            ) : null}
+
+            {data.latestBrandId && orgId ? (
+              <Suspense fallback={<DashboardSystemStatusSkeleton />}>
+                <DashboardSystemStatus
+                  brandId={data.latestBrandId}
+                  canAudit={hasPlan(plan, "growth")}
+                  organizationId={orgId}
+                />
+              </Suspense>
             ) : null}
 
             {/* 기획서 §4-1 섹션순서 2번 — 처방을 1급 시민으로(리서치 "진짜 공백=처방"). */}
