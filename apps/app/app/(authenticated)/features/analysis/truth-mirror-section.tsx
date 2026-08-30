@@ -1,5 +1,6 @@
 "use client";
 
+import { objectParticle } from "@repo/audit/actions";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
@@ -9,7 +10,7 @@ import { useState } from "react";
 import type { TruthMirrorData } from "../../lib/truth-mirror-data";
 
 /**
- * 「진실의 거울」 — AI 가 실제로 뭐라고 했나 (2026-08-17 세션N-37 · v4 탭7).
+ * 「측정 원문」 — AI 가 실제로 뭐라고 했나 (2026-08-17 세션N-37 · v4 탭7).
  *
  * ⭐ **경쟁사 4곳 중 Otterly 만 유사 기능을 갖고 있다**(실측). 우리 무기다.
  *   점수·비율은 요약이고, 이 화면은 **원문**을 보여준다 — *"왜 그 점수인지"* 에 답한다.
@@ -60,12 +61,12 @@ const BRIEFING_ENGINE_ID = "naver-briefing";
  */
 const renderMentionBadge = (engineId: string, mentioned: boolean) => {
   if (mentioned) {
-    return <Badge variant="default">우리를 말함</Badge>;
+    return <Badge variant="default">우리 브랜드로 확인됨</Badge>;
   }
   if (engineId === BRIEFING_ENGINE_ID) {
     return <Badge variant="secondary">이 질문엔 안 떠요</Badge>;
   }
-  return <Badge variant="secondary">우리를 안 말함</Badge>;
+  return <Badge variant="secondary">우리 브랜드 확인 안 됨</Badge>;
 };
 
 /** 기본으로 펼치는 카드 수. 나머지는 접는다(밀도 축소 — web 판과 같은 판단). */
@@ -93,15 +94,26 @@ export const TruthMirrorSection = ({
     <section className="findable-card p-5">
       <div className="flex items-center gap-1.5 text-[color:var(--findable-primary,#ff7a4d)] text-xs">
         <QuoteIcon aria-hidden className="size-3.5" />
-        진실의 거울 · AI가 아는 우리
+        측정 원문 · AI별 대표 답변
       </div>
 
       <h2 className="mt-2 font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-        측정한 AI {measuredCount}곳 중 {knownCount}곳이 {brandName}를 압니다
+        {knownCount === 0 ? (
+          <>
+            측정한 AI {measuredCount}곳 중 등록한 {brandName}
+            {objectParticle(brandName)} 확인한 곳은 없습니다
+          </>
+        ) : (
+          <>
+            측정한 AI {measuredCount}곳 중 {knownCount}곳이 등록한 {brandName}
+            {objectParticle(brandName)} 실제 브랜드로 확인했습니다
+          </>
+        )}
       </h2>
       <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-        점수가 아니라 <strong>실제 답변</strong>이에요. 아래가 AI가 한 말
-        그대로예요.
+        공개 리포트의 ‘진실의 거울’ 요약을 뒷받침하는 <strong>대표 원문</strong>이에요.
+        질문별 전체 원문과 날짜별 변화는 ‘추적 질문’에서 관리합니다. 브랜드명·별칭·공식
+        도메인 또는 공식 출처로 검산되는 답변만 확인으로 집계합니다.
       </p>
 
       {/* 🔴 오류는 "모른다"가 아니다 — 분모에서 뺐다는 사실을 밝힌다. */}
@@ -160,9 +172,25 @@ export const TruthMirrorSection = ({
               //   ⚠️ 렌더가 아니라 **제거**를 택한 이유: 원문은 외부 AI 가 만든 문자열이라
               //     HTML 로 그리면 XSS 경계를 새로 져야 한다. 여기 목적은 *"뭐라고 했나"* 를
               //     읽는 것이지 서식 재현이 아니다.
-              <p className="mt-2 whitespace-pre-wrap break-words text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-                {stripMarkdown(engine.excerpt)}
-              </p>
+              <div className="mt-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
+                <p className="whitespace-pre-wrap break-words">
+                  {stripMarkdown(engine.excerpt)}
+                </p>
+                {(engine.fullResponse ?? engine.excerpt).length >
+                engine.excerpt.length ? (
+                  <details className="group mt-2">
+                    <summary className="cursor-pointer font-medium text-[color:var(--findable-primary,#ff7a4d)] text-xs marker:hidden">
+                      <span className="group-open:hidden">전체 답변 보기</span>
+                      <span className="hidden group-open:inline">
+                        전체 답변 접기
+                      </span>
+                    </summary>
+                    <p className="mt-2 max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-[color:var(--findable-surface-raised,#17191d)] p-3">
+                      {stripMarkdown(engine.fullResponse ?? engine.excerpt)}
+                    </p>
+                  </details>
+                ) : null}
+              </div>
             ) : (
               // 원문이 없으면 **지어내지 않는다** — 없다고 말한다.
               <p className="mt-2 text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm">
