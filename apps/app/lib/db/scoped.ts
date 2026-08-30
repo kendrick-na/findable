@@ -222,6 +222,34 @@ export async function scopedBrandById(brandId: string) {
   });
 }
 
+/** 현재 org·brand의 가장 최근 사이트 준비도 실행. 다른 조직 run은 반환하지 않는다. */
+export async function scopedLatestSiteReadinessRun(brandId: string) {
+  const orgId = await requireOrg();
+  return database.siteReadinessRun.findFirst({
+    where: { brandId, organizationId: orgId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      status: true,
+      trigger: true,
+      targetUrl: true,
+      report: true,
+      errorCode: true,
+    },
+  });
+}
+
+/** 전후 비교용 완료 실행 2건. 실패·진행 중 실행은 비교 기준에서 제외한다. */
+export async function scopedCompletedSiteReadinessRuns(brandId: string) {
+  const orgId = await requireOrg();
+  return database.siteReadinessRun.findMany({
+    where: { brandId, organizationId: orgId, status: "completed" },
+    orderBy: { createdAt: "desc" },
+    take: 2,
+    select: { id: true, report: true },
+  });
+}
+
 /** 현재 org가 소유한 퍼블리셔 콘텐츠. Publisher → Brand 경유 스코프를 항상 강제한다. */
 type ContentFilterStatus =
   | "draft"
@@ -340,7 +368,10 @@ export async function scopedHeaderMetric(): Promise<{
       brandId: true,
       trackedAt: true,
     },
-    where: { brand: { organizationId: orgId } },
+    where: {
+      brand: { organizationId: orgId },
+      engineId: { not: "naver-briefing" },
+    },
   });
   if (!latest) {
     return null;
@@ -356,6 +387,7 @@ export async function scopedHeaderMetric(): Promise<{
     where: {
       brand: { organizationId: orgId },
       brandId: latest.brandId,
+      engineId: { not: "naver-briefing" },
       trackedAt: latest.trackedAt,
     },
   });
