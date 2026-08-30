@@ -36,6 +36,9 @@ model Organization {
   brands    Brand[]
   reports   Report[]
   auditJobs AuditJob[]
+  siteReadinessRuns SiteReadinessRun[]
+  searchPerformanceConnections SearchPerformanceConnection[]
+  indexNowConfigurations IndexNowConfiguration[]
 
   @@index([ownerId])
 }
@@ -76,9 +79,12 @@ model Brand {
   trackings         Tracking[]
   reports           Report[]
   auditJobs         AuditJob[]
+  siteReadinessRuns SiteReadinessRun[]
   actionCompletions ActionCompletion[]
   annotations       Annotation[]
   publisher         Publisher?
+  searchPerformanceConnections SearchPerformanceConnection[]
+  indexNowConfiguration IndexNowConfiguration?
 
   @@index([organizationId])
   @@index([domain])
@@ -493,6 +499,105 @@ model AuditJob {
   @@index([createdAt])
   @@index([organizationId])
   @@index([brandId])
+}
+
+// ──────────────────────────────────────────────────
+// 사이트 SEO/GEO 기술 준비도 측정
+//   온보딩 완료·도메인 변경·수동 재측정이 모두 같은 실행 이력에 쌓인다.
+//   report는 당시 관측 근거의 스냅샷이라 소급 변경하지 않는다.
+// ──────────────────────────────────────────────────
+
+model SiteReadinessRun {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  brandId        String
+  brand          Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  targetUrl      String
+  finalUrl       String?
+  status         String       @default("queued") // queued | processing | completed | failed
+  trigger        String       @default("manual") // onboarding | brand_create | domain_change | manual
+  report         Json?
+  errorCode      String?
+  createdAt      DateTime     @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  @@index([organizationId, createdAt])
+  @@index([brandId, createdAt])
+  @@index([status])
+}
+
+// Google Search Console·GA4의 고객 승인 연결과 일별 실측 데이터.
+// Findable AI 응답 측정과 섞지 않으며, provider별 상태와 출처를 그대로 노출한다.
+model SearchPerformanceConnection {
+  id                    String       @id @default(uuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  brandId               String
+  brand                  Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  provider              String       // google_search_console | google_analytics_4 | naver_search_advisor_csv
+  propertyId            String?
+  propertyName          String?
+  status                String       @default("pending_property") // pending_property | connected | syncing | error
+  encryptedRefreshToken String?      @db.Text // CSV imports have no OAuth token.
+  scopes                String[]     @default([])
+  createdBy             String
+  tokenUpdatedAt        DateTime     @default(now())
+  lastSyncedAt          DateTime?
+  lastErrorCode         String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  daily SearchPerformanceDaily[]
+
+  @@unique([brandId, provider])
+  @@index([organizationId, updatedAt])
+  @@index([status])
+}
+
+model SearchPerformanceDaily {
+  id                String                      @id @default(uuid())
+  connectionId      String
+  connection        SearchPerformanceConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  date              DateTime
+  clicks            Int?
+  impressions       Int?
+  ctr               Float?
+  averagePosition   Float?
+  sessions          Int?
+  engagedSessions   Int?
+  keyEvents         Float?
+  totalRevenue      Float?
+  dataFinal         Boolean                     @default(true)
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  @@unique([connectionId, date])
+  @@index([connectionId, date])
+}
+
+// 고객 도메인의 IndexNow 키 확인과 실제 제출 근거.
+// 키는 도메인 루트에서 공개되는 소유권 확인 값이며 비밀 자격증명이 아니다.
+model IndexNowConfiguration {
+  id                 String       @id @default(uuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  brandId            String       @unique
+  brand              Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  host               String
+  key                String
+  status             String       @default("configured") // configured | error
+  keyVerifiedAt      DateTime?
+  lastSubmittedAt    DateTime?
+  lastSubmittedCount Int?
+  lastHttpStatus     Int?
+  lastErrorCode      String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([organizationId, updatedAt])
+  @@index([status])
 }
 
 enum CrewStatus {
