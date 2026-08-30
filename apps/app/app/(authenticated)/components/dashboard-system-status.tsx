@@ -7,13 +7,6 @@ import type { ReactNode } from "react";
  * 대시보드 요약은 진단 상세 타입 전체가 아니라 집계 수치만 읽는다. 별도 진단
  * 패키지가 아직 배포되지 않은 환경에서도 대시보드 자체가 실패하지 않게 경계를 둔다.
  */
-interface SiteReadinessSummary {
-  summary: {
-    fail: number;
-    pass: number;
-    warning: number;
-  };
-}
 
 interface DashboardSystemStatusProps {
   brandId: string;
@@ -122,18 +115,7 @@ export const DashboardSystemStatus = async ({
     );
   }
 
-  const [readinessRun, connections] = await Promise.all([
-    database.siteReadinessRun.findFirst({
-      where: { brandId, organizationId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        completedAt: true,
-        createdAt: true,
-        report: true,
-        status: true,
-      },
-    }),
-    database.searchPerformanceConnection.findMany({
+  const connections = await database.searchPerformanceConnection.findMany({
       where: { brandId, organizationId },
       orderBy: { updatedAt: "desc" },
       select: {
@@ -141,24 +123,7 @@ export const DashboardSystemStatus = async ({
         provider: true,
         status: true,
       },
-    }),
-  ]);
-
-  const report = readinessRun?.report as unknown as SiteReadinessSummary | null;
-  let readinessValue = "진단 전";
-  if (readinessRun?.status === "completed" && report) {
-    readinessValue = `통과 ${report.summary.pass}개`;
-  } else if (
-    readinessRun?.status === "processing" ||
-    readinessRun?.status === "queued"
-  ) {
-    readinessValue = "측정 중";
-  } else if (readinessRun?.status === "failed") {
-    readinessValue = "측정 실패";
-  }
-  const readinessDescription = report
-    ? `실패 ${report.summary.fail}개 · 경고 ${report.summary.warning}개`
-    : "저장한 도메인의 기술 준비도를 확인하세요.";
+    });
   const connected = connections.filter((item) => item.status === "connected");
   const providers = connected.map(
     (item) => providerLabel[item.provider] ?? item.provider
@@ -187,16 +152,12 @@ export const DashboardSystemStatus = async ({
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <StatusCard
-          description={readinessDescription}
+          description="저장한 도메인의 SEO·GEO 기술 준비도를 확인하세요."
           href="/site-audit"
           icon={<ScanSearchIcon className="size-4" />}
           label="사이트 준비도"
-          meta={
-            formatTime(
-              readinessRun?.completedAt ?? readinessRun?.createdAt ?? null
-            ) ?? "아직 측정하지 않음"
-          }
-          value={readinessValue}
+          meta="진단 결과와 해결 방법 보기"
+          value="진단하기"
         />
         <StatusCard
           description={
