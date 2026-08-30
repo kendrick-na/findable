@@ -7,6 +7,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { env } from "@/env";
 import {
   scopedAnnotations,
   scopedLatestRunTracking,
@@ -330,6 +331,11 @@ const App = async ({ searchParams }: AppProperties) => {
               brandName={data.latestBrandName}
               jobId={currentRunJob?.id ?? null}
               measuredAt={data.latestMeasuredAt}
+              reportUrl={
+                currentRunJob
+                  ? `${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`
+                  : null
+              }
             />
 
             {/* D6: 히어로 카드 → 목적지. paid 는 잠긴 목적지를 **클릭 전에** 알리는 용도
