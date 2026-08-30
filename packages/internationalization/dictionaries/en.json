@@ -11,9 +11,10 @@
         "description": "Track your brand across Korean and English AI answers.",
         "pricing": "Pricing"
       },
-      "blog": "Blog",
+      "blog": "Insights",
+      "knowledge": "Search & AI guide",
       "docs": "Docs",
-      "contact": "Contact",
+      "contact": "Talk to us",
       "signIn": "Sign in",
       "signUp": "Get started",
       "openMenu": "Open menu",
@@ -21,8 +22,8 @@
     },
     "home": {
       "meta": {
-        "title": "Is AI recommending your brand?",
-        "description": "ChatGPT, HyperCLOVA, Perplexity, Naver, Claude, Daum, Gemini. Findable tracks where your brand stands in 7 Korean and English AI answers."
+        "title": "AI search and GEO brand visibility audit",
+        "description": "Findable measures brand mentions, cited sources, and competitor position across ChatGPT, Claude, Perplexity, Gemini, Naver, Daum, and HyperCLOVA, then turns the findings into actions."
       }
     },
     "blog": {
@@ -102,12 +103,12 @@
       "add": "Add",
       "emptyHint": "Nothing yet. You can skip this.",
       "introTitle": "Which brand should we measure?",
-      "introLede": "Just your domain. We infer industry and target market from it, and you can change them later.",
+      "introLede": "We find the brand from its domain, then ask you to confirm the name people actually use. Measurement has not started yet.",
       "introWhyTitle": "Why only the domain?",
       "introWhyBody": "Some tools ask ten questions at signup, but the more you ask, the more there is to get wrong. We infer industry and target market from your domain and show you why we decided that way. If it is wrong, fix it right there.",
       "introEngines": "We measure ChatGPT, Claude, Perplexity and Gemini alongside Naver, Daum and HyperCLOVA. No matter which market you pick, none of these are dropped.",
-      "scopeTitle": "Which market are you in?",
-      "scopeLede": "We inferred this from your domain. If it looks right, just continue.",
+      "scopeTitle": "What market and category are you in?",
+      "scopeLede": "Market and industry shape prompts, competitors and entity disambiguation. Confirm the inferred context.",
       "scopeLabel": "Target market",
       "scopeDetected": "Auto-detected",
       "scopeWhyTitle": "Why this one?",
@@ -116,6 +117,20 @@
       "scopeKorea": "Korea-focused",
       "scopeGlobal": "Global-focused",
       "scopeBoth": "Korea and global",
+      "industryLabel": "Industry or category",
+      "industryPlaceholder": "Choose the closest industry",
+      "industryHint": "This prevents a school, song or work with the same name from being counted as your brand and keeps comparisons in your category.",
+      "industryManufacturing": "Manufacturing & industrial",
+      "industryB2bSaas": "B2B SaaS & software",
+      "industryBeauty": "Beauty & cosmetics",
+      "industryFashion": "Fashion & apparel",
+      "industryFood": "Food & beverage",
+      "industryRetail": "Retail & commerce",
+      "industryFinance": "Finance & fintech",
+      "industryHealthcare": "Healthcare & medical",
+      "industryEducation": "Education",
+      "industryContentIp": "Content & IP",
+      "industryOther": "Other / not sure",
       "aliasTitle": "We also go by these names",
       "aliasLede": "AI answers may call {brand} by other names. Add whatever comes to mind.",
       "aliasLabel": "Other names · English spelling",
@@ -126,6 +141,8 @@
       "competitorLede": "We've pre-filled competitors AI identified. Remove any that don't fit.",
       "competitorLedeEmpty": "Add the brands you want to compare against. You can leave this empty and move on.",
       "competitorSuggestion": "More candidates you can add",
+      "competitorLoading": "Finding real competitors using the industry you confirmed…",
+      "competitorSelected": "{count} selected",
       "competitorAddLabel": "Add your own",
       "competitorPlaceholder": "e.g. Olive Young",
       "competitorWhyTitle": "Where is this used?",
@@ -135,8 +152,19 @@
       "savedTitle": "Settings saved",
       "doneRateLimited": "You already measured today. You can see the existing results on your dashboard.",
       "doneFailed": "Your brand was registered but measurement could not start. You can retry from the dashboard.",
-      "doneAsideTitle": "From now on, we check every day",
-      "doneAsideBody": "We automatically run brand prompts every day across ChatGPT, Claude, Perplexity, Gemini, and Naver, Daum, HyperCLOVA X, tracking how your visibility changes.",
+      "readyTitle": "Ready to measure",
+      "readyLede": "We save the settings you confirmed, then start the first real measurement. The next screen keeps showing the real state and where results will appear.",
+      "doneAsideTitle": "What happens after you click",
+      "doneAsideBody": "We show server-reported queued, running and completed states instead of a fabricated percentage.",
+      "measureQueue": "When the request is accepted, we show its job ID and start time.",
+      "measureQuery": "The status refreshes while questions run across each AI engine.",
+      "measureResult": "When complete, the same result appears on the dashboard and in measurement history.",
+      "startMeasure": "Save settings and start measurement",
+      "measureStarting": "Saving settings and preparing measurement…",
+      "measureStarted": "Your first measurement has started. Follow its live status.",
+      "measureRateLimited": "We'll take you to the measurement that already exists.",
+      "measureFailed": "Your settings were saved, but measurement could not start.",
+      "measureFailedHint": "You can retry from Brand & measurement.",
       "donePreviewLabel": "Example screen · not your real results",
       "donePreviewCaption": "Once measurements build up, you'll see visibility trends like this",
       "featurePreviewTitle": "More becomes available as measurements build up",
@@ -148,13 +176,14 @@
       "featureAlertsDesc": "Get notified when your visibility shifts significantly",
       "summaryBrand": "Brand",
       "summaryMarket": "Target market",
+      "summaryIndustry": "Industry or category",
       "summaryAliases": "{count} other names",
       "summaryCompetitors": "{count} brands to compare",
       "goDashboard": "Go to dashboard",
       "saving": "Saving…",
       "saveFailedHint": "You can change these settings later.",
       "removeItem": "Remove {item}",
-      "editorSummary": "Names & competitors",
+      "editorSummary": "View & edit brand info — industry, market, names & competitors",
       "editorCounts": "{aliases} aliases · {competitors} competitors",
       "editorAliasTitle": "Other names we go by",
       "editorAliasHint": "So AI does not count Korean and English spellings separately. e.g. Amorepacific",
@@ -249,6 +278,235 @@
         "archived": "Archived"
       }
     },
+    "siteAudit": {
+      "metaTitle": "AI Search Readiness · Findable",
+      "metaDescription": "Inspect the evidence that shows whether a site is technically accessible and understandable to AI search engines.",
+      "navLabel": "Site readiness",
+      "brandLabel": "Select a brand to inspect",
+      "eyebrow": "AI SEARCH READINESS",
+      "title": "Can AI read your website?",
+      "description": "Inspect real site responses from robots.txt to structured data. This audit covers technical readiness; whether AI actually mentions your brand is measured separately.",
+      "inputLabel": "Website to inspect",
+      "inputPlaceholder": "https://example.com",
+      "cta": "Inspect site",
+      "measuringCta": "Inspecting…",
+      "recheckCta": "Inspect again",
+      "formHint": "Checks public responses and up to 10 pages, then measures Google mobile performance. A complete audit can take about a minute.",
+      "autoTitle": "Automatic saved-domain audit",
+      "autoQueued": "The audit for the domain entered during signup is queued.",
+      "autoProcessing": "We are checking the live site response. Results will update automatically when complete.",
+      "autoCompleted": "This is the latest saved measurement for your domain.",
+      "autoFailed": "The automatic audit could not be completed.",
+      "resultTitle": "Measured result",
+      "resultDescription": "Evidence and guidance by check",
+      "resultCta": "Measure actual AI visibility",
+      "checkedAt": "Checked",
+      "evidenceLabel": "Observed evidence",
+      "adviceLabel": "Improvement guide",
+      "performanceTitle": "Measured response performance",
+      "ttfbLabel": "Time to first byte",
+      "totalResponseLabel": "Complete HTML response",
+      "responseSizeLabel": "HTML size",
+      "pageSpeedTitle": "Google mobile performance measurement",
+      "mobileLabel": "Mobile environment",
+      "labDataLabel": "Lighthouse lab data",
+      "fieldDataLabel": "28-day field data",
+      "pageSpeedPerformanceLabel": "Performance score",
+      "pageSpeedSeoLabel": "Baseline technical SEO",
+      "pageSpeedLcpLabel": "Largest Contentful Paint",
+      "pageSpeedInpLabel": "Interaction to Next Paint",
+      "pageSpeedClsLabel": "Cumulative Layout Shift",
+      "pageSpeedOpportunityTitle": "Priority improvements found by Google",
+      "pageSpeedUnavailable": "Google PageSpeed measurement could not be completed. Direct response measurements remain available.",
+      "findingsTitle": "Priority actions",
+      "findingsDescription": "Ordered by likely impact on indexing and crawlability.",
+      "crawlTitle": "Page-level sample audit",
+      "crawlDescription": "Checks live responses for up to 10 URLs found through homepage links and the sitemap.",
+      "auditedLabel": "Audited",
+      "discoveredLabel": "Discovered",
+      "indexableLabel": "Indexable",
+      "pageColumn": "Page",
+      "responseColumn": "Response",
+      "indexingColumn": "Indexable",
+      "canonicalColumn": "Canonical matches",
+      "schemaColumn": "Structured data",
+      "yesLabel": "Yes",
+      "noLabel": "No",
+      "previousComparison": "Versus previous measurement",
+      "issueCountLabel": "Priority actions",
+      "severity": {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "findingItems": {
+        "non_2xx": {
+          "title": "Non-successful page response",
+          "advice": "Fix errors and redirects so important URLs return HTTP 2xx."
+        },
+        "noindex": {
+          "title": "Page blocked from indexing",
+          "advice": "Remove noindex from meta robots or X-Robots-Tag when the page should be public."
+        },
+        "canonical_missing": {
+          "title": "Canonical missing",
+          "advice": "Declare the preferred URL on each page to avoid duplicate URL ambiguity."
+        },
+        "canonical_mismatch": {
+          "title": "Canonical mismatch",
+          "advice": "Verify that the page does not unintentionally declare another URL as canonical."
+        },
+        "schema_invalid": {
+          "title": "Invalid JSON-LD",
+          "advice": "Correct the JSON syntax and verify it again with Rich Results Test."
+        },
+        "schema_required_missing": {
+          "title": "Structured-data fields missing",
+          "advice": "Add required properties that match the content visitors can actually see."
+        },
+        "title_missing": {
+          "title": "Page title missing",
+          "advice": "Write a unique title that clearly describes the page topic and brand."
+        },
+        "h1_missing": {
+          "title": "H1 missing",
+          "advice": "Add a primary H1 that states the page topic in one clear sentence."
+        },
+        "broken_internal_link": {
+          "title": "Broken internal link",
+          "advice": "Replace internal URLs that return errors or redirect them to the correct live page."
+        },
+        "thin_article_content": {
+          "title": "Thin evidence in an article",
+          "advice": "Add a direct answer, examples, data, and enough detail to substantively cover the topic."
+        },
+        "citation_sources_missing": {
+          "title": "External evidence links missing",
+          "advice": "Link directly to primary statistics, research, and official sources that support the article."
+        },
+        "author_signal_missing": {
+          "title": "Author or publication signals missing",
+          "advice": "Expose the author name and profile plus publication and modification dates to readers and machines."
+        },
+        "slow_ttfb": {
+          "title": "Slow first response",
+          "advice": "Review caching, CDN, and server queries to bring TTFB below 800ms."
+        },
+        "slow_response": {
+          "title": "Slow HTML response",
+          "advice": "Optimize server rendering and response size to bring the complete response below 2.5 seconds."
+        }
+      },
+      "locale": "en-US",
+      "status": {
+        "pass": "Pass",
+        "warning": "Review",
+        "fail": "Fail",
+        "info": "Info"
+      },
+      "categories": {
+        "access": "Accessibility",
+        "crawl": "Crawl control",
+        "structure": "Content structure",
+        "trust": "Trust signals"
+      },
+      "noScoreTitle": "Readiness and actual AI visibility are different metrics",
+      "noScoreBody": "This view does not fabricate a composite score. llms.txt is shown as information because it is not a universal standard. Measure ChatGPT and Perplexity answers separately under Brand & measurement.",
+      "lockedTitle": "AI Search Readiness audit",
+      "lockedDescription": "Inspect whether AI search bots can access your site and whether machines can understand its content, backed by real response evidence.",
+      "lockedBullets": [
+        "Check GPTBot, OAI-SearchBot, ClaudeBot and PerplexityBot access",
+        "Inspect title, description, H1, canonical and JSON-LD structure",
+        "Show observed evidence and fixes instead of a synthetic percentage"
+      ],
+      "lockedPreview": [
+        "AI bot access policy",
+        "Structured data",
+        "Server-rendered content",
+        "Trust and freshness signals"
+      ],
+      "errors": {
+        "AUTH_REQUIRED": "Sign in and select an organization to continue.",
+        "PLAN_REQUIRED": "This feature is available on Growth.",
+        "BRAND_REQUIRED": "Register a brand and domain first.",
+        "RUNNING": "An audit is already running for this brand.",
+        "URL_REQUIRED": "Enter a website address.",
+        "URL_INVALID": "Enter a valid website address.",
+        "URL_PROTOCOL": "Only HTTP or HTTPS websites can be inspected.",
+        "URL_UNSAFE": "Addresses with credentials or custom ports cannot be inspected.",
+        "URL_PRIVATE": "Only websites reachable from the public internet can be inspected.",
+        "URL_DNS": "The domain could not be resolved.",
+        "FETCH_TIMEOUT": "The site took too long to respond, so the inspection stopped.",
+        "FETCH_FAILED": "The site could not be reached.",
+        "RESPONSE_TOO_LARGE": "The homepage response is larger than the inspection limit.",
+        "REDIRECT_FAILED": "The site has too many redirects or an invalid destination.",
+        "NOT_HTML": "The homepage did not return an HTML document.",
+        "UNKNOWN": "An unexpected error occurred. Try again shortly."
+      },
+      "checkItems": {
+        "https": {
+          "title": "HTTPS connection",
+          "advice": "Serve every public page over HTTPS and redirect HTTP requests to the matching secure URL."
+        },
+        "status": {
+          "title": "Homepage response",
+          "advice": "The primary URL should return HTTP 2xx without requiring a login or showing an error page."
+        },
+        "robots": {
+          "title": "robots.txt",
+          "advice": "Return a valid robots.txt and make sure important public content is not blocked accidentally."
+        },
+        "aiBots": {
+          "title": "Major AI bot access",
+          "advice": "Choose access rules for each AI bot deliberately. Avoid blocking core pages when AI search visibility is the goal."
+        },
+        "sitemap": {
+          "title": "XML sitemap",
+          "advice": "Publish a sitemap.xml with current canonical URLs and declare its location in robots.txt."
+        },
+        "title": {
+          "title": "Page title",
+          "advice": "Use a unique title that clearly describes the page topic and brand."
+        },
+        "description": {
+          "title": "Meta description",
+          "advice": "Write a concise, specific description of who the page helps and what it answers."
+        },
+        "h1": {
+          "title": "Primary H1",
+          "advice": "Use one clear H1 that states the primary topic of the page."
+        },
+        "canonical": {
+          "title": "Canonical URL",
+          "advice": "When duplicate URLs exist, declare a canonical link to the preferred address."
+        },
+        "jsonLd": {
+          "title": "JSON-LD structured data",
+          "advice": "Add valid Organization, Product, Article or other relevant schemas that match visible page content."
+        },
+        "serverContent": {
+          "title": "Content in server HTML",
+          "advice": "Include essential copy in the server response instead of revealing it only after JavaScript runs."
+        },
+        "semanticHtml": {
+          "title": "Semantic HTML structure",
+          "advice": "Separate primary content and navigation with meaningful elements such as main, article and headings."
+        },
+        "trustLinks": {
+          "title": "Company and policy information",
+          "advice": "Link to company details, contact information, privacy policy and terms so the operator is verifiable."
+        },
+        "freshness": {
+          "title": "Modification date signal",
+          "advice": "For time-sensitive content, provide a visible date plus machine-readable datetime or metadata."
+        },
+        "llmsTxt": {
+          "title": "llms.txt information",
+          "advice": "You may publish this guide file, but it does not guarantee AI visibility and is excluded from evaluation totals."
+        }
+      }
+    },
     "sidebar": {
       "adminAudits": "Audits",
       "adminContent": "Content moderation",
@@ -262,6 +520,7 @@
       "brandMeasure": "Brand & measurement",
       "compare": "Competitors",
       "content": "My content",
+      "contentPerformance": "Content performance",
       "publicInsights": "Public insights",
       "currentPlan": "Current plan",
       "dashboard": "Dashboard",
@@ -275,6 +534,7 @@
       "history": "Measurement history",
       "lockedHint": "Unlocks on {plan}",
       "prompts": "Tracked questions",
+      "siteAudit": "Site readiness",
       "sources": "Cited sources",
       "support": "Support",
       "todo": "What to do now"

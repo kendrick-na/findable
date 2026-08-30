@@ -11,9 +11,10 @@
         "description": "한국어와 영어 AI 답변에서 우리 브랜드를 추적합니다.",
         "pricing": "가격"
       },
-      "blog": "블로그",
+      "blog": "인사이트",
+      "knowledge": "검색·AI 가이드",
       "docs": "문서",
-      "contact": "문의",
+      "contact": "상담 문의",
       "signIn": "로그인",
       "signUp": "시작하기",
       "openMenu": "메뉴 열기",
@@ -21,8 +22,8 @@
     },
     "home": {
       "meta": {
-        "title": "AI는 우리 브랜드를 추천하고 있나요?",
-        "description": "ChatGPT · HyperCLOVA · Perplexity · 네이버 · Claude · 다음 · Gemini. 한국어·영어 7개 AI 답변에서 우리 브랜드의 위치를 추적합니다."
+        "title": "파인더블(Findable) | AI 검색 최적화·GEO 브랜드 진단",
+        "description": "파인더블(Findable)은 ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바 AI 답변에서 브랜드 등장률, 인용 출처, 경쟁 위치를 측정하고 고칠 일을 제안합니다."
       }
     },
     "blog": {
@@ -102,12 +103,12 @@
       "add": "추가",
       "emptyHint": "아직 없어요. 비워두고 넘어가도 괜찮아요.",
       "introTitle": "어떤 브랜드를 측정할까요?",
-      "introLede": "도메인 하나만 넣으면 됩니다. 업종·타깃 시장은 도메인에서 자동으로 추정하고, 필요하면 나중에 바꿀 수 있어요.",
+      "introLede": "도메인으로 브랜드를 찾고, 실제로 부르는 이름이 맞는지 한 번만 확인해요. 아직 측정은 시작하지 않아요.",
       "introWhyTitle": "왜 도메인만 받나요?",
       "introWhyBody": "가입할 때 열 가지를 묻는 서비스도 있지만, 많이 물을수록 잘못 넣을 여지가 커집니다. 우리는 도메인에서 업종·타깃 시장을 추정하고, 추정한 근거를 화면에 함께 보여드려요. 틀렸으면 그 자리에서 고치면 됩니다.",
       "introEngines": "측정은 ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바까지 함께 봅니다. 어떤 시장을 고르든 이 엔진들이 빠지지 않아요.",
-      "scopeTitle": "어느 시장을 보고 계신가요?",
-      "scopeLede": "도메인을 보고 아래처럼 추정했어요. 맞으면 그대로 두고 넘어가세요.",
+      "scopeTitle": "어느 시장의, 어떤 브랜드인가요?",
+      "scopeLede": "시장과 업종은 질문·경쟁사·동명이체 판정을 바꾸어요. 자동 추정값을 확인해 주세요.",
       "scopeLabel": "타깃 시장",
       "scopeDetected": "자동 추정",
       "scopeWhyTitle": "왜 이렇게 잡았나요?",
@@ -116,8 +117,22 @@
       "scopeKorea": "국내 중심",
       "scopeGlobal": "해외 중심",
       "scopeBoth": "국내·해외 함께",
+      "industryLabel": "업종·카테고리",
+      "industryPlaceholder": "가장 가까운 업종 선택",
+      "industryHint": "동명의 학원·노래·작품을 우리 브랜드로 오인하지 않고, 우리 분야의 경쟁사와 비교하는 데 써요.",
+      "industryManufacturing": "제조·산업재",
+      "industryB2bSaas": "B2B SaaS·소프트웨어",
+      "industryBeauty": "뷰티·화장품",
+      "industryFashion": "패션·의류",
+      "industryFood": "식품·F&B",
+      "industryRetail": "리테일·커머스",
+      "industryFinance": "금융·핀테크",
+      "industryHealthcare": "헬스케어·의료",
+      "industryEducation": "교육",
+      "industryContentIp": "콘텐츠·IP",
+      "industryOther": "기타·잘 모르겠음",
       "aliasTitle": "우리를 이렇게도 부릅니다",
-      "aliasLede": "AI 답변에서 {brand}을(를) 다르게 부를 수 있어요. 떠오르는 대로 적어주세요.",
+      "aliasLede": "AI가 ‘{brand}’ 브랜드 이름을 한글·영문으로 다르게 쓸 수 있어요. 떠오르는 표기를 적어주세요.",
       "aliasLabel": "다른 이름 · 영문 표기",
       "aliasPlaceholder": "예: Amorepacific",
       "aliasWhyTitle": "왜 물어보나요?",
@@ -126,6 +141,8 @@
       "competitorLede": "AI가 파악한 경쟁 브랜드를 미리 담아뒀어요. 틀린 게 있으면 빼주세요.",
       "competitorLedeEmpty": "비교할 브랜드를 직접 적어주세요. 비워두고 넘어가도 괜찮아요.",
       "competitorSuggestion": "더 담을 수 있는 후보",
+      "competitorLoading": "확인한 업종을 기준으로 실제 경쟁 브랜드를 찾고 있어요…",
+      "competitorSelected": "{count}개 선택",
       "competitorAddLabel": "직접 추가",
       "competitorPlaceholder": "예: 올리브영",
       "competitorWhyTitle": "이 값은 어디에 쓰이나요?",
@@ -135,8 +152,19 @@
       "savedTitle": "설정을 저장했어요",
       "doneRateLimited": "오늘은 이미 측정했어요. 대시보드에서 기존 결과를 볼 수 있어요.",
       "doneFailed": "브랜드는 등록됐지만 측정을 시작하지 못했어요. 대시보드에서 다시 시도할 수 있어요.",
-      "doneAsideTitle": "이제부터 매일 확인해요",
-      "doneAsideBody": "ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바까지, 매일 자동으로 브랜드 관련 프롬프트를 실행해 노출도 변화를 기록해요.",
+      "readyTitle": "측정할 준비가 됐어요",
+      "readyLede": "확인한 설정을 저장한 뒤 첫 측정을 시작해요. 다음 화면에서 실제 상태와 결과 위치를 계속 보여드려요.",
+      "doneAsideTitle": "버튼을 누르면 이렇게 진행돼요",
+      "doneAsideBody": "가짜 퍼센트 대신 서버가 알려주는 대기·진행·완료 상태를 그대로 보여드려요.",
+      "measureQueue": "측정 요청이 등록되면 작업 ID와 시작 시간을 보여줘요.",
+      "measureQuery": "AI별 질의가 진행되는 동안 상태를 자동으로 새로고침해요.",
+      "measureResult": "완료되면 대시보드와 측정 이력에서 같은 결과를 확인해요.",
+      "startMeasure": "설정 저장하고 측정 시작",
+      "measureStarting": "설정 저장·측정 준비 중…",
+      "measureStarted": "첫 측정을 시작했어요. 실제 상태를 확인해 주세요.",
+      "measureRateLimited": "이미 진행했던 측정으로 안내할게요.",
+      "measureFailed": "설정은 저장했지만 측정을 시작하지 못했어요.",
+      "measureFailedHint": "브랜드 관리에서 다시 시작할 수 있어요.",
       "donePreviewLabel": "예시 화면이에요 · 실제 결과가 아니에요",
       "donePreviewCaption": "측정이 쌓이면 이렇게 노출도 추이를 볼 수 있어요",
       "featurePreviewTitle": "측정이 쌓이면 더 볼 수 있어요",
@@ -148,13 +176,14 @@
       "featureAlertsDesc": "노출도가 크게 바뀌면 알려드려요",
       "summaryBrand": "브랜드",
       "summaryMarket": "타깃 시장",
+      "summaryIndustry": "업종·카테고리",
       "summaryAliases": "다른 이름 {count}개",
       "summaryCompetitors": "비교할 브랜드 {count}개",
       "goDashboard": "대시보드로 가기",
       "saving": "저장 중…",
       "saveFailedHint": "설정은 나중에 바꿀 수 있어요.",
       "removeItem": "{item} 제거",
-      "editorSummary": "이름·경쟁사 설정",
+      "editorSummary": "브랜드 정보 확인·수정 — 업종·시장·별칭·경쟁사",
       "editorCounts": "별칭 {aliases} · 경쟁사 {competitors}",
       "editorAliasTitle": "우리를 부르는 다른 이름",
       "editorAliasHint": "AI가 한글·영문을 따로 세지 않도록 합칩니다. 예: Amorepacific",
@@ -249,6 +278,235 @@
         "archived": "보관됨"
       }
     },
+    "siteAudit": {
+      "metaTitle": "AI 검색 준비도 · Findable",
+      "metaDescription": "사이트가 AI 검색 엔진에 읽히고 이해될 기술적 준비가 되었는지 근거별로 점검합니다.",
+      "navLabel": "사이트 준비도",
+      "brandLabel": "진단할 브랜드 선택",
+      "eyebrow": "AI SEARCH READINESS",
+      "title": "AI가 읽을 수 있는 사이트인가요?",
+      "description": "robots.txt부터 구조화 데이터까지 실제 사이트 응답을 확인합니다. 이 진단은 기술적 준비도를 보여주며, AI가 브랜드를 실제로 언급하는지는 별도 측정으로 확인합니다.",
+      "inputLabel": "점검할 사이트 주소",
+      "inputPlaceholder": "https://example.com",
+      "cta": "사이트 점검",
+      "measuringCta": "실측 중…",
+      "recheckCta": "다시 실측",
+      "formHint": "공개 사이트 응답과 최대 10개 페이지를 확인하고 Google 모바일 성능을 함께 측정합니다. 전체 진단에는 약 1분이 걸릴 수 있습니다.",
+      "autoTitle": "저장된 도메인 자동 진단",
+      "autoQueued": "가입할 때 입력한 도메인의 진단을 준비하고 있습니다.",
+      "autoProcessing": "실제 사이트 응답을 확인하고 있습니다. 완료되면 결과가 자동으로 바뀝니다.",
+      "autoCompleted": "가장 최근에 저장된 실측 결과입니다.",
+      "autoFailed": "자동 진단을 완료하지 못했습니다.",
+      "resultTitle": "실측 결과",
+      "resultDescription": "항목별 근거와 개선 방향",
+      "resultCta": "실제 AI 노출 측정하기",
+      "checkedAt": "확인 시각",
+      "evidenceLabel": "발견 근거",
+      "adviceLabel": "개선 가이드",
+      "performanceTitle": "실제 응답 성능",
+      "ttfbLabel": "첫 응답(TTFB)",
+      "totalResponseLabel": "전체 HTML 응답",
+      "responseSizeLabel": "HTML 크기",
+      "pageSpeedTitle": "Google 모바일 성능 실측",
+      "mobileLabel": "모바일 환경",
+      "labDataLabel": "Lighthouse 실험실 데이터",
+      "fieldDataLabel": "최근 28일 실사용자 데이터",
+      "pageSpeedPerformanceLabel": "성능 점수",
+      "pageSpeedSeoLabel": "기초 기술 SEO 점수",
+      "pageSpeedLcpLabel": "최대 콘텐츠 표시(LCP)",
+      "pageSpeedInpLabel": "상호작용 응답(INP)",
+      "pageSpeedClsLabel": "레이아웃 안정성(CLS)",
+      "pageSpeedOpportunityTitle": "Google이 발견한 우선 개선 항목",
+      "pageSpeedUnavailable": "Google PageSpeed 측정을 완료하지 못했습니다. 기존 직접 응답 실측 결과는 정상적으로 유지됩니다.",
+      "findingsTitle": "우선 개선 액션",
+      "findingsDescription": "색인과 크롤링에 미치는 영향을 기준으로 정렬합니다.",
+      "crawlTitle": "페이지별 표본 실측",
+      "crawlDescription": "홈페이지 내부 링크와 사이트맵에서 최대 10개 URL을 선택해 실제 응답을 확인합니다.",
+      "auditedLabel": "실측",
+      "discoveredLabel": "발견",
+      "indexableLabel": "색인 가능",
+      "pageColumn": "페이지",
+      "responseColumn": "응답",
+      "indexingColumn": "색인 가능",
+      "canonicalColumn": "Canonical 일치",
+      "schemaColumn": "구조화 데이터",
+      "yesLabel": "예",
+      "noLabel": "아니오",
+      "previousComparison": "이전 실측 대비",
+      "issueCountLabel": "개선 액션",
+      "severity": {
+        "critical": "긴급",
+        "high": "높음",
+        "medium": "중간",
+        "low": "낮음"
+      },
+      "findingItems": {
+        "non_2xx": {
+          "title": "정상 응답이 아닌 페이지",
+          "advice": "핵심 URL이 HTTP 2xx로 응답하도록 오류와 리디렉션을 수정하세요."
+        },
+        "noindex": {
+          "title": "색인 차단된 페이지",
+          "advice": "공개해야 할 페이지의 meta robots와 X-Robots-Tag에서 noindex를 제거하세요."
+        },
+        "canonical_missing": {
+          "title": "Canonical 누락",
+          "advice": "중복 URL 혼선을 막도록 각 페이지의 대표 URL을 선언하세요."
+        },
+        "canonical_mismatch": {
+          "title": "Canonical 불일치",
+          "advice": "의도하지 않은 다른 URL이 대표로 선언되지 않았는지 확인하세요."
+        },
+        "schema_invalid": {
+          "title": "파싱할 수 없는 JSON-LD",
+          "advice": "JSON 문법 오류를 수정하고 Rich Results Test로 다시 검증하세요."
+        },
+        "schema_required_missing": {
+          "title": "구조화 데이터 필수 정보 누락",
+          "advice": "페이지에 표시된 실제 내용과 일치하는 필수 속성을 추가하세요."
+        },
+        "title_missing": {
+          "title": "페이지 제목 누락",
+          "advice": "페이지 주제와 브랜드를 명확하게 설명하는 고유 title을 작성하세요."
+        },
+        "h1_missing": {
+          "title": "H1 누락",
+          "advice": "주제를 한 문장으로 드러내는 대표 H1을 추가하세요."
+        },
+        "broken_internal_link": {
+          "title": "깨진 내부 링크",
+          "advice": "오류를 반환하는 내부 URL을 정상 페이지로 교체하거나 올바르게 리디렉션하세요."
+        },
+        "thin_article_content": {
+          "title": "근거가 부족한 짧은 아티클",
+          "advice": "주제에 대한 직접 답변, 사례, 데이터와 세부 설명을 보강하세요."
+        },
+        "citation_sources_missing": {
+          "title": "외부 근거 링크 누락",
+          "advice": "통계·연구·공식 정보의 원문을 바로 확인할 수 있게 출처 링크를 추가하세요."
+        },
+        "author_signal_missing": {
+          "title": "저자·발행 신호 누락",
+          "advice": "저자 이름과 프로필, 최초 발행일과 수정일을 독자와 기계가 읽을 수 있게 표시하세요."
+        },
+        "slow_ttfb": {
+          "title": "느린 첫 응답",
+          "advice": "캐시·CDN·서버 쿼리를 점검해 TTFB를 800ms 이하로 줄이세요."
+        },
+        "slow_response": {
+          "title": "느린 HTML 응답",
+          "advice": "서버 렌더링과 HTML 크기를 최적화해 전체 응답을 2.5초 이하로 줄이세요."
+        }
+      },
+      "locale": "ko-KR",
+      "status": {
+        "pass": "통과",
+        "warning": "주의",
+        "fail": "실패",
+        "info": "참고"
+      },
+      "categories": {
+        "access": "접근 가능성",
+        "crawl": "크롤링 제어",
+        "structure": "콘텐츠 구조",
+        "trust": "신뢰 신호"
+      },
+      "noScoreTitle": "준비도와 실제 AI 노출은 다른 지표입니다",
+      "noScoreBody": "이 화면은 임의의 종합 점수를 만들지 않습니다. llms.txt도 아직 보편적인 표준이 아니어서 참고로만 표시합니다. ChatGPT·Perplexity 등이 실제로 브랜드를 말하는지는 브랜드·측정에서 별도로 실측하세요.",
+      "lockedTitle": "AI 검색 준비도 진단",
+      "lockedDescription": "내 사이트가 AI 검색 봇에 열려 있고, 내용을 기계가 이해할 수 있게 구성됐는지 실제 응답 근거로 확인합니다.",
+      "lockedBullets": [
+        "GPTBot·OAI-SearchBot·ClaudeBot·PerplexityBot 접근 확인",
+        "제목·설명·H1·canonical·JSON-LD 구조 점검",
+        "통과율 대신 항목별 실제 근거와 수정 방향 제공"
+      ],
+      "lockedPreview": [
+        "AI 봇 접근 정책",
+        "구조화 데이터",
+        "서버 HTML 콘텐츠",
+        "신뢰·최신성 신호"
+      ],
+      "errors": {
+        "AUTH_REQUIRED": "로그인과 조직 선택이 필요합니다.",
+        "PLAN_REQUIRED": "Growth 플랜에서 사용할 수 있습니다.",
+        "BRAND_REQUIRED": "먼저 브랜드와 도메인을 등록해 주세요.",
+        "RUNNING": "이 브랜드의 진단이 이미 진행 중입니다.",
+        "URL_REQUIRED": "사이트 주소를 입력해 주세요.",
+        "URL_INVALID": "올바른 사이트 주소를 입력해 주세요.",
+        "URL_PROTOCOL": "HTTP 또는 HTTPS 주소만 점검할 수 있습니다.",
+        "URL_UNSAFE": "인증 정보나 사용자 지정 포트가 포함된 주소는 점검할 수 없습니다.",
+        "URL_PRIVATE": "공개 인터넷에서 접근 가능한 사이트만 점검할 수 있습니다.",
+        "URL_DNS": "도메인의 접속 주소를 찾지 못했습니다.",
+        "FETCH_TIMEOUT": "사이트 응답 시간이 너무 길어 점검을 중단했습니다.",
+        "FETCH_FAILED": "사이트에 연결하지 못했습니다.",
+        "RESPONSE_TOO_LARGE": "첫 화면 응답이 점검 가능한 크기를 초과했습니다.",
+        "REDIRECT_FAILED": "리디렉션이 너무 많거나 목적지가 올바르지 않습니다.",
+        "NOT_HTML": "첫 화면이 HTML 문서를 반환하지 않습니다.",
+        "UNKNOWN": "점검 중 알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+      },
+      "checkItems": {
+        "https": {
+          "title": "HTTPS 보안 연결",
+          "advice": "모든 공개 페이지를 HTTPS로 제공하고 HTTP 요청은 같은 HTTPS 주소로 이동시키세요."
+        },
+        "status": {
+          "title": "첫 화면 응답",
+          "advice": "대표 URL이 로그인이나 오류 화면 없이 HTTP 2xx로 응답해야 합니다."
+        },
+        "robots": {
+          "title": "robots.txt",
+          "advice": "robots.txt가 정상 응답하는지 확인하고 필요한 공개 콘텐츠를 실수로 차단하지 마세요."
+        },
+        "aiBots": {
+          "title": "주요 AI 봇 접근",
+          "advice": "정책에 맞게 AI 봇별 허용 여부를 결정하세요. 검색 노출이 목적이라면 핵심 페이지의 전면 차단을 피하세요."
+        },
+        "sitemap": {
+          "title": "XML 사이트맵",
+          "advice": "최신 canonical URL을 담은 sitemap.xml을 제공하고 robots.txt에도 위치를 선언하세요."
+        },
+        "title": {
+          "title": "페이지 제목",
+          "advice": "페이지 주제와 브랜드를 구체적으로 설명하는 고유한 title을 사용하세요."
+        },
+        "description": {
+          "title": "메타 설명",
+          "advice": "페이지가 누구에게 어떤 답을 주는지 간결하고 구체적인 설명을 작성하세요."
+        },
+        "h1": {
+          "title": "대표 제목 H1",
+          "advice": "페이지의 핵심 주제를 나타내는 명확한 H1을 하나 두세요."
+        },
+        "canonical": {
+          "title": "Canonical URL",
+          "advice": "중복 URL이 있다면 대표 주소를 가리키는 canonical 링크를 선언하세요."
+        },
+        "jsonLd": {
+          "title": "JSON-LD 구조화 데이터",
+          "advice": "실제 페이지 내용과 일치하는 Organization·Product·Article 등 적절한 스키마를 유효한 JSON-LD로 제공하세요."
+        },
+        "serverContent": {
+          "title": "서버 HTML 본문",
+          "advice": "중요한 설명이 자바스크립트 실행 뒤에만 나타나지 않도록 서버 응답 HTML에도 핵심 본문을 포함하세요."
+        },
+        "semanticHtml": {
+          "title": "의미 있는 HTML 구조",
+          "advice": "main·article·heading 등 의미 요소로 본문과 탐색 영역을 구분하세요."
+        },
+        "trustLinks": {
+          "title": "회사·정책 정보",
+          "advice": "회사 소개, 연락처, 개인정보처리방침, 이용약관처럼 운영 주체를 확인할 링크를 제공하세요."
+        },
+        "freshness": {
+          "title": "수정 시각 신호",
+          "advice": "최신성이 중요한 문서에는 독자가 볼 수 있는 날짜와 기계가 읽는 datetime 또는 메타 정보를 함께 제공하세요."
+        },
+        "llmsTxt": {
+          "title": "llms.txt 참고",
+          "advice": "필요하면 안내 파일을 제공할 수 있지만, 이것만으로 AI 노출이 보장되지는 않으며 평가 점수에도 포함하지 않습니다."
+        }
+      }
+    },
     "sidebar": {
       "adminAudits": "진단 목록",
       "adminContent": "콘텐츠 검수",
@@ -262,6 +520,7 @@
       "brandMeasure": "브랜드·측정",
       "compare": "경쟁사 비교",
       "content": "내 콘텐츠",
+      "contentPerformance": "콘텐츠 성과",
       "publicInsights": "공개 인사이트",
       "currentPlan": "현재 플랜",
       "dashboard": "대시보드",
@@ -275,6 +534,7 @@
       "history": "측정 이력",
       "lockedHint": "{plan}에서 해제",
       "prompts": "추적 질문",
+      "siteAudit": "사이트 준비도",
       "sources": "출처 링크",
       "support": "문의",
       "todo": "지금 할 일"
