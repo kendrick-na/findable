@@ -35,15 +35,6 @@ function hasFinalConsonant(word: string): boolean | null {
   return (code - HANGUL_START) % 28 !== 0;
 }
 
-/** 주격 조사(이/가). 한글이 아니면 받침 있는 것으로 취급(영문 브랜드는 "은" 계열이 자연스럽다). */
-function subjectParticle(word: string): string {
-  const final = hasFinalConsonant(word);
-  if (final === null) {
-    return "은";
-  }
-  return final ? "이" : "가";
-}
-
 /**
  * 목적격 조사(을/를).
  * 세션L: www 진단 결과 카피(약점 앵커 CTA)도 같은 판정이 필요해 export.
@@ -55,6 +46,18 @@ export function objectParticle(word: string): string {
     return "를";
   }
   return final ? "을" : "를";
+}
+
+/** 주제 조사(은/는). 영문 등 받침을 판정할 수 없으면 기존 표기 관례대로 "는". */
+export function topicParticle(word: string): string {
+  const final = hasFinalConsonant(word);
+  return final ? "은" : "는";
+}
+
+/** 접속 조사(과/와). 영문 등 받침을 판정할 수 없으면 기존 표기 관례대로 "와". */
+export function conjunctionParticle(word: string): string {
+  const final = hasFinalConsonant(word);
+  return final ? "과" : "와";
 }
 
 /** 논문 Table 1 — 방법별 효과(베이스라인 19.3 대비 상승률). 카피에 인용하는 유일한 출처. */
@@ -229,8 +232,6 @@ function promptGapActions(input: ActionInput): GeoAction[] {
     .sort((a, b) => a.hit / a.total - b.hit / b.total)
     .slice(0, 2);
 
-  const particle = subjectParticle(input.brandName);
-
   return gaps.map((p, index) => {
     const missRate = Math.round(((p.total - p.hit) / p.total) * 100);
     const missed = p.hit === 0;
@@ -238,11 +239,11 @@ function promptGapActions(input: ActionInput): GeoAction[] {
       kind: "prompt_gap" as const,
       priority: (missed ? 3 : 2) as ActionPriority,
       title: missed
-        ? `"${p.text}" — 이 질문에서 한 번도 등장하지 못했습니다`
+        ? `"${p.text}" — 등록 브랜드로 확인된 답변이 없습니다`
         : `"${p.text}" — 이 질문에서 ${missRate}% 놓치고 있습니다`,
       evidence: missed
-        ? `AI ${p.total}곳에 물었지만 ${input.brandName}${particle} 한 번도 언급되지 않았습니다.`
-        : `AI ${p.total}곳 중 ${p.hit}곳에서만 ${input.brandName}${particle} 언급됐습니다.`,
+        ? `AI ${p.total}곳에 물었지만 등록한 ${input.brandName}로 확인된 답변은 0개였습니다.`
+        : `AI ${p.total}곳 중 등록한 ${input.brandName}로 확인된 답변은 ${p.hit}개였습니다.`,
       // 같은 문구 반복을 피한다(무명 브랜드는 갭이 여러 개 잡힌다).
       how:
         index === 0
@@ -373,13 +374,14 @@ function contentFixAction(input: ActionInput): GeoAction | null {
     return {
       kind: "content_fix",
       priority: 3,
-      title: "AI가 브랜드를 아직 모릅니다 — 먼저 '알려진 사실'을 만드세요",
-      evidence: `측정한 AI ${input.enginesMeasured}곳 중 어디도 ${input.brandName}${objectParticle(input.brandName)} 인지하지 못했습니다.`,
+      title:
+        "등록 브랜드로 확인된 답변이 없습니다 — 먼저 '알려진 사실'을 만드세요",
+      evidence: `측정한 AI ${input.enginesMeasured}곳 중 등록한 ${input.brandName}로 확인된 답변은 0개였습니다.`,
       how:
         "AI는 여러 곳에 반복 등장하는 정보를 학습합니다. ①공식 소개 페이지에 " +
         "'무엇을 하는 회사인지' 한 문단으로 명확히 쓰고 ②위키·업계 디렉터리·보도자료처럼 " +
         "제3자가 검증 가능한 자리에 같은 사실을 남기세요. 이름만 반복하는 건 효과가 없습니다.",
-      source: "우리 측정 데이터 — 브랜드 인지율 0%",
+      source: "우리 측정 데이터 — 등록 브랜드 확인률 0%",
     };
   }
 
