@@ -35,6 +35,8 @@ export interface GeoScoreMetrics {
     negative: number;
   };
   sov: number;
+  /** API 키 미설정 등으로 만들어진 가짜 응답 수. 인지도 분모에서 제외한다. */
+  stubCount?: number;
   topCitedDomains?: Array<{ domain: string; count: number }>;
 }
 
@@ -141,6 +143,16 @@ export function measuredEngineCount(metrics: GeoScoreMetrics): number {
   );
 }
 
+/** 실제 응답을 받은 횟수. 오류와 stub을 미노출로 오인하지 않기 위한 공통 분모다. */
+export function successfulResponseCount(metrics: GeoScoreMetrics): number {
+  return Math.max(
+    metrics.enginesCovered.length -
+      (metrics.errors?.length ?? 0) -
+      (metrics.stubCount ?? 0),
+    0
+  );
+}
+
 export function geoAxisScores(metrics: GeoScoreMetrics): GeoAxisScores {
   const dist = metrics.sentimentDistribution ?? {
     positive: 0,
@@ -166,7 +178,7 @@ export function geoAxisScores(metrics: GeoScoreMetrics): GeoAxisScores {
   //   영향(실측 8건): 3~11점 하락, 평균 −6.4. 나이키 −3 / SK하이닉스 −11 로 **변별력 발생**
   //   (기존엔 68~71 로 전부 뭉쳐 있었다).
   //   ⚠️ 점수 체계 변경이라 기존 시계열과 단절된다. 실고객 0명 시점에 일괄 적용(사용자 승인 2026-08-02).
-  const usableResponses = metrics.enginesCovered.length;
+  const usableResponses = successfulResponseCount(metrics);
   const recognitionRate =
     usableResponses > 0
       ? clamp(0, 1, metrics.enginesWithMention.length / usableResponses)
