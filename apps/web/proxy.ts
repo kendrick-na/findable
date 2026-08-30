@@ -11,6 +11,14 @@ import { createNEMO } from "@rescale/nemo";
 import { type NextProxy, type NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
 
+/**
+ * Public landing pages are the first unauthenticated entry point. A bot
+ * classification false positive must not turn a visitor's first request into
+ * a 403. Form/API routes retain their route-level rate limits.
+ */
+const isPublicLandingPath = (pathname: string): boolean =>
+  pathname === "/" || /^\/(?:ko|en)(?:\/|$)/.test(pathname);
+
 export const config = {
   // matcher tells Next.js which routes to run the middleware on. This runs the
   // middleware on all routes except for static assets, Posthog ingest, and API routes.
@@ -33,6 +41,10 @@ const securityHeaders = env.FLAGS_SECRET
 // Custom middleware for Arcjet security checks
 const arcjetMiddleware = async (request: NextRequest) => {
   if (!env.ARCJET_KEY) {
+    return;
+  }
+
+  if (isPublicLandingPath(request.nextUrl.pathname)) {
     return;
   }
 
