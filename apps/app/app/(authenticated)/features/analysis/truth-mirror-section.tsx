@@ -176,20 +176,6 @@ export const TruthMirrorSection = ({
                 <p className="whitespace-pre-wrap break-words">
                   {stripMarkdown(engine.excerpt)}
                 </p>
-                {(engine.fullResponse ?? engine.excerpt).length >
-                engine.excerpt.length ? (
-                  <details className="group mt-2">
-                    <summary className="cursor-pointer font-medium text-[color:var(--findable-primary,#ff7a4d)] text-xs marker:hidden">
-                      <span className="group-open:hidden">전체 답변 보기</span>
-                      <span className="hidden group-open:inline">
-                        전체 답변 접기
-                      </span>
-                    </summary>
-                    <p className="mt-2 max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-[color:var(--findable-surface-raised,#17191d)] p-3">
-                      {stripMarkdown(engine.fullResponse ?? engine.excerpt)}
-                    </p>
-                  </details>
-                ) : null}
               </div>
             ) : (
               // 원문이 없으면 **지어내지 않는다** — 없다고 말한다.
