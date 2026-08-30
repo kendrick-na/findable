@@ -2,7 +2,18 @@ import { database } from "@repo/database";
 import { ArrowRightIcon, LinkIcon, ScanSearchIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import type { SiteReadinessReport } from "@/lib/site-readiness/types";
+
+/**
+ * 대시보드 요약은 진단 상세 타입 전체가 아니라 집계 수치만 읽는다. 별도 진단
+ * 패키지가 아직 배포되지 않은 환경에서도 대시보드 자체가 실패하지 않게 경계를 둔다.
+ */
+interface SiteReadinessSummary {
+  summary: {
+    fail: number;
+    pass: number;
+    warning: number;
+  };
+}
 
 interface DashboardSystemStatusProps {
   brandId: string;
@@ -133,7 +144,7 @@ export const DashboardSystemStatus = async ({
     }),
   ]);
 
-  const report = readinessRun?.report as unknown as SiteReadinessReport | null;
+  const report = readinessRun?.report as unknown as SiteReadinessSummary | null;
   let readinessValue = "진단 전";
   if (readinessRun?.status === "completed" && report) {
     readinessValue = `통과 ${report.summary.pass}개`;
