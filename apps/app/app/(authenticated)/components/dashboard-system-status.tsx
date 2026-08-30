@@ -143,6 +143,8 @@ export const DashboardSystemStatus = async ({
     latestReadinessRun?.status === "completed" &&
     typeof readinessReport?.score === "number"
       ? `${readinessReport.score}점`
+      : latestReadinessRun?.status === "completed"
+        ? "점검 완료"
       : latestReadinessRun?.status === "processing" ||
           latestReadinessRun?.status === "queued"
         ? "점검 중"
