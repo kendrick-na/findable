@@ -1,4 +1,3 @@
-import { database } from "@repo/database";
 import { ArrowRightIcon, LinkIcon, ScanSearchIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -14,20 +13,6 @@ interface DashboardSystemStatusProps {
   organizationId: string;
 }
 
-const formatTime = (value: Date | null) =>
-  value
-    ? new Intl.DateTimeFormat("ko-KR", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "Asia/Seoul",
-      }).format(value)
-    : null;
-
-const providerLabel: Record<string, string> = {
-  google_analytics_4: "GA4",
-  google_search_console: "Search Console",
-  naver_search_advisor_csv: "네이버",
-};
 
 const StatusCard = ({
   description,
@@ -115,27 +100,6 @@ export const DashboardSystemStatus = async ({
     );
   }
 
-  const connections = await database.searchPerformanceConnection.findMany({
-      where: { brandId, organizationId },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        lastSyncedAt: true,
-        provider: true,
-        status: true,
-      },
-    });
-  const connected = connections.filter((item) => item.status === "connected");
-  const providers = connected.map(
-    (item) => providerLabel[item.provider] ?? item.provider
-  );
-  const latestSync = connections.reduce<Date | null>(
-    (latest, item) =>
-      item.lastSyncedAt && (!latest || item.lastSyncedAt > latest)
-        ? item.lastSyncedAt
-        : latest,
-    null
-  );
-
   return (
     <section aria-labelledby="dashboard-system-status" className="space-y-3">
       <div className="flex items-baseline justify-between gap-3">
@@ -160,20 +124,12 @@ export const DashboardSystemStatus = async ({
           value="진단하기"
         />
         <StatusCard
-          description={
-            providers.length > 0
-              ? `${providers.join(" · ")} 연결됨`
-              : "Search Console·GA4·네이버 데이터를 연결하세요."
-          }
+          description="Search Console·GA4·네이버 데이터를 연결하고 성과를 확인하세요."
           href={`/site-audit/integrations?brand=${brandId}`}
           icon={<LinkIcon className="size-4" />}
           label="검색 데이터"
-          meta={
-            latestSync
-              ? `최근 동기화 ${formatTime(latestSync)}`
-              : "동기화 이력 없음"
-          }
-          value={`${connected.length}개 연결`}
+          meta="연결 상태와 최근 동기화 보기"
+          value="연결 관리"
         />
       </div>
     </section>
