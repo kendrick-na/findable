@@ -24,6 +24,8 @@ interface RevenueImpactCardProps {
   isKo: boolean;
   /** 응답을 실제로 받아낸 엔진 수(고유). **분자**. */
   measuredEngines?: number;
+  /** 리포트는 당시 결과를 읽는 문서다. 가정 조정은 대시보드에서만 제공한다. */
+  readOnly?: boolean;
   sov: number;
 }
 
@@ -104,6 +106,7 @@ export function RevenueImpactCard({
   sov,
   isKo,
   defaultSizeKey = "small",
+  readOnly = false,
 }: RevenueImpactCardProps) {
   const t = T(isKo);
   // 규모 프리셋: AI 답변 노출량과 광고 CPC를 함께 조정.
@@ -154,7 +157,13 @@ export function RevenueImpactCard({
       {/* 규모 프리셋 — 추정의 첫 변수(노출량·CPC)를 사용자가 고른다 */}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span className="text-xs text-zinc-400">{t.sizeLabel}</span>
-        {(Object.keys(SIZE_PRESETS) as BrandSizeKey[]).map((key) => (
+        {(Object.keys(SIZE_PRESETS) as BrandSizeKey[]).map((key) => readOnly ? (
+          key === sizeKey ? (
+            <span className="rounded-full border border-[var(--brand-2)]/50 bg-[var(--brand-2)]/10 px-3 py-1 text-xs text-[var(--brand-2)]" key={key}>
+              {isKo ? SIZE_PRESETS[key].labelKo : SIZE_PRESETS[key].labelEn}
+            </span>
+          ) : null
+        ) : (
           <button
             className={`rounded-full border px-3 py-1 text-xs transition-colors ${
               sizeKey === key
@@ -198,14 +207,14 @@ export function RevenueImpactCard({
           : "Visits you miss because AI answers don't surface you."}
       </p>
 
-      <button
+      {!readOnly && <button
         aria-expanded={showMoney}
         className="mt-3 inline-flex items-center gap-1.5 text-xs text-zinc-400 underline decoration-zinc-700 underline-offset-4 transition-colors hover:text-zinc-200"
         onClick={() => setShowMoney((v) => !v)}
         type="button"
       >
         {showMoney ? t.hideMoney : t.showMoney}
-      </button>
+      </button>}
 
       {showMoney && (
         <div className="mt-3 rounded-xl border border-white/10 bg-zinc-950/40 p-4">
@@ -295,13 +304,19 @@ export function RevenueImpactCard({
       </div>
 
       {/* 가정 조정 */}
-      <button
+      {readOnly ? (
+        <p className="mt-3 text-xs text-zinc-400">
+          {isKo
+            ? "이 리포트는 측정 시점의 기본 가정을 고정해 보여줍니다. 값 조정과 실행 관리는 대시보드에서 할 수 있어요."
+            : "This report keeps the measurement-time defaults fixed. Adjust assumptions and manage actions in the dashboard."}
+        </p>
+      ) : <button
         className="mt-3 text-[var(--brand-2)] text-xs underline-offset-2 hover:underline"
         onClick={() => setOpen((v) => !v)}
         type="button"
       >
         {t.adjust} {open ? "▲" : "▼"}
-      </button>
+      </button>}
 
       {open && (
         <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-white/10 bg-zinc-950/40 p-4 sm:grid-cols-2">

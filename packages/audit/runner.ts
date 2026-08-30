@@ -21,7 +21,12 @@ import { verifyMentions } from "@repo/ai/lib/mention-verdict";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
-import { actionsToStrings, buildGeoActions } from "./actions";
+import {
+  actionsToStrings,
+  buildGeoActions,
+  conjunctionParticle,
+  topicParticle,
+} from "./actions";
 import { runBriefingForAuditJob } from "./briefing-runner";
 import {
   type KnownCompetitor,
@@ -36,8 +41,13 @@ import {
   type MarketScope,
   REGION_LABEL,
 } from "./market-scope";
+import {
+  countMeasurementCoverage,
+  isMeasurementFailure,
+} from "./measurement-coverage";
 import { generateAuditPdf } from "./pdf-generator";
 import type { AuditPdfData } from "./pdf-template";
+import { resolveOfficialSiteIdentity } from "./official-site-identity";
 import { pickRotatingPrompts } from "./prompt-rotation";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
 
@@ -82,10 +92,10 @@ function generateAuditPrompts(
   // 각 배열은 [브랜드형, 브랜드형, 경쟁사형, 경쟁사형] 순 — both 모드가 slice로
   // 앞 2개(브랜드형)+뒤로 경쟁사형을 뽑아도 유형이 섞이도록 배치.
   const ko = [
-    `${brandName} 추천해줘`,
-    `${brandName}의 장단점은?`,
-    `${brandName}와 같은 카테고리의 인기 브랜드 5가지 추천해줘`,
-    `${brandName} 경쟁사 대표 브랜드를 순위로 알려줘`,
+    `${brandName}${topicParticle(brandName)} 어떤 브랜드이고 어떤 서비스를 제공해?`,
+    `${brandName}의 주요 강점과 한계는?`,
+    `${brandName}${conjunctionParticle(brandName)} 비슷한 서비스를 제공하는 브랜드 5곳 추천해줘`,
+    `${brandName}의 주요 경쟁사를 비교해줘`,
   ];
   // ⚠️ 2026-08-02 F7 — 한/영 프롬프트를 **의미 등가**로 맞춘다.
   //   기존 en[0] = "What is X? Is it worth buying?" 는 ko[0] "X 추천해줘" 와 질문이 달랐다:
@@ -96,10 +106,10 @@ function generateAuditPrompts(
   //   추가로 "Is it worth buying?" 는 구매 가능한 소비재를 전제해 B2B·병원·반도체엔 무의미하고,
   //   부정 톤 답변이 감성 점수를 왜곡할 수 있었다(업종 편향과 같은 뿌리).
   const en = [
-    `Recommend ${brandName}`,
-    `What are the pros and cons of ${brandName}?`,
-    `Top 5 popular brands in the same category as ${brandName}`,
-    `List ${brandName}'s main competitors in ranked order`,
+    `What does ${brandName} offer, and who is it for?`,
+    `What are the main strengths and limitations of ${brandName}?`,
+    `Top alternatives to ${brandName} and how they differ`,
+    `Compare the main competitors of ${brandName}`,
   ];
 
   if (language === "ko") {
@@ -344,6 +354,17 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const brandName = identity.brandName;
     const brandVariants = input.brandVariants ?? identity.brandVariants;
 
+    // 응답 생성 모델에는 주입하지 않는다(실제 AI 인지도를 재야 하므로). 대신 판정기가
+    // 동명의 다른 대상을 확정 언급으로 세지 않도록 공식 홈페이지의 제목·설명·H1을
+    // 한 번만 읽어 엔티티 기준 사실로 고정한다. 근거를 확보하지 못하면 AI 호출 전에
+    // 중단한다. 수치는 없는 편이 다른 엔티티를 자사 언급으로 공개하는 것보다 정확하다.
+    const officialSiteIdentity = await resolveOfficialSiteIdentity(input.domain);
+    if (!officialSiteIdentity) {
+      throw new Error(
+        "공식 사이트에서 브랜드 식별 근거(title, description, H1)를 확인하지 못했습니다. 사이트 접근 설정을 확인한 뒤 다시 측정해 주세요."
+      );
+    }
+
     /**
      * 등록 경쟁사 — **표기 병합 사전**으로만 쓴다(👤 승인 ⓐ · N-44). 거르지 않는다.
      *
@@ -446,7 +467,14 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       brandName,
       brandDomain: input.domain,
       industry: input.industry ?? undefined,
+      officialSite: officialSiteIdentity,
     });
+    const measurementCoverage = countMeasurementCoverage(flat);
+    if (isMeasurementFailure(measurementCoverage)) {
+      throw new Error(
+        `AI 엔진 응답을 받지 못했습니다. 연결 설정을 확인한 뒤 다시 시도해 주세요. (시도 ${measurementCoverage.attempted}곳)`
+      );
+    }
     // Tracking(dual-write)도 같은 판정을 쓰도록 교정 결과를 태깅 배열에 반영.
     //   flat 과 tagged 는 동일한 flatMap 순서를 공유한다(위 주석 참조).
     for (const [i, verified] of flat.entries()) {
@@ -528,6 +556,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const result = {
       brandName,
       domain: input.domain,
+      measurementContext: {
+        officialSiteIdentity,
+        identityGrounded: true,
+      },
       promptsCount: prompts.length,
       briefingStatus: "not_requested" as const,
       cost: costSummary,
@@ -554,6 +586,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         //      → UI 를 먼저 만들면 표본 1(클로드)의 일반화가 된다. 분포부터 쌓는다.
         mentionQuality: r.mentionQuality,
         verdictVia: r.verdictVia,
+        // 심층 분석의 인용 출처 판정도 원본 측정에 근거해야 한다. 도메인 집계만
+        // 남기면 수진 분석기가 실제 출처 URL·제목을 전혀 받지 못해, "출처 분석"이라는
+        // 이름과 입력 데이터가 어긋난다.
+        citedSources: r.citedSources,
         // D-051: 300→1500자. 결함감사(2026-07-30) §9: 1500 하드컷이 단어·마크다운 토큰
         // 중간을 잘라("**GeForce RT") raw 기호가 노출됐음 → 4000자로 상향 + 문장/줄
         // 경계 컷 + 말줄임. DB 비용: 28 응답 × 4000 = 112KB/audit (Neon 감내 가능).
@@ -596,34 +632,19 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       registeredCompetitors,
     };
 
-    // PDF 생성 — 실패해도 result/status는 유지 (PDF는 부가 산출물)
-    let pdfUrl: string | null = null;
-    try {
-      const pdfData: AuditPdfData = {
-        ...result,
-        language: input.language,
-        generatedAt: new Date().toISOString().replace("T", " ").slice(0, 16),
-      };
-      const pdf = await generateAuditPdf(input.jobId, pdfData);
-      pdfUrl = pdf.pdfUrl;
-      log.info("audit.pdf.generated", {
-        jobId: input.jobId,
-        sizeKB: Math.round(pdf.pdfSize / 1024),
-      });
-    } catch (pdfError) {
-      log.error("audit.pdf.failed", {
-        jobId: input.jobId,
-        error: parseError(pdfError),
-      });
-    }
-
+    // 이 시각은 측정 1회의 식별자다. AuditJob과 모든 Tracking 행이 정확히 같은
+    // 값을 공유해야 대시보드가 한 run으로 접는다(각각 new Date()면 단건 run 분리).
+    //
+    // 결과와 시계열을 PDF보다 먼저 커밋한다. PDF의 Chromium 시작·폰트 대기·Blob
+    // 업로드는 부가 작업인데, 이를 앞에 두면 300초 함수 상한에서 이미 수집한 AI
+    // 응답까지 통째로 잃고 job이 영원히 processing에 남는다.
+    const completedAt = new Date();
     await database.auditJob.update({
       where: { id: input.jobId },
       data: {
         status: "completed",
         result: result as never,
-        pdfUrl,
-        completedAt: new Date(),
+        completedAt,
       },
     });
     // 원가계기(유닛이코노믹스): 진단 1건 실비용을 로그로도 실측 축적(result.cost 와 동일).
@@ -654,7 +675,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         organizationId: input.organizationId,
         brandId: input.brandId,
         tagged,
-        completedAt: new Date(),
+        completedAt,
       });
     } else {
       log.warn("audit.tracking.skipped", {
@@ -664,6 +685,30 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         flagEnabled: dualWriteEnabled,
         hasOrganizationId: Boolean(input.organizationId),
         hasBrandId: Boolean(input.brandId),
+      });
+    }
+
+    // PDF 생성 — 핵심 결과와 Tracking을 저장한 뒤 실행하는 best-effort 부가 산출물.
+    // 이 단계에서 함수 시간이 끝나도 고객은 측정 결과를 즉시 볼 수 있다.
+    try {
+      const pdfData: AuditPdfData = {
+        ...result,
+        language: input.language,
+        generatedAt: new Date().toISOString().replace("T", " ").slice(0, 16),
+      };
+      const pdf = await generateAuditPdf(input.jobId, pdfData);
+      await database.auditJob.update({
+        where: { id: input.jobId },
+        data: { pdfUrl: pdf.pdfUrl },
+      });
+      log.info("audit.pdf.generated", {
+        jobId: input.jobId,
+        sizeKB: Math.round(pdf.pdfSize / 1024),
+      });
+    } catch (pdfError) {
+      log.error("audit.pdf.failed", {
+        jobId: input.jobId,
+        error: parseError(pdfError),
       });
     }
 

@@ -38,12 +38,12 @@ export const NextActionsCard = ({
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
       <span className="font-semibold text-[color:var(--findable-ink,#f7f8f8)]">
-        지금 할 일 보기
+        개선 실행 계획 보기
       </span>
       <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
         {brandName
-          ? `${brandName}의 측정 결과에서 효과가 큰 순서로 정리했어요`
-          : "측정 결과에서 효과가 큰 순서로 정리했어요"}
+          ? `${brandName}의 실측 근거와 함께 효과가 큰 순서로 정리했어요`
+          : "실측 근거와 함께 효과가 큰 순서로 정리했어요"}
       </span>
     </span>
     <ArrowRight

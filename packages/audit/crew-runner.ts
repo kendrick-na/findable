@@ -7,7 +7,7 @@
 // after()로 백그라운드 실행. 4 에이전트 호출은 2~10분 소요 가능.
 
 import { runCrewDiagnose } from "@repo/ai/lib/crew";
-import type { EngineResponse } from "@repo/ai/lib/engines";
+import type { CitedSource, EngineResponse } from "@repo/ai/lib/engines";
 import { resolveIndustryProfile } from "@repo/ai/lib/industry-profile";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
@@ -95,6 +95,7 @@ export async function runCrewForAuditJob(input: CrewRunInput): Promise<void> {
         isStub: boolean;
         errorMessage: string | null;
         excerpt: string;
+        citedSources?: CitedSource[];
       }>;
       metrics: {
         enginesCovered: string[];
@@ -122,7 +123,9 @@ export async function runCrewForAuditJob(input: CrewRunInput): Promise<void> {
         // 분모를 빠뜨리면 crew 재집계 때 상대위치가 사라져 점수가 조용히 내려간다.
         mentionListSize: r.mentionListSize ?? null,
         sentiment: r.sentiment,
-        citedSources: [], // 빠른 모드 result에 도메인 카운트만 있어 출처 detail 손실 — v1.1에서 raw 보존
+        // 구 버전 리포트에는 이 필드가 없으므로 빈 배열로 안전하게 폴백한다.
+        // 새 측정은 runner가 원본 출처를 보존해 수진 분석의 근거가 된다.
+        citedSources: r.citedSources ?? [],
         shareOfVoice: r.sov,
         errorMessage: r.errorMessage,
         durationMs: r.durationMs,
@@ -168,6 +171,13 @@ export async function runCrewForAuditJob(input: CrewRunInput): Promise<void> {
       isStub: crewReport.isStub,
       totalDurationMs: crewReport.totalDurationMs,
       analystCount: crewReport.analysts.length,
+      // 특정 분석가만 비는 문제를 원문·프롬프트 없이 운영 로그에서 바로 판별한다.
+      analystStates: crewReport.analysts.map((analyst) => ({
+        agentId: analyst.agentId,
+        hasOutput: Boolean(analyst.output),
+        hasRawText: Boolean(analyst.rawText),
+        hasError: Boolean(analyst.errorMessage),
+      })),
       strategistOk: Boolean(crewReport.strategist.output),
       // 자기평가 1패스 관측(2026-08-09). 이게 없으면 재작성이 실제로 도는지·채택되는지
       // 알 수 없다 — 같은 저장소가 `mentionQuality`·`promptStats` 를 계산만 하고 버려

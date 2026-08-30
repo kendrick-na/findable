@@ -14,8 +14,8 @@
 //   9. 메타 라벨 — 차분한 국문 라벨(text-xs font-medium, 2026-07-30 slop 제거)
 //  10. 한국어 본문 line-height 1.7, 본문 단색 zinc
 
-import { analytics } from "@repo/analytics";
 import { BRIEFING_FAIL_PREFIX } from "@repo/ai/lib/engines/briefing-failure";
+import { analytics } from "@repo/analytics";
 import {
   type CrewTriggerOutcome,
   trackAuditCompleted,
@@ -27,6 +27,7 @@ import {
   geoAxisScores,
   type ScoreTier,
   scoreTier,
+  successfulResponseCount,
   TIER_LABEL_EN,
   TIER_LABEL_KO,
 } from "@repo/audit/geo-score";
@@ -122,6 +123,39 @@ interface AnalystReport {
   rawText: string | null;
   role: string;
 }
+
+/**
+ * 고객 화면에서는 내부 페르소나 이름을 노출하지 않는다.
+ *
+ * `수진` 같은 이름은 Findable 내부 분석 단계의 식별자일 뿐, 고객이 만든
+ * 에이전트나 실존 컨설턴트가 아니다. 이름을 먼저 보이면 개인 에이전트의 응답을
+ * 수집·표시하는 기능으로 오해할 수 있으므로, 고객이 얻는 분석 범위로 번역한다.
+ */
+const ANALYST_PRESENTATION: Record<AnalystReport["agentId"], {
+  scopeKo: string;
+  titleKo: string;
+  scopeEn: string;
+  titleEn: string;
+}> = {
+  minji: {
+    titleKo: "국내 AI 검색 분석",
+    scopeKo: "국내 AI 응답의 브랜드 인식과 검색 맥락",
+    titleEn: "Korean AI search analysis",
+    scopeEn: "Brand recognition and search context in Korean AI responses",
+  },
+  alex: {
+    titleKo: "글로벌 AI 검색 분석",
+    scopeKo: "글로벌 AI 응답의 비교와 가시성",
+    titleEn: "Global AI search analysis",
+    scopeEn: "Comparison and visibility in global AI responses",
+  },
+  sujin: {
+    titleKo: "인용 출처 분석",
+    scopeKo: "측정 응답에 표시된 인용 출처와 도메인 신호",
+    titleEn: "Citation-source analysis",
+    scopeEn: "Cited sources and domain signals shown in measured responses",
+  },
+};
 interface StrategistReport {
   agentId: "junho";
   displayName: string;
@@ -209,6 +243,30 @@ interface RegionScoreView {
   mentionRate: number;
   region: "korea" | "global";
   score: number;
+}
+
+/**
+ * 과거 job의 문자열 매칭 순위가 언급 품질 검증 뒤에도 남아 만든
+ * `언급 0% · 평균 1위` 모순을 표시 경계에서 정리한다. 저장 원본은 감사 추적을
+ * 위해 바꾸지 않고, 새 측정은 aggregateAudit의 동일 규칙으로 처음부터 저장된다.
+ */
+function normalizeLegacyResult(result: JobResult): JobResult {
+  if (result.metrics.enginesWithMention.length > 0) {
+    return result;
+  }
+  const hasContradictoryRegion = result.regions?.some(
+    (region) => region.mentionRate > 0
+  );
+  return {
+    ...result,
+    metrics: {
+      ...result.metrics,
+      averageMentionListSize: null,
+      averageMentionPosition: null,
+      averageRelativePosition: null,
+    },
+    regions: hasContradictoryRegion ? undefined : result.regions,
+  };
 }
 
 /** packages/audit/actions.ts GeoAction 과 동일 모양(클라 컴포넌트라 타입만 재선언). */
@@ -466,6 +524,7 @@ function fiveAxisScores(metrics: JobMetrics, isKo: boolean): FiveAxisView {
     sentimentCap,
     presenceCap,
   } = geoAxisScores(metrics);
+  const answeredCount = successfulResponseCount(metrics);
 
   // 🔴 2026-08-11 (세션N-17) — 라벨·힌트가 **척도를 잘못 말하고 있었다**.
   //   실측: `recognitionRate = enginesWithMention.length / usableResponses`(geo-score.ts:170-173)
@@ -483,8 +542,8 @@ function fiveAxisScores(metrics: JobMetrics, isKo: boolean): FiveAxisView {
     //   **응답 1건당 1원소**다(화면의 "총 29회 측정"이 같은 값 — :1408). 엔진 종류 수는
     //   `enginesCoveredUnique.length`(=8) 로 별개다. 즉 이 축의 분모는 **응답 수(29)** 가 맞다.
     hint: isKo
-      ? `${metrics.enginesCovered.length}번 물어서 우리가 나온 비율`
-      : `Share of ${metrics.enginesCovered.length} answers that mentioned you`,
+      ? `실제 답변 ${answeredCount}개에서 우리가 나온 비율`
+      : `Share of ${answeredCount} successful answers that mentioned you`,
   };
 
   const dependents: AxisScore[] = [
@@ -515,13 +574,13 @@ function fiveAxisScores(metrics: JobMetrics, isKo: boolean): FiveAxisView {
   const independents: AxisScore[] = [
     {
       key: "sov",
-      labelKo: "우리 비중",
-      labelEn: "Share of Voice",
+      labelKo: "답변 등장률",
+      labelEn: "Answer appearance",
       score: sovAxis,
       max: 10,
       hint: isKo
-        ? "AI 답변에서 우리가 차지한 몫"
-        : "Category conversation share",
+        ? "성공한 AI 답변 중 우리 브랜드가 등장한 비율"
+        : "Share of successful AI answers that mention your brand",
     },
     {
       key: "competition",
@@ -577,10 +636,10 @@ function mckinseyHeadline(
       return `${brandName}, 측정한 AI ${measured}곳이 모두 우리를 말해요. 이제 어떻게 말하는지, 순위를 지키는 게 관건이에요.`;
     }
     if (sov >= 70) {
-      return `${brandName}, 점유율은 상위권(${sov}%)이지만 AI ${measured}곳 중 ${missing}곳은 아직 우리를 인용하지 않아요.`;
+      return `${brandName}, AI 답변 등장률은 ${sov}%지만 AI ${measured}곳 중 ${missing}곳은 아직 우리를 인용하지 않아요.`;
     }
     if (sov >= 40) {
-      return `${brandName}, AI 답변 점유율은 ${sov}%예요. 나머지 ${100 - sov}%는 경쟁 브랜드가 가져가고 있어요.`;
+      return `${brandName}, 성공한 AI 답변의 ${sov}%에 등장했어요. 아래에서 어떤 답변과 출처를 먼저 개선할지 확인해 보세요.`;
     }
     return `${brandName}, AI 검색에서 거의 보이지 않아요. 아래에서 무엇부터 손볼지 알려드려요.`;
   }
@@ -588,10 +647,10 @@ function mckinseyHeadline(
     return `${brandName} is cited by all ${measured} measured AI engines. Now it's about protecting rank and narrative.`;
   }
   if (sov >= 70) {
-    return `${brandName} holds a top share (${sov}%), yet ${missing} of ${measured} AI engines still don't cite you.`;
+    return `${brandName} appears in ${sov}% of successful AI answers, yet ${missing} of ${measured} AI engines still don't cite you.`;
   }
   if (sov >= 40) {
-    return `${brandName} holds ${sov}% of AI answers — competitors take the other ${100 - sov}%.`;
+    return `${brandName} appears in ${sov}% of successful AI answers. See which answers and sources to improve first.`;
   }
   return `${brandName} is nearly invisible in AI search. See below for what to fix first.`;
 }
@@ -727,16 +786,6 @@ export function AuditResultView({ jobId, locale }: Props) {
     void poll();
   }, [jobId]);
 
-  // 브리핑 트리거 성공 시: 낙관적으로 briefingStatus=processing 반영 + 폴링 재개.
-  const handleBriefingTriggered = useCallback(() => {
-    setJob((prev) =>
-      prev?.result
-        ? { ...prev, result: { ...prev.result, briefingStatus: "processing" } }
-        : prev
-    );
-    runPoll();
-  }, [runPoll]);
-
   useEffect(() => {
     pollControlRef.current.active = false;
     runPoll();
@@ -792,14 +841,14 @@ export function AuditResultView({ jobId, locale }: Props) {
   if (!job.result) {
     return <NoDataState isKo={isKo} />;
   }
+  const displayResult = normalizeLegacyResult(job.result);
 
   return (
     <>
       <CompletedView
         job={job}
         locale={locale}
-        onBriefingTriggered={handleBriefingTriggered}
-        result={job.result}
+        result={displayResult}
       />
       <ViralBar job={job} locale={locale} />
     </>
@@ -825,12 +874,12 @@ export function getLeadResultMessage(
 ): string {
   if (emailSent) {
     return isKo
-      ? "전체 리포트를 곧 메일로 보내드려요."
-      : "Full report is on its way to your inbox.";
+      ? "이 리포트를 이메일로 보내드려요."
+      : "This report is on its way to your inbox.";
   }
   return isKo
-    ? "메일 발송에 실패했어요. 전체 리포트는 이 화면에서 그대로 보실 수 있어요."
-    : "We couldn't send the email. The full report is right here on this page.";
+    ? "메일 발송에 실패했어요. 이 리포트는 지금 이 화면에서 그대로 보실 수 있어요."
+    : "We couldn't send the email. This report is right here on this page.";
 }
 
 function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
@@ -1061,7 +1110,7 @@ function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
               ) : (
                 <Mail className="h-3.5 w-3.5" />
               )}
-              {isKo ? "풀 리포트 받기" : "Send full report"}
+              {isKo ? "리포트 이메일로 받기" : "Email me this report"}
             </Button>
             <Button
               onClick={() => {
@@ -1088,7 +1137,7 @@ function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
               size="sm"
             >
               <Mail className="h-3.5 w-3.5" />
-              {isKo ? "풀 리포트 받기 · 무료" : "Get full report · Free"}
+              {isKo ? "리포트 이메일로 받기 · 무료" : "Email me this report · Free"}
             </Button>
             <Button
               className="gap-1.5"
@@ -1267,12 +1316,10 @@ function CompletedView({
   job,
   result,
   locale,
-  onBriefingTriggered,
 }: {
   job: JobResponse;
   result: JobResult;
   locale: string;
-  onBriefingTriggered: () => void;
 }) {
   const isKo = locale.startsWith("ko");
   // 계산은 `@repo/audit/measurement-coverage` 단일 진실을 쓴다(규칙 복제 금지).
@@ -1295,8 +1342,7 @@ function CompletedView({
   }
 
   return (
-    <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-8">
-      {/* main column */}
+    <div className="mx-auto max-w-5xl">
       <div className="space-y-12 pb-24 lg:pb-12">
         {/* 캐시 투명성(세션L) — 측정 시각을 숨기지 않는다. 리서치: Observatory·SSL Labs·
             PageSpeed 전부 캐시를 밝히고 재측정 경로를 준다. 숨기면 "왜 안 바뀌지?"
@@ -1326,6 +1372,7 @@ function CompletedView({
           //     **몇 개로 잰 숫자인지 그대로 적는다.** 판단은 고객이 한다.
           //   (화면이 이미 쓰는 "7개 중 1개 미인용" 패턴과 같은 방식이다.)
           measuredEngines={measured}
+          readOnly
           sov={result.metrics.sov}
         />
 
@@ -1348,21 +1395,12 @@ function CompletedView({
             무슨 관계냐"는 혼란을 만들었다. 측정 처방 먼저, 심층 분석은 그 다음. */}
         <ActionTeaser isKo={isKo} locale={locale} result={result} />
 
-        <CrewMainSection job={job} locale={locale} />
-
-        {job.crewStatus === "completed" &&
-          job.crewResult?.analysts &&
-          job.crewResult?.strategist && (
-            <CopilotChat isKo={isKo} jobId={job.jobId} />
-          )}
-
-        <NaverBriefingCard
+        <NaverBriefingReadOnlyCard
           briefingPrompt={result.briefingPrompt}
           briefingStatus={result.briefingStatus ?? "not_requested"}
           engineResponses={result.engineResponses}
           isKo={isKo}
           jobId={job.jobId}
-          onTriggered={onBriefingTriggered}
         />
 
         <NaverVsAiGap engineResponses={result.engineResponses} isKo={isKo} />
@@ -1377,15 +1415,10 @@ function CompletedView({
           <CitationSourcesPanel isKo={isKo} result={result} />
         )}
 
+        <ReportToDashboardGuide isKo={isKo} />
+
         <UpsellCard isKo={isKo} job={job} locale={locale} result={result} />
       </div>
-
-      {/* right sticky aside — Action Center (AthenaHQ +45% ROI 패턴) */}
-      <aside className="hidden lg:block">
-        <div className="sticky top-6 space-y-4">
-          <ActionCenterSticky isKo={isKo} job={job} locale={locale} />
-        </div>
-      </aside>
     </div>
   );
 }
@@ -1426,6 +1459,11 @@ function HeroSection({
   //   저건 엔진 종류 수(2곳), 이건 실패한 측정 횟수(예: 2회). 요약 줄은 "총 N회 측정"
   //   이라 응답 단위로 말하므로 여기서만 쓴다. 섞으면 분모 혼재가 다시 생긴다.
   const failedResponses = (result.metrics.errors ?? []).length;
+  const successfulResponses = successfulResponseCount(result.metrics);
+  const excludedResponses = Math.max(
+    result.metrics.enginesCovered.length - successfulResponses,
+    0
+  );
   const dedupMetrics: JobMetrics = {
     ...result.metrics,
     enginesCovered: enginesCoveredUnique,
@@ -1514,7 +1552,7 @@ function HeroSection({
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="font-medium text-[var(--brand-2)] text-xs">
-            {isKo ? "AI 노출 점수" : "GEO Score Audit"}
+            {isKo ? "AI 검색 가시성 리포트" : "AI Search Visibility Report"}
           </div>
           <div className="mt-0.5 font-medium text-xs text-zinc-400">
             {result.domain}
@@ -1565,23 +1603,58 @@ function HeroSection({
           쓴다. `erroredEnginesCount`(엔진 단위)를 쓰면 ⑥에서 고친 분모 혼재가 되살아난다. */}
       <p className="mt-2 text-sm text-zinc-400">
         {isKo
-          ? `${result.promptsCount}개 프롬프트 × ${enginesCoveredUnique.length}개 AI 엔진 · 총 ${result.metrics.enginesCovered.length}회 측정`
-          : `${result.promptsCount} prompts × ${enginesCoveredUnique.length} AI engines · ${result.metrics.enginesCovered.length} measurements`}
-        {failedResponses > 0 && (
+          ? `${result.promptsCount}개 프롬프트 × ${enginesCoveredUnique.length}개 AI 엔진 · 총 ${result.metrics.enginesCovered.length}회 시도 · 실제 답변 ${successfulResponses}개`
+          : `${result.promptsCount} prompts × ${enginesCoveredUnique.length} AI engines · ${result.metrics.enginesCovered.length} attempts · ${successfulResponses} successful answers`}
+        {excludedResponses > 0 && (
           <span className="text-[var(--signal-warn)]">
             {isKo
-              ? ` · ${failedResponses}회 실패(점수에서 제외)`
-              : ` · ${failedResponses} failed (excluded from score)`}
+              ? ` · ${excludedResponses}회 제외(오류 ${failedResponses} · 미연결 ${result.metrics.stubCount})`
+              : ` · ${excludedResponses} excluded (${failedResponses} errors · ${result.metrics.stubCount} unconnected)`}
           </span>
         )}
       </p>
+
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <div className="font-medium text-[11px] text-zinc-500 uppercase tracking-wide">
+            {isKo ? "GEO 종합 점수" : "GEO composite score"}
+          </div>
+          <div className="mt-1 flex items-baseline gap-1">
+            <span className="font-semibold text-xl text-zinc-100 tabular-nums">
+              {Math.round(totalScore)}
+            </span>
+            <span className="text-xs text-zinc-500">/ 100</span>
+          </div>
+          <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
+            {isKo
+              ? "인지·감정·노출 품질·답변 등장·경쟁 위치를 가중 합산한 진단값"
+              : "Weighted composite of recognition, sentiment, presence, appearance, and competition"}
+          </p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <div className="font-medium text-[11px] text-zinc-500 uppercase tracking-wide">
+            {isKo ? "AI 답변 등장률" : "AI answer appearance rate"}
+          </div>
+          <div className="mt-1 flex items-baseline gap-1">
+            <span className="font-semibold text-xl text-zinc-100 tabular-nums">
+              {Math.round(result.metrics.sov)}
+            </span>
+            <span className="text-xs text-zinc-500">%</span>
+          </div>
+          <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
+            {isKo
+              ? "성공한 AI 응답 중 브랜드가 한 번 이상 등장한 응답의 비율"
+              : "Share of successful AI responses that mention the brand at least once"}
+          </p>
+        </div>
+      </div>
 
       {/* Donut + 5축 분해 (HubSpot 패턴) */}
       <div className="relative mt-10 flex flex-col items-center gap-10 md:flex-row md:items-start md:gap-12">
         {/* 점수와 "그래서 좋은 거냐"를 **붙여서** 놓는다 — 티어 알약은 제목 위에 있어
             게이지와 시각적으로 분리돼 있었고, 그래서 73과 연결이 안 보였다. */}
         <div className="flex shrink-0 flex-col items-center gap-3">
-          <ScoreDonut severity={severity} value={totalScore} />
+          <ScoreDonut isKo={isKo} severity={severity} value={totalScore} />
           <p className="max-w-[14rem] text-center text-sm text-zinc-400 leading-relaxed">
             {scoreTierMeaning(totalScore, isKo)}
           </p>
@@ -1839,9 +1912,11 @@ function MarketRegionCards({
 function ScoreDonut({
   value,
   severity,
+  isKo,
 }: {
   value: number;
   severity: Severity;
+  isKo: boolean;
 }) {
   const radius = 96;
   const circumference = 2 * Math.PI * radius;
@@ -1948,9 +2023,13 @@ function ScoreDonut({
           aria-hidden="true"
           className="mt-1 font-medium text-xs text-zinc-400"
         >
-          GEO 점수
+          {isKo ? "GEO 종합 점수" : "GEO composite"}
         </span>
-        <span className="sr-only">GEO 점수 {Math.round(value)}점</span>
+        <span className="sr-only">
+          {isKo
+            ? `GEO 종합 점수 ${Math.round(value)}점`
+            : `GEO composite score ${Math.round(value)} out of 100`}
+        </span>
       </div>
     </div>
   );
@@ -2278,8 +2357,8 @@ function ActionCenterPending({
         <RotateCw className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-[var(--brand-2)]" />
         <span className="leading-relaxed">
           {isKo
-            ? "AI 마케팅팀 4명이 분석하고 있어요. 끝나면 먼저 할 일 3가지를 여기에 보여드려요."
-            : "Your AI team is analyzing. Top 3 actions will appear here."}
+            ? "심층 근거 분석 중이에요. 끝나면 먼저 할 일 3가지를 여기에 보여드려요."
+            : "Deep evidence analysis is in progress. Top 3 actions will appear here."}
         </span>
       </div>
     );
@@ -2305,7 +2384,7 @@ function ActionCenterPending({
 }
 
 function ActionCenterEmpty({ jobId, isKo }: { jobId: string; isKo: boolean }) {
-  const { triggering, triggerError, signUpRequired, handleTrigger } =
+  const { triggering, triggerError, signUpRequired, started, handleTrigger } =
     useCrewTrigger(jobId);
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr";
@@ -2339,6 +2418,22 @@ function ActionCenterEmpty({ jobId, isKo }: { jobId: string; isKo: boolean }) {
     );
   }
 
+  if (started) {
+    return (
+      <div aria-live="polite" className="mt-4">
+        <p className="flex items-center gap-2 font-semibold text-sm text-zinc-100">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--brand-2)] motion-reduce:animate-none" />
+          {isKo ? "우선순위 분석을 시작했어요" : "Priority analysis started"}
+        </p>
+        <p className="mt-1.5 text-xs text-zinc-400 leading-relaxed">
+          {isKo
+            ? "이 리포트가 곧 갱신되고, 결과는 여기와 본문의 ‘먼저 할 일’에 저장돼요. 보통 3~5분 걸려요."
+            : "This report will refresh. Results are saved here and under Prioritized actions in the report. Usually 3-5 minutes."}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-4">
       <p className="font-semibold text-sm text-zinc-100 leading-relaxed">
@@ -2368,7 +2463,9 @@ function ActionCenterEmpty({ jobId, isKo }: { jobId: string; isKo: boolean }) {
             <Sparkles className="h-3.5 w-3.5" />
             {/* 🔴 세션N-25 — 예전 라벨 `할 일 뽑기 · 무료`. 서버는 1회만 허용하므로
                 횟수를 밝힌다(AthenaHQ 최대 불만 = "크레딧 소진 예측 불가"). */}
-            {isKo ? "할 일 뽑기 · 무료 1회" : "Get my actions · 1 free"}
+            {isKo
+              ? "심층 근거 분석 시작 · 무료 1회"
+              : "Start priority analysis · 1 free"}
           </>
         )}
       </Button>
@@ -2408,6 +2505,7 @@ function LegacyCrewNotice({ locale, isKo }: { locale: string; isKo: boolean }) {
 function useCrewTrigger(jobId: string) {
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState<string | null>(null);
+  const [started, setStarted] = useState(false);
   // 🔴 2026-08-12 세션N-25 — "무료 체험 소진"은 **에러가 아니라 다음 단계**다.
   //   예전에는 모든 실패를 빨간 에러 문자열 하나로 뭉개서, 무료 사용자가
   //   *"무료"* 라고 적힌 버튼을 누르면 빨간 경고를 받았다(신뢰 파괴).
@@ -2449,7 +2547,9 @@ function useCrewTrigger(jobId: string) {
         return;
       }
       trackCrewTriggered({ outcome: "started" });
-      setTimeout(() => setTriggering(false), 1500);
+      setStarted(true);
+      setTriggering(false);
+      window.setTimeout(() => window.location.reload(), 1200);
     } catch (err) {
       setTriggerError(err instanceof Error ? err.message : String(err));
       trackCrewTriggered({ outcome: "error" });
@@ -2457,7 +2557,13 @@ function useCrewTrigger(jobId: string) {
     }
   }
 
-  return { triggering, triggerError, signUpRequired, handleTrigger };
+  return {
+    triggering,
+    triggerError,
+    signUpRequired,
+    started,
+    handleTrigger,
+  };
 }
 
 /**
@@ -2574,13 +2680,17 @@ function CrewTriggerCard({
   isKo: boolean;
   emailMasked: string | null;
 }) {
-  const { triggering, triggerError, signUpRequired, handleTrigger } =
+  const { triggering, triggerError, signUpRequired, started, handleTrigger } =
     useCrewTrigger(jobId);
 
   // 🔴 2026-08-12 세션N-25 — 무료 체험을 다 쓴 상태는 **에러가 아니라 다음 단계**다.
   //   빨간 경고 대신 가입 경로를 준다. (예전엔 여기가 빨간 ⚠ 문구였다.)
   if (signUpRequired) {
     return <CrewSignUpCard emailMasked={emailMasked} isKo={isKo} />;
+  }
+
+  if (started) {
+    return <CrewProcessingCard isKo={isKo} />;
   }
 
   return (
@@ -2601,13 +2711,13 @@ function CrewTriggerCard({
           </div>
           <h3 className="mt-3 font-bold text-xl text-zinc-50">
             {isKo
-              ? "AI 마케팅팀 4명에게 깊이 있는 분석 받기"
-              : "Get deep analysis from 4 AI marketing analysts"}
+              ? "측정 근거를 바탕으로 우선순위 분석 받기"
+              : "Get a prioritized analysis grounded in this measurement"}
           </h3>
           <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
             {isKo
-              ? "AI 에이전트 4개(한국 GEO·글로벌 비교·인용 출처·실행 전략)가 위 데이터를 분석해서 이번 주에 할 수 있는 일 1개를 뽑아드려요. 가입 없이 지금 한 번 받아보실 수 있어요. 약 3~5분."
-              : "Four AI agents (Korean GEO · global benchmark · citations · strategy) analyze the data above and propose one action you can ship this week. One run, no sign-up needed. ~3-5 min."}
+              ? "위에서 측정한 AI 답변과 인용 출처를 교차 검토해, 먼저 할 일과 우선순위 액션을 정리해요. 개인 계정·외부 에이전트 대화에는 접근하지 않으며, 결과는 이 리포트에 저장됩니다. 가입 없이 한 번 받아볼 수 있고 약 3~5분 걸려요."
+              : "We cross-check the measured AI replies and citations to prioritize actions. We do not access private accounts or external agent conversations. Results are saved in this report. One run without sign-up, usually 3-5 minutes."}
           </p>
           {triggerError && (
             <p className="mt-3 text-red-400 text-sm">⚠ {triggerError}</p>
@@ -2630,7 +2740,7 @@ function CrewTriggerCard({
                     누르라고 하는데 버튼은 "4 에이전트 분석 시작"이어서 **없는 버튼을 찾게 만들었다**.
                     "4 에이전트"는 내부 구조 용어이기도 하다 —
                     Stripe 규칙 *"라벨은 시스템 구조가 아니라 사용자 의도"*("Chargeback Events"❌→"Disputes"○). */}
-                {isKo ? "AI 마케팅팀 분석 시작" : "Start 4-agent analysis"}
+                {isKo ? "우선순위 분석 시작" : "Start priority analysis"}
               </>
             )}
           </Button>
@@ -2648,8 +2758,8 @@ function CrewProcessingCard({ isKo }: { isKo: boolean }) {
         <div>
           <h3 className="font-bold text-lg text-zinc-50">
             {isKo
-              ? "AI 마케팅팀이 분석하고 있어요…"
-              : "Your AI team is analyzing…"}
+              ? "심층 근거 분석 중이에요…"
+              : "Deep evidence analysis is in progress…"}
           </h3>
           <p className="mt-1 text-sm text-zinc-400">
             {isKo ? "3~5분쯤 걸려요." : "Takes about 3-5 minutes."}
@@ -2710,6 +2820,59 @@ function CrewFailedCard({ jobId, isKo }: { jobId: string; isKo: boolean }) {
 //   본류 7 엔진과 분리. Browserbase 클라우드 크롬 사용 (느림)이라 버튼으로만 트리거.
 //   briefingStatus별로 트리거/진행중/완료/실패 뷰. CrewTriggerCard 패턴 미러.
 // ──────────────────────────────────────────────────────────────────
+
+/**
+ * 공개 리포트에서는 새 작업을 만들지 않는다. 로그인 브랜드 측정은 runner 가 별도
+ * 검색 축으로 자동 실행하며, 이 카드는 완료된 결과만 읽기 전용으로 보여준다.
+ */
+function NaverBriefingReadOnlyCard({
+  jobId,
+  briefingStatus,
+  briefingPrompt,
+  engineResponses,
+  isKo,
+}: {
+  jobId: string;
+  briefingStatus: BriefingStatus;
+  briefingPrompt?: string;
+  engineResponses: JobResult["engineResponses"];
+  isKo: boolean;
+}) {
+  if (briefingStatus === "completed") {
+    return (
+      <NaverBriefingCompletedCard
+        briefingPrompt={briefingPrompt}
+        engineResponses={engineResponses}
+        isKo={isKo}
+        jobId={jobId}
+      />
+    );
+  }
+
+  return (
+    <section className="rounded-2xl border border-white/10 bg-zinc-900/50 p-6 md:p-8">
+      <p className="font-medium text-[var(--brand-2)] text-xs">
+        {isKo ? "네이버 검색 맥락" : "Naver search context"}
+      </p>
+      <h2 className="mt-2 font-semibold text-xl text-zinc-100">
+        {isKo
+          ? "네이버 AI 브리핑은 핵심 GEO 점수와 별도로 관리합니다"
+          : "Naver AI Briefing is tracked separately from the core GEO score"}
+      </h2>
+      <p className="mt-2 max-w-2xl text-sm text-zinc-400 leading-relaxed">
+        {isKo
+          ? "추천·비교 질문을 쓰는 핵심 7엔진과 달리, 네이버 AI 브리핑은 검색 결과의 효과·후기·장단점 질문을 확인합니다. 그래서 같은 분모에 섞지 않습니다. 로그인 후 브랜드 측정에서는 자동으로 확인하고 대시보드에서 회차별로 비교할 수 있어요."
+          : "Unlike the core seven recommendation and comparison engines, Naver AI Briefing checks a search-result query about benefits, reviews, and trade-offs. It stays out of the same denominator. Authenticated brand measurements run it automatically and compare it by run in the dashboard."}
+      </p>
+      <a
+        className="mt-4 inline-flex text-sm text-[var(--brand-2)] hover:underline"
+        href="https://app.findable.co.kr/"
+      >
+        {isKo ? "대시보드에서 측정 관리하기 →" : "Manage measurements in dashboard →"}
+      </a>
+    </section>
+  );
+}
 
 function NaverBriefingCard({
   jobId,
@@ -2919,9 +3082,7 @@ export function BriefingNotSurfaced({
     return (
       <div className="mt-3 rounded-xl border border-zinc-700 bg-zinc-900/50 p-4">
         <p className="font-semibold text-sm text-zinc-200">
-          {isKo
-            ? "이번엔 측정하지 못했어요"
-            : "We couldn't measure this time"}
+          {isKo ? "이번엔 측정하지 못했어요" : "We couldn't measure this time"}
         </p>
         <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">
           {isKo
@@ -3146,6 +3307,7 @@ function SecondaryActionsGrid({
 
 function ActionCard({ action, isKo }: { action: ActionItem; isKo: boolean }) {
   const channelLabel = CHANNEL_LABELS[action.channel] ?? action.channel;
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <motion.div
@@ -3170,12 +3332,45 @@ function ActionCard({ action, isKo }: { action: ActionItem; isKo: boolean }) {
           {channelLabel}
         </span>
       </div>
-      <h3 className="mt-3 line-clamp-3 font-semibold text-base text-zinc-50 leading-snug">
+      <h3
+        className={`mt-3 font-semibold text-base text-zinc-50 leading-snug ${
+          expanded ? "" : "line-clamp-3"
+        }`}
+      >
         {action.title}
       </h3>
-      <p className="mt-2 line-clamp-3 text-sm text-zinc-400 leading-relaxed">
+      <p
+        className={`mt-2 text-sm text-zinc-400 leading-relaxed ${
+          expanded ? "" : "line-clamp-3"
+        }`}
+      >
         {action.rationale}
       </p>
+      {expanded && action.steps.length > 0 && (
+        <ol className="mt-4 list-decimal space-y-1.5 border-white/10 border-t pl-5 pt-4 text-sm text-zinc-300 leading-relaxed">
+          {action.steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      )}
+      <button
+        aria-expanded={expanded}
+        className="mt-3 text-[var(--brand-2)] text-xs underline underline-offset-2 hover:text-zinc-200"
+        onClick={() => setExpanded((value) => !value)}
+        type="button"
+      >
+        {isKo
+          ? expanded
+            ? "간단히 보기"
+            : action.steps.length > 0
+              ? "근거와 실행 방법 보기"
+              : "근거 전체 보기"
+          : expanded
+            ? "Show less"
+            : action.steps.length > 0
+              ? "View rationale and steps"
+              : "View full rationale"}
+      </button>
       <div className="mt-4 flex items-center justify-between border-white/5 border-t pt-3 text-xs">
         {/* 🔴 S7-2차(2026-08-11) — `임팩트 4/5`·`노력 2/5` 만 있고 **5가 뭘 뜻하는지
             화면에 없었다**. 카드 3장을 비교하려면 축을 알아야 한다 → 각 항목에 설명을
@@ -3248,8 +3443,13 @@ function AnalystsSection({
     <section>
       <div className="mb-5 flex items-center gap-2 font-medium text-xs text-zinc-400">
         <Users className="h-3.5 w-3.5" />
-        {isKo ? "분석가 리포트" : "Analyst Reports"}
+        {isKo ? "심층 분석 근거" : "Deep-analysis evidence"}
       </div>
+      <p className="mb-4 max-w-3xl text-sm text-zinc-400 leading-relaxed">
+        {isKo
+          ? "등록 도메인의 공개 정보, 위에서 측정한 AI 답변, 답변에 표시된 인용 출처만 분석합니다. 개인 계정, 프롬프트, 외부 에이전트 대화에는 접근하지 않습니다."
+          : "This analyzes only public information from the registered domain, the AI responses measured above, and citations shown in those responses. It does not access private accounts, prompts, or external-agent conversations."}
+      </p>
       <div className="space-y-3">
         {analysts.map((a) => (
           <AnalystAccordion isKo={isKo} key={a.agentId} report={a} />
@@ -3266,8 +3466,11 @@ function AnalystAccordion({
   report: AnalystReport;
   isKo: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  // 결과를 만들지 못했으면 접힌 카드 안에 숨기지 않는다. 사용자는 "아직 분석 중"으로
+  // 오해하지 않고 즉시 재시도/문의할 근거를 본다.
+  const [open, setOpen] = useState(() => !report.output || Boolean(report.errorMessage));
   const out = report.output;
+  const presentation = ANALYST_PRESENTATION[report.agentId];
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900/60 backdrop-blur-sm">
@@ -3280,10 +3483,10 @@ function AnalystAccordion({
           <span className="text-xl">{report.emoji}</span>
           <div>
             <div className="font-semibold text-sm text-zinc-100">
-              {report.displayName}
+              {isKo ? presentation.titleKo : presentation.titleEn}
             </div>
             <div className="font-medium text-xs text-zinc-400">
-              {report.role}
+              {isKo ? presentation.scopeKo : presentation.scopeEn}
             </div>
           </div>
         </div>
@@ -3295,6 +3498,11 @@ function AnalystAccordion({
           )}
           {report.errorMessage && (
             <span className="text-red-400 text-xs">⚠ 오류</span>
+          )}
+          {!out && !report.errorMessage && (
+            <span className="text-amber-300 text-xs">
+              {isKo ? "결과 없음" : "No result"}
+            </span>
           )}
           <ChevronDown
             className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`}
@@ -3342,7 +3550,9 @@ function AnalystAccordion({
             </div>
           ) : (
             <p className="text-sm text-zinc-400">
-              {isKo ? "응답이 없어요." : "No response."}
+              {isKo
+                ? "이번 심층 분석 결과를 만들지 못했습니다. 위의 AI 응답과 인용 출처는 별도로 확인할 수 있습니다."
+                : "This deep-analysis result could not be generated. You can still review the AI responses and citations above."}
             </p>
           )}
         </div>
@@ -3485,8 +3695,15 @@ function EnginesTabsSection({
 
   return (
     <section>
-      <div className="mb-5 flex items-center gap-2 font-medium text-xs text-zinc-400">
-        {isKo ? "엔진별 응답" : "Engine Responses"}
+      <div className="mb-5">
+        <div className="font-medium text-xs text-zinc-400">
+          {isKo ? "엔진별 대표 응답" : "Representative response by engine"}
+        </div>
+        <p className="mt-1.5 text-xs text-zinc-500 leading-relaxed">
+          {isKo
+            ? `이 리포트에는 엔진마다 대표 응답 1개를 보여드려요. ${result.promptsCount}개 질문별 전체 원문·날짜별 변화는 가입 후 대시보드의 ‘추적 질문’에서 관리할 수 있어요.`
+            : `This report shows one representative response per engine. Manage all responses across ${result.promptsCount} prompts and dates in the dashboard after sign-up.`}
+        </p>
       </div>
       <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900/60 backdrop-blur-sm">
         {/* 🔴 세션N-28 ② — 모바일에서 탭이 **가로 스크롤로 잘려 있었다**.
@@ -4029,7 +4246,38 @@ function ActionTeaser({
   locale: string;
   result: JobResult;
 }) {
-  const actions = result.geoActions ?? [];
+  const storedActions = result.geoActions ?? [];
+  const mentionedEngines = new Set(result.metrics.enginesWithMention).size;
+  // 구 진단 일부는 언급 품질 검증에서 false positive가 제외된 뒤에도, 검증 전
+  // 순위로 만든 `rank_strategy`/부분 언급 처방을 JSON에 보존하고 있다. 최신 지표가
+  // 0건인데 "평균 1위"·"2곳 중 1곳"을 다시 그리지 않도록 표시 시점에 정합화한다.
+  const actions: GeoActionView[] =
+    mentionedEngines === 0
+      ? [
+          {
+            kind: "content_fix",
+            priority: 3,
+            title: isKo
+              ? "AI가 브랜드를 아직 확인하지 못했습니다 — 검증 가능한 사실부터 만드세요"
+              : "AI cannot verify the brand yet — establish verifiable facts first",
+            evidence: isKo
+              ? `이번 진단에서 ${result.brandName}${objectParticle(result.brandName)} 실제 브랜드로 확인한 AI는 0곳입니다.`
+              : `No measured AI verified ${result.brandName} as the actual brand in this audit.`,
+            how: isKo
+              ? "공식 사이트에 회사명·제공 서비스·대표 사례·연락처를 명확히 적고, 동일한 사실을 확인할 수 있는 신뢰도 높은 제3자 출처를 확보하세요. 질문의 전제를 반복한 AI 답변은 인지로 계산하지 않습니다."
+              : "State the company name, services, representative work, and contact details clearly on the official site, then secure credible third-party sources that verify the same facts. Answers that merely repeat the question's premise do not count as recognition.",
+            source: isKo
+              ? "언급 품질 검증을 통과한 측정 응답"
+              : "Measured responses that passed mention-quality verification",
+          },
+          ...storedActions.filter(
+            (action) =>
+              action.kind !== "rank_strategy" &&
+              action.kind !== "prompt_gap" &&
+              action.kind !== "content_fix"
+          ),
+        ]
+      : storedActions;
   if (actions.length === 0) {
     return null;
   }
@@ -4076,8 +4324,8 @@ function ActionTeaser({
           무슨 뜻인지 모른다. 두 묶음이 **무엇으로 갈리는지**를 그대로 말한다. */}
       <p className="mb-5 text-sm text-zinc-400">
         {isKo
-          ? "위 측정 숫자가 바로 가리키는 처방이에요. 아래 'AI 분석팀' 제안은 AI가 따로 검토해 제안한 것이라 근거가 달라요."
-          : "Prescriptions derived directly from the measurement above. The AI analyst suggestions below come from a separate review, so their basis differs."}
+          ? "이번 회차의 측정 결과에서 바로 나온 개선 과제입니다. 실행과 재측정 관리는 대시보드에서 이어갈 수 있어요."
+          : "These are the improvement tasks directly derived from this measurement. Continue execution and remeasurement in the dashboard."}
       </p>
       <SpotlightCard className="p-6 md:p-8">
         <div className="flex items-start gap-3">
@@ -4156,6 +4404,39 @@ function ActionTeaser({
 // ──────────────────────────────────────────────────────────────────
 // Upsell
 // ──────────────────────────────────────────────────────────────────
+
+/** 무료 리포트와 로그인 대시보드의 역할을 한 화면에서 분리한다. */
+function ReportToDashboardGuide({ isKo }: { isKo: boolean }) {
+  return (
+    <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5 md:p-6">
+      <h2 className="font-semibold text-base text-zinc-100">
+        {isKo ? "이 리포트와 대시보드는 이렇게 이어집니다" : "How this report continues in the dashboard"}
+      </h2>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border border-white/10 bg-zinc-900/50 p-4">
+          <p className="font-medium text-sm text-zinc-100">
+            {isKo ? "지금 보고 있는 리포트" : "This report"}
+          </p>
+          <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">
+            {isKo
+              ? "한 시점에 AI가 브랜드를 어떻게 답했는지와, 그 답변의 인용 출처·우선 처방을 보여줍니다. 사이트 SEO 기술 진단 결과는 포함하지 않습니다."
+              : "Shows a point-in-time AI answer, citations, and prioritized recommendations. It does not include a technical SEO site audit."}
+          </p>
+        </div>
+        <div className="rounded-lg border border-[var(--brand-2)]/20 bg-[var(--brand-2)]/5 p-4">
+          <p className="font-medium text-sm text-zinc-100">
+            {isKo ? "가입 후 대시보드" : "Dashboard after sign-up"}
+          </p>
+          <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">
+            {isKo
+              ? "질문별 전체 원문과 날짜별 추세를 비교하고, 사이트 준비도(SEO·GEO), 개선 실행 항목, 재측정 결과를 한 브랜드 기준으로 관리합니다."
+              : "Compare full answers by prompt and date, then manage site readiness, actions, and remeasurement for one brand."}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 /**
  * 업셀 카피 — 인지 상태 3분기(전무/일부/전부)로 각각 성립하는 문장을 만든다.
@@ -4320,13 +4601,20 @@ function UpsellCard({
   return (
     <SpotlightCard border="brand" className="p-6 md:p-10">
       <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 font-medium text-[11px] text-zinc-400">
-        {isKo ? "지금 보신 건 오늘 하루의 스냅샷" : "This is today's snapshot"}
+        {isKo
+          ? "이 리포트는 오늘 측정한 한 시점의 결과입니다"
+          : "This report is a point-in-time measurement"}
       </div>
       <h3 className="mt-4 font-bold text-xl text-zinc-50 md:text-2xl">
         {headline}
       </h3>
       <p className="mt-3 max-w-2xl text-sm text-zinc-400 leading-relaxed">
         {bodyCopy}
+      </p>
+      <p className="mt-3 max-w-2xl text-sm text-zinc-400 leading-relaxed">
+        {isKo
+          ? "대시보드에서는 이 기준점을 이어서 브랜드별 추세, 여러 프롬프트·엔진의 원문, 사이트 준비도, 실행 항목과 재측정 결과를 관리할 수 있어요."
+          : "In the dashboard, continue from this baseline with brand trends, full responses across prompts and engines, site readiness, actions, and re-measurement results."}
       </p>
 
       {/* 장치 A — 결과 소유권 연결. 이 안내가 없으면 다른 이메일로 가입해 결과를 잃는다. */}

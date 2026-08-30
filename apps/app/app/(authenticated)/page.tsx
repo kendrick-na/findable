@@ -1,10 +1,12 @@
-import { isPaid } from "@repo/auth/plan";
+import { isUsableRun } from "@repo/audit/run-quality";
+import { hasPlan, isPaid } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth, currentUser } from "@repo/auth/server";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import {
   scopedAnnotations,
   scopedLatestRunTracking,
@@ -14,7 +16,15 @@ import { hasCompletedSetup } from "@/lib/onboarding";
 import { BrandSwitcher } from "./components/brand-switcher";
 import { DashboardEmptyState } from "./components/dashboard-empty-state-server";
 import { DashboardKpis } from "./components/dashboard-kpis";
+import { DashboardImpactEstimate } from "./components/dashboard-impact-estimate";
+import { DashboardDeepAnalysis } from "./components/dashboard-deep-analysis";
+import { DashboardRunContext } from "./components/dashboard-run-context";
+import {
+  DashboardSystemStatus,
+  DashboardSystemStatusSkeleton,
+} from "./components/dashboard-system-status";
 import { Header } from "./components/header";
+import { auditJobScope } from "./lib/audit-job-scope";
 import { NextActionsCard } from "./components/next-actions-card";
 import { OnboardingTour } from "./components/onboarding-tour";
 import { PartnerCTA } from "./components/partner-cta";
@@ -44,6 +54,106 @@ interface AppProperties {
   searchParams: Promise<{ brand?: string }>;
 }
 
+const DashboardNoResultState = ({
+  activeJobId,
+  failedJobId,
+  unavailableJobId,
+  signedInEmail,
+}: {
+  activeJobId?: string;
+  failedJobId?: string;
+  unavailableJobId?: string;
+  signedInEmail: string | null;
+}) => {
+  if (activeJobId) {
+    return (
+      <section className="findable-card flex min-h-[360px] flex-col items-center justify-center gap-4 p-8 text-center">
+        <div
+          aria-hidden="true"
+          className="size-3 animate-pulse rounded-full bg-[color:var(--findable-primary,#ff7a4d)] motion-reduce:animate-none"
+        />
+        <div>
+          <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
+            첫 측정을 진행하고 있어요
+          </h1>
+          <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
+            브랜드 설정은 완료됐어요. AI 답변을 수집한 뒤 이 대시보드와 측정
+            이력에 결과가 쌓입니다.
+          </p>
+        </div>
+        <Link
+          className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
+          href={`/brand/measuring?job=${activeJobId}`}
+        >
+          실시간 상태 보기
+        </Link>
+      </section>
+    );
+  }
+
+  if (failedJobId) {
+    return (
+      <section className="findable-card flex min-h-[360px] flex-col items-center justify-center gap-4 p-8 text-center">
+        <div>
+          <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
+            브랜드 설정은 완료됐지만 첫 측정에 실패했어요
+          </h1>
+          <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
+            브랜드를 다시 입력할 필요는 없어요. 실패 사유를 확인한 뒤 기존
+            브랜드에서 측정만 다시 시작하세요.
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Link
+            className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
+            href={`/history/${failedJobId}`}
+          >
+            실패 사유 보기
+          </Link>
+          <Link
+            className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
+            href="/brand"
+          >
+            브랜드에서 다시 측정
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
+  if (unavailableJobId) {
+    return (
+      <section className="findable-card flex min-h-[360px] flex-col items-center justify-center gap-4 p-8 text-center">
+        <div>
+          <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
+            측정 요청은 끝났지만 AI 응답을 받지 못했어요
+          </h1>
+          <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
+            0점이나 미노출이라는 뜻이 아니에요. 연결된 AI 응답이 없어 이번
+            회차의 점수와 할 일을 만들 수 없습니다.
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Link
+            className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
+            href={`/history/${unavailableJobId}`}
+          >
+            측정 상세 보기
+          </Link>
+          <Link
+            className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
+            href="/brand"
+          >
+            브랜드에서 다시 측정
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
+  return <DashboardEmptyState signedInEmail={signedInEmail} />;
+};
+
 const App = async ({ searchParams }: AppProperties) => {
   const { brand: selectedBrandId } = await searchParams;
   const user = await currentUser();
@@ -54,13 +164,7 @@ const App = async ({ searchParams }: AppProperties) => {
   }
   const plan = await getCurrentPlan();
 
-  // 내 측정 = 이메일로 실행한 무료진단(www) ∪ 조직으로 실행한 측정(app).
-  // org 측정은 8-b FK(organizationId)가 정식 연결이고, email=`org:${orgId}` 프리픽스는
-  // FK 이전(backfill 전) 레거시 행 커버용으로 남긴다.
-  const identifiers = [
-    ...(email ? [email] : []),
-    ...(orgId ? [`org:${orgId}`] : []),
-  ];
+  // 조직 선택 중에는 조직 측정만 읽는다. 이메일 무료진단은 조직이 없을 때만 폴백한다.
   // 🔴🔴 **무거운 `result`(Json)를 조건부로만 읽는다** (2026-08-17 세션N-39 실측).
   //   [실측] 이 쿼리 하나가 **6,293ms** — 대시보드 서버 대기의 **83%** 였다.
   //     20행에 `result` Json 이 **837KB**(행당 42KB) 붙어 나온다.
@@ -71,15 +175,10 @@ const App = async ({ searchParams }: AppProperties) => {
   //     → 실사용 경로에서 837KB 는 **전량 낭비**였다. 나머지 2개는 AuditJob 도 0건.
   //   ⚠️ 폴백을 없애는 게 아니다 — **필요할 때만** 무거운 컬럼을 읽는다.
   //     `hasData`·`buildDashboardData` 계약은 그대로다.
-  const JOB_WHERE = {
-    OR: [
-      { email: { in: identifiers } },
-      ...(orgId ? [{ organizationId: orgId }] : []),
-    ],
-  };
+  const JOB_WHERE = auditJobScope(email, orgId);
   // 1차: 가벼운 컬럼만(= 화면이 Tracking 경로로 갈 때 필요한 전부).
   const jobsLite =
-    identifiers.length > 0
+    JOB_WHERE
       ? await database.auditJob.findMany({
           where: JOB_WHERE,
           select: {
@@ -117,7 +216,7 @@ const App = async ({ searchParams }: AppProperties) => {
   // 2차: **Tracking 이 비어 폴백이 실제로 필요할 때만** 무거운 `result` 를 읽는다.
   //   여기 오는 경우 = 무료 email 진단만 있는 유저 · dual-write 롤백 시(주석 위 §참조).
   const jobsWithResult =
-    trackingData === null && jobsLite.length > 0
+    trackingData === null && jobsLite.length > 0 && JOB_WHERE
       ? await database.auditJob.findMany({
           where: JOB_WHERE,
           orderBy: { createdAt: "desc" },
@@ -125,6 +224,30 @@ const App = async ({ searchParams }: AppProperties) => {
         })
       : null;
   const data = trackingData ?? buildDashboardData(jobsWithResult ?? []);
+  // Tracking 한 회차는 runner 가 AuditJob.completedAt 과 동일한 trackedAt 을 기록한다.
+  // 이 연결을 화면에도 유지해야 리포트와 대시보드가 서로 다른 회차를 말하지 않는다.
+  const currentRunJob = data.latestBrandId && data.latestMeasuredAt
+    ? jobsLite.find(
+        (job) =>
+          job.status === "completed" &&
+          job.brandId === data.latestBrandId &&
+          job.completedAt?.getTime() === data.latestMeasuredAt?.getTime()
+      )
+    : null;
+  // 생성형 분석도 반드시 현재 대시보드 회차에만 붙인다. 최신 브랜드의 다른 과거
+  // 결과를 가져오면 점수와 분석 근거가 서로 다른 회차가 되는 오류가 재발한다.
+  const currentRunAnalysis = currentRunJob
+    ? await database.auditJob.findFirst({
+        where: { id: currentRunJob.id, ...(JOB_WHERE ?? {}) },
+        select: { crewResult: true, crewStatus: true },
+      })
+    : null;
+  const latestCompletedJob = jobsWithResult?.find(
+    (job) => job.status === "completed"
+  );
+  const hasUsableResult =
+    trackingData !== null ||
+    Boolean(latestCompletedJob && isUsableRun(latestCompletedJob.result));
 
   // 「진실의 거울」 — 답변 원문은 **최신 1회차만** 읽는다(v4 탭7 · N-37).
   //   ⚠️ 위 `scopedTracking()`(1400행)에 `rawResponse` 를 얹지 않는다 —
@@ -135,7 +258,14 @@ const App = async ({ searchParams }: AppProperties) => {
     ? await scopedLatestRunTracking(data.latestBrandId ?? undefined)
     : [];
   const truthMirror = buildTruthMirrorData(latestRun);
-  const hasData = trackingData !== null || jobsLite.length > 0;
+  const activeJob = jobsLite.find(
+    (job) => job.status === "queued" || job.status === "processing"
+  );
+  const latestFailedJob = activeJob
+    ? undefined
+    : jobsLite.find((job) => job.status === "failed");
+  const hasData =
+    trackingData !== null || jobsLite.some((job) => job.status === "completed");
 
   // 추세 주석(감사 D2) — 화면이 보고 있는 브랜드 것만. 브랜드가 없으면(AuditJob 폴백) 빈 배열.
   const annotations = data.latestBrandId
@@ -146,7 +276,30 @@ const App = async ({ searchParams }: AppProperties) => {
     <>
       <Header page="대시보드" pages={["Findable"]} />
       <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
-        {hasData ? (
+        {activeJob && hasData && hasUsableResult ? (
+          <section
+            aria-live="polite"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[color:var(--findable-primary,#ff7a4d)]/35 bg-[color:var(--findable-primary,#ff7a4d)]/5 p-4"
+          >
+            <div>
+              <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+                새 측정을 진행하고 있어요
+              </p>
+              <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+                지금 보이는 값은 이전 완료 결과예요. 새 결과가 끝나면 자동으로
+                이력에 쌓여요.
+              </p>
+            </div>
+            <Link
+              className="text-[color:var(--findable-primary,#ff7a4d)] text-sm"
+              href={`/brand/measuring?job=${activeJob.id}`}
+            >
+              실시간 상태 보기 →
+            </Link>
+          </section>
+        ) : null}
+
+        {hasData && hasUsableResult ? (
           <>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex flex-col gap-1">
@@ -155,7 +308,7 @@ const App = async ({ searchParams }: AppProperties) => {
                 </h1>
                 <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
                   {data.latestBrandName
-                    ? `AI가 ${data.latestBrandName}을 어떻게 말하는지 모았어요.`
+                    ? `AI가 ‘${data.latestBrandName}’ 브랜드를 어떻게 말하는지 모았어요.`
                     : "AI가 내 브랜드를 어떻게 말하는지 모았어요."}
                 </p>
               </div>
@@ -177,6 +330,12 @@ const App = async ({ searchParams }: AppProperties) => {
               />
             ) : null}
 
+            <DashboardRunContext
+              brandName={data.latestBrandName}
+              jobId={currentRunJob?.id ?? null}
+              measuredAt={data.latestMeasuredAt}
+            />
+
             {/* D6: 히어로 카드 → 목적지. paid 는 잠긴 목적지를 **클릭 전에** 알리는 용도
                 (게이팅 판정 자체는 각 목적지 페이지가 서버에서 다시 한다).
                 🔴 2026-08-21(11번) — `id="tour-kpis"` 는 대시보드 첫 진입 가이드
@@ -186,10 +345,33 @@ const App = async ({ searchParams }: AppProperties) => {
               <DashboardKpis data={data} paid={isPaid(plan)} />
             </div>
 
+            {data.coverage && data.latestSov !== null ? (
+              <DashboardImpactEstimate
+                coverage={data.coverage}
+                sov={data.latestSov}
+              />
+            ) : null}
+
+            {data.latestBrandId && orgId ? (
+              <Suspense fallback={<DashboardSystemStatusSkeleton />}>
+                <DashboardSystemStatus
+                  brandId={data.latestBrandId}
+                  canAudit={hasPlan(plan, "growth")}
+                  organizationId={orgId}
+                />
+              </Suspense>
+            ) : null}
+
             {/* 기획서 §4-1 섹션순서 2번 — 처방을 1급 시민으로(리서치 "진짜 공백=처방"). */}
             <div id="tour-actions">
               <NextActionsCard brandName={data.latestBrandName} />
             </div>
+
+            <DashboardDeepAnalysis
+              crewResult={currentRunAnalysis?.crewResult as never ?? null}
+              crewStatus={currentRunAnalysis?.crewStatus ?? "not_requested"}
+              jobId={currentRunJob?.id ?? null}
+            />
 
             <div id="tour-trend">
               <SovTrendChart
@@ -270,7 +452,14 @@ const App = async ({ searchParams }: AppProperties) => {
              업그레이드 유도는 **측정 결과를 본 직후**가 가장 설득력 있다(가치 경험 후 전환)
              — 그 자리(위 `hasData` 분기)에는 그대로 남아 있다.
              ⚠️ 파는 것을 **지운 게 아니라 옮긴 것**이다. 되살리지 말 것. */
-          <DashboardEmptyState signedInEmail={email} />
+          <DashboardNoResultState
+            activeJobId={activeJob?.id}
+            failedJobId={latestFailedJob?.id}
+            signedInEmail={email}
+            unavailableJobId={
+              hasData && !hasUsableResult ? latestCompletedJob?.id : undefined
+            }
+          />
         )}
       </div>
     </>

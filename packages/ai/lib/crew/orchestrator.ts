@@ -264,10 +264,13 @@ async function generateAnalyst(
         structuredOutput: { schema: analystOutputSchema },
       })
     );
-    // Mastra의 structuredOutput 응답: { object: T, text: string, ... }
-    const r = result as unknown as { object?: AnalystOutput; text?: string };
-    if (r.object) {
-      return { output: r.object, rawText: null, errorMessage: null };
+    // 제공자·SDK 버전에 따라 structured output 이 object가 아니라 JSON text로
+    // 돌아오는 경우가 있다. 이전 구현은 이 정상 응답을 통째로 "파싱 실패"로
+    // 처리해 특정 분석가 카드가 비는 원인이 됐다.
+    const r = result as unknown as { object?: unknown; text?: string };
+    const parsed = parseAnalystOutput(r.object, r.text);
+    if (parsed) {
+      return { output: parsed, rawText: null, errorMessage: null };
     }
     return {
       output: null,
@@ -280,6 +283,32 @@ async function generateAnalyst(
       rawText: null,
       errorMessage: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+/** object 응답과 JSON 텍스트 응답을 같은 스키마로 검증한다. */
+function parseAnalystOutput(
+  object: unknown,
+  text: string | undefined
+): AnalystOutput | null {
+  const fromObject = analystOutputSchema.safeParse(object);
+  if (fromObject.success) {
+    return fromObject.data;
+  }
+  if (!text) {
+    return null;
+  }
+
+  // 일부 호환 제공자는 JSON을 markdown fence 안에 넣어 반환한다.
+  const json = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  try {
+    const fromText = analystOutputSchema.safeParse(JSON.parse(json));
+    return fromText.success ? fromText.data : null;
+  } catch {
+    return null;
   }
 }
 
