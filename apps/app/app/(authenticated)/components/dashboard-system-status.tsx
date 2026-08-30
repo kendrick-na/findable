@@ -1,6 +1,7 @@
 import { ArrowRightIcon, LinkIcon, ScanSearchIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { database } from "@repo/database";
 
 /**
  * 대시보드 요약은 진단 상세 타입 전체가 아니라 집계 수치만 읽는다. 별도 진단
@@ -13,6 +14,29 @@ interface DashboardSystemStatusProps {
   organizationId: string;
 }
 
+interface SiteReadinessSummary {
+  score?: number;
+}
+
+function formatUpdatedAt(value: Date | null | undefined) {
+  if (!value) {
+    return "아직 실행 기록이 없어요";
+  }
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "numeric",
+  }).format(value);
+}
+
+function connectionStatusLabel(status: string) {
+  if (status === "connected") return "연결됨";
+  if (status === "syncing") return "동기화 중";
+  if (status === "error") return "확인 필요";
+  return "속성 선택 필요";
+}
 
 const StatusCard = ({
   description,
@@ -100,6 +124,45 @@ export const DashboardSystemStatus = async ({
     );
   }
 
+  const [latestReadinessRun, connections] = await Promise.all([
+    database.siteReadinessRun.findFirst({
+      orderBy: { createdAt: "desc" },
+      select: { completedAt: true, createdAt: true, report: true, status: true },
+      where: { brandId, organizationId },
+    }),
+    database.searchPerformanceConnection.findMany({
+      orderBy: { updatedAt: "desc" },
+      select: { lastSyncedAt: true, provider: true, status: true, updatedAt: true },
+      where: { brandId, organizationId },
+    }),
+  ]);
+  const readinessReport = latestReadinessRun?.report as
+    | SiteReadinessSummary
+    | null;
+  const readinessValue =
+    latestReadinessRun?.status === "completed" &&
+    typeof readinessReport?.score === "number"
+      ? `${readinessReport.score}점`
+      : latestReadinessRun?.status === "processing" ||
+          latestReadinessRun?.status === "queued"
+        ? "점검 중"
+        : "진단 전";
+  const readinessMeta =
+    latestReadinessRun?.status === "failed"
+      ? "최근 점검을 완료하지 못했습니다 · 다시 실행해 보세요"
+      : formatUpdatedAt(
+          latestReadinessRun?.completedAt ?? latestReadinessRun?.createdAt
+        );
+  const connectedCount = connections.filter(
+    (connection) => connection.status === "connected"
+  ).length;
+  const latestConnection = connections[0];
+  const connectionMeta = latestConnection
+    ? `${connectionStatusLabel(latestConnection.status)} · ${formatUpdatedAt(
+        latestConnection.lastSyncedAt ?? latestConnection.updatedAt
+      )}`
+    : "Search Console·GA4·네이버 데이터를 연결할 수 있어요";
+
   return (
     <section aria-labelledby="dashboard-system-status" className="space-y-3">
       <div className="flex items-baseline justify-between gap-3">
@@ -116,20 +179,24 @@ export const DashboardSystemStatus = async ({
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <StatusCard
-          description="저장한 도메인의 SEO·GEO 기술 준비도를 확인하세요."
+          description={
+            latestReadinessRun?.status === "failed"
+              ? "점검을 다시 실행해 원인을 확인하세요."
+              : "저장한 도메인의 SEO·GEO 기술 준비도를 확인하세요."
+          }
           href="/site-audit"
           icon={<ScanSearchIcon className="size-4" />}
           label="사이트 준비도"
-          meta="진단 결과와 해결 방법 보기"
-          value="진단하기"
+          meta={readinessMeta}
+          value={readinessValue}
         />
         <StatusCard
           description="Search Console·GA4·네이버 데이터를 연결하고 성과를 확인하세요."
           href={`/site-audit/integrations?brand=${brandId}`}
           icon={<LinkIcon className="size-4" />}
           label="검색 데이터"
-          meta="연결 상태와 최근 동기화 보기"
-          value="연결 관리"
+          meta={connectionMeta}
+          value={`${connectedCount}/${connections.length}개 연결`}
         />
       </div>
     </section>
