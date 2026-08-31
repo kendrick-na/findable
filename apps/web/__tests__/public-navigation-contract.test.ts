@@ -12,14 +12,19 @@ describe("public landing navigation contract", () => {
   const insights = read("apps/web/app/[locale]/insights/page.tsx");
 
   it("keeps every landing knowledge link backed by a public route", () => {
+    expect(hero).toContain('home: { label: "홈", href: lp || "/" }');
     expect(hero).toContain('href: `${lp}/glossary`');
     expect(hero).toContain('href: `${lp}/insights`');
+    expect(hero).toContain('faq: { label: "FAQ", href: "#faq" }');
     expect(
       existsSync(join(root, "apps/web/app/[locale]/glossary/page.tsx"))
     ).toBe(true);
     expect(
       existsSync(join(root, "apps/web/app/[locale]/insights/page.tsx"))
     ).toBe(true);
+    expect(
+      read("apps/web/app/[locale]/(home)/components/faq.tsx")
+    ).toContain('id="faq"');
   });
 
   it("ships a visual cover for every insight card", () => {

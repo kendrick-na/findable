@@ -61,16 +61,19 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
           { label: "Benchmark", href: `${lp}/research/k-geo-bench-v0_1` },
         ],
       };
-  // 단일 링크 nav 항목 (제품·요금제). 인사이트는 별도 드롭다운으로 렌더.
+  // 단일 링크 nav 항목. "제품"은 현재 페이지의 앵커라 이동감이 없었으므로
+  // 언제든 랜딩 첫 화면으로 돌아가는 홈 링크로 명확히 바꾼다.
   const navItems = isKo
     ? {
-        product: { label: "제품", href: "#product" },
-        knowledge: { label: "검색·AI 가이드", href: `${lp}/glossary` },
+        home: { label: "홈", href: lp || "/" },
+        knowledge: { label: "GEO·SEO 가이드", href: `${lp}/glossary` },
+        faq: { label: "FAQ", href: "#faq" },
         pricing: { label: "요금제", href: `${lp}/pricing` },
       }
     : {
-        product: { label: "Product", href: "#product" },
-        knowledge: { label: "Search & AI guide", href: `${lp}/glossary` },
+        home: { label: "Home", href: lp || "/" },
+        knowledge: { label: "GEO & SEO guide", href: `${lp}/glossary` },
+        faq: { label: "FAQ", href: "#faq" },
         pricing: { label: "Pricing", href: `${lp}/pricing` },
       };
   const navSignIn = isKo ? "로그인" : "Sign in";
@@ -91,7 +94,7 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
       />
 
       {/* TOP NAV — Hero 안 인라인 (sticky 제거, 디자인 안정 우선) */}
-      <header className="relative z-50 flex h-14 items-center justify-between border-[var(--findable-hairline)] border-b px-8">
+      <header className="relative z-50 flex h-14 items-center justify-between border-[var(--findable-hairline)] border-b px-5 lg:px-8">
         <Link
           aria-label="파인더블 Findable"
           className="inline-flex items-baseline text-[var(--findable-ink)] transition hover:opacity-80"
@@ -117,15 +120,19 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
         </Link>
 
         <nav
-          className="hidden items-center gap-8 md:flex"
+          className="hidden items-center gap-5 xl:gap-8 md:flex"
           style={{ fontFamily: "var(--findable-font-sans)" }}
         >
-          <Link className={navLinkClass} href={navItems.product.href}>
-            {navItems.product.label}
+          <Link className={navLinkClass} href={navItems.home.href}>
+            {navItems.home.label}
           </Link>
 
           <Link className={navLinkClass} href={navItems.knowledge.href}>
             {navItems.knowledge.label}
+          </Link>
+
+          <Link className={navLinkClass} href={navItems.faq.href}>
+            {navItems.faq.label}
           </Link>
 
           {/* 인사이트 드롭다운: CSS group-hover + focus-within (키보드 접근 포함) */}
