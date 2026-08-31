@@ -47,6 +47,7 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
   const insightMenu = isKo
     ? {
         label: "인사이트·블로그",
+        href: `${lp}/insights`,
         children: [
           { label: "블로그 전체", href: `${lp}/insights` },
           { label: "GEO 리포트", href: `${lp}/report/k-beauty-geo-2026q2` },
@@ -55,6 +56,7 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
       }
     : {
         label: "Insights & blog",
+        href: `${lp}/insights`,
         children: [
           { label: "All insights", href: `${lp}/insights` },
           { label: "GEO report", href: `${lp}/report/k-beauty-geo-2026q2` },
@@ -135,14 +137,21 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
             {navItems.faq.label}
           </Link>
 
-          {/* 인사이트 드롭다운: CSS group-hover + focus-within (키보드 접근 포함) */}
+          {/* 라벨은 블로그 허브로 즉시 이동하고, 화살표만 세부 메뉴를 연다.
+              기존에는 라벨 전체가 버튼이라 첫 클릭이 "무반응"처럼 보였다. */}
           <div className="group relative flex w-fit items-center">
-            <button
-              aria-haspopup="menu"
-              className={`inline-flex items-center gap-1 ${navLinkClass} group-focus-within:text-[var(--findable-ink)] group-hover:text-[var(--findable-ink)]`}
-              type="button"
+            <Link
+              className={`${navLinkClass} group-focus-within:text-[var(--findable-ink)] group-hover:text-[var(--findable-ink)]`}
+              href={insightMenu.href}
             >
               {insightMenu.label}
+            </Link>
+            <button
+              aria-label={isKo ? "인사이트 하위 메뉴 열기" : "Open insight menu"}
+              aria-haspopup="menu"
+              className="ml-0.5 inline-flex items-center text-[var(--findable-ink-subtle)] transition hover:text-[var(--findable-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--findable-primary)]"
+              type="button"
+            >
               <ChevronDown className="h-3.5 w-3.5 opacity-70 transition group-focus-within:rotate-180 group-hover:rotate-180" />
             </button>
             <div

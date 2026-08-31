@@ -10,11 +10,13 @@ const read = (file: string) => readFileSync(join(root, file), "utf8");
 describe("public landing navigation contract", () => {
   const hero = read("apps/web/app/[locale]/(home)/components/hero.tsx");
   const insights = read("apps/web/app/[locale]/insights/page.tsx");
+  const layout = read("apps/web/app/[locale]/layout.tsx");
 
   it("keeps every landing knowledge link backed by a public route", () => {
     expect(hero).toContain('home: { label: "홈", href: lp || "/" }');
     expect(hero).toContain('href: `${lp}/glossary`');
     expect(hero).toContain('href: `${lp}/insights`');
+    expect(hero).toContain('href={insightMenu.href}');
     expect(hero).toContain('faq: { label: "FAQ", href: "#faq" }');
     expect(
       existsSync(join(root, "apps/web/app/[locale]/glossary/page.tsx"))
@@ -25,6 +27,7 @@ describe("public landing navigation contract", () => {
     expect(
       read("apps/web/app/[locale]/(home)/components/faq.tsx")
     ).toContain('id="faq"');
+    expect(layout).not.toContain('"scroll-smooth"');
   });
 
   it("ships a visual cover for every insight card", () => {
