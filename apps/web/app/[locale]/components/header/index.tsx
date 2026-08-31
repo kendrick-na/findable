@@ -40,7 +40,12 @@ export const Header = ({ dictionary }: HeaderProps) => {
     },
     {
       title: dictionary.web.header.blog,
-      href: "/blog",
+      href: "/insights",
+      description: "",
+    },
+    {
+      title: dictionary.web.header.knowledge,
+      href: "/glossary",
       description: "",
     },
   ];

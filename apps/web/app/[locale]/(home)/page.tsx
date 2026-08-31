@@ -4,8 +4,10 @@ import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import { env } from "@/env";
 import { Credibility } from "./components/credibility";
+import { Faq } from "./components/faq";
 import { FooterCTA } from "./components/footer-cta";
 import { Hero } from "./components/hero";
+import { HomeInsights } from "./components/home-insights";
 import { LiveCounter } from "./components/live-counter";
 import { RentVsEquity } from "./components/rent-vs-equity";
 import { Showcase } from "./components/showcase";
@@ -23,6 +25,9 @@ interface HomeProps {
 //   홈은 dynamic API(headers/cookies/searchParams) 사용 0 → 30분 ISR로 CDN 캐시.
 //   LiveCounter의 DB 카운트도 이 주기로 갱신(컴포넌트 파일의 revalidate export는 무효였음).
 export const revalidate = 1800;
+// 홈은 로그인·개인화가 없는 공개 경로다. DB 기반 보조 지표도 아래 캐시 경계로
+// 감싸므로, 매 방문 SSR 대신 정적/ISR 응답을 사용한다.
+export const dynamic = "force-static";
 
 export const generateMetadata = async ({
   params,
@@ -31,6 +36,7 @@ export const generateMetadata = async ({
   const dictionary = await getDictionary(locale);
 
   // locale·pathname 을 주면 hreflang(ko·en)+canonical+OG locale 이 생성된다(2026-08-08).
+  // 검색어 나열용 meta keywords는 사용하지 않고, 실제 H1·본문·FAQ가 검색 의도를 설명하게 한다.
   return createMetadata({ ...dictionary.web.home.meta, locale, pathname: "/" });
 };
 
@@ -45,13 +51,16 @@ export const generateMetadata = async ({
 // 홈 구조화 데이터(JSON-LD) — GEO/AEO 도그푸딩: AI 답변 엔진이 Findable을
 // "네이버까지 진단하는 Agentic GEO 플랫폼"으로 인용·이해하도록 SoftwareApplication + Organization 명시.
 // 근거: KAIST OverEdge Day06(기술 SEO·JSON-LD) → docs/_적용/실행백로그. 문구는 dictionary와 동일.
-const siteUrl = env.VERCEL_PROJECT_PRODUCTION_URL
-  ? new URL(`https://${env.VERCEL_PROJECT_PRODUCTION_URL}`).toString()
+const siteOrigin = env.VERCEL_PROJECT_PRODUCTION_URL
+  ? new URL(`https://${env.VERCEL_PROJECT_PRODUCTION_URL}`).origin
   : "https://www.findable.co.kr";
 
 const Home = async ({ params }: HomeProps) => {
   const { locale } = await params;
   const dictionary = await getDictionary(locale);
+  // JSON-LD의 대표 URL을 실제 canonical(`/ko` 또는 `/`)과 일치시킨다.
+  // 루트 URL만 사용하면 한국어 홈과 브랜드 엔티티 신호가 분리될 수 있다.
+  const siteUrl = `${siteOrigin}${locale.startsWith("ko") ? "/ko" : ""}`;
 
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)]">
@@ -60,13 +69,14 @@ const Home = async ({ params }: HomeProps) => {
           "@context": "https://schema.org",
           "@type": "SoftwareApplication",
           name: "Findable",
+          alternateName: ["파인더블", "Findable Korea"],
           applicationCategory: "BusinessApplication",
           applicationSubCategory:
             "Generative Engine Optimization (GEO) Platform",
           operatingSystem: "Web",
           url: siteUrl,
           description: dictionary.web.home.meta.description,
-          inLanguage: ["ko", "en"],
+          inLanguage: locale.startsWith("ko") ? "ko-KR" : "en-US",
           offers: {
             "@type": "Offer",
             price: "0",
@@ -82,9 +92,44 @@ const Home = async ({ params }: HomeProps) => {
           provider: {
             "@type": "Organization",
             name: "Findable",
+            alternateName: ["파인더블", "Findable Korea"],
             url: siteUrl,
             slogan:
               "네이버까지 진단하고 고칠 곳까지 알려주는 Agentic GEO 플랫폼",
+          },
+        }}
+      />
+      <JsonLd
+        code={{
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          name: "Findable",
+          legalName: "인디고차일드",
+          alternateName: ["파인더블", "Findable Korea"],
+          url: siteUrl,
+          email: "kendrick@indigochild.kr",
+          description:
+            "파인더블(Findable)은 생성형 AI 답변에서 브랜드의 인식·언급·인용을 측정하는 한국어 GEO 플랫폼입니다.",
+          founder: {
+            "@type": "Person",
+            name: "나현덕",
+          },
+        }}
+      />
+      <JsonLd
+        code={{
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: "Findable",
+          alternateName: ["파인더블", "Findable Korea"],
+          url: siteUrl,
+          description: dictionary.web.home.meta.description,
+          inLanguage: locale.startsWith("ko") ? "ko-KR" : "en-US",
+          publisher: {
+            "@type": "Organization",
+            name: "Findable",
+            alternateName: ["파인더블", "Findable Korea"],
+            url: siteUrl,
           },
         }}
       />
@@ -94,8 +139,10 @@ const Home = async ({ params }: HomeProps) => {
           우리는 고객 0명이라 그대로 흉내내면 날조가 된다 →
           선정·수상 + "만든 팀이 해온 일" 로 대체. 상세 규율은 컴포넌트 주석. */}
       <Credibility locale={locale} />
+      <HomeInsights locale={locale} />
       <ThreePillars locale={locale} />
       <StepSections locale={locale} />
+      <Faq locale={locale} />
       <RentVsEquity locale={locale} />
       <Showcase locale={locale} />
       <FooterCTA locale={locale} />

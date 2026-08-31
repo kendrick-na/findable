@@ -7,27 +7,15 @@ import type { Dictionary } from "@repo/internationalization";
 import { ArrowRight, ChevronDown } from "lucide-react";
 import Link from "next/link";
 
-// 네이버를 맨 앞으로 재배치 (D-2026-07-23 포지셔닝 전환): 유일 방어 공백인
-// "네이버 AI 셀프서브"가 엔진 나열에서 묻히지 않게 최전면에. 나머지는 글로벌 인지도 순.
-const ENGINES_KO = [
-  "네이버",
-  "ChatGPT",
-  "Gemini",
-  "Claude",
-  "Perplexity",
-  "HyperCLOVA",
-  "다음",
-];
-
-const ENGINES_EN = [
-  "Naver",
-  "ChatGPT",
-  "Gemini",
-  "Claude",
-  "Perplexity",
-  "HyperCLOVA",
-  "Daum",
-];
+const ENGINE_MARKS = [
+  { label: "NAVER", icon: "N", color: "#03C75A", source: "naver" },
+  { label: "ChatGPT", icon: "◎", color: "#E8E8E3", source: "text" },
+  { label: "Gemini", icon: "✦", color: "#8AB4F8", source: "googlegemini" },
+  { label: "Claude", icon: "AI", color: "#D4A27F", source: "anthropic" },
+  { label: "Perplexity", icon: "P", color: "#8BC7C5", source: "perplexity" },
+  { label: "HyperCLOVA", icon: "C", color: "#20C997", source: "text" },
+  { label: "Daum", icon: "D", color: "#FFE812", source: "kakao" },
+] as const;
 
 interface HeroProps {
   dictionary: Dictionary;
@@ -39,7 +27,6 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
   // 영문(en)은 defaultLocale이라 URL prefix 없음 → 내부 링크에도 prefix 안 붙임.
   // 한국어(ko)는 prefix 유지 → 클릭 시 미들웨어 재판별로 튕기지 않게.
   const lp = isKo ? "/ko" : "";
-  const ENGINES = isKo ? ENGINES_KO : ENGINES_EN;
   const h1 = isKo
     ? "AI가 우리 브랜드를 먼저 답하게."
     : "Make AI answer about your brand first.";
@@ -55,35 +42,36 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
   // secondary CTA는 primary(진단)와 목적지가 겹치지 않게 요금제로 분리.
   const ctaSecondary = isKo ? "요금제 보기" : "See pricing";
   const enginesLabel = isKo ? "진단 대상 AI" : "Engines covered";
-  // 고객사례 드롭다운 하위 링크 (사례·리포트·리서치)
-  const customerMenu = isKo
+  // 인사이트 드롭다운: 공개 검색 자산의 정규 허브(`/insights`)를
+  // 전면에 노출하고, 리포트·리서치도 같은 콘텐츠 축으로 묶는다.
+  const insightMenu = isKo
     ? {
-        label: "고객사례",
+        label: "인사이트·블로그",
         children: [
-          { label: "케이스 스터디", href: `${lp}/case/a-brand` },
+          { label: "블로그 전체", href: `${lp}/insights` },
           { label: "GEO 리포트", href: `${lp}/report/k-beauty-geo-2026q2` },
           { label: "벤치마크 리서치", href: `${lp}/research/k-geo-bench-v0_1` },
         ],
       }
     : {
-        label: "Customers",
+        label: "Insights & blog",
         children: [
-          { label: "Case study", href: `${lp}/case/a-brand` },
+          { label: "All insights", href: `${lp}/insights` },
           { label: "GEO report", href: `${lp}/report/k-beauty-geo-2026q2` },
           { label: "Benchmark", href: `${lp}/research/k-geo-bench-v0_1` },
         ],
       };
-  // 단일 링크 nav 항목 (제품·요금제·리소스). 고객사례는 별도 드롭다운으로 렌더.
+  // 단일 링크 nav 항목 (제품·요금제). 인사이트는 별도 드롭다운으로 렌더.
   const navItems = isKo
     ? {
         product: { label: "제품", href: "#product" },
+        knowledge: { label: "검색·AI 가이드", href: `${lp}/glossary` },
         pricing: { label: "요금제", href: `${lp}/pricing` },
-        resources: { label: "리소스", href: `${lp}/blog` },
       }
     : {
         product: { label: "Product", href: "#product" },
+        knowledge: { label: "Search & AI guide", href: `${lp}/glossary` },
         pricing: { label: "Pricing", href: `${lp}/pricing` },
-        resources: { label: "Resources", href: `${lp}/blog` },
       };
   const navSignIn = isKo ? "로그인" : "Sign in";
   // 우상단 primary CTA는 무료 진단으로 통일 (기존 데모 신청 → 진단).
@@ -105,7 +93,7 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
       {/* TOP NAV — Hero 안 인라인 (sticky 제거, 디자인 안정 우선) */}
       <header className="relative z-50 flex h-14 items-center justify-between border-[var(--findable-hairline)] border-b px-8">
         <Link
-          aria-label="Findable"
+          aria-label="파인더블 Findable"
           className="inline-flex items-baseline text-[var(--findable-ink)] transition hover:opacity-80"
           href={lp || "/"}
         >
@@ -118,6 +106,9 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
             }}
           >
             Findable
+          </span>
+          <span className="ml-2 text-[11px] text-[var(--findable-ink-muted)]">
+            파인더블
           </span>
           <span
             aria-hidden
@@ -133,21 +124,25 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
             {navItems.product.label}
           </Link>
 
-          {/* 고객사례 드롭다운: CSS group-hover + focus-within (키보드 접근 포함) */}
+          <Link className={navLinkClass} href={navItems.knowledge.href}>
+            {navItems.knowledge.label}
+          </Link>
+
+          {/* 인사이트 드롭다운: CSS group-hover + focus-within (키보드 접근 포함) */}
           <div className="group relative flex w-fit items-center">
             <button
               aria-haspopup="menu"
               className={`inline-flex items-center gap-1 ${navLinkClass} group-focus-within:text-[var(--findable-ink)] group-hover:text-[var(--findable-ink)]`}
               type="button"
             >
-              {customerMenu.label}
+              {insightMenu.label}
               <ChevronDown className="h-3.5 w-3.5 opacity-70 transition group-focus-within:rotate-180 group-hover:rotate-180" />
             </button>
             <div
               className="findable-glass !absolute invisible top-full left-1/2 z-50 mt-2 w-52 -translate-x-1/2 translate-y-1 rounded-lg p-1.5 opacity-0 transition-all duration-150 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100"
               role="menu"
             >
-              {customerMenu.children.map((c) => (
+              {insightMenu.children.map((c) => (
                 <Link
                   className="block rounded-md px-3 py-2 text-[13px] text-[var(--findable-ink-subtle)] transition hover:bg-white/[0.06] hover:text-[var(--findable-ink)]"
                   href={c.href}
@@ -162,9 +157,6 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
 
           <Link className={navLinkClass} href={navItems.pricing.href}>
             {navItems.pricing.label}
-          </Link>
-          <Link className={navLinkClass} href={navItems.resources.href}>
-            {navItems.resources.label}
           </Link>
         </nav>
 
@@ -291,31 +283,62 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
           </Link>
         </div>
 
-        {/* AI 엔진 모노 스트립 */}
+        {/* AI 엔진 마키 — 공개 브랜드 식별자를 사용해 진단 범위를 즉시 이해시키되,
+            협업·보증처럼 보이는 표현은 피한다. */}
         <div
-          className="mt-20 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 opacity-0"
+          className="mt-20 w-full max-w-[980px] overflow-hidden opacity-0"
           style={{
             animation:
               "findable-fade-up-sm 0.35s var(--findable-ease-out-soft) 0.45s forwards",
           }}
         >
-          <span
-            className="text-[11px] text-[var(--findable-ink-tertiary)] uppercase tracking-[0.18em]"
+          <p
+            className="mb-4 text-center text-[11px] text-[var(--findable-ink-tertiary)] uppercase tracking-[0.18em]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             {enginesLabel}
-          </span>
-          {ENGINES.map((engine) => (
-            <span
-              className="text-[13px] text-[var(--findable-ink-subtle)]"
-              key={engine}
-              style={{ fontFamily: "var(--findable-font-mono)" }}
-            >
-              {engine}
-            </span>
-          ))}
+          </p>
+          <div className="findable-engine-marquee">
+            <div className="findable-engine-track">
+              {[...ENGINE_MARKS, ...ENGINE_MARKS].map((engine, index) => (
+                <div className="findable-engine-chip" key={`${engine.label}-${index}`}>
+                  {engine.source === "text" ? (
+                    <span
+                      aria-hidden
+                      className="findable-engine-letter"
+                      style={{ color: engine.color }}
+                    >
+                      {engine.icon}
+                    </span>
+                  ) : (
+                    <img
+                      alt=""
+                      aria-hidden
+                      className="h-[17px] w-[17px] object-contain"
+                      src={`https://cdn.simpleicons.org/${engine.source}/${engine.color.slice(1)}`}
+                    />
+                  )}
+                  <span>{engine.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-3 text-center text-[11px] text-[var(--findable-ink-tertiary)]">
+            {isKo
+              ? "각 상표는 해당 권리자에게 귀속됩니다. Findable과의 제휴를 뜻하지 않습니다."
+              : "All marks belong to their respective owners; no affiliation is implied."}
+          </p>
         </div>
       </div>
+      <style>{`
+        .findable-engine-marquee { mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent); }
+        .findable-engine-track { display: flex; width: max-content; animation: findable-engine-roll 26s linear infinite; }
+        .findable-engine-marquee:hover .findable-engine-track { animation-play-state: paused; }
+        .findable-engine-chip { display: inline-flex; align-items: center; gap: 9px; margin-right: 12px; min-width: 145px; border: 1px solid var(--findable-hairline-strong); border-radius: 999px; padding: 9px 14px; color: var(--findable-ink-subtle); font-family: var(--findable-font-mono); font-size: 12px; background: color-mix(in srgb, var(--findable-surface-1) 85%, transparent); }
+        .findable-engine-letter { display: inline-grid; width: 17px; height: 17px; place-items: center; font-family: var(--findable-font-sans); font-size: 15px; font-weight: 700; line-height: 1; }
+        @keyframes findable-engine-roll { to { transform: translateX(-50%); } }
+        @media (prefers-reduced-motion: reduce) { .findable-engine-track { animation: none; } }
+      `}</style>
     </section>
   );
 };

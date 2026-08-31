@@ -10,6 +10,7 @@
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { loadDatasetResponseCount } from "./sov-chart-data";
 
 const BETA_LAUNCH_DATE = new Date("2026-05-04T00:00:00Z");
@@ -17,7 +18,7 @@ const BETA_LAUNCH_DATE = new Date("2026-05-04T00:00:00Z");
 // ⚠️ revalidate 는 page/layout 세그먼트에서만 유효 — 컴포넌트 파일 export 는 무효라 제거(2026-07-30).
 //    실제 30분 캐시는 (home)/page.tsx 의 `export const revalidate = 1800` 이 담당.
 
-async function getLiveStats() {
+const getLiveStats = unstable_cache(async () => {
   const now = new Date();
   const daysSinceLaunch = Math.max(
     1,
@@ -63,7 +64,7 @@ async function getLiveStats() {
       isLive: false,
     };
   }
-}
+}, ["landing-live-stats"], { revalidate: 1800 });
 
 interface CounterCardProps {
   delay: string;
