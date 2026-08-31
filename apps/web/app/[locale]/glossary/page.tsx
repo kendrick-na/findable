@@ -83,9 +83,9 @@ export default async function GlossaryPage({
       <div className="mx-auto max-w-4xl">
         <Link
           className="text-sm text-white/55 hover:text-white"
-          href={`${prefix}/insights`}
+          href={prefix || "/"}
         >
-          ← {ko ? "Findable 인사이트" : "Findable Insights"}
+          ← {ko ? "홈" : "Home"}
         </Link>
         <p className="mt-16 font-semibold text-[#ff7a4d] text-xs uppercase tracking-[0.22em]">
           Findable knowledge hub

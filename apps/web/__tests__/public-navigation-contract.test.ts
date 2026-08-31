@@ -9,6 +9,7 @@ const read = (file: string) => readFileSync(join(root, file), "utf8");
 
 describe("public landing navigation contract", () => {
   const hero = read("apps/web/app/[locale]/(home)/components/hero.tsx");
+  const glossary = read("apps/web/app/[locale]/glossary/page.tsx");
   const insights = read("apps/web/app/[locale]/insights/page.tsx");
   const layout = read("apps/web/app/[locale]/layout.tsx");
 
@@ -18,6 +19,8 @@ describe("public landing navigation contract", () => {
     expect(hero).toContain('href: `${lp}/insights`');
     expect(hero).toContain('href={insightMenu.href}');
     expect(hero).toContain('faq: { label: "FAQ", href: "#faq" }');
+    expect(glossary).toContain('href={prefix || "/"}');
+    expect(glossary).toContain('← {ko ? "홈" : "Home"}');
     expect(
       existsSync(join(root, "apps/web/app/[locale]/glossary/page.tsx"))
     ).toBe(true);
