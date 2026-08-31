@@ -9,12 +9,32 @@ const publicWhere = {
   publisher: { suspendedAt: null },
 };
 
+// Keep the first published article reachable while moving its Unicode slug to
+// an ASCII canonical URL. Some search inspection crawlers still return 404 for
+// the encoded Korean path even though normal browsers receive 200.
+const LEGACY_SLUG_ALIASES: Record<string, string> = {
+  "2026-k-뷰티-ai-검색-가시성-벤치마크-20개-브랜드-108개-응답-분석-mt45znpn":
+    "k-beauty-ai-search-visibility-benchmark-2026",
+};
+
 function decodeRouteSegment(value: string) {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
+  let decoded = value;
+  // Crawlers and edge proxies can percent-encode an already encoded Unicode
+  // slug more than once. Normalize a few layers so the public article URL
+  // resolves consistently for browsers, Google Inspection Tool, and sitemap
+  // fetchers without changing the stored slug.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) {
+        break;
+      }
+      decoded = next;
+    } catch {
+      break;
+    }
   }
+  return decoded;
 }
 
 export function listPublishedContent(
@@ -91,12 +111,13 @@ export function getPublishedContent(input: {
 }) {
   const postSlug = decodeRouteSegment(input.postSlug);
   const publisherSlug = decodeRouteSegment(input.publisherSlug);
+  const lookupSlug = LEGACY_SLUG_ALIASES[postSlug] ?? postSlug;
 
   return database.content.findFirst({
     where: {
       ...publicWhere,
       locale: input.locale,
-      slug: postSlug,
+      slug: lookupSlug,
       publisher: { slug: publisherSlug, suspendedAt: null },
     },
     include: { publisher: true },
