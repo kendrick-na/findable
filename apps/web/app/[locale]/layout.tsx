@@ -1,6 +1,5 @@
 import "./styles.css";
 import { AnalyticsProvider } from "@repo/analytics/provider";
-import { Toolbar as CMSToolbar } from "@repo/cms/components/toolbar";
 import { DesignSystemProvider } from "@repo/design-system";
 import { fonts } from "@repo/design-system/lib/fonts";
 import { cn } from "@repo/design-system/lib/utils";
@@ -25,6 +24,15 @@ export const generateStaticParams = () => [{ locale: "ko" }, { locale: "en" }];
 const RootLayout = async ({ children, params }: RootLayoutProperties) => {
   const { locale } = await params;
   const htmlLang = locale.startsWith("ko") ? "ko" : "en";
+  const showCmsToolbar =
+    process.env.VERCEL_ENV !== "preview" &&
+    Boolean(process.env.BASEHUB_TOKEN) &&
+    !process.env.BASEHUB_TOKEN?.includes("dummy");
+  // Preview 빌드는 커밋된 콘텐츠·타입을 사용한다. BaseHub 편집 툴바까지 정적으로
+  // 불러오면 Preview 토큰의 ref 검증이 빌드 전체를 막으므로 Production에서만 로드한다.
+  const CMSToolbar = showCmsToolbar
+    ? (await import("@repo/cms/components/toolbar")).Toolbar
+    : null;
 
   return (
     <html
@@ -50,8 +58,7 @@ const RootLayout = async ({ children, params }: RootLayoutProperties) => {
           </DesignSystemProvider>
           <Toolbar />
           {/* BASEHUB 정식 토큰이 있을 때만 CMS toolbar 렌더. dev 더미값(bshb_pk_dummy_*)에선 비활성화. */}
-          {process.env.BASEHUB_TOKEN &&
-            !process.env.BASEHUB_TOKEN.includes("dummy") && <CMSToolbar />}
+          {CMSToolbar ? <CMSToolbar /> : null}
         </AnalyticsProvider>
       </body>
     </html>
