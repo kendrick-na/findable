@@ -2,7 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const root = process.cwd();
+const root = existsSync(join(process.cwd(), "apps/web"))
+  ? process.cwd()
+  : join(process.cwd(), "../..");
 const read = (file: string) => readFileSync(join(root, file), "utf8");
 
 describe("public landing navigation contract", () => {
