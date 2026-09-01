@@ -1,3 +1,4 @@
+import { JsonLd } from "@repo/seo/json-ld";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -191,17 +192,22 @@ export default async function GlossaryPage({
             </Link>
           </div>
         </section>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "FAQPage",
-              mainEntity: FAQS.map(([question, answer]) => ({
-                "@type": "Question",
-                name: question,
-                acceptedAnswer: { "@type": "Answer", text: answer },
-              })),
-            }),
+        {/*
+         * 🔒 JSON-LD 는 저장소 표준 `JsonLd` 로만 심는다.
+         *   직접 `dangerouslySetInnerHTML` + `JSON.stringify` 를 쓰면 `<`·`>` 가 이스케이프되지
+         *   않아, 값에 `</script>` 가 섞이는 순간 스크립트가 조기 종료된다(XSS 경로).
+         *   지금 FAQS 는 이 파일 안의 상수라 악용 경로가 없지만, 같은 저장소의 다른 페이지는
+         *   전부 `JsonLd`(이스케이프 내장)를 쓰고 있었고 이 페이지만 예외였다.
+         */}
+        <JsonLd
+          code={{
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: FAQS.map(([question, answer]) => ({
+              "@type": "Question",
+              name: question,
+              acceptedAnswer: { "@type": "Answer", text: answer },
+            })),
           }}
         />
       </div>
