@@ -42,9 +42,13 @@ export const sentryConfig: Parameters<typeof withSentryConfig>[1] = {
 };
 
 export const withSentry = (sourceConfig: object): object => {
+  const source = sourceConfig as { transpilePackages?: string[] };
   const configWithTranspile = {
     ...sourceConfig,
-    transpilePackages: ["@sentry/nextjs"],
+    transpilePackages: [
+      ...(source.transpilePackages ?? []),
+      "@sentry/nextjs",
+    ],
   };
 
   return withSentryConfig(configWithTranspile, sentryConfig);

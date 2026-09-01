@@ -8,6 +8,11 @@ import { env } from "@/env";
 
 let nextConfig: NextConfig = withToolbar(withLogging(config));
 
+// Workspace packages used by the client instrumentation are TypeScript source.
+// Transpile them explicitly so both local Webpack builds and Vercel builds can
+// bundle `instrumentation-client.ts` consistently.
+nextConfig.transpilePackages = ["@repo/analytics", "@repo/observability"];
+
 // PDF 리포트 복구(2026-08-10) — 🔴 3개월(5/3~) 100% 실패의 진짜 원인.
 // `@sparticuz/chromium` 은 브라우저 바이너리를 `../bin/chromium.br` 처럼
 // **런타임에 문자열로** 조립해 찾는다. Next 의 추적기(@vercel/nft)는 import·require·fs 를
