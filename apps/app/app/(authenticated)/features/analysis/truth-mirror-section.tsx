@@ -183,6 +183,18 @@ export const TruthMirrorSection = ({
                 답변 원문이 저장되지 않았어요.
               </p>
             )}
+
+            {engine.fullResponse &&
+            engine.fullResponse.trim() !== engine.excerpt.trim() ? (
+              <details className="mt-3 rounded-md border border-[color:var(--findable-hairline,#23252a)] p-3">
+                <summary className="cursor-pointer text-[color:var(--findable-primary,#ff7a4d)] text-xs">
+                  전체 답변 보기
+                </summary>
+                <p className="mt-2 whitespace-pre-wrap break-words text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
+                  {stripMarkdown(engine.fullResponse)}
+                </p>
+              </details>
+            ) : null}
           </li>
         ))}
       </ul>

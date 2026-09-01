@@ -73,6 +73,11 @@ const STATIC_PATHS = [
   "/pricing",
   "/contact",
   "/insights",
+  "/glossary",
+  "/glossary/seo",
+  "/glossary/geo",
+  "/glossary/aeo",
+  "/glossary/ai-search-visibility",
   // 🔴 2026-08-17 세션N-38 — `/synergy` 는 **페이지째 삭제**됐다(👤 *"필요 없어"*).
   //   N-34 는 *"제안 자산일 수 있어 색인만 끊는다"* 로 남겼으나, D2SF(5월 신청)가 끝났고
   //   진입 경로도 0 이라 유지 근거가 사라졌다. 백업만 남긴다.
@@ -82,6 +87,9 @@ const STATIC_PATHS = [
   "/legal/privacy",
   "/legal/terms",
 ] as const;
+
+// This is an intentionally locale-neutral machine-readable endpoint.
+const ROOT_STATIC_PATHS = ["/ai-instructions"] as const;
 
 const TRAILING_SLASH_RE = /\/$/;
 
@@ -128,6 +136,8 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
     requestHost &&
     requestHost !== "findable.co.kr" &&
     requestHost !== "www.findable.co.kr" &&
+    requestHost !== "localhost" &&
+    requestHost !== "127.0.0.1" &&
     !requestHost.endsWith(".vercel.app")
   ) {
     const publisher = await getPublicPublisherByDomain(requestHost);
@@ -151,6 +161,10 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
     ];
   }
   const staticEntries = STATIC_PATHS.flatMap((path) => entriesFor(path, now));
+  const rootStaticEntries = ROOT_STATIC_PATHS.map((path) => ({
+    url: `${origin}${path}`,
+    lastModified: now,
+  }));
   try {
     const posts = await listAllPublishedContentForDiscovery();
     const visible = posts.filter((post) =>
@@ -171,10 +185,15 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
       url: localizedUrl(post.locale, `/p/${post.publisher.slug}/${post.slug}`),
       lastModified: post.updatedAt,
     }));
-    return [...staticEntries, ...publisherEntries, ...postEntries];
+    return [
+      ...staticEntries,
+      ...rootStaticEntries,
+      ...publisherEntries,
+      ...postEntries,
+    ];
   } catch {
     // 빌드·일시 DB 장애 때 정적 사이트맵 전체를 500으로 만들지 않는다.
-    return staticEntries;
+    return [...staticEntries, ...rootStaticEntries];
   }
 };
 
