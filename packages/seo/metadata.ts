@@ -205,15 +205,26 @@ export const createMetadata = ({
   //   `image` 를 명시한 페이지(진단 결과의 동적 OG 등)는 그대로 그 값이 이긴다.
   // ⚠️ 절대 URL 로 만든다: OG 크롤러는 상대경로를 못 읽는다(`metadataBase` 에 기대지 않는다).
   //
-  // 🔴 **접두사를 항상 붙인다** — 페이지 URL 규칙(`rewriteDefault`: en 은 접두사 없음)을
-  //   이미지에 그대로 적용하면 안 된다. 이 PNG 는 `app/[locale]/` 안에 있어서
-  //   **로케일 세그먼트가 있어야만** 존재한다. 라이브 실측:
-  //     `/opengraph-image.png` → **500** ❌   `/en/…` → 200 ✅   `/ko/…` → 200 ✅
-  //   (처음에 en 을 접두사 없이 만들었다가 배포 전 실측에서 잡았다. 그대로 나갔으면
-  //    영어권 공유 썸네일이 전부 깨진 채 발행될 뻔했다.)
+  // 🔴 **접두사를 붙이지 않는다 — 2026-09-02 변경**. 이 PNG 는 이제
+  //   `apps/web/public/opengraph-image.png` 다(예전엔 `app/[locale]/` 안이었다).
+  //
+  //   ⚠️ 왜 옮겼나: `app/[locale]/` 안의 메타데이터 이미지가 **Vercel 빌드를 통째로**
+  //     깨뜨렸다 — `Invariant: failed to find source route /[locale]/opengraph-image.png
+  //     for prerender /[locale]/opengraph-image.png`. 같은 커밋·같은 Next 16.2.11·같은
+  //     빌더(webpack)인데 **macOS 로컬은 통과, Vercel(Linux) 만 실패**했다(3회 재현:
+  //     자동 2·수동 1). Next 가 이 PNG 를 로케일별 프리렌더 대상으로 잡아놓고 정작
+  //     자기 source route 목록에서 못 찾는다. `public/` 은 라우트 계산을 아예 타지
+  //     않으므로 이 실패 경로가 원천적으로 없어진다.
+  //     → 같은 빌드에서 `app/` 루트의 `apple-icon.png`·`icon.svg` 는 정상 생성됐다
+  //       (○ /apple-icon.png). 즉 문제는 **`[locale]` 세그먼트 안에 있다는 것**이었다.
+  //
+  //   📕 (이력) `app/[locale]/` 시절 실측: `/opengraph-image.png` → **500** ❌ ·
+  //     `/en/…` → 200 ✅ · `/ko/…` → 200 ✅. 그때 루트가 500 이던 이유는 파일이
+  //     로케일 세그먼트 안에만 있었기 때문이고, **지금은 그 주소에 실제 파일이 있다**.
+  //     (그 실측이 이번에 파일을 `app/` 루트로 옮기려던 시도를 막아줬다 — 옮기기만
+  //      하면 이 줄의 URL 이 404 가 됐다.)
   // ──────────────────────────────────────────────────────────────────
-  const ogImageUrl =
-    image ?? `${siteOrigin}/${locale ?? DEFAULT_LOCALE}/opengraph-image.png`;
+  const ogImageUrl = image ?? `${siteOrigin}/opengraph-image.png`;
 
   if (metadata.openGraph) {
     metadata.openGraph.images = [
