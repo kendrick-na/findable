@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "email build --dir ../../packages/email/templates",
+    "build": "echo 'apps/email is a local preview server; no production artifact is published'",
     "dev": "email dev --port 3003 --dir ../../packages/email/templates",
     "export": "email export --dir ../../packages/email/templates",
     "clean": "git clean -xdf .cache .turbo dist node_modules",
@@ -20,7 +20,7 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "25.3.5",
     "@types/react": "19.2.14",
-    "next": "16.1.6",
+    "next": "16.2.11",
     "typescript": "^5.9.3"
   }
 }
