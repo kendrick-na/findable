@@ -6,6 +6,7 @@ import {
   listAllPublishedContentForDiscovery,
   listPublishedContent,
 } from "@/lib/content";
+import { isCanonicalOnSite } from "@/lib/public-url";
 
 /**
  * sitemap.xml — 언어별(ko·en) URL 을 hreflang 과 함께 제출한다.
@@ -51,10 +52,14 @@ const origin = `${protocol}://${env.VERCEL_PROJECT_PRODUCTION_URL ?? "www.findab
  *   → **실제로 200 을 주는 `ko` 만 제출**한다. `x-default` 도 `ko` 로 내린다.
  *   ⚠️ **EN 을 되살리려면 사이트맵이 아니라 프록시부터 고쳐야 한다** —
  *     여기 `en` 을 다시 넣는 건 그 다음이다(순서를 뒤집으면 같은 상태로 되돌아간다).
+ *
+ * 🟢 **2026-09-02 `en` 을 되살렸다 — 위 주석이 요구한 순서를 지켰다.**
+ *   프록시 matcher 가 명시적 `/ko`·`/en` 경로를 i18n 미들웨어에서 제외하도록 함께 고쳤고,
+ *   [실측] EN 23 페이지가 전부 200 이다. `packages/seo/metadata.ts` 와 **동시에** 바꿨다.
  */
-const LOCALES = ["ko"] as const;
+const LOCALES = ["ko", "en"] as const;
 /** hreflang `x-default` 가 가리킬 로케일 — **실제 도달 가능한 것**이어야 한다. */
-const DEFAULT_LOCALE = "ko";
+const DEFAULT_LOCALE = "en";
 
 /**
  * 로케일 접두사를 뺀 공개 경로. 홈은 `/`.
@@ -65,23 +70,50 @@ const DEFAULT_LOCALE = "ko";
  *   원본 파일은 그걸 `@ts-nocheck` 로 덮고 있었다). CMS 로 콘텐츠를 실제로 발행하기 시작하면
  *   그때 동적 조회를 되살릴 것.
  */
-const STATIC_PATHS = [
-  "/",
+/**
+ * 🔴🔴 **`lastmod` 를 "지금"으로 찍지 않는다**(2026-09-02 실측으로 발견).
+ *
+ *   [실측] 사이트맵을 3초 간격으로 두 번 받으니 `lastmod` 가 **매번 달랐다**
+ *   (`04:41:39` → `04:41:42`). 정적 페이지 30개(15경로×2언어)가 요청마다
+ *   **"방금 수정됨"** 으로 신고되고 있었다.
+ *
+ *   🔴 구글 공식: `lastmod` 는 **정확할 때만** 쓰이고, 부정확하면 **무시**한다.
+ *     즉 ① "언제 바뀌었는지" 신호가 통째로 무력화되고 ② 안 바뀐 페이지에 크롤 예산이 샌다.
+ *     신생 도메인(등록 2026-04-16)에서 크롤 예산은 특히 아깝다.
+ *
+ *   → 경로별로 **실제 마지막 수정일**을 적는다. 값은 각 페이지 파일의 마지막 커밋일
+ *     (`git log -1 --format=%cs -- <파일>`)에서 가져왔다.
+ *   ⚠️ **페이지 내용을 고치면 이 날짜도 같이 고친다.** 안 고치면 거짓말이 되고,
+ *     거짓 `lastmod` 는 없느니만 못하다(구글이 사이트 전체의 lastmod 를 불신하게 된다).
+ */
+const STATIC_PATHS: readonly { lastModified: string; path: string }[] = [
+  { path: "/", lastModified: "2026-08-31" },
   // 🟡 2026-08-19(👤 결정 A): 무료 진단은 **동선에서 뺐다**(랜딩 CTA → `/sign-up`).
   //   페이지는 남기므로 사이트맵에도 남긴다 — 다만 신규 유입 설계의 기준점은 아니다.
-  "/audit",
-  "/pricing",
-  "/contact",
-  "/insights",
+  { path: "/audit", lastModified: "2026-08-22" },
+  { path: "/pricing", lastModified: "2026-08-22" },
+  { path: "/contact", lastModified: "2026-09-02" },
+  { path: "/insights", lastModified: "2026-08-31" },
+  { path: "/glossary", lastModified: "2026-09-01" },
+  { path: "/glossary/seo", lastModified: "2026-08-31" },
+  { path: "/glossary/geo", lastModified: "2026-08-31" },
+  { path: "/glossary/aeo", lastModified: "2026-08-31" },
+  { path: "/glossary/ai-search-visibility", lastModified: "2026-08-31" },
   // 🔴 2026-08-17 세션N-38 — `/synergy` 는 **페이지째 삭제**됐다(👤 *"필요 없어"*).
   //   N-34 는 *"제안 자산일 수 있어 색인만 끊는다"* 로 남겼으나, D2SF(5월 신청)가 끝났고
   //   진입 경로도 0 이라 유지 근거가 사라졌다. 백업만 남긴다.
-  "/case/a-brand",
-  "/report/k-beauty-geo-2026q2",
-  "/research/k-geo-bench-v0_1",
-  "/legal/privacy",
-  "/legal/terms",
-] as const;
+  { path: "/case/a-brand", lastModified: "2026-09-02" },
+  { path: "/report/k-beauty-geo-2026q2", lastModified: "2026-09-02" },
+  { path: "/research/k-geo-bench-v0_1", lastModified: "2026-09-02" },
+  { path: "/legal/privacy", lastModified: "2026-09-02" },
+  { path: "/legal/terms", lastModified: "2026-09-02" },
+];
+
+// This is an intentionally locale-neutral machine-readable endpoint.
+// ⚠️ 내용을 고치면 `lastModified` 도 함께 고친다(거짓 lastmod 는 없느니만 못하다).
+const ROOT_STATIC_PATHS: readonly { lastModified: string; path: string }[] = [
+  { path: "/ai-instructions", lastModified: "2026-09-02" },
+];
 
 const TRAILING_SLASH_RE = /\/$/;
 
@@ -89,10 +121,14 @@ const TRAILING_SLASH_RE = /\/$/;
  * 🔴 접두사 규칙은 **i18n 전략**이 정한다 — `x-default` 로 뭘 골랐는지와 무관하다.
  *   `urlMappingStrategy: "rewriteDefault"` 라 **`en` 만** 접두사가 없고(`/pricing`),
  *   `ko` 는 항상 `/ko` 를 단다(`/ko/pricing`).
- *   ⚠️ 여기서 `DEFAULT_LOCALE`(=`ko`)을 기준으로 접두사를 떼면 `/pricing` 이 나오는데
- *     그건 **307 로 튕기는 바로 그 URL** 이다(= 고치려던 문제를 다시 만든다).
+ *   ⚠️ 여기서 `DEFAULT_LOCALE` 을 기준으로 접두사를 떼면 `/pricing` 이 나오는데
+ *     그건 **국가에 따라 언어가 바뀌는 바로 그 URL** 이다(= 고치려던 문제를 다시 만든다).
+ *
+ * 🔴 **2026-09-02: 무접두사 경로를 아예 쓰지 않는다.** 무접두사 경로는 방문자 국가로
+ *   로케일이 결정되므로(`x-vercel-ip-country`) 정규 URL 로 신고할 수 없다.
+ *   `ko`·`en` 모두 접두사를 붙인다. (센티널이라 어떤 로케일과도 일치하지 않는다.)
  */
-const UNPREFIXED_LOCALE = "en";
+const UNPREFIXED_LOCALE = "__no_unprefixed_locale__";
 
 function localizedUrl(locale: string, pathname: string): string {
   const prefix = locale === UNPREFIXED_LOCALE ? "" : `/${locale}`;
@@ -115,7 +151,6 @@ function entriesFor(pathname: string, lastModified: Date) {
 }
 
 const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
-  const now = new Date();
   const requestHeaders = await headers();
   const requestHost = (
     requestHeaders.get("x-forwarded-host") ??
@@ -150,11 +185,24 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
       })),
     ];
   }
-  const staticEntries = STATIC_PATHS.flatMap((path) => entriesFor(path, now));
+  // 🔴 각 경로의 **실제 마지막 수정일**을 쓴다(2026-09-02). `now` 를 쓰면 요청마다 값이
+  //   바뀌어 구글이 lastmod 자체를 불신한다(실측으로 그 상태였다 — 위 STATIC_PATHS 주석).
+  const staticEntries = STATIC_PATHS.flatMap((entry) =>
+    entriesFor(entry.path, new Date(entry.lastModified))
+  );
+  const rootStaticEntries = ROOT_STATIC_PATHS.map((entry) => ({
+    url: `${origin}${entry.path}`,
+    lastModified: new Date(entry.lastModified),
+  }));
   try {
     const posts = await listAllPublishedContentForDiscovery();
-    const visible = posts.filter((post) =>
-      LOCALES.includes(post.locale as (typeof LOCALES)[number])
+    // 🔴 커스텀 도메인으로 **정본을 넘긴 글은 제외**한다(2026-09-02). 그 글의 정규 URL 은
+    //   고객 도메인이고, 우리 사이트맵에 남의 호스트 URL 을 담으면 교차제출이 되어
+    //   양쪽 도메인 소유확인이 없으면 무시된다. 고객 도메인 사이트맵(위 호스트 분기)이 담당한다.
+    const visible = posts.filter(
+      (post) =>
+        LOCALES.includes(post.locale as (typeof LOCALES)[number]) &&
+        isCanonicalOnSite(post.publisher)
     );
     const publisherEntries = [
       ...new Map(

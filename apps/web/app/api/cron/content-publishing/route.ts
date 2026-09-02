@@ -4,6 +4,7 @@ import { resend } from "@repo/email";
 import { NewsletterArticleEmail } from "@repo/email/templates/newsletter-article";
 import { denyIfNotCron } from "@repo/security/cron";
 import { Receiver } from "@upstash/qstash";
+import { revalidatePath } from "next/cache";
 import type { NextRequest } from "next/server";
 
 export const maxDuration = 300;
@@ -114,6 +115,16 @@ async function publishDueContent() {
             ]
           : []),
       ]);
+      // 🔴 **예약 발행도 캐시를 비워야 한다**(2026-09-02). 글 페이지·목록은 ISR(1시간)이라
+      //   여기서 무효화하지 않으면 발행 직후에도 최대 1시간 동안 그 글이 목록에 없다.
+      //   ⚠️ 이 cron 은 **웹과 같은 배포**라 `revalidatePath` 가 실제로 듣는다
+      //     (대시보드는 다른 배포라 HTTP `/api/revalidate` 를 거쳐야 한다 —
+      //      즉 예약 발행 경로는 `CRON_SECRET` 값 일치와 무관하게 항상 반영된다).
+      revalidatePath(`/${job.content.locale}/insights`);
+      revalidatePath(`/${job.content.locale}/p/${job.content.publisher.slug}`);
+      revalidatePath(
+        `/${job.content.locale}/p/${job.content.publisher.slug}/${job.content.slug}`
+      );
       published += 1;
     } catch (error) {
       await database.publicationJob.update({

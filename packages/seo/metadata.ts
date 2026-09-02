@@ -53,20 +53,33 @@ const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
  *   ⚠️ `sitemap.ts` 와 **같은 판단**이다. 되살릴 땐 **둘을 함께**, 그리고
  *     **프록시를 먼저** 고친 뒤에.
  */
-const HREFLANG_LOCALES = ["ko"] as const;
+/**
+ * 🟢 **2026-09-02 `en` 을 되살렸다 — 순서를 지켰다.**
+ *   N-39 가 `en` 을 뺀 이유는 "EN URL 이 307 로 튕긴다"였고, 되살리는 조건은
+ *   *"사이트맵이 아니라 프록시부터 고친 뒤"* 였다. 그 프록시 수정(`apps/web/proxy.ts` 의
+ *   matcher 가 명시적 `/ko`·`/en` 경로를 i18n 미들웨어에서 제외)이 함께 들어갔고,
+ *   [실측 2026-09-02] `/en` · `/en/pricing` 등 **EN 23 페이지가 전부 200** 이다.
+ *   ⚠️ 되살릴 때 반드시 **셋을 함께** 바꾼다: 이 파일 · `app/sitemap.ts` · `proxy.ts`.
+ *     하나만 바꾸면 리다이렉트되는 URL 을 정규 URL 로 신고하는 상태로 되돌아간다.
+ */
+const HREFLANG_LOCALES = ["ko", "en"] as const;
 
 /**
  * `x-default` 가 가리킬 로케일 — **실제 200 인 곳**이어야 한다.
  * ⚠️ URL 접두사 규칙(`UNPREFIXED_LOCALE`)과는 **다른 축**이다. 혼동 금지.
+ * 언어를 특정하지 않은 방문자용이라 국제 기본값인 `en` 을 가리킨다(라이브와 동일).
  */
-const DEFAULT_LOCALE = "ko";
+const DEFAULT_LOCALE = "en";
 
 /**
- * 접두사가 **없는** 로케일 — i18n `urlMappingStrategy: "rewriteDefault"` 가 정한다.
- * 🔴 `en` 만 접두사가 없다(`/pricing`). `ko` 는 항상 `/ko` 를 단다.
- *   여기에 `DEFAULT_LOCALE` 을 쓰면 `/ko` 가 사라져 **307 URL 을 정규 URL 로 신고**하게 된다.
+ * 🔴 **무접두사 경로를 정규 URL 로 쓰지 않는다.**
+ *   i18n 전략은 `rewriteDefault` 라 `/pricing` 같은 무접두사 경로도 응답하지만,
+ *   그 경로는 **방문자 국가로 로케일이 결정**된다(`x-vercel-ip-country`).
+ *   한국 IP 에는 한국어, 그 외에는 영어가 나오는 주소를 canonical·hreflang 으로
+ *   신고하면 언어 신호가 무너진다. → `ko`·`en` **모두 접두사를 붙인다.**
+ *   (센티널 값이라 어떤 로케일과도 일치하지 않는다.)
  */
-const UNPREFIXED_LOCALE = "en";
+const UNPREFIXED_LOCALE = "__no_unprefixed_locale__";
 
 /** OG 규격(`ll_CC`) 매핑. 하드코딩된 `en_US` 를 언어별로 교정한다. */
 const OG_LOCALES: Record<string, string> = {
@@ -117,7 +130,14 @@ export const createMetadata = ({
   pathname,
   ...properties
 }: MetadataGenerator): Metadata => {
-  const parsedTitle = `${title} | ${applicationName}`;
+  // 🔴 **접미사 중복 제거**(2026-09-02). [실측] 공개 46 페이지 중 **17 페이지**가
+  //   `… | Findable | Findable` 로 나갔다 — `seoTitle`·다국어 사전 문구에 이미
+  //   `| Findable` 이 들어 있는데 여기서 한 번 더 붙였기 때문이다. SERP·AI 답변의
+  //   출처 표기에 그대로 노출된다. 이미 끝이 접미사면 붙이지 않는다.
+  const titleSuffix = ` | ${applicationName}`;
+  const parsedTitle = title.trimEnd().endsWith(titleSuffix.trim())
+    ? title.trimEnd()
+    : `${title}${titleSuffix}`;
   // 언어를 알면 OG locale 을 맞춘다. 몰랐던 시절엔 전 언어가 en_US 로 나가
   // 한국어 페이지가 영어로 신고되고 있었다.
   const ogLocale = (locale && OG_LOCALES[locale]) ?? "en_US";
@@ -125,9 +145,9 @@ export const createMetadata = ({
     title: parsedTitle,
     description,
     applicationName,
-    metadataBase: productionUrl
-      ? new URL(`${protocol}://${productionUrl}`)
-      : undefined,
+    // `metadataBase` 를 항상 채운다 — 없으면 상대경로 메타데이터가 절대 URL 로
+    // 확정되지 않는다(`siteOrigin` 은 프로덕션 URL 미설정 시 기본 도메인으로 폴백한다).
+    metadataBase: new URL(siteOrigin),
     authors: [author],
     creator: author.name,
     formatDetection: {
@@ -188,6 +208,22 @@ export const createMetadata = ({
   }
 
   const metadata: Metadata = merge(defaultMetadata, properties);
+
+  // 🖼️ `max-image-preview: large` — 구글이 대표 이미지를 **큰 카드**로 쓸 수 있게 허용한다
+  //   (3차 리서치 §A: Discover 큰 카드는 1,200px 이상 이미지 + 큰 미리보기 허용이 조건).
+  //
+  // 🔴 **호출부가 `robots` 를 넘겼으면 손대지 않는다.** `merge` 로 섞으면
+  //   `robots: noindex` + `googlebot: index` 가 동시에 나가는데, 구글은 자기 이름이 붙은
+  //   지시를 우선하므로 **noindex 를 무력화**한다. 색인을 막으려던 페이지가 색인된다.
+  if (metadata.robots === undefined) {
+    metadata.robots = {
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+      },
+    };
+  }
 
   // ──────────────────────────────────────────────────────────────────
   // og:image (2026-08-11 세션N-18)

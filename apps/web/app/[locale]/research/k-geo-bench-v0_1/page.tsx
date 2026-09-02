@@ -29,15 +29,28 @@ const DESCRIPTION =
   "한국어 GEO 측정 공개 데이터셋. K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트 = 140 측정 응답. CC BY 4.0.";
 const PATHNAME = "/research/k-geo-bench-v0_1";
 const SITE_URL = "https://www.findable.co.kr";
-const CANONICAL = `${SITE_URL}/ko${PATHNAME}`;
+const canonicalFor = (locale: string) =>
+  `${SITE_URL}/${locale.startsWith("ko") ? "ko" : "en"}${PATHNAME}`;
 
-export const generateMetadata = () =>
-  createMetadata({
+/**
+ * 🔴 **2026-09-02 — 로케일이 `"ko"` 로 못박혀 있었다.**
+ *   [실측] `/en/…` 페이지의 canonical 이 `/ko/…` 를 가리켰다. hreflang 은 en 자기참조라
+ *   두 신호가 정면으로 어긋난다 → 구글은 이런 클러스터를 통째로 무시할 수 있다(1차 리서치 §1-7).
+ *   하필 이 페이지들은 **AI 가 인용할 실측 자산**이라 EN 색인을 포기할 이유가 없다.
+ */
+export const generateMetadata = async ({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) => {
+  const { locale } = await params;
+  return createMetadata({
     title: "K-GEO-Bench v0.1 · Korean GEO Open Dataset",
     description: DESCRIPTION,
-    locale: "ko",
+    locale: locale.startsWith("ko") ? "ko" : "en",
     pathname: PATHNAME,
   });
+};
 
 export const revalidate = 3600;
 
@@ -109,7 +122,13 @@ const FINDINGS = [
   },
 ];
 
-export default function KGeoBenchPage() {
+export default async function KGeoBenchPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const CANONICAL = canonicalFor(locale);
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
       <JsonLd

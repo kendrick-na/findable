@@ -179,6 +179,27 @@ const PAGES_EN: Record<string, LegalDoc> = {
   },
 };
 
+/**
+ * 🔴 meta description 이 `page.title` 이었다 — 「이용약관」 **4자**(실측 2026-09-02).
+ *   검색 결과 스니펫이 제목의 반복이라 클릭 판단에 아무 정보도 못 준다.
+ *   ⚠️ 약관·개인정보처리방침 **본문은 손대지 않는다**(전자상거래법 제13조 고지 항목이자
+ *     카카오페이 심사 유지 항목). 여기서 바꾸는 것은 `<head>` 의 설명문뿐이다.
+ */
+const LEGAL_DESCRIPTIONS: Record<string, Record<string, string>> = {
+  ko: {
+    privacy:
+      "파인더블(Findable)이 수집하는 개인정보 항목과 이용 목적, 보유 기간, 위탁 현황, 이용자의 권리와 행사 방법을 안내합니다.",
+    terms:
+      "파인더블(Findable) 서비스 이용약관입니다. 서비스 범위, 이용자와 회사의 의무, 요금과 결제, 취소·환불, 책임 범위를 규정합니다.",
+  },
+  en: {
+    privacy:
+      "What personal data Findable collects, why it is used, how long it is kept, who processes it, and how to exercise your rights.",
+    terms:
+      "Findable's terms of service: scope of the service, obligations of both sides, fees and payment, cancellation and refunds, and limits of liability.",
+  },
+};
+
 export const generateMetadata = async ({
   params,
 }: LegalPageProps): Promise<Metadata> => {
@@ -188,9 +209,14 @@ export const generateMetadata = async ({
   if (!page) {
     return {};
   }
+  const normalizedLocale = isKo ? "ko" : "en";
   return createMetadata({
     title: page.title,
-    description: page.title,
+    description: LEGAL_DESCRIPTIONS[normalizedLocale]?.[slug] ?? page.title,
+    // 🔴 `locale`·`pathname` 을 넘긴다 — 이게 없어서 이 페이지들은 canonical·hreflang·og:url 이
+    //   **전부 없었다**(실측: `/ko|/en` × `privacy|terms` 4 페이지).
+    locale: normalizedLocale,
+    pathname: `/legal/${slug}`,
   });
 };
 

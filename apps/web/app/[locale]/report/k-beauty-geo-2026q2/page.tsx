@@ -31,7 +31,8 @@ const DESCRIPTION =
   "한국 K-뷰티 5사 (메디큐브·라운드랩·아누아·조선미녀·달바)의 7 AI 엔진 가시성 측정 + Princeton GEO 시뮬레이션. 광고주·마케터를 위한 산업 인사이트.";
 const PATHNAME = "/report/k-beauty-geo-2026q2";
 const SITE_URL = "https://www.findable.co.kr";
-const CANONICAL = `${SITE_URL}/ko${PATHNAME}`;
+const canonicalFor = (locale: string) =>
+  `${SITE_URL}/${locale.startsWith("ko") ? "ko" : "en"}${PATHNAME}`;
 
 /**
  * 🔴 **2026-08-17 세션N-39 — 이 페이지엔 canonical 이 없었다.**
@@ -39,13 +40,25 @@ const CANONICAL = `${SITE_URL}/ko${PATHNAME}`;
  *   **우회**하고 있었다. 하필 이 페이지는 **AI 가 인용할 실측 콘텐츠**라
  *   (블로그는 비어 있고 실질 자산이 이것과 k-geo-bench 둘뿐) 정규 URL 신호가 제일 중요한 자리다.
  */
-export const generateMetadata = () =>
-  createMetadata({
+/**
+ * 🔴 **2026-09-02 — 로케일이 `"ko"` 로 못박혀 있었다.**
+ *   [실측] `/en/…` 페이지의 canonical 이 `/ko/…` 를 가리켰다. hreflang 은 en 자기참조라
+ *   두 신호가 정면으로 어긋난다 → 구글은 이런 클러스터를 통째로 무시할 수 있다(1차 리서치 §1-7).
+ *   하필 이 페이지들은 **AI 가 인용할 실측 자산**이라 EN 색인을 포기할 이유가 없다.
+ */
+export const generateMetadata = async ({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) => {
+  const { locale } = await params;
+  return createMetadata({
     title: "K-뷰티 GEO Report 2026 Q2",
     description: DESCRIPTION,
-    locale: "ko",
+    locale: locale.startsWith("ko") ? "ko" : "en",
     pathname: PATHNAME,
   });
+};
 
 export const revalidate = 3600;
 
@@ -140,7 +153,13 @@ const APPLY_STRATEGIES = [
   },
 ];
 
-export default function KBeautyReportPage() {
+export default async function KBeautyReportPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const CANONICAL = canonicalFor(locale);
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
       {/* 🔴 GEO 도그푸딩 — AI 가 이 리포트를 **출처로 인용**하게 만드는 구조화 데이터.

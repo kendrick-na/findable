@@ -3,6 +3,19 @@ import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 
+const REMOTE_SRC_RE = /^https?:\/\//;
+
+/**
+ * 🖼️ **최적화를 켠다 — 단, 외부 호스트는 원본 그대로 둔다**(2026-09-02).
+ *   [실측] 공개 페이지의 `<img>` 64건이 **전부** `unoptimized` 였다 = WebP/AVIF 변환·
+ *   사이즈 축소가 하나도 걸리지 않았다(LCP 손실 · 3차 리서치 §A).
+ *   우리 `/public` 에 올린 이미지는 같은 오리진이라 `remotePatterns` 등록 없이 최적화된다.
+ *   ⚠️ 외부 URL 은 `next.config.ts` 의 `remotePatterns` 에 없으면 **런타임 400** 이 된다 →
+ *     등록 전까지는 그 경우만 원본으로 서빙한다(깨진 이미지보다 낫다).
+ */
+const isRemoteSrc = (src: unknown): boolean =>
+  typeof src === "string" && REMOTE_SRC_RE.test(src);
+
 const headingId = (value: unknown) =>
   String(value)
     .toLowerCase()
@@ -54,8 +67,9 @@ export function MarkdownArticle({ markdown }: { markdown: string }) {
             alt={alt ?? ""}
             className="my-10 aspect-video w-full rounded-sm bg-black/5 object-cover"
             height={675}
+            sizes="(min-width: 768px) 720px, 100vw"
             src={typeof src === "string" ? src : ""}
-            unoptimized
+            unoptimized={isRemoteSrc(src)}
             width={1200}
           />
         ),

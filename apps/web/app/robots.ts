@@ -37,36 +37,99 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   )
     .split(":")[0]
     .toLowerCase();
+  // ⚠️ `localhost`·`127.0.0.1` 제외(2026-09-02 로컬 검증에서 발견): 빠뜨리면 개발 서버에서
+  //   `Host: localhost` · `Sitemap: https://localhost/sitemap.xml` 이 나온다(존재하지 않는 주소).
+  //   `app/sitemap.ts` 는 이미 같은 예외를 두고 있었는데 이 파일만 없었다.
   const publicOrigin =
     requestHost &&
     requestHost !== "findable.co.kr" &&
     requestHost !== "www.findable.co.kr" &&
+    requestHost !== "localhost" &&
+    requestHost !== "127.0.0.1" &&
     !requestHost.endsWith(".vercel.app")
       ? `https://${requestHost}`
       : origin;
+  const publicHost = new URL(publicOrigin).host;
+  const isFindableHost =
+    publicHost === "findable.co.kr" || publicHost === "www.findable.co.kr";
+
+  // 🤖 **AI 크롤러를 이름으로 허용한다**(2026-09-02).
+  //   [실측] 이전 robots.txt 에는 `User-Agent: *` 한 벌뿐이었다. 와일드카드로도 허용되지만,
+  //   GEO 를 파는 회사가 정작 자사 진단 항목("주요 AI 봇 접근 정책 결정")을 비워둔 상태였다.
+  //   1차 리서치 §2-2 의 3분류(학습·실시간검색·유저트리거)를 **전부 명시 허용**한다 —
+  //   우리 목표는 차단이 아니라 **인용되는 것**이라 미들패스(학습봇 차단)를 쓰지 않는다.
+  //   ⚠️ 2차 리서치 §A-5: robots.txt 준수는 봇마다 편차가 크다. 이 파일은 **의사 표시**이고
+  //     실제 차단이 필요하면 WAF 레벨로 해야 한다(여기서는 차단 목적이 없다).
+  //   ⚠️ `Applebot-Extended` 는 크롤러가 아니라 **Apple Intelligence 학습 opt-out 토큰**이다
+  //     (2차 §A-2). 미설정이 기본 허용이라, 허용 의사를 명시만 해 둔다.
+  const aiCrawlers = [
+    "GPTBot",
+    "OAI-SearchBot",
+    "ChatGPT-User",
+    "ClaudeBot",
+    "Claude-SearchBot",
+    "Claude-User",
+    "PerplexityBot",
+    "Perplexity-User",
+    "Google-Extended",
+    "Applebot",
+    "Applebot-Extended",
+    "Bingbot",
+    "Yeti",
+  ];
+
   return {
-    rules: {
-      userAgent: "*",
-      // `allow` 가 `disallow` 보다 구체적이면 우선한다(표준: 최장 일치 규칙).
-      // `/audit` 는 리드 유입 랜딩이라 반드시 허용하고, 그 **하위**만 막는다.
-      allow: ["/", "/audit", "/ko/audit"],
-      disallow: [
-        "/api/",
-        "/audit/*", // 개인 진단 결과(`/audit/<jobId>`) — 위 주석 참고
-        "/ko/audit/*",
-        "/checkout/", // 결제 완료 화면
-        "/ko/checkout/",
-        "/logo-preview", // 내부 확인용
-        "/ko/logo-preview",
-        // 🔴 2026-08-17 세션N-38 — `/synergy` 는 **페이지를 삭제**했다(👤 *"필요 없어"*).
-        //   투자 피치 문서(네이버 D2SF, 5월 신청 건)라 고객용 서비스가 아니었고,
-        //   진입 경로 0 인데 배포만 되어 있었다. 남아 있던 내용도 지금은 사실과 어긋났다 —
-        //   *"8번째 엔진으로 AI 브리핑을 통합한 첫 도구"* 는 실측상 본류 7엔진에 없다.
-        //   차단 규칙은 **경로가 사라졌으므로 함께 제거**한다(없는 길을 막는 규칙은 오해를 남긴다).
-        //   백업 = `_백업/synergy_page_D2SF투자피치_삭제전.tsx.bak`
-      ],
-    },
-    sitemap: `${publicOrigin}/sitemap.xml`,
-    host: publicOrigin,
+    rules: [
+      {
+        userAgent: aiCrawlers,
+        allow: ["/", "/audit", "/ko/audit"],
+        disallow: [
+          "/api/",
+          "/audit/*",
+          "/ko/audit/*",
+          "/en/audit/*",
+          "/checkout/",
+          "/ko/checkout/",
+          "/en/checkout/",
+          "/logo-preview",
+          "/ko/logo-preview",
+          "/en/logo-preview",
+        ],
+      },
+      {
+        userAgent: "*",
+        // `allow` 가 `disallow` 보다 구체적이면 우선한다(표준: 최장 일치 규칙).
+        // `/audit` 는 리드 유입 랜딩이라 반드시 허용하고, 그 **하위**만 막는다.
+        allow: ["/", "/audit", "/ko/audit"],
+        disallow: [
+          "/api/",
+          "/audit/*", // 개인 진단 결과(`/audit/<jobId>`) — 위 주석 참고
+          "/ko/audit/*",
+          "/checkout/", // 결제 완료 화면
+          "/ko/checkout/",
+          "/logo-preview", // 내부 확인용
+          "/ko/logo-preview",
+          "/en/logo-preview",
+          // 🔴 2026-08-17 세션N-38 — `/synergy` 는 **페이지를 삭제**했다(👤 *"필요 없어"*).
+          //   투자 피치 문서(네이버 D2SF, 5월 신청 건)라 고객용 서비스가 아니었고,
+          //   진입 경로 0 인데 배포만 되어 있었다. 남아 있던 내용도 지금은 사실과 어긋났다 —
+          //   *"8번째 엔진으로 AI 브리핑을 통합한 첫 도구"* 는 실측상 본류 7엔진에 없다.
+          //   차단 규칙은 **경로가 사라졌으므로 함께 제거**한다(없는 길을 막는 규칙은 오해를 남긴다).
+          //   백업 = `_백업/synergy_page_D2SF투자피치_삭제전.tsx.bak`
+        ],
+      },
+    ],
+    // 🔴 **뉴스 사이트맵은 우리 호스트에서만 알린다**(2026-09-02). 고객 커스텀 도메인에는
+    //   `/news-sitemap.xml` 라우트가 우리 글 목록을 돌려주므로, 그 호스트에서 광고하면
+    //   남의 도메인에 우리 기사 목록을 신고하게 된다.
+    //   ⚠️ `sitemap` 값은 **프로토콜·호스트를 포함한 절대 URL** 이어야 한다(구글 공식 스펙).
+    //      여러 줄 제출은 허용된다(상한 없음).
+    sitemap: isFindableHost
+      ? [`${publicOrigin}/sitemap.xml`, `${publicOrigin}/news-sitemap.xml`]
+      : `${publicOrigin}/sitemap.xml`,
+    // ⚠️ `host` 는 **구글이 지원하지 않는 필드**다(공식 스펙의 지원 목록 = user-agent·allow·
+    //   disallow·sitemap). Yandex 계열 파서 호환용으로만 남기고, 값은 URL 이 아니라
+    //   **호스트명**을 준다(이전 값 `https://…` 는 그 파서들에서도 무의미했다).
+    host: publicHost,
   };
 }

@@ -14,14 +14,30 @@
 //   조선미녀 (beautyofjoseon.com) — jobId e6d206df (5/8 측정)
 //   달바 (dalba.com)          — jobId 44b63810 (5/8 측정)
 
+import { createMetadata } from "@repo/seo/metadata";
 import { ArrowRight, ExternalLink, Info } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = {
-  title: "K-뷰티 5사 AI 가시성 시뮬레이션 · Findable Case Study",
-  description:
-    "메디큐브·라운드랩·아누아·조선미녀·달바 5사의 7 AI 엔진 실측 데이터 + Princeton GEO 알고리즘 시뮬레이션. AI 시대 K-뷰티 가시성 분석.",
+/**
+ * 🔴 정적 `metadata` 였다 → canonical·hreflang·og:url 이 **하나도 없었다**(실측 2026-09-02).
+ *   `createMetadata` 로 옮기면서 `locale`·`pathname` 을 넘겨 세 신호를 채운다.
+ *   ⚠️ 제목·설명 **문구는 그대로 유지**한다(검색 결과 표기를 바꿀 이유가 없다).
+ *   ⚠️ 정적 `metadata` 와 `generateMetadata` 는 같은 라우트에서 **동시에 못 쓴다**(Next 규칙).
+ */
+export const generateMetadata = async ({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> => {
+  const { locale } = await params;
+  return createMetadata({
+    title: "K-뷰티 5사 AI 가시성 시뮬레이션 · Findable Case Study",
+    description:
+      "메디큐브·라운드랩·아누아·조선미녀·달바 5사의 7 AI 엔진 실측 데이터 + Princeton GEO 알고리즘 시뮬레이션. AI 시대 K-뷰티 가시성 분석.",
+    locale: locale.startsWith("ko") ? "ko" : "en",
+    pathname: "/case/a-brand",
+  });
 };
 
 export const revalidate = 3600;

@@ -184,7 +184,19 @@ export function listAllPublishedContentForDiscovery() {
       tags: true,
       publishedAt: true,
       updatedAt: true,
-      publisher: { select: { slug: true, name: true } },
+      // 🔴 `customDomain`·`customDomainStatus` 를 함께 읽는다(2026-09-02).
+      //   사이트맵·뉴스 사이트맵·RSS 가 **정본 호스트**를 판정해야 하는데
+      //   (→ `lib/public-url.ts`), 이 두 값이 없어서 전부 우리 도메인 URL 로만
+      //   조립되고 있었다. 커스텀 도메인을 연결한 퍼블리셔의 글이 두 호스트에
+      //   중복 등재되는 원인이었다.
+      publisher: {
+        select: {
+          slug: true,
+          name: true,
+          customDomain: true,
+          customDomainStatus: true,
+        },
+      },
     },
     take: 1000,
   });
