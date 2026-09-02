@@ -20,7 +20,7 @@
  *     (feedback_guard_defends_the_bug)
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -41,6 +41,8 @@ const customArticle = read(
 const customHome = read("apps/web/app/[locale]/site/[customDomain]/page.tsx");
 const manageAction = read("apps/app/app/actions/content/manage.ts");
 const publishCron = read("apps/web/app/api/cron/content-publishing/route.ts");
+const indexNow = read("apps/web/lib/indexnow.ts");
+const revalidateRoute = read("apps/web/app/api/revalidate/route.ts");
 
 const CANONICAL_POLICY_RE =
   /const CANONICAL_HOST_POLICY: "custom-domain" \| "findable"/;
@@ -52,6 +54,9 @@ const NEWS_NAME_FROM_PUBLISHER =
  *   (실제로 걸렸다). 가드는 문구가 아니라 계약을 검사한다.
  */
 const CREATE_METADATA_USED = /import\s*\{[^}]*createMetadata|createMetadata\(/;
+/** 공개 키 파일과 짝을 맞춰야 하는 IndexNow 키 상수. */
+const INDEXNOW_KEY_RE =
+  /INDEXNOW_KEY =\s*\n?\s*process\.env\.INDEXNOW_KEY \?\? "([^"]+)"/;
 
 describe("고객사 블로그 — 정본 URL 이 한 곳에서 결정된다", () => {
   it("🔴 정본 판정 모듈이 정책 상수와 두 판정 함수를 노출한다", () => {
@@ -133,5 +138,32 @@ describe("고객사 블로그 — 발행이 공개 페이지에 실제로 반영
       publishCron,
       "cron 발행 후 무효화가 없으면 발행 직후 목록에 글이 안 보인다(ISR 1시간)"
     ).toContain("revalidatePath");
+  });
+
+  it("🔴 두 발행 경로 모두 IndexNow 로 색인을 통지한다", () => {
+    // 사이트맵은 "명령이 아니라 신호"다(존 뮬러). 신생 도메인은 크롤러가 자주 오지 않아
+    // 통지가 없으면 새 글이 며칠 방치된다. 구글은 IndexNow 미지원 → 네이버 축의 수단이다.
+    expect(indexNow).toContain("api.indexnow.org/indexnow");
+    // 공식 body 스키마(indexnow.org/documentation): host·key·keyLocation·urlList
+    for (const field of ["host", "key", "keyLocation", "urlList"]) {
+      expect(indexNow, `IndexNow body 에 ${field} 가 없다`).toContain(field);
+    }
+    expect(revalidateRoute, "대시보드 즉시 발행 경로에 통지가 없다").toContain(
+      "submitToIndexNow"
+    );
+    expect(publishCron, "예약 발행 경로에 통지가 없다").toContain(
+      "submitToIndexNow"
+    );
+  });
+
+  it("🔴 IndexNow 키 상수와 공개 키 파일이 일치한다", () => {
+    // 🔴 둘이 갈리면 검색엔진이 소유 확인에 실패해 **전량 거부**된다(403/422).
+    //   키는 프로토콜상 공개 값이라 비밀이 아니지만, **파일과 코드가 짝**이어야 한다.
+    const key = INDEXNOW_KEY_RE.exec(indexNow)?.[1];
+    expect(key, "indexnow.ts 에서 키 상수를 찾지 못했다").toBeDefined();
+    expect(
+      existsSync(join(ROOT, `apps/web/public/${key}.txt`)),
+      `apps/web/public/${key}.txt 가 없다 — 키 파일과 코드가 어긋나면 제출이 전량 거부된다`
+    ).toBe(true);
   });
 });

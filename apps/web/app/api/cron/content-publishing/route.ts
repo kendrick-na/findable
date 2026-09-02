@@ -6,6 +6,7 @@ import { denyIfNotCron } from "@repo/security/cron";
 import { Receiver } from "@upstash/qstash";
 import { revalidatePath } from "next/cache";
 import type { NextRequest } from "next/server";
+import { submitToIndexNow } from "@/lib/indexnow";
 
 export const maxDuration = 300;
 
@@ -120,11 +121,24 @@ async function publishDueContent() {
       //   ⚠️ 이 cron 은 **웹과 같은 배포**라 `revalidatePath` 가 실제로 듣는다
       //     (대시보드는 다른 배포라 HTTP `/api/revalidate` 를 거쳐야 한다 —
       //      즉 예약 발행 경로는 `CRON_SECRET` 값 일치와 무관하게 항상 반영된다).
-      revalidatePath(`/${job.content.locale}/insights`);
-      revalidatePath(`/${job.content.locale}/p/${job.content.publisher.slug}`);
-      revalidatePath(
-        `/${job.content.locale}/p/${job.content.publisher.slug}/${job.content.slug}`
-      );
+      const changedPaths = [
+        `/${job.content.locale}/insights`,
+        `/${job.content.locale}/p/${job.content.publisher.slug}`,
+        `/${job.content.locale}/p/${job.content.publisher.slug}/${job.content.slug}`,
+      ];
+      for (const path of changedPaths) {
+        revalidatePath(path);
+      }
+      // 🔎 색인 통지(네이버 등 IndexNow 참여 엔진 · 구글은 미지원).
+      //   ⚠️ 정본이 **고객 커스텀 도메인**인 글은 우리 키로 제출할 수 없다(프로토콜 규칙) → 건너뛴다.
+      if (
+        !(
+          job.content.publisher.customDomain &&
+          job.content.publisher.customDomainStatus === "active"
+        )
+      ) {
+        await submitToIndexNow(changedPaths);
+      }
       published += 1;
     } catch (error) {
       await database.publicationJob.update({
