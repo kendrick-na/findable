@@ -77,9 +77,13 @@ export const ContactForm = ({ dictionary, locale }: ContactFormProps) => {
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <h4 className="max-w-xl text-left font-regular text-3xl tracking-tighter md:text-5xl">
+                {/* 🔴 `h4` → `h1`(2026-09-02). [실측] `/ko/contact`·`/en/contact` 에
+                    **H1 이 0개**였고 제목이 `h4` 라 헤딩 단계도 h1~h3 을 건너뛰었다.
+                    크기는 Tailwind 클래스가 정하므로 **화면은 그대로**고 구조만 바뀐다.
+                    (자사 진단 항목 "대표 H1 추가"를 우리 페이지가 위반하고 있었다.) */}
+                <h1 className="max-w-xl text-left font-regular text-3xl tracking-tighter md:text-5xl">
                   {dictionary.web.contact.meta.title}
-                </h4>
+                </h1>
                 <p className="max-w-sm text-left text-lg text-muted-foreground leading-relaxed tracking-tight">
                   {dictionary.web.contact.meta.description}
                 </p>

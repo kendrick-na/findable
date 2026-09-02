@@ -6,15 +6,64 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MarkdownArticle } from "@/components/content/markdown-article";
-import { getPublishedContent, listRelatedContent } from "@/lib/content";
+import {
+  getPublishedContent,
+  listAllPublishedContentForDiscovery,
+  listRelatedContent,
+} from "@/lib/content";
+import {
+  articleCanonicalUrl,
+  customDomainArticleUrl,
+  hasLiveCustomDomain,
+  siteArticleUrl,
+  sitePublisherUrl,
+} from "@/lib/public-url";
 
-export const dynamic = "force-dynamic";
+/**
+ * 🔴🔴 **발행 즉시 살아나야 한다 — `dynamicParams` 를 끄지 않는다**(2026-09-02).
+ *
+ *   라이브는 `dynamicParams = false` 였다. Next.js 공식(16.3.4) 정의:
+ *   *"`false`: generateStaticParams 에 없는 동적 세그먼트는 **404** 를 반환한다."*
+ *   → **고객사가 대시보드에서 새 글을 발행하면 재배포 전까지 그 URL 이 404** 였다.
+ *     사이트맵·RSS·뉴스 사이트맵에는 올라가는데 페이지가 없는 상태 = 색인 요청이
+ *     404 를 먹는다(구글은 반복 404 를 기억한다). 고객사 블로그를 파는 제품에서
+ *     이건 기능이 아니라 결함이다.
+ *
+ *   기본값(`true`)을 그대로 쓰면 **목록에 없던 글은 첫 요청에 생성**되고 이후 캐시된다.
+ *   빌드 시점에 아는 글은 미리 만들어 두고(아래 `generateStaticParams`),
+ *   그 뒤 발행된 글은 온디맨드로 만든다.
+ *
+ * ⚠️ 갱신(수정 후 재발행)은 `revalidate` 주기 안에서는 반영되지 않는다 →
+ *   `apps/app` 의 발행 액션이 `app/api/revalidate` 를 호출해 즉시 무효화한다.
+ *   (앱과 웹은 **다른 Vercel 배포**라 `revalidatePath` 가 서로에게 듣지 않는다.)
+ */
+export const revalidate = 3600;
+export const dynamic = "force-static";
+
+export async function generateStaticParams() {
+  try {
+    const posts = await listAllPublishedContentForDiscovery();
+    return posts
+      .filter((post) => post.locale === "ko" || post.locale === "en")
+      .map((post) => ({
+        locale: post.locale,
+        postSlug: post.slug,
+        publisherSlug: post.publisher.slug,
+      }));
+  } catch {
+    // 🔴 빌드가 DB 에 의존하지 않게 한다. 목록이 비어도 `dynamicParams` 기본값 덕에
+    //   모든 글이 온디맨드로 생성된다 — 빌드 실패보다 훨씬 낫다.
+    return [];
+  }
+}
 
 interface Props {
   params: Promise<{ locale: string; postSlug: string; publisherSlug: string }>;
 }
 
 const MARKDOWN_PUNCTUATION_RE = /[#*_>`[\]()|-]/g;
+/** 외부 호스트 이미지 판별 — `remotePatterns` 미등록 URL 은 최적화를 태우면 400 이 된다. */
+const REMOTE_IMAGE_RE = /^https?:\/\//;
 const WHITESPACE_RE = /\s+/;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -23,18 +72,55 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!post) {
     return {};
   }
+  const locale = input.locale.startsWith("ko") ? "ko" : "en";
+  const canonical = articleCanonicalUrl({
+    locale,
+    postSlug: post.slug,
+    publisher: post.publisher,
+  });
+
+  // 🔴 **커스텀 도메인을 연결한 퍼블리셔의 글은 그 도메인이 정본이다**(→ `lib/public-url.ts`).
+  //   그때는 canonical·hreflang 을 **고객 도메인 주소로 통째로** 바꿔야 한다.
+  //   canonical 만 넘기고 hreflang 을 우리 호스트로 남기면 두 신호가 엇갈려
+  //   구글이 언어 클러스터를 무시한다(1차 리서치 §1-7).
+  const alternates = hasLiveCustomDomain(post.publisher)
+    ? {
+        canonical,
+        languages: {
+          ko: customDomainArticleUrl({
+            customDomain: post.publisher.customDomain ?? "",
+            locale: "ko",
+            postSlug: post.slug,
+          }),
+          en: customDomainArticleUrl({
+            customDomain: post.publisher.customDomain ?? "",
+            locale: "en",
+            postSlug: post.slug,
+          }),
+          "x-default": customDomainArticleUrl({
+            customDomain: post.publisher.customDomain ?? "",
+            locale: "en",
+            postSlug: post.slug,
+          }),
+        },
+      }
+    : undefined;
+
   return createMetadata({
     title: post.seoTitle ?? post.title,
     description:
       post.seoDescription ?? post.excerpt ?? post.bodyMarkdown.slice(0, 160),
     image: post.coverImageUrl ?? undefined,
-    locale: input.locale,
-    pathname: `/p/${input.publisherSlug}/${input.postSlug}`,
-    robots: post.noindex ? { index: false, follow: true } : undefined,
+    locale,
+    pathname: `/p/${post.publisher.slug}/${post.slug}`,
+    ...(alternates ? { alternates } : {}),
     openGraph: {
       type: "article",
+      url: canonical,
       publishedTime: post.publishedAt?.toISOString(),
+      modifiedTime: post.updatedAt.toISOString(),
       authors: [post.publisher.name],
+      tags: post.tags,
     },
   });
 }
@@ -46,9 +132,21 @@ export default async function ArticlePage({ params }: Props) {
   if (!post) {
     notFound();
   }
-  const prefix = input.locale.startsWith("ko") ? "/ko" : "";
+  // 🔴 `en` 접두사를 붙인다(2026-09-02). 이전엔 빈 문자열이라 EN 글의 내부 링크·JSON-LD 가
+  //   무접두사 경로를 가리켰다 — 그 경로는 **방문자 국가로 언어가 바뀐다.**
   const ko = input.locale.startsWith("ko");
-  const canonical = `https://www.findable.co.kr${prefix}/p/${post.publisher.slug}/${post.slug}`;
+  const locale = ko ? "ko" : "en";
+  const prefix = `/${locale}`;
+  const canonical = articleCanonicalUrl({
+    locale,
+    postSlug: post.slug,
+    publisher: post.publisher,
+  });
+  const siteUrl = siteArticleUrl({
+    locale,
+    postSlug: post.slug,
+    publisherSlug: post.publisher.slug,
+  });
   const words = post.bodyMarkdown
     .replace(MARKDOWN_PUNCTUATION_RE, " ")
     .split(WHITESPACE_RE)
@@ -80,17 +178,40 @@ export default async function ArticlePage({ params }: Props) {
           description: post.excerpt ?? undefined,
           datePublished: post.publishedAt?.toISOString(),
           dateModified: post.updatedAt.toISOString(),
-          mainEntityOfPage: canonical,
+          // `mainEntityOfPage` 는 문자열이 아니라 **WebPage 노드**로 준다(정본 URL 고정).
+          mainEntityOfPage: {
+            "@type": "WebPage",
+            "@id": canonical,
+          },
+          url: canonical,
+          // 🔴 **발행 주체를 고객 퍼블리셔로 바로잡았다**(2026-09-02).
+          //   이전엔 `publisher` 가 전 글 하드코딩 `Findable` 이었다 — 고객사가 자기 블로그에
+          //   올린 글의 발행처를 우리로 신고하는 셈이었다(고객 발행이 시작되면 전부 오신고).
+          //   Findable 공식 글은 퍼블리셔 자체가 Findable 이라 값이 그대로 유지된다.
           author: {
             "@type": "Organization",
             name: post.publisher.name,
-            url: `https://www.findable.co.kr${prefix}/p/${post.publisher.slug}`,
+            url:
+              post.publisher.websiteUrl ??
+              sitePublisherUrl(locale, post.publisher.slug),
           },
-          publisher: { "@type": "Organization", name: "Findable" },
+          publisher: {
+            "@type": "Organization",
+            name: post.publisher.name,
+            ...(post.publisher.logoUrl
+              ? {
+                  logo: {
+                    "@type": "ImageObject",
+                    url: post.publisher.logoUrl,
+                  },
+                }
+              : {}),
+          },
           image: post.coverImageUrl ?? undefined,
           articleSection: post.contentType,
           keywords: post.tags.join(", "),
-          inLanguage: input.locale,
+          inLanguage: ko ? "ko-KR" : "en-US",
+          wordCount: words,
           isAccessibleForFree: true,
         }}
       />
@@ -109,13 +230,15 @@ export default async function ArticlePage({ params }: Props) {
               "@type": "ListItem",
               position: 2,
               name: post.publisher.name,
-              item: `https://www.findable.co.kr${prefix}/p/${post.publisher.slug}`,
+              item: sitePublisherUrl(locale, post.publisher.slug),
             },
             {
+              // 빵부스러기는 **이 호스트에서의 경로**를 설명한다 → 정본이 고객 도메인이어도
+              // 여기서는 우리 호스트 주소를 쓴다(경로와 URL 이 어긋나면 안 된다).
               "@type": "ListItem",
               position: 3,
               name: post.title,
-              item: canonical,
+              item: siteUrl,
             },
           ],
         }}
@@ -165,12 +288,17 @@ export default async function ArticlePage({ params }: Props) {
         {post.coverImageUrl ? (
           <div className="mx-auto max-w-6xl px-6 pt-10">
             <Image
-              alt={post.coverImageAlt ?? ""}
+              // 🔴 alt 폴백을 제목으로 바꿨다 — 빈 alt 는 "장식용 이미지" 선언이라
+              //   대표 이미지에 쓰면 스크린리더·이미지 검색이 내용을 알 수 없다(3차 리서치 §A).
+              alt={post.coverImageAlt ?? post.title}
               className="aspect-[16/8] w-full rounded-sm object-cover"
               height={630}
               priority
+              sizes="(min-width: 1024px) 1152px, 100vw"
               src={post.coverImageUrl}
-              unoptimized
+              // 같은 오리진 이미지는 최적화(WebP/AVIF·리사이즈)를 태운다.
+              // 외부 URL 은 `remotePatterns` 미등록 시 400 이 되므로 원본으로 둔다.
+              unoptimized={REMOTE_IMAGE_RE.test(post.coverImageUrl)}
               width={1200}
             />
           </div>

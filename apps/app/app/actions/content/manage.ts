@@ -6,6 +6,7 @@ import { checkContentQuality } from "@repo/audit/content-quality";
 import { isAdmin, requireAdmin } from "@repo/auth/admin";
 import { auth } from "@repo/auth/server";
 import { database, type Prisma } from "@repo/database";
+import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { latestContentBrief } from "@/lib/content/latest-brief";
@@ -62,6 +63,54 @@ async function ownedContent(contentId: string) {
   });
 }
 
+/**
+ * 🔴🔴 **웹(공개 사이트)의 캐시는 여기서 못 지운다**(2026-09-02 발견).
+ *   `apps/app` 과 `apps/web` 은 **다른 Vercel 배포**(프로젝트 `findable-app` · `findable`)라
+ *   `revalidatePath` 는 **자기 배포의 캐시만** 건드린다. 아래 호출들은 앱 화면용이고,
+ *   공개 글 페이지는 웹의 `/api/revalidate` 를 **HTTP 로 불러야** 비워진다.
+ *   그 전까지는 고객이 글을 고쳐 재발행해도 공개 페이지가 최대 1시간 옛 내용이었다.
+ *
+ * ⚠️ 실패해도 발행을 막지 않는다 — 캐시는 `revalidate` 주기로도 결국 갱신된다.
+ *   ⚠️ `CRON_SECRET` 이 이 앱에 없으면 조용히 건너뛴다(env parity 필요).
+ */
+async function revalidateWebPaths(paths: string[]) {
+  const webUrl = process.env.NEXT_PUBLIC_WEB_URL;
+  const secret = process.env.CRON_SECRET;
+  if (!(webUrl && secret) || paths.length === 0) {
+    return;
+  }
+  try {
+    const response = await fetch(`${webUrl}/api/revalidate`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${secret}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ paths }),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      // 🔴 **401 = 두 Vercel 프로젝트의 `CRON_SECRET` 값이 다르다.**
+      //   [실측 2026-09-02] 키 *존재*는 양쪽 확인했지만 값은 Sensitive 라 대조할 수 없다 →
+      //   불일치는 **런타임에만** 드러난다. 조용히 지나가면 "발행했는데 공개 페이지가
+      //   안 바뀐다"는 증상만 남고 원인을 못 찾는다. 상태 코드를 남겨 진단 가능하게 한다.
+      log.warn("web revalidate rejected", {
+        status: response.status,
+        hint:
+          response.status === 401
+            ? "CRON_SECRET 값이 web/app 두 프로젝트에서 다르다"
+            : undefined,
+        paths,
+      });
+    }
+  } catch (error) {
+    log.warn("web revalidate call failed", {
+      error: error instanceof Error ? error.message : String(error),
+      paths,
+    });
+  }
+}
+
 function refreshContentPaths(content?: {
   locale: string;
   publisher: { slug: string };
@@ -74,6 +123,15 @@ function refreshContentPaths(content?: {
     revalidatePath(
       `/${content.locale}/p/${content.publisher.slug}/${content.slug}`
     );
+    // 공개 사이트(다른 배포)의 같은 경로 + 목록·피드를 함께 비운다.
+    // 실패해도 발행을 막지 않으므로 결과를 기다리지 않는다(함수 내부에서 예외를 삼킨다).
+    revalidateWebPaths([
+      `/${content.locale}/insights`,
+      `/${content.locale}/p/${content.publisher.slug}`,
+      `/${content.locale}/p/${content.publisher.slug}/${content.slug}`,
+    ]).catch(() => {
+      // revalidateWebPaths 가 이미 로깅한다.
+    });
   }
 }
 

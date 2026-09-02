@@ -22,13 +22,26 @@ describe("SEO/GEO content platform contract", () => {
     expect(schema).toContain("@@unique([publisherId, locale, slug])");
   });
 
-  it("keeps public content SSR, sanitized and discoverable", () => {
+  it("keeps public content server-rendered, sanitized and discoverable", () => {
     const article = read(
       "apps/web/app/[locale]/p/[publisherSlug]/[postSlug]/page.tsx"
     );
     const markdown = read("apps/web/components/content/markdown-article.tsx");
     const sitemap = read("apps/web/app/sitemap.ts");
-    expect(article).toContain('export const dynamic = "force-dynamic"');
+    // 🔴 **2026-09-02: 이 가드가 `force-dynamic` 을 요구하고 있었다.**
+    //   원래 의도는 "크롤러가 JS 없이 완성된 HTML 을 받는다"였는데, 그걸 **매 요청 SSR**
+    //   이라는 특정 구현으로 못박아 ISR 로 옮기는 것을 막고 있었다(ISR 도 서버 렌더다).
+    //   📕 가드는 의도를 검사해야 한다 — 구현을 못박으면 개선이 회귀로 보인다.
+    //     (reference_findable_traps · feedback_guard_defends_the_bug)
+    expect(article).not.toContain('"use client"');
+    expect(article).toContain("export const revalidate");
+    // 🔴🔴 **발행 즉시 도달 가능해야 한다.** Next 공식: `dynamicParams = false` 는
+    //   generateStaticParams 에 없는 경로에 **404** 를 준다 → 고객사가 대시보드에서
+    //   새 글을 발행하면 재배포 전까지 404 였다(라이브 실측 구조, 2026-09-02).
+    expect(
+      article,
+      "dynamicParams=false 는 새로 발행된 글을 404 로 만든다 — 다시 넣지 말 것"
+    ).not.toMatch(/export const dynamicParams = false/);
     expect(article).toContain("<JsonLd");
     expect(markdown).toContain("rehypeSanitize");
     // 검수된 인사이트의 원출처 링크는 크롤러가 따라갈 수 있어야 인용 사슬이 보존된다.
