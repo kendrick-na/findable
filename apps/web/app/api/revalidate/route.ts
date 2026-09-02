@@ -1,5 +1,6 @@
 import { denyIfNotCron } from "@repo/security/cron";
 import { revalidatePath } from "next/cache";
+import { submitToIndexNow } from "@/lib/indexnow";
 
 /**
  * `/api/revalidate` — **앱(대시보드)에서 웹의 캐시를 무효화하는 유일한 경로.**
@@ -61,5 +62,12 @@ export async function POST(request: Request): Promise<Response> {
     revalidatePath(path);
   }
 
-  return Response.json({ revalidated: safePaths });
+  // 캐시를 비운 뒤 **검색엔진에 통지**한다(네이버 등 IndexNow 참여 엔진. 구글은 미지원).
+  // 대시보드에서 즉시 발행한 경우가 이 경로를 탄다.
+  const submitted = await submitToIndexNow(safePaths);
+
+  return Response.json({
+    revalidated: safePaths,
+    indexNowSubmitted: submitted,
+  });
 }
