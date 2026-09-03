@@ -42,6 +42,8 @@ const CONNECTION_ERRORS: Record<string, string> = {
   brand_domain: "브랜드 도메인이 없어 Google 속성을 검증할 수 없습니다.",
   callback: "Google 연결을 완료하지 못했습니다. 다시 시도해 주세요.",
   google_denied: "Google 권한 요청이 취소되었습니다.",
+  oauth_config:
+    "Google 연결 설정이 아직 완료되지 않았습니다. 운영팀에 문의해 주세요.",
   property: "선택한 속성을 확인할 수 없습니다. 목록에서 다시 선택해 주세요.",
   property_list:
     "Google 속성 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
@@ -136,8 +138,7 @@ function buildConnectionMetrics(
 function indexNowBadge(status: string | null | undefined) {
   if (status === "configured") {
     return {
-      className:
-        "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
+      className: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
       label: "키 확인 완료",
     };
   }
@@ -269,15 +270,31 @@ export default async function SearchPerformanceIntegrationsPage({
         ) : null}
 
         {params.connected ? (
-          <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-4 text-emerald-200 text-sm">
+          <div
+            aria-live="polite"
+            className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-4 text-emerald-200 text-sm"
+          >
             Google 권한 연결을 완료했습니다. 아래에서 각 데이터 속성을
             선택하세요.
           </div>
         ) : null}
         {params.error ? (
-          <div className="rounded-lg border border-red-400/20 bg-red-400/10 p-4 text-red-200 text-sm">
-            {CONNECTION_ERRORS[params.error] ??
-              "연결을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요."}
+          <div
+            aria-live="polite"
+            className="rounded-lg border border-red-400/20 bg-red-400/10 p-4 text-red-200 text-sm"
+          >
+            <p>
+              {CONNECTION_ERRORS[params.error] ??
+                "연결을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요."}
+            </p>
+            {brand ? (
+              <a
+                className="mt-2 inline-flex font-medium text-red-100 underline underline-offset-4 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
+                href={`/api/integrations/google/connect?brandId=${brand.id}`}
+              >
+                Google 연결 다시 시도
+              </a>
+            ) : null}
           </div>
         ) : null}
         {params.naverImported ? (
@@ -305,9 +322,28 @@ export default async function SearchPerformanceIntegrationsPage({
                   {brand.name}의 Search Console과 GA4에 읽기 전용으로
                   연결합니다. 수정·광고 집행 권한은 요청하지 않습니다.
                 </p>
+                <ol className="mt-4 grid gap-2 text-sm text-white/65 sm:grid-cols-3">
+                  <li className="rounded-md border border-white/10 bg-black/10 px-3 py-2">
+                    <span className="mr-1 font-mono text-orange-200">01</span>
+                    Google 계정 선택
+                  </li>
+                  <li className="rounded-md border border-white/10 bg-black/10 px-3 py-2">
+                    <span className="mr-1 font-mono text-orange-200">02</span>
+                    읽기 전용 권한 동의
+                  </li>
+                  <li className="rounded-md border border-white/10 bg-black/10 px-3 py-2">
+                    <span className="mr-1 font-mono text-orange-200">03</span>
+                    브랜드와 같은 도메인 속성 선택
+                  </li>
+                </ol>
+                <p className="mt-3 text-xs text-white/40">
+                  동의 후에는 이 앱의 속성 선택 화면으로 돌아옵니다. 계정의 보안
+                  정책에 따른 Google 확인 화면은 Google이 직접 표시할 수 있으며,
+                  비밀번호나 이메일 인증 정보를 Findable에 입력하지 않습니다.
+                </p>
               </div>
               <a
-                className="findable-btn-primary inline-flex h-10 items-center justify-center rounded-md px-5 text-sm"
+                className="findable-btn-primary inline-flex h-10 items-center justify-center rounded-md px-5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
                 href={`/api/integrations/google/connect?brandId=${brand.id}`}
               >
                 Google 연결
@@ -496,8 +532,9 @@ export default async function SearchPerformanceIntegrationsPage({
                   <div>
                     <p className="font-semibold text-lg">네이버 검색 성과</p>
                     <p className="mt-1 text-sm text-white/50">
-                      공식 공개 성과 API가 없어, 서치어드바이저에서 받은 CSV만
-                      실측값으로 가져옵니다.
+                      현재는 서치어드바이저에서 내보낸 성과 CSV를 실측값으로
+                      가져옵니다. 수집요청 API는 제휴된 사용자용이라 성과 데이터
+                      연결과는 별도입니다.
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-amber-100 text-xs">
@@ -564,7 +601,8 @@ export default async function SearchPerformanceIntegrationsPage({
                   />
                   <p className="text-white/40 text-xs">
                     필수 열: 날짜, 클릭, 노출 · 선택 열: CTR, 평균순위 · 최대
-                    400행
+                    400행. 가져오기 전 서치어드바이저에서 해당 기간의 성과를
+                    CSV로 내보내세요.
                   </p>
                   <button
                     className="findable-btn-primary h-10 rounded-md px-4 text-sm"
@@ -674,6 +712,20 @@ export default async function SearchPerformanceIntegrationsPage({
               Search Console, GA4, 사이트 준비도, AI 답변 노출은 출처와 날짜가
               다른 별도 지표입니다. 각 원천 데이터와 마지막 동기화 시각을 함께
               표시합니다.
+            </p>
+          </div>
+        </section>
+
+        <section className="findable-card grid gap-4 p-6 md:grid-cols-[auto_1fr]">
+          <DatabaseZapIcon className="size-6 text-sky-300" />
+          <div>
+            <h2 className="font-semibold">연동 범위와 다음 확장</h2>
+            <p className="mt-2 text-sm text-white/55">
+              지금은 Google Search Console·GA4를 직접 읽기 전용으로 연결하고,
+              네이버 성과는 CSV, IndexNow는 색인 갱신 알림으로 분리합니다. Bing
+              Webmaster Tools는 다음 직접 연동 후보입니다. 고객 데이터가 없는
+              상태에서 0으로 표시하지 않으며, 새 외부 연동은 권한 범위와 데이터
+              보관 기준을 확인한 뒤 추가합니다.
             </p>
           </div>
         </section>

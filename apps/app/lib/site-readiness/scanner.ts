@@ -251,6 +251,10 @@ export function extractSitemapLocations(xml: string, origin: string): URL[] {
     .slice(0, 1000);
 }
 
+export function sitemapStatusForUrlCount(urlCount: number): "pass" | "warning" {
+  return urlCount > 0 ? "pass" : "warning";
+}
+
 async function inspectRobots(origin: string): Promise<{
   aiBotsEvidence: string;
   aiBotsStatus: "pass" | "warning" | "fail";
@@ -341,7 +345,7 @@ async function inspectSitemap(
         }
         return {
           evidence: `${result.finalUrl.toString()} · ${urls.length} URLs`,
-          status: "pass",
+          status: sitemapStatusForUrlCount(urls.length),
           urls,
         };
       }

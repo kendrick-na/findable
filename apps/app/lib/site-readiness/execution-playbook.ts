@@ -392,6 +392,47 @@ function checkGuide(
       verification:
         "재실측에서 JSON-LD block과 유형이 표시되고 invalid가 없으면 완료입니다.",
     }),
+    language: common({
+      code: check.id,
+      title: "문서 언어 선언",
+      location: "최상위 HTML 태그",
+      why: "언어 선언은 검색 시스템과 보조기술이 페이지의 기본 언어를 올바르게 해석하도록 돕습니다.",
+      steps: [
+        "주 콘텐츠의 언어를 확인합니다.",
+        "html 태그에 적절한 BCP 47 언어 코드를 넣습니다.",
+        "다국어 페이지는 각 URL의 실제 주 언어에 맞춥니다.",
+      ],
+      snippet: '<html lang="ko">',
+      verification: "재실측에서 lang=ko 등 언어 코드가 표시되면 완료입니다.",
+    }),
+    viewport: common({
+      code: check.id,
+      title: "모바일 뷰포트 선언",
+      location: "홈페이지 <head>",
+      why: "모바일 화면 폭에 맞춘 뷰포트가 없으면 읽기와 탐색 품질이 크게 떨어집니다.",
+      steps: [
+        "head에 viewport 메타 태그를 추가합니다.",
+        "실제 기기에서 가로 스크롤과 글자 크기를 확인합니다.",
+        "확대 기능을 제한하는 설정은 넣지 않습니다.",
+      ],
+      snippet:
+        '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+      verification: "재실측에서 viewport 값이 표시되면 완료입니다.",
+    }),
+    openGraph: common({
+      code: check.id,
+      title: "공유 미리보기 정보 보강",
+      location: "홈페이지 <head>",
+      why: "공유 미리보기의 제목·설명·이미지가 일관되면 신뢰도와 클릭 판단이 좋아집니다.",
+      steps: [
+        "페이지별 og:title과 og:description을 작성합니다.",
+        "절대 URL의 og:image를 제공합니다.",
+        "메신저와 소셜 미리보기에서 실제 표시를 확인합니다.",
+      ],
+      snippet: `<meta property="og:title" content="페이지의 핵심 가치" />\n<meta property="og:description" content="누구에게 어떤 답을 주는지 설명" />\n<meta property="og:image" content="${origin}/og-image.png" />`,
+      verification:
+        "재실측에서 title·description·image 3개가 표시되면 완료입니다.",
+    }),
     serverContent: common({
       code: check.id,
       title: "서버 HTML에 핵심 본문 제공",

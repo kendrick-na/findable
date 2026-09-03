@@ -179,6 +179,12 @@
       "summaryIndustry": "Industry or category",
       "summaryAliases": "{count} other names",
       "summaryCompetitors": "{count} brands to compare",
+      "siteReadinessTitle": "SEO & GEO site readiness",
+      "siteReadinessRunning": "We're checking your site's technical readiness from your signup details. This updates automatically when complete.",
+      "siteReadinessCompleted": "Technical readiness check complete. Review the highest-priority fixes in the result.",
+      "siteReadinessFailed": "We couldn't complete the technical check. You can run it again from Site readiness.",
+      "siteReadinessUnavailable": "Your technical check is being prepared. Check Site readiness again shortly.",
+      "siteReadinessLink": "View result",
       "goDashboard": "Go to dashboard",
       "saving": "Saving…",
       "saveFailedHint": "You can change these settings later.",
@@ -299,6 +305,10 @@
       "autoFailed": "The automatic audit could not be completed.",
       "resultTitle": "Measured result",
       "resultDescription": "Evidence and guidance by check",
+      "prioritySummaryLabel": "Items to improve now",
+      "passedChecksLabel": "Show passed and informational checks",
+      "playbookLinkLabel": "Execution guide",
+      "technicalLinkLabel": "Pages & performance",
       "resultCta": "Measure actual AI visibility",
       "checkedAt": "Checked",
       "evidenceLabel": "Observed evidence",
@@ -484,6 +494,18 @@
         "jsonLd": {
           "title": "JSON-LD structured data",
           "advice": "Add valid Organization, Product, Article or other relevant schemas that match visible page content."
+        },
+        "language": {
+          "title": "Document language",
+          "advice": "Declare the page's primary language with a lang attribute on the html element. For example, lang=\"en\"."
+        },
+        "viewport": {
+          "title": "Mobile viewport",
+          "advice": "Provide a viewport meta tag for mobile-width screens and do not restrict zoom."
+        },
+        "openGraph": {
+          "title": "Share preview metadata",
+          "advice": "Provide og:title, og:description and og:image so share previews stay consistent."
         },
         "serverContent": {
           "title": "Content in server HTML",

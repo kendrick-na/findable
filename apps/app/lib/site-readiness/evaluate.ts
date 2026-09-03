@@ -207,6 +207,12 @@ export function evaluateSiteReadiness(
   );
   const canonical = linkHref(input.html, "canonical");
   const jsonLd = jsonLdEvidence(input.html);
+  const htmlTag = tags(input.html, "html")[0] ?? "";
+  const language = attribute(htmlTag, "lang");
+  const viewport = metaContent(input.html, "viewport");
+  const openGraphTitle = metaContent(input.html, "og:title");
+  const openGraphDescription = metaContent(input.html, "og:description");
+  const openGraphImage = metaContent(input.html, "og:image");
   const bodyText = plainText(input.html);
   const hasSemanticMain = SEMANTIC_MAIN_RE.test(input.html);
   const trustLinkCount = tags(input.html, "a").filter((tag) => {
@@ -284,6 +290,27 @@ export function evaluateSiteReadiness(
       category: "structure",
       status: jsonLd.status,
       evidence: jsonLd.evidence,
+    },
+    {
+      id: "language",
+      category: "structure",
+      status: language ? "pass" : "warning",
+      evidence: language ? `lang=${language}` : "missing on <html>",
+    },
+    {
+      id: "viewport",
+      category: "structure",
+      status: viewport ? "pass" : "warning",
+      evidence: viewport ?? "missing",
+    },
+    {
+      id: "openGraph",
+      category: "structure",
+      status:
+        openGraphTitle && openGraphDescription && openGraphImage
+          ? "pass"
+          : "warning",
+      evidence: `${[openGraphTitle && "title", openGraphDescription && "description", openGraphImage && "image"].filter(Boolean).join(", ") || "missing"}`,
     },
     {
       id: "serverContent",

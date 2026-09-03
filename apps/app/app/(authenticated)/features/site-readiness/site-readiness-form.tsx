@@ -76,6 +76,10 @@ export interface SiteReadinessLabels {
   pageSpeedUnavailable: string;
   performanceTitle: string;
   previousComparison: string;
+  passedChecksLabel: string;
+  playbookLinkLabel: string;
+  prioritySummaryLabel: string;
+  technicalLinkLabel: string;
   recheckCta: string;
   responseColumn: string;
   responseSizeLabel: string;
@@ -439,6 +443,62 @@ export function SiteReadinessForm({
         (left, right) => statusOrder[left.status] - statusOrder[right.status]
       )
     : [];
+  const actionableChecks = sortedChecks.filter(
+    (check) => check.status === "fail" || check.status === "warning"
+  );
+  const passedChecks = sortedChecks.filter(
+    (check) => check.status === "pass" || check.status === "info"
+  );
+
+  const renderCheck = (check: (typeof sortedChecks)[number]) => {
+    const StatusIcon = statusIcon[check.status];
+    const item = labels.checkItems[check.id];
+    return (
+      <li
+        className="grid gap-3 px-5 py-4 lg:grid-cols-[minmax(180px,0.8fr)_minmax(0,1.4fr)_minmax(0,1.2fr)]"
+        key={check.id}
+      >
+        <div className="flex items-start gap-3">
+          <StatusIcon
+            aria-hidden="true"
+            className={cn(
+              "mt-0.5 size-4 shrink-0",
+              statusIconTone[check.status]
+            )}
+          />
+          <div className="flex flex-col gap-1">
+            <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+              {item.title}
+            </span>
+            <span
+              className={cn(
+                "w-fit rounded-full border px-2 py-0.5 font-medium text-[11px]",
+                statusTone[check.status]
+              )}
+            >
+              {labels.status[check.status]}
+            </span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="mb-1 text-[11px] text-[color:var(--findable-ink-tertiary,#7e8289)] uppercase tracking-wide">
+            {labels.evidenceLabel}
+          </p>
+          <p className="break-words font-mono text-[color:var(--findable-ink-muted,#d0d6e0)] text-xs leading-5">
+            {check.evidence}
+          </p>
+        </div>
+        <div>
+          <p className="mb-1 text-[11px] text-[color:var(--findable-ink-tertiary,#7e8289)] uppercase tracking-wide">
+            {labels.adviceLabel}
+          </p>
+          <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs leading-5">
+            {item.advice}
+          </p>
+        </div>
+      </li>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -466,14 +526,14 @@ export function SiteReadinessForm({
             <input
               autoCapitalize="none"
               autoComplete="url"
-              className="min-h-11 flex-1 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-0,#090a0b)] px-4 text-[color:var(--findable-ink,#f7f8f8)] text-sm outline-none transition-colors placeholder:text-[color:var(--findable-ink-tertiary,#7e8289)] focus:border-[color:var(--findable-primary,#ff7a4d)]"
+              className="min-h-11 flex-1 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-0,#090a0b)] px-4 text-[color:var(--findable-ink,#f7f8f8)] text-sm transition-colors placeholder:text-[color:var(--findable-ink-tertiary,#7e8289)] focus-visible:border-[color:var(--findable-primary,#ff7a4d)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--findable-primary,#ff7a4d)]/35"
               defaultValue={defaultUrl}
               disabled={busy || !brandId}
               id="site-readiness-url"
               name="url"
               placeholder={labels.inputPlaceholder}
               required
-              type="text"
+              type="url"
             />
             <button
               className="findable-btn-primary inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 font-medium text-sm disabled:cursor-wait disabled:opacity-70"
@@ -528,19 +588,26 @@ export function SiteReadinessForm({
             </Link>
           </div>
 
-          <TechnicalOverview
-            labels={labels}
-            previousReport={previousReport}
-            report={report}
-          />
-
-          <ExecutionPlaybook
-            brandId={brandId}
-            completedTaskIds={completedTaskIds}
-            currentTasks={currentTasks}
-            locale={labels.locale}
-            previousTasks={previousTasks}
-          />
+          <nav aria-label="진단 결과 바로가기" className="flex flex-wrap gap-2">
+            <a
+              className="rounded-full border border-orange-400/25 bg-orange-400/10 px-3 py-1.5 text-orange-100 text-xs hover:bg-orange-400/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
+              href="#priority-checks"
+            >
+              {labels.prioritySummaryLabel} {actionableChecks.length}
+            </a>
+            <a
+              className="rounded-full border border-white/10 px-3 py-1.5 text-white/70 text-xs hover:border-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              href="#site-readiness-tasks"
+            >
+              {labels.playbookLinkLabel}
+            </a>
+            <a
+              className="rounded-full border border-white/10 px-3 py-1.5 text-white/70 text-xs hover:border-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              href="#technical-overview"
+            >
+              {labels.technicalLinkLabel}
+            </a>
+          </nav>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {report.categories.map((category) => (
@@ -597,63 +664,44 @@ export function SiteReadinessForm({
             ))}
           </div>
 
-          <div className="findable-card overflow-hidden">
+          <div
+            className="findable-card scroll-mt-24 overflow-hidden"
+            id="priority-checks"
+          >
             <div className="border-[color:var(--findable-hairline,#23252a)] border-b px-5 py-4">
               <h3 className="font-medium text-[color:var(--findable-ink,#f7f8f8)]">
-                {labels.resultDescription}
+                {labels.prioritySummaryLabel}
               </h3>
             </div>
             <ul className="divide-y divide-[color:var(--findable-hairline,#23252a)]">
-              {sortedChecks.map((check) => {
-                const StatusIcon = statusIcon[check.status];
-                const item = labels.checkItems[check.id];
-                return (
-                  <li
-                    className="grid gap-3 px-5 py-4 lg:grid-cols-[minmax(180px,0.8fr)_minmax(0,1.4fr)_minmax(0,1.2fr)]"
-                    key={check.id}
-                  >
-                    <div className="flex items-start gap-3">
-                      <StatusIcon
-                        aria-hidden="true"
-                        className={cn(
-                          "mt-0.5 size-4 shrink-0",
-                          statusIconTone[check.status]
-                        )}
-                      />
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-                          {item.title}
-                        </span>
-                        <span
-                          className={cn(
-                            "w-fit rounded-full border px-2 py-0.5 font-medium text-[11px]",
-                            statusTone[check.status]
-                          )}
-                        >
-                          {labels.status[check.status]}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="mb-1 text-[11px] text-[color:var(--findable-ink-tertiary,#7e8289)] uppercase tracking-wide">
-                        {labels.evidenceLabel}
-                      </p>
-                      <p className="break-words font-mono text-[color:var(--findable-ink-muted,#d0d6e0)] text-xs leading-5">
-                        {check.evidence}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="mb-1 text-[11px] text-[color:var(--findable-ink-tertiary,#7e8289)] uppercase tracking-wide">
-                        {labels.adviceLabel}
-                      </p>
-                      <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs leading-5">
-                        {item.advice}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
+              {actionableChecks.map(renderCheck)}
             </ul>
+            <details className="border-[color:var(--findable-hairline,#23252a)] border-t">
+              <summary className="cursor-pointer px-5 py-4 font-medium text-[color:var(--findable-ink-muted,#d0d6e0)] text-sm hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
+                {labels.passedChecksLabel} ({passedChecks.length})
+              </summary>
+              <ul className="divide-y divide-[color:var(--findable-hairline,#23252a)]">
+                {passedChecks.map(renderCheck)}
+              </ul>
+            </details>
+          </div>
+
+          <div className="scroll-mt-24" id="site-readiness-tasks">
+            <ExecutionPlaybook
+              brandId={brandId}
+              completedTaskIds={completedTaskIds}
+              currentTasks={currentTasks}
+              locale={labels.locale}
+              previousTasks={previousTasks}
+            />
+          </div>
+
+          <div className="scroll-mt-24" id="technical-overview">
+            <TechnicalOverview
+              labels={labels}
+              previousReport={previousReport}
+              report={report}
+            />
           </div>
 
           <aside className="flex gap-3 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
