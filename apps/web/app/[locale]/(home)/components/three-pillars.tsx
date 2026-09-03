@@ -7,7 +7,7 @@ import { Reveal } from "./reveal";
 const PILLARS_KO = [
   {
     title: "글로벌+한국 AI 동시에",
-    body: "ChatGPT · Gemini · Claude부터 HyperCLOVA · 네이버까지. 한국어 AI 3개를 잡는 건 Findable이 유일합니다.",
+    body: "ChatGPT · Gemini · Claude부터 HyperCLOVA · 네이버까지. 글로벌 AI와 한국어 AI를 한 번에 같은 기준으로 비교합니다.",
     illustration: (
       <svg
         aria-hidden="true"
@@ -125,7 +125,7 @@ const PILLARS_EN = PILLARS_KO.map((p, i) => ({
     "We don't just measure",
   ][i],
   body: [
-    "From ChatGPT · Gemini · Claude to HyperCLOVA · Naver. Findable is the only tool covering all three Korean AI engines.",
+    "From ChatGPT · Gemini · Claude to HyperCLOVA · Naver. Compare global and Korean AI answers with one consistent measurement model.",
     "AI agents handle measurement, analysis, and recommendations on their own. Marketers just review the results.",
     "We feed the analysis straight back into content, then re-measure. Citations stack up fast.",
   ][i],

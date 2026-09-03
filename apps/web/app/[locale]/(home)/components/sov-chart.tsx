@@ -31,7 +31,7 @@ interface SoVChartProps {
 
 export const SoVChart = ({ locale = "ko" }: SoVChartProps) => {
   const isKo = locale.startsWith("ko");
-  const lp = isKo ? "/ko" : "";
+  const lp = isKo ? "/ko" : "/en";
   const data = loadSoVChartData();
 
   const chartTitle = isKo

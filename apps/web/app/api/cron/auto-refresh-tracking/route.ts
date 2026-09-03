@@ -73,6 +73,7 @@ const HISTORY_TAKE = 50;
 interface DueBrand {
   brandId: string;
   brandName: string;
+  brandVariants: string[];
   domain: string;
   lastMeasuredMs: number; // 정렬용(오래된 것 우선). 측정 이력 없으면 0.
   orgId: string;
@@ -175,10 +176,23 @@ async function sendDigest(
 
 /** 자동 갱신 대상 org 조회 결과(브랜드 포함). */
 interface OrgWithBrands {
-  brands: Array<{ domain: string; id: string; name: string }>;
+  brands: Array<{
+    domain: string;
+    entityVariants: unknown;
+    id: string;
+    name: string;
+  }>;
   id: string;
   plan: Plan;
 }
+
+/** JSON 별칭 필드에서 실제 문자열만 골라 러너에 넘긴다. */
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter(
+        (item): item is string => typeof item === "string" && item.trim() !== ""
+      )
+    : [];
 
 /**
  * 브랜드별 **마지막 측정 시각**을 보고 주기가 지난 것만 모은다.
@@ -215,6 +229,7 @@ async function collectDueBrands(
           orgId: org.id,
           brandId: brand.id,
           brandName: brand.name,
+          brandVariants: stringList(brand.entityVariants),
           domain: brand.domain,
           lastMeasuredMs: lastMs,
         });
@@ -295,7 +310,9 @@ export const GET = async (request: NextRequest) => {
     select: {
       id: true,
       plan: true,
-      brands: { select: { id: true, name: true, domain: true } },
+      brands: {
+        select: { domain: true, entityVariants: true, id: true, name: true },
+      },
     },
   });
 
@@ -341,6 +358,7 @@ export const GET = async (request: NextRequest) => {
         domain: item.domain,
         language: "both",
         brandName: item.brandName,
+        brandVariants: item.brandVariants,
         organizationId: item.orgId,
         brandId: item.brandId,
       });

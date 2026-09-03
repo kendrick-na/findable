@@ -8,13 +8,30 @@ import { ArrowRight, ChevronDown } from "lucide-react";
 import Link from "next/link";
 
 const ENGINE_MARKS = [
-  { label: "NAVER", icon: "N", color: "#03C75A", source: "naver" },
-  { label: "ChatGPT", icon: "◎", color: "#E8E8E3", source: "text" },
-  { label: "Gemini", icon: "✦", color: "#8AB4F8", source: "googlegemini" },
-  { label: "Claude", icon: "AI", color: "#D4A27F", source: "anthropic" },
-  { label: "Perplexity", icon: "P", color: "#8BC7C5", source: "perplexity" },
-  { label: "HyperCLOVA", icon: "C", color: "#20C997", source: "text" },
-  { label: "Daum", icon: "D", color: "#FFE812", source: "kakao" },
+  {
+    alt: "NAVER",
+    src: "https://www.navercorp.com/img/pc/logo-type-green.png",
+  },
+  {
+    alt: "ChatGPT",
+    src: "https://commons.wikimedia.org/wiki/Special:FilePath/OpenAI_logo_2025_%28wordmark%29.svg",
+  },
+  {
+    alt: "Gemini",
+    src: "https://commons.wikimedia.org/wiki/Special:FilePath/Google_Gemini_logo_2025.svg",
+  },
+  {
+    alt: "Claude",
+    src: "https://commons.wikimedia.org/wiki/Special:FilePath/Claude_AI_logo.svg",
+  },
+  {
+    alt: "Perplexity",
+    src: "https://commons.wikimedia.org/wiki/Special:FilePath/Perplexity_AI_logo.svg",
+  },
+  {
+    alt: "Daum",
+    src: "https://commons.wikimedia.org/wiki/Special:FilePath/Daum_logo_%282013%E2%80%932025%29.svg",
+  },
 ] as const;
 
 interface HeroProps {
@@ -26,7 +43,7 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
   const isKo = locale.startsWith("ko");
   // 영문(en)은 defaultLocale이라 URL prefix 없음 → 내부 링크에도 prefix 안 붙임.
   // 한국어(ko)는 prefix 유지 → 클릭 시 미들웨어 재판별로 튕기지 않게.
-  const lp = isKo ? "/ko" : "";
+  const lp = isKo ? "/ko" : "/en";
   const h1 = isKo
     ? "AI가 우리 브랜드를 먼저 답하게."
     : "Make AI answer about your brand first.";
@@ -57,11 +74,7 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
     : {
         label: "Insights & blog",
         href: `${lp}/insights`,
-        children: [
-          { label: "All insights", href: `${lp}/insights` },
-          { label: "GEO report", href: `${lp}/report/k-beauty-geo-2026q2` },
-          { label: "Benchmark", href: `${lp}/research/k-geo-bench-v0_1` },
-        ],
+        children: [{ label: "All insights", href: `${lp}/insights` }],
       };
   // 단일 링크 nav 항목. "제품"은 현재 페이지의 앵커라 이동감이 없었으므로
   // 언제든 랜딩 첫 화면으로 돌아가는 홈 링크로 명확히 바꾼다.
@@ -147,7 +160,9 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
               {insightMenu.label}
             </Link>
             <button
-              aria-label={isKo ? "인사이트 하위 메뉴 열기" : "Open insight menu"}
+              aria-label={
+                isKo ? "인사이트 하위 메뉴 열기" : "Open insight menu"
+              }
               aria-haspopup="menu"
               className="ml-0.5 inline-flex items-center text-[var(--findable-ink-subtle)] transition hover:text-[var(--findable-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--findable-primary)]"
               type="button"
@@ -299,10 +314,9 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
           </Link>
         </div>
 
-        {/* AI 엔진 마키 — 공개 브랜드 식별자를 사용해 진단 범위를 즉시 이해시키되,
-            협업·보증처럼 보이는 표현은 피한다. */}
+        {/* AI 엔진 마키 — 아이콘 대신 각 서비스의 워드마크를 사용한다. */}
         <div
-          className="mt-20 w-full max-w-[980px] overflow-hidden opacity-0"
+          className="mt-12 w-full max-w-[980px] overflow-hidden opacity-0"
           style={{
             animation:
               "findable-fade-up-sm 0.35s var(--findable-ease-out-soft) 0.45s forwards",
@@ -314,44 +328,36 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
           >
             {enginesLabel}
           </p>
-          <div className="findable-engine-marquee">
+          <div aria-hidden="true" className="findable-engine-marquee">
             <div className="findable-engine-track">
-              {[...ENGINE_MARKS, ...ENGINE_MARKS].map((engine, index) => (
-                <div className="findable-engine-chip" key={`${engine.label}-${index}`}>
-                  {engine.source === "text" ? (
-                    <span
-                      aria-hidden
-                      className="findable-engine-letter"
-                      style={{ color: engine.color }}
-                    >
-                      {engine.icon}
-                    </span>
-                  ) : (
-                    <img
-                      alt=""
-                      aria-hidden
-                      className="h-[17px] w-[17px] object-contain"
-                      src={`https://cdn.simpleicons.org/${engine.source}/${engine.color.slice(1)}`}
-                    />
-                  )}
-                  <span>{engine.label}</span>
+              {["a", "b"].map((copy) => (
+                <div className="findable-engine-set" key={copy}>
+                  {ENGINE_MARKS.map((engine) => (
+                    <div className="findable-engine-chip" key={engine.alt}>
+                      <img
+                        alt={engine.alt}
+                        className="findable-engine-logo"
+                        fetchPriority={copy === "a" ? "high" : "auto"}
+                        height="20"
+                        loading={copy === "a" ? "eager" : "lazy"}
+                        src={engine.src}
+                        width="88"
+                      />
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
           </div>
-          <p className="mt-3 text-center text-[11px] text-[var(--findable-ink-tertiary)]">
-            {isKo
-              ? "각 상표는 해당 권리자에게 귀속됩니다. Findable과의 제휴를 뜻하지 않습니다."
-              : "All marks belong to their respective owners; no affiliation is implied."}
-          </p>
         </div>
       </div>
       <style>{`
-        .findable-engine-marquee { mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent); }
-        .findable-engine-track { display: flex; width: max-content; animation: findable-engine-roll 26s linear infinite; }
+        .findable-engine-marquee { overflow: hidden; }
+        .findable-engine-track { display: flex; width: max-content; animation: findable-engine-roll 26s linear infinite; will-change: transform; }
+        .findable-engine-set { display: flex; gap: 48px; padding-right: 48px; }
         .findable-engine-marquee:hover .findable-engine-track { animation-play-state: paused; }
-        .findable-engine-chip { display: inline-flex; align-items: center; gap: 9px; margin-right: 12px; min-width: 145px; border: 1px solid var(--findable-hairline-strong); border-radius: 999px; padding: 9px 14px; color: var(--findable-ink-subtle); font-family: var(--findable-font-mono); font-size: 12px; background: color-mix(in srgb, var(--findable-surface-1) 85%, transparent); }
-        .findable-engine-letter { display: inline-grid; width: 17px; height: 17px; place-items: center; font-family: var(--findable-font-sans); font-size: 15px; font-weight: 700; line-height: 1; }
+        .findable-engine-chip { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; height: 38px; }
+        .findable-engine-logo { display: block; width: auto; max-width: 88px; height: 20px; object-fit: contain; filter: grayscale(1) brightness(0) invert(1); opacity: 0.82; }
         @keyframes findable-engine-roll { to { transform: translateX(-50%); } }
         @media (prefers-reduced-motion: reduce) { .findable-engine-track { animation: none; } }
       `}</style>

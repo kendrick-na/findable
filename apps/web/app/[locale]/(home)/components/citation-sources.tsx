@@ -46,7 +46,7 @@ function sourceKind(domain: string, owned: boolean) {
 
 export const CitationSources = ({ locale = "ko" }: CitationSourcesProps) => {
   const isKo = locale.startsWith("ko");
-  const lp = isKo ? "/ko" : "";
+  const lp = isKo ? "/ko" : "/en";
   const data = loadCitationData();
   const top = data.sources.slice(0, 6);
   const ownedShare = data.total ? (data.ownedCount / data.total) * 100 : 0;
