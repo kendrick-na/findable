@@ -39,6 +39,7 @@ model Organization {
   siteReadinessRuns SiteReadinessRun[]
   searchPerformanceConnections SearchPerformanceConnection[]
   indexNowConfigurations IndexNowConfiguration[]
+  consultationNotes      ConsultationNote[]
 
   @@index([ownerId])
 }
@@ -52,6 +53,23 @@ model User {
   createdAt      DateTime      @default(now())
 
   @@index([organizationId])
+}
+
+// ──────────────────────────────────────────────────
+// 운영 컨설팅 기록
+// ──────────────────────────────────────────────────
+// 고객사별 분석 결과와 분리된 운영자 메모. 조직 단위로만 연결해 한 고객사의
+// 기록이 다른 고객사 화면에 섞이지 않게 한다.
+model ConsultationNote {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  body           String       @db.Text
+  nextCheckAt    DateTime?
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
 }
 
 // ──────────────────────────────────────────────────
