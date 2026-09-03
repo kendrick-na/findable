@@ -10,7 +10,8 @@ interface HomeInsightsProps {
 // 공개 홈에서는 게시글 목록이 매 방문마다 DB 응답을 기다릴 이유가 없다.
 // 콘텐츠 발행은 ISR 재검증으로 반영하고, 첫 화면은 CDN에서 즉시 제공한다.
 const getHomeInsights = unstable_cache(
-  async (locale: string) => (await listPublishedContent(locale)).slice(0, 3),
+  async (locale: string) =>
+    (await listPublishedContent(locale, "findable")).slice(0, 3),
   ["landing-insights"],
   { revalidate: 1800 }
 );
@@ -22,7 +23,7 @@ const getHomeInsights = unstable_cache(
  */
 export const HomeInsights = async ({ locale = "ko" }: HomeInsightsProps) => {
   const isKo = locale.startsWith("ko");
-  const prefix = isKo ? "/ko" : "";
+  const prefix = isKo ? "/ko" : "/en";
   const posts = await getHomeInsights(locale);
 
   return (
@@ -65,7 +66,10 @@ export const HomeInsights = async ({ locale = "ko" }: HomeInsightsProps) => {
         {posts.length > 0 ? (
           <div className="grid divide-y divide-[var(--findable-hairline)] md:grid-cols-3 md:divide-x md:divide-y-0">
             {posts.map((post) => (
-              <article className="group py-7 md:px-7 md:first:pl-0 md:last:pr-0" key={post.id}>
+              <article
+                className="group py-7 md:px-7 md:last:pr-0 md:first:pl-0"
+                key={post.id}
+              >
                 <p
                   className="text-[11px] text-[var(--findable-primary)] uppercase tracking-[0.14em]"
                   style={{ fontFamily: "var(--findable-font-mono)" }}
@@ -74,9 +78,14 @@ export const HomeInsights = async ({ locale = "ko" }: HomeInsightsProps) => {
                 </p>
                 <h3
                   className="mt-3 text-[19px] text-[var(--findable-ink)] leading-[1.35] transition group-hover:text-[var(--findable-primary)]"
-                  style={{ fontFamily: "var(--findable-font-sans)", fontWeight: 600 }}
+                  style={{
+                    fontFamily: "var(--findable-font-sans)",
+                    fontWeight: 600,
+                  }}
                 >
-                  <Link href={`${prefix}/p/${post.publisher.slug}/${post.slug}`}>
+                  <Link
+                    href={`${prefix}/p/${post.publisher.slug}/${post.slug}`}
+                  >
                     {post.title}
                   </Link>
                 </h3>

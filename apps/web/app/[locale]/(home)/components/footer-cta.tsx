@@ -10,7 +10,7 @@ interface FooterCTAProps {
 
 export const FooterCTA = ({ locale = "ko" }: FooterCTAProps) => {
   const isKo = locale.startsWith("ko");
-  const lp = isKo ? "/ko" : "";
+  const lp = isKo ? "/ko" : "/en";
   // ⚠️ 2026-08-19(N-44) 문구 정정 — 이 CTA 는 `/sign-up` 으로 간다(무료 진단 폼이 아님).
   //   👤 결정 A: 무료 진단(`/audit`)은 **접는다**(페이지는 남기되 동선에서 뺀다).
   //   버튼이 "진단받기"라고 하고 가입 화면을 여는 것은 **문구가 거짓말**이었다.

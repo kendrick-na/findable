@@ -34,7 +34,7 @@ const SECTIONS_KO = [
     stage: "추천",
     en: "Recommend",
     title: "추측이 아닌, 검증된 액션.",
-    body: "Princeton 연구가 검증한 8가지 GEO 전략 중 효과 큰 3개를 우선 제안합니다. Cite Sources · Quotation · Statistics로 가시성 +40%.",
+    body: "GEO 연구와 실제 답변 근거를 바탕으로 효과를 기대할 수 있는 3개를 우선 제안합니다. 출처·인용·통계가 부족한 지점을 먼저 고칩니다.",
     bullets: [
       "Top 3 액션: 우선순위 · 예상 효과 · 난이도",
       "산업별 맞춤 가이드 (K-뷰티 · 한국지사 · 내수 D2C)",
@@ -92,7 +92,7 @@ const SECTIONS_EN = [
     ...SECTIONS_KO[2],
     stage: "Recommend",
     title: "Verified actions, not guesses.",
-    body: "From the 8 GEO strategies validated by Princeton research, we surface the 3 with the highest impact. Cite Sources · Quotation · Statistics for +40% visibility.",
+    body: "We prioritize three actions from GEO research and the sources found in your actual answers, starting with missing citations, quotations, and statistics.",
     bullets: [
       "Top 3 actions: priority · expected impact · difficulty",
       "Industry-specific guides (K-beauty · Korea HQ · domestic D2C)",

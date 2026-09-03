@@ -14,10 +14,8 @@
 //    ⛔ 메타·구글 공식 파트너 배지 — **그 인증이 없다.** 넣지 말 것
 //    ✅ "만든 팀이 마케팅을 맡아온 곳" = 사실 그대로
 //
-// ⚠️ 로고 이미지는 **의도적으로 안 쓴다.** 기관·브랜드 로고는 상표권·사용규정이 걸린다
-//    (지자체는 특히 까다롭다). 텍스트 워드마크는 **사실 적시**라 안전하다.
-//    👤 승인: "우선 텍스트 워드마크로 넣고 자리만 만들어놔"(2026-08-16)
-//    → 나중에 사용 허락을 받으면 이 컴포넌트만 이미지로 바꾸면 된다.
+// 기관 공식 로고를 그대로 복제하지 않고, 선정·수상 사실을 읽기 쉬운 텍스트 락업으로
+// 표현한다. 이는 공식 인증·후원·제휴처럼 보일 수 있는 오인을 피하기 위한 선택이다.
 
 interface CredibilityProps {
   locale?: string;
@@ -59,17 +57,41 @@ export const Credibility = ({ locale = "ko" }: CredibilityProps) => {
     <section className="w-full bg-[var(--findable-canvas)] pb-16 md:pb-20">
       <div className="mx-auto max-w-5xl px-6">
         {/* ① 선정·수상 */}
-        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-stretch justify-center gap-3">
           {CREDENTIALS.map((c) => (
-            <span
-              className="rounded-full border border-[var(--findable-hairline-strong)] bg-[var(--findable-surface-1)] px-3.5 py-1.5 text-[12px] text-[var(--findable-ink-muted)]"
+            <div
+              className="flex min-h-16 items-center gap-3 rounded-sm border border-[var(--findable-hairline-strong)] bg-[var(--findable-surface-1)] px-4 py-3 text-[12px] text-[var(--findable-ink-muted)]"
               key={c.en}
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
-              {isKo ? c.ko : c.en}
-            </span>
+              {c.ko.startsWith("KAIST") ? (
+                <span
+                  aria-hidden
+                  className="border-[var(--findable-primary)] border-r pr-3 text-[16px] text-[var(--findable-ink)] tracking-[-0.08em]"
+                  style={{ fontFamily: "Georgia, serif", fontWeight: 700 }}
+                >
+                  KAIST
+                </span>
+              ) : c.ko.startsWith("생성형") ? (
+                <span
+                  aria-hidden
+                  className="border-[var(--findable-primary)] border-r pr-3 text-[10px] text-[var(--findable-ink)] leading-tight"
+                  style={{ fontWeight: 700 }}
+                >
+                  고용노동부<br />서울동부고용노동지청
+                </span>
+              ) : (
+                <span aria-hidden className="text-[18px] text-[var(--findable-primary)]">↗</span>
+              )}
+              <span>{isKo ? c.ko : c.en}</span>
+            </div>
           ))}
         </div>
+        <p className="mt-3 text-center text-[11px] text-[var(--findable-ink-tertiary)]">
+          {isKo
+            ? "선정·수상 사실을 표기한 것이며, 각 기관의 공식 인증·후원 또는 제휴를 뜻하지 않습니다."
+            : "These are factual selection and award references, not endorsements, sponsorships, or partnerships."}
+        </p>
 
         {/* ② 팀 수행 실적 — 🔴 라벨이 이 블록의 전부다.
             "고객사"라고 쓰는 순간 거짓이 된다. */}

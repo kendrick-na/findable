@@ -18,53 +18,57 @@ const BETA_LAUNCH_DATE = new Date("2026-05-04T00:00:00Z");
 // ⚠️ revalidate 는 page/layout 세그먼트에서만 유효 — 컴포넌트 파일 export 는 무효라 제거(2026-07-30).
 //    실제 30분 캐시는 (home)/page.tsx 의 `export const revalidate = 1800` 이 담당.
 
-const getLiveStats = unstable_cache(async () => {
-  const now = new Date();
-  const daysSinceLaunch = Math.max(
-    1,
-    Math.floor((now.getTime() - BETA_LAUNCH_DATE.getTime()) / 86_400_000)
-  );
+const getLiveStats = unstable_cache(
+  async () => {
+    const now = new Date();
+    const daysSinceLaunch = Math.max(
+      1,
+      Math.floor((now.getTime() - BETA_LAUNCH_DATE.getTime()) / 86_400_000)
+    );
 
-  try {
-    const [auditCount, distinctDomains] = await Promise.all([
-      database.auditJob.count({ where: { status: "completed" } }),
-      database.auditJob.findMany({
-        where: { status: "completed" },
-        select: { domain: true },
-        distinct: ["domain"],
-      }),
-    ]);
+    try {
+      const [auditCount, distinctDomains] = await Promise.all([
+        database.auditJob.count({ where: { status: "completed" } }),
+        database.auditJob.findMany({
+          where: { status: "completed" },
+          select: { domain: true },
+          distinct: ["domain"],
+        }),
+      ]);
 
-    return {
-      daysSinceLaunch,
-      auditCount,
-      brandCount: distinctDomains.length,
-      isLive: true,
-    };
-  } catch (error) {
-    // 🔴 세션N-38: 원래 `catch {}` 로 **아무 말 없이** 0 을 반환했다.
-    //   그래서 DB 조회가 실패하면 랜딩 히어로 바로 아래에 `0 진단 · 0 브랜드` 가
-    //   **사실인 것처럼** 서고, 로그가 없어 아무도 모른다
-    //   (실측: 로컬에서 정확히 이 상태가 재현됐고 원인을 찾는 데 조회를 세 번 돌려야 했다.
-    //    프로덕션은 `103 · 29` 로 정상이었다 — 즉 **조용해서 구분이 안 되는 것**이 문제다).
-    //
-    //   ⚠️ 0 은 이 저장소가 반복해 온 **"못 잰 것을 0이라 부르기"** 그 자체다.
-    //   게다가 이 숫자는 **신뢰도 증거**로 쓰려고 둔 자리라, 실패했을 때 0 을 보여주면
-    //   증거가 아니라 **역효과**(= "아무도 안 쓰는 서비스")를 낸다.
-    //
-    //   → 값은 그대로 0 을 두되(레이아웃 보존) **`isLive: false` 로 표시**하고
-    //     반드시 로그를 남긴다. 표시 측은 `isLive` 로 렌더 여부를 정한다.
-    log.error("landing.live_counter.query_failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return {
-      daysSinceLaunch,
-      auditCount: 0,
-      brandCount: 0,
-      isLive: false,
-    };
-  }
-}, ["landing-live-stats"], { revalidate: 1800 });
+      return {
+        daysSinceLaunch,
+        auditCount,
+        brandCount: distinctDomains.length,
+        isLive: true,
+      };
+    } catch (error) {
+      // 🔴 세션N-38: 원래 `catch {}` 로 **아무 말 없이** 0 을 반환했다.
+      //   그래서 DB 조회가 실패하면 랜딩 히어로 바로 아래에 `0 진단 · 0 브랜드` 가
+      //   **사실인 것처럼** 서고, 로그가 없어 아무도 모른다
+      //   (실측: 로컬에서 정확히 이 상태가 재현됐고 원인을 찾는 데 조회를 세 번 돌려야 했다.
+      //    프로덕션은 `103 · 29` 로 정상이었다 — 즉 **조용해서 구분이 안 되는 것**이 문제다).
+      //
+      //   ⚠️ 0 은 이 저장소가 반복해 온 **"못 잰 것을 0이라 부르기"** 그 자체다.
+      //   게다가 이 숫자는 **신뢰도 증거**로 쓰려고 둔 자리라, 실패했을 때 0 을 보여주면
+      //   증거가 아니라 **역효과**(= "아무도 안 쓰는 서비스")를 낸다.
+      //
+      //   → 값은 그대로 0 을 두되(레이아웃 보존) **`isLive: false` 로 표시**하고
+      //     반드시 로그를 남긴다. 표시 측은 `isLive` 로 렌더 여부를 정한다.
+      log.error("landing.live_counter.query_failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        daysSinceLaunch,
+        auditCount: 0,
+        brandCount: 0,
+        isLive: false,
+      };
+    }
+  },
+  ["landing-live-stats"],
+  { revalidate: 1800 }
+);
 
 interface CounterCardProps {
   delay: string;
@@ -207,7 +211,7 @@ export async function LiveCounter({ locale = "ko" }: LiveCounterProps) {
               `/research` 가 이미 쓰는 값이다(수치 두 벌 금지). */}
           <CounterCard
             delay="0.4s"
-            href={`${isKo ? "/ko" : ""}/research/k-geo-bench-v0_1`}
+            href={isKo ? "/ko/research/k-geo-bench-v0_1" : "/en/insights"}
             label={labels[2]}
             value={loadDatasetResponseCount().toLocaleString(numLocale)}
           />

@@ -1,4 +1,3 @@
-import { JsonLd } from "@repo/seo/json-ld";
 import Link from "next/link";
 
 interface FaqProps {
@@ -64,7 +63,7 @@ const FAQ_EN = [
 export const Faq = ({ locale = "ko" }: FaqProps) => {
   const isKo = locale.startsWith("ko");
   const items = isKo ? FAQ_KO : FAQ_EN;
-  const lp = isKo ? "/ko" : "";
+  const lp = isKo ? "/ko" : "/en";
 
   return (
     <section
@@ -72,27 +71,6 @@ export const Faq = ({ locale = "ko" }: FaqProps) => {
       className="bg-[var(--findable-canvas)] px-8 py-20 md:py-28"
       id="faq"
     >
-      {/* 🔎 FAQPage JSON-LD — **화면에 렌더된 것과 같은 배열**로 만든다(문답을 따로 쓰지 않는다.
-          따로 쓰면 화면과 스키마가 갈라지고, 그건 구글 스팸 정책이 금지하는 형태가 된다).
-
-          ⚠️ **SEO 목적이 아니다.** 2차 리서치 §A-1: 구글은 2026-05-07 FAQ 구조화 데이터
-            지원을 중단했고 2026-06 에 리포트·테스트에서도 제거했다 → **검색 결과에 아무
-            시각적 효과가 없다.** 남겨도 페널티는 없다(구글 문서: *"markup won't cause
-            problems, but it also won't produce visible results"*).
-          🟡 넣는 이유는 **AI 답변 엔진의 파싱**이다(업계 중론, 인과관계는 별도 검증 필요).
-            비용이 0 이라 위생 조치로만 취급한다 — 여기에 효과를 기대하지 말 것. */}
-      <JsonLd
-        code={{
-          "@context": "https://schema.org",
-          "@type": "FAQPage",
-          inLanguage: isKo ? "ko-KR" : "en-US",
-          mainEntity: items.map((item) => ({
-            "@type": "Question",
-            name: item.question,
-            acceptedAnswer: { "@type": "Answer", text: item.answer },
-          })),
-        }}
-      />
       <div className="mx-auto grid max-w-[1200px] gap-10 md:grid-cols-[0.8fr_1.2fr] md:gap-20">
         <div>
           <p className="text-[12px] text-[var(--findable-primary)] uppercase tracking-[0.18em]">
