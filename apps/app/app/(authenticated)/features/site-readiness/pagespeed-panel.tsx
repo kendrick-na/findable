@@ -89,7 +89,10 @@ export function PageSpeedPanel({
           </p>
         </div>
         {pageSpeed.measuredAt ? (
-          <time className="font-mono text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+          <time
+            className="font-mono text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs"
+            dateTime={pageSpeed.measuredAt}
+          >
             {new Date(pageSpeed.measuredAt).toLocaleString(labels.locale)}
           </time>
         ) : null}
@@ -124,8 +127,9 @@ export function PageSpeedPanel({
                       "size-2.5 rounded-full border",
                       ratingTone[metric.rating]
                     )}
-                    title={metric.rating}
-                  />
+                  >
+                    <span className="sr-only">{metric.rating}</span>
+                  </span>
                 </div>
                 <p className="mt-2 text-[10px] text-white/30 uppercase tracking-wide">
                   {metric.value === null ? "—" : metric.source}
