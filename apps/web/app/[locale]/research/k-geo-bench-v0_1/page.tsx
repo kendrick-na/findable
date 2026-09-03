@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { FooterCTA } from "../../(home)/components/footer-cta";
-import { Footer } from "../../components/footer";
 import { PublicLandingHeader } from "../../components/public-landing-header";
 
 const DESCRIPTION =
@@ -470,7 +469,6 @@ export default async function KGeoBenchPage({
         </div>
       </section>
       <FooterCTA locale={locale} />
-      <Footer locale={locale} />
     </div>
   );
 }

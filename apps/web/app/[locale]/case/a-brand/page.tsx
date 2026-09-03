@@ -19,7 +19,6 @@ import { ArrowRight, ExternalLink, Info } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { FooterCTA } from "../../(home)/components/footer-cta";
-import { Footer } from "../../components/footer";
 import { PublicLandingHeader } from "../../components/public-landing-header";
 
 /**
@@ -474,7 +473,6 @@ export default async function ABrandCasePage({
         </div>
       </section>
       <FooterCTA locale={locale} />
-      <Footer locale={locale} />
     </div>
   );
 }

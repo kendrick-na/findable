@@ -12,7 +12,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { NewsletterSubscribe } from "@/components/content/newsletter-subscribe";
 import { listPublishedContent } from "@/lib/content";
-import { Footer } from "../components/footer";
 import { PublicLandingHeader } from "../components/public-landing-header";
 import { FooterCTA } from "../(home)/components/footer-cta";
 
@@ -418,7 +417,6 @@ export default async function PublicInsightsPage({
         </div>
       </section>
       <FooterCTA locale={locale} />
-      <Footer locale={locale} />
     </main>
   );
 }

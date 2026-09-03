@@ -2,7 +2,6 @@ import { getDictionary } from "@repo/internationalization";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import { FooterCTA } from "../(home)/components/footer-cta";
-import { Footer } from "../components/footer";
 import { PublicLandingHeader } from "../components/public-landing-header";
 import { ContactForm } from "./components/contact-form";
 
@@ -38,7 +37,6 @@ const Contact = async ({ params }: ContactProps) => {
       <PublicLandingHeader locale={locale} />
       <ContactForm dictionary={dictionary} locale={locale} />
       <FooterCTA locale={locale} />
-      <Footer locale={locale} />
     </>
   );
 };

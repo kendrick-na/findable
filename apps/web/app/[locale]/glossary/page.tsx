@@ -1,7 +1,6 @@
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Footer } from "../components/footer";
 import { PublicLandingHeader } from "../components/public-landing-header";
 import { FooterCTA } from "../(home)/components/footer-cta";
 
@@ -205,7 +204,6 @@ export default async function GlossaryPage({
         />
       </div>
       <FooterCTA locale={locale} />
-      <Footer locale={locale} />
     </main>
   );
 }
