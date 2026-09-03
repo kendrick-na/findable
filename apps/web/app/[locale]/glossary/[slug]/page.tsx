@@ -3,7 +3,6 @@ import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Footer } from "../../components/footer";
 import { PublicLandingHeader } from "../../components/public-landing-header";
 import { FooterCTA } from "../../(home)/components/footer-cta";
 
@@ -209,7 +208,6 @@ export default async function GlossaryTermPage({
         </p>
       </article>
       <FooterCTA locale={locale} />
-      <Footer locale={locale} />
     </main>
   );
 }

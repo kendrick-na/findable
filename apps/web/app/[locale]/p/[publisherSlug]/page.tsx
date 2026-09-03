@@ -11,7 +11,6 @@ import {
   sitePublisherUrl,
 } from "@/lib/public-url";
 import { FooterCTA } from "../../(home)/components/footer-cta";
-import { Footer } from "../../components/footer";
 import { PublicLandingHeader } from "../../components/public-landing-header";
 
 // 🔴 매 요청 SSR(`force-dynamic`)이었다 — 크롤러가 가장 자주 오는 목록 페이지다(2026-09-02).
@@ -159,7 +158,6 @@ export default async function PublisherPage({ params }: Props) {
         ))}
       </section>
       <FooterCTA locale={locale} />
-      <Footer locale={locale} />
     </main>
   );
 }

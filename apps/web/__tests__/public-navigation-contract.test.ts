@@ -67,14 +67,13 @@ describe("public landing navigation contract", () => {
       expect(page).toContain("PublicLandingHeader");
       expect(page).toContain("<PublicLandingHeader locale={locale} />");
       expect(page).toContain("<FooterCTA locale={locale} />");
-      expect(page).toContain("<Footer locale={locale} />");
     }
     expect(landingHeader).toContain('aria-label={isKo ? "주요 메뉴"');
     expect(read("apps/web/app/[locale]/components/footer.tsx")).toContain(
       'id="site-footer"'
     );
+    expect(layout).toContain("<Footer locale={locale} />");
     expect(audit).toContain("<PublicLandingHeader locale={locale} />");
-    expect(audit).toContain("<Footer locale={locale} />");
   });
 
   it("ships a visual cover for every insight card", () => {

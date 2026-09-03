@@ -19,7 +19,6 @@ import {
   sitePublisherUrl,
 } from "@/lib/public-url";
 import { FooterCTA } from "../../../(home)/components/footer-cta";
-import { Footer } from "../../../components/footer";
 import { PublicLandingHeader } from "../../../components/public-landing-header";
 
 /**
@@ -379,7 +378,6 @@ export default async function ArticlePage({ params }: Props) {
         </section>
       ) : null}
       <FooterCTA locale={locale} />
-      <Footer locale={locale} />
     </main>
   );
 }

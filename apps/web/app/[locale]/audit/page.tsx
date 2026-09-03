@@ -3,7 +3,6 @@
 import { getDictionary } from "@repo/internationalization";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
-import { Footer } from "../components/footer";
 import { PublicLandingHeader } from "../components/public-landing-header";
 import { AuditForm } from "./components/audit-form";
 
@@ -148,7 +147,6 @@ const AuditPage = async ({ params }: AuditPageProps) => {
             : "Findable v1.0 beta · 1 audit per email per 24h · Anonymized results may be used for GEO model training."}
         </p>
       </div>
-      <Footer locale={locale} />
     </div>
   );
 };

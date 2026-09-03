@@ -9,7 +9,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { env } from "@/env";
 import { FooterCTA } from "../(home)/components/footer-cta";
-import { Footer } from "../components/footer";
 import { PublicLandingHeader } from "../components/public-landing-header";
 
 // ⚡ ISR (2026-07-30 성능): dynamic API 사용 0 → 1시간 캐시(CDN). [locale] 전 페이지
@@ -524,7 +523,6 @@ const PricingPage = async ({ params }: PricingPageProps) => {
         </div>
       </section>
       <FooterCTA locale={locale} />
-      <Footer locale={locale} />
     </div>
   );
 };
