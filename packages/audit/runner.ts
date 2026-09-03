@@ -49,6 +49,7 @@ import { generateAuditPdf } from "./pdf-generator";
 import type { AuditPdfData } from "./pdf-template";
 import { resolveOfficialSiteIdentity } from "./official-site-identity";
 import { pickRotatingPrompts } from "./prompt-rotation";
+import { queryPromptsSequentially } from "./prompt-query-scheduler";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
 
 export interface AuditRunInput {
@@ -349,16 +350,21 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
 
     // 브랜드명 해석 (P0-b): 폼입력→정적사전→LLM→영문 폴백 체인으로 한/영 변형 확보.
     // 도메인만 입력돼도 한국어 답변의 "설화수"를 판정이 잡도록 variants에 한글명 포함.
-    // brandVariants가 호출자에게서 명시적으로 넘어온 경우(내부 재사용)는 그대로 존중.
+    // 가입 단계의 저장 별칭과 도메인 기반 추론 별칭을 합친다. 전자만 쓰면 빈/불완전한
+    // 저장값이 후자를 덮어쓰고, 후자만 쓰면 고객이 등록한 공식 영문·한글 표기를 잃는다.
     const identity = await resolveBrandIdentity(input.domain, input.brandName);
     const brandName = identity.brandName;
-    const brandVariants = input.brandVariants ?? identity.brandVariants;
+    const brandVariants = [
+      ...new Set([...identity.brandVariants, ...(input.brandVariants ?? [])]),
+    ];
 
     // 응답 생성 모델에는 주입하지 않는다(실제 AI 인지도를 재야 하므로). 대신 판정기가
     // 동명의 다른 대상을 확정 언급으로 세지 않도록 공식 홈페이지의 제목·설명·H1을
     // 한 번만 읽어 엔티티 기준 사실로 고정한다. 근거를 확보하지 못하면 AI 호출 전에
     // 중단한다. 수치는 없는 편이 다른 엔티티를 자사 언급으로 공개하는 것보다 정확하다.
-    const officialSiteIdentity = await resolveOfficialSiteIdentity(input.domain);
+    const officialSiteIdentity = await resolveOfficialSiteIdentity(
+      input.domain
+    );
     if (!officialSiteIdentity) {
       throw new Error(
         "공식 사이트에서 브랜드 식별 근거(title, description, H1)를 확인하지 못했습니다. 사이트 접근 설정을 확인한 뒤 다시 측정해 주세요."
@@ -417,8 +423,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const enginesForLang = (lang: "ko" | "en") =>
       lang === "en" ? GLOBAL_4 : DEFAULT_7;
 
-    const sevenEngineResponses = await Promise.all(
-      prompts.map((p) =>
+    const sevenEngineResponses = await queryPromptsSequentially(
+      prompts,
+      async (p) =>
         queryAllEngines(
           {
             prompt: p.text,
@@ -433,7 +440,6 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             typeof queryAllEngines
           >[1]
         )
-      )
     );
 
     // 20번(dual-write): flat() 하면 각 응답이 어느 프롬프트에서 나왔는지 소실된다.
