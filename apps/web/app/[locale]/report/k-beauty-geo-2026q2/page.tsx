@@ -26,6 +26,9 @@ import {
   TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
+import { FooterCTA } from "../../(home)/components/footer-cta";
+import { Footer } from "../../components/footer";
+import { PublicLandingHeader } from "../../components/public-landing-header";
 
 const DESCRIPTION =
   "한국 K-뷰티 5사 (메디큐브·라운드랩·아누아·조선미녀·달바)의 7 AI 엔진 가시성 측정 + Princeton GEO 시뮬레이션. 광고주·마케터를 위한 산업 인사이트.";
@@ -162,6 +165,7 @@ export default async function KBeautyReportPage({
   const CANONICAL = canonicalFor(locale);
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
+      <PublicLandingHeader locale={locale} />
       {/* 🔴 GEO 도그푸딩 — AI 가 이 리포트를 **출처로 인용**하게 만드는 구조화 데이터.
           [실측 2026-08-17] 하위 페이지 JSON-LD 가 전부 0개였다. 블로그가 비어 있어
           실질 인용 자산은 이 리포트와 k-geo-bench 둘뿐인데, 그 둘에 스키마가 없었다.
@@ -496,6 +500,8 @@ export default async function KBeautyReportPage({
           </div>
         </div>
       </section>
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </div>
   );
 }

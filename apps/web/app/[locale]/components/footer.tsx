@@ -87,7 +87,10 @@ export const Footer = ({ locale = "ko" }: FooterProps) => {
     : "Indigochild | CEO Hyeondeok Na | Business Reg. No. 534-15-01132 | 96, Cheongnam-ro 2005beon-gil, Seowon-gu, Cheongju-si, Chungcheongbuk-do, Korea | Tel 010-8958-2547 | Email kendrick@indigochild.kr | Hosting provider: Vercel Inc.";
 
   return (
-    <footer className="border-[var(--findable-hairline)] border-t bg-[var(--findable-canvas)] text-[var(--findable-ink-subtle)]">
+    <footer
+      className="border-[var(--findable-hairline)] border-t bg-[var(--findable-canvas)] text-[var(--findable-ink-subtle)]"
+      id="site-footer"
+    >
       <div className="mx-auto max-w-[1200px] px-8 py-16">
         <div className="grid grid-cols-2 gap-10 md:grid-cols-[2fr_repeat(3,1fr)]">
           {/* Brand */}

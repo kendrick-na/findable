@@ -1,7 +1,9 @@
 import { getDictionary } from "@repo/internationalization";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
-import { Header } from "../components/header";
+import { FooterCTA } from "../(home)/components/footer-cta";
+import { Footer } from "../components/footer";
+import { PublicLandingHeader } from "../components/public-landing-header";
 import { ContactForm } from "./components/contact-form";
 
 // ⚡ ISR (2026-07-30 성능): dynamic API 사용 0 → 1시간 캐시(CDN). [locale] 전 페이지
@@ -33,8 +35,10 @@ const Contact = async ({ params }: ContactProps) => {
 
   return (
     <>
-      <Header dictionary={dictionary} />
+      <PublicLandingHeader locale={locale} />
       <ContactForm dictionary={dictionary} locale={locale} />
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </>
   );
 };

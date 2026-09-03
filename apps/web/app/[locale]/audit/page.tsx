@@ -3,7 +3,8 @@
 import { getDictionary } from "@repo/internationalization";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
-import { Header } from "../components/header";
+import { Footer } from "../components/footer";
+import { PublicLandingHeader } from "../components/public-landing-header";
 import { AuditForm } from "./components/audit-form";
 
 // ⚡ ISR (2026-07-30 성능): dynamic API 사용 0 → 1시간 캐시(CDN). [locale] 전 페이지
@@ -38,7 +39,7 @@ const AuditPage = async ({ params }: AuditPageProps) => {
 
   return (
     <div className="min-h-screen w-full bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
-      <Header dictionary={dictionary} />
+      <PublicLandingHeader locale={locale} />
       <div className="container mx-auto max-w-3xl px-4 py-24">
         <p
           className="text-[12px] text-[var(--findable-primary)] uppercase tracking-[0.18em]"
@@ -147,6 +148,7 @@ const AuditPage = async ({ params }: AuditPageProps) => {
             : "Findable v1.0 beta · 1 audit per email per 24h · Anonymized results may be used for GEO model training."}
         </p>
       </div>
+      <Footer locale={locale} />
     </div>
   );
 };

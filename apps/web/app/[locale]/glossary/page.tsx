@@ -1,6 +1,9 @@
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Footer } from "../components/footer";
+import { PublicLandingHeader } from "../components/public-landing-header";
+import { FooterCTA } from "../(home)/components/footer-cta";
 
 const TERMS = [
   {
@@ -79,21 +82,14 @@ export default async function GlossaryPage({
   const prefix = ko ? "/ko" : "";
 
   return (
-    <main className="min-h-screen bg-[#0b0c0d] px-5 py-16 text-[#f4f1e8] md:px-8 md:py-24">
-      <div className="mx-auto max-w-4xl">
-        <Link
-          className="text-sm text-white/55 hover:text-white"
-          href={prefix || "/"}
-        >
-          ← {ko ? "홈" : "Home"}
-        </Link>
-        <p className="mt-16 font-semibold text-[#ff7a4d] text-xs uppercase tracking-[0.22em]">
+    <main className="min-h-screen bg-[#0b0c0d] text-[#f4f1e8]">
+      <PublicLandingHeader locale={locale} />
+      <div className="mx-auto max-w-4xl px-5 py-16 md:px-8 md:py-24">
+        <p className="font-semibold text-[#ff7a4d] text-xs uppercase tracking-[0.22em]">
           Findable knowledge hub
         </p>
         <h1 className="mt-5 font-semibold text-5xl tracking-[-0.05em] md:text-7xl">
-          {ko
-            ? "검색·AI 가이드"
-            : "A guide to search and AI visibility"}
+          {ko ? "검색·AI 가이드" : "A guide to search and AI visibility"}
         </h1>
         <p className="mt-7 max-w-2xl text-lg text-white/58 leading-8">
           {ko
@@ -126,7 +122,10 @@ export default async function GlossaryPage({
           <div className="mt-6 grid gap-3 md:grid-cols-2">
             {[
               ["SEO와 GEO의 차이는 무엇인가요?", "geo"],
-              ["AI 검색에 브랜드가 인용되지 않는 이유는?", "ai-search-visibility"],
+              [
+                "AI 검색에 브랜드가 인용되지 않는 이유는?",
+                "ai-search-visibility",
+              ],
               ["AEO는 어떻게 시작하나요?", "aeo"],
               ["검색 노출과 AI 노출을 어떻게 함께 측정하나요?", "seo"],
             ].map(([question, slug]) => (
@@ -205,6 +204,8 @@ export default async function GlossaryPage({
           }}
         />
       </div>
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </main>
   );
 }

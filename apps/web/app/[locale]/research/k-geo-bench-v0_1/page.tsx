@@ -24,6 +24,9 @@ import {
   GraduationCap,
 } from "lucide-react";
 import Link from "next/link";
+import { FooterCTA } from "../../(home)/components/footer-cta";
+import { Footer } from "../../components/footer";
+import { PublicLandingHeader } from "../../components/public-landing-header";
 
 const DESCRIPTION =
   "한국어 GEO 측정 공개 데이터셋. K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트 = 140 측정 응답. CC BY 4.0.";
@@ -131,6 +134,7 @@ export default async function KGeoBenchPage({
   const CANONICAL = canonicalFor(locale);
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
+      <PublicLandingHeader locale={locale} />
       <JsonLd
         code={{
           "@context": "https://schema.org",
@@ -465,6 +469,8 @@ export default async function KGeoBenchPage({
           </div>
         </div>
       </section>
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </div>
   );
 }
