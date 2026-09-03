@@ -11,6 +11,7 @@ import {
   scopedLatestSiteReadinessRun,
 } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
+import { readinessUrlMatchesBrand } from "@/lib/site-readiness/brand-domain";
 import type {
   SiteReadinessReport,
   StoredSiteReadinessRun,
@@ -41,7 +42,15 @@ const SiteAuditPage = async ({
     brands.find((candidate) => candidate.id === requestedBrandId) ??
     brands[0] ??
     null;
-  const latestRun = brand ? await scopedLatestSiteReadinessRun(brand.id) : null;
+  const candidateRun = brand
+    ? await scopedLatestSiteReadinessRun(brand.id)
+    : null;
+  const latestRun =
+    candidateRun &&
+    brand &&
+    readinessUrlMatchesBrand(candidateRun.targetUrl, brand.domain)
+      ? candidateRun
+      : null;
   const completedRuns = brand
     ? await scopedCompletedSiteReadinessRuns(brand.id)
     : [];

@@ -440,6 +440,7 @@
         "AUTH_REQUIRED": "Sign in and select an organization to continue.",
         "PLAN_REQUIRED": "This feature is available on Growth.",
         "BRAND_REQUIRED": "Register a brand and domain first.",
+        "BRAND_DOMAIN_MISMATCH": "You can audit only the registered brand domain. Update the brand domain first if it has changed.",
         "RUNNING": "An audit is already running for this brand.",
         "URL_REQUIRED": "Enter a website address.",
         "URL_INVALID": "Enter a valid website address.",

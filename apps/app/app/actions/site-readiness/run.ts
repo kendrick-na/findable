@@ -4,6 +4,7 @@ import { hasPlan } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth } from "@repo/auth/server";
 import { scopedBrandById } from "@/lib/db/scoped";
+import { readinessUrlMatchesBrand } from "@/lib/site-readiness/brand-domain";
 import {
   createSiteReadinessRun,
   executeSiteReadinessRun,
@@ -29,6 +30,9 @@ export async function runSiteReadiness(
     const brand = await scopedBrandById(brandId);
     if (!brand) {
       return { status: "error", error: "BRAND_REQUIRED" };
+    }
+    if (!readinessUrlMatchesBrand(url, brand.domain)) {
+      return { status: "error", error: "BRAND_DOMAIN_MISMATCH" };
     }
     const run = await createSiteReadinessRun({
       brandId: brand.id,
