@@ -64,6 +64,27 @@ function makeErrorResponse(
   };
 }
 
+/** 검색 API가 정상 응답했지만 문서가 없을 때의 측정값. 실패와 구분해야 한다. */
+function makeEmptySearchResponse(
+  engineId: EngineId,
+  prompt: string,
+  durationMs: number
+): EngineResponse {
+  return {
+    engineId,
+    rawResponse: `검색 결과가 없습니다.\n질의: ${prompt.slice(0, 200)}`,
+    brandMentioned: false,
+    mentionPosition: null,
+    mentionListSize: null,
+    sentiment: null,
+    citedSources: [],
+    shareOfVoice: 0,
+    errorMessage: null,
+    durationMs,
+    isStub: false,
+  };
+}
+
 // ─────────────────────────────────────────────
 // 1. HyperCLOVA X (CLOVA Studio Chat Completions)
 // ─────────────────────────────────────────────
@@ -159,11 +180,18 @@ interface NaverSearchItem {
   title: string;
 }
 
-async function naverSearch(query: string): Promise<NaverSearchItem[]> {
+interface NaverSearchResult {
+  failures: string[];
+  items: NaverSearchItem[];
+}
+
+async function naverSearch(query: string): Promise<NaverSearchResult> {
   const clientId = process.env.NAVER_CLIENT_ID;
   const clientSecret = process.env.NAVER_CLIENT_SECRET;
   if (!(clientId && clientSecret)) {
-    return [];
+    throw new Error(
+      "NAVER_CLIENT_ID 또는 NAVER_CLIENT_SECRET이 설정되지 않았습니다"
+    );
   }
 
   // 블로그·뉴스·웹문서 3개 동시 호출
@@ -178,14 +206,21 @@ async function naverSearch(query: string): Promise<NaverSearchItem[]> {
         },
       });
       if (!resp.ok) {
-        return [];
+        throw new Error(`${kind} HTTP ${resp.status}`);
       }
       const data = (await resp.json()) as { items?: NaverSearchItem[] };
       return data.items ?? [];
     })
   );
 
-  return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  return {
+    items: results.flatMap((r) => (r.status === "fulfilled" ? r.value : [])),
+    failures: results.flatMap((r) =>
+      r.status === "rejected"
+        ? [r.reason instanceof Error ? r.reason.message : String(r.reason)]
+        : []
+    ),
+  };
 }
 
 export const naverAdapter: EngineAdapter = async (query) => {
@@ -193,18 +228,22 @@ export const naverAdapter: EngineAdapter = async (query) => {
   const clientId = process.env.NAVER_CLIENT_ID;
   const clovaKey = process.env.CLOVA_STUDIO_API_KEY;
 
-  if (!(clientId && clovaKey)) {
+  const clientSecret = process.env.NAVER_CLIENT_SECRET;
+  if (!(clientId && clientSecret && clovaKey)) {
     return makeStubResponse("naver", query.prompt, Date.now() - start);
   }
 
   try {
-    const items = await naverSearch(query.prompt);
-    if (items.length === 0) {
+    const { items, failures } = await naverSearch(query.prompt);
+    if (failures.length > 0) {
       return makeErrorResponse(
         "naver",
-        "Naver Search API 결과 없음",
+        `Naver Search API 요청 실패: ${failures.join(", ")}`,
         Date.now() - start
       );
+    }
+    if (items.length === 0) {
+      return makeEmptySearchResponse("naver", query.prompt, Date.now() - start);
     }
 
     // 검색 결과를 HyperCLOVA에 컨텍스트로 주입 → Cue: 답변 합성
