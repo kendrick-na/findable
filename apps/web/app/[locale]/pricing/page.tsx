@@ -8,7 +8,9 @@ import { ArrowRight, Check, Clock } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { env } from "@/env";
-import { Header } from "../components/header";
+import { FooterCTA } from "../(home)/components/footer-cta";
+import { Footer } from "../components/footer";
+import { PublicLandingHeader } from "../components/public-landing-header";
 
 // ⚡ ISR (2026-07-30 성능): dynamic API 사용 0 → 1시간 캐시(CDN). [locale] 전 페이지
 //   매 요청 SSR이던 문제의 페이지 단위 해소. 카피 변경은 재배포로 반영.
@@ -300,7 +302,7 @@ const PricingPage = async ({ params }: PricingPageProps) => {
 
   return (
     <div className="min-h-screen w-full bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
-      <Header dictionary={dictionary} />
+      <PublicLandingHeader locale={locale} />
       {/* Hero */}
       <section className="px-8 pt-24 pb-16 text-center">
         <p
@@ -521,6 +523,8 @@ const PricingPage = async ({ params }: PricingPageProps) => {
           </dl>
         </div>
       </section>
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </div>
   );
 };

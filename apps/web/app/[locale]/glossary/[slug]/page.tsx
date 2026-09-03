@@ -3,6 +3,9 @@ import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Footer } from "../../components/footer";
+import { PublicLandingHeader } from "../../components/public-landing-header";
+import { FooterCTA } from "../../(home)/components/footer-cta";
 
 const TERMS = {
   seo: {
@@ -134,8 +137,9 @@ export default async function GlossaryTermPage({
   const prefix = locale.startsWith("ko") ? "/ko" : "";
 
   return (
-    <main className="min-h-screen bg-[#0b0c0d] px-5 py-16 text-[#f4f1e8] md:px-8 md:py-24">
-      <article className="mx-auto max-w-3xl">
+    <main className="min-h-screen bg-[#0b0c0d] text-[#f4f1e8]">
+      <PublicLandingHeader locale={locale} />
+      <article className="mx-auto max-w-3xl px-5 py-16 md:px-8 md:py-24">
         <JsonLd
           code={{
             "@context": "https://schema.org",
@@ -204,6 +208,8 @@ export default async function GlossaryTermPage({
           에서 확인할 수 있다.
         </p>
       </article>
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </main>
   );
 }

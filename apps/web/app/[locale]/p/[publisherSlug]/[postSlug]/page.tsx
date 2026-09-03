@@ -18,6 +18,9 @@ import {
   siteArticleUrl,
   sitePublisherUrl,
 } from "@/lib/public-url";
+import { FooterCTA } from "../../../(home)/components/footer-cta";
+import { Footer } from "../../../components/footer";
+import { PublicLandingHeader } from "../../../components/public-landing-header";
 
 /**
  * 🔴🔴 **발행 즉시 살아나야 한다 — `dynamicParams` 를 끄지 않는다**(2026-09-02).
@@ -170,6 +173,7 @@ export default async function ArticlePage({ params }: Props) {
   });
   return (
     <main className="min-h-screen bg-[#f5f1e8] text-[#1f211f]">
+      <PublicLandingHeader locale={locale} />
       <JsonLd
         code={{
           "@context": "https://schema.org",
@@ -374,6 +378,8 @@ export default async function ArticlePage({ params }: Props) {
           </div>
         </section>
       ) : null}
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </main>
   );
 }

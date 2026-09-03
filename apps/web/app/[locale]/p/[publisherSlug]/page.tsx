@@ -10,6 +10,9 @@ import {
   publisherCanonicalUrl,
   sitePublisherUrl,
 } from "@/lib/public-url";
+import { FooterCTA } from "../../(home)/components/footer-cta";
+import { Footer } from "../../components/footer";
+import { PublicLandingHeader } from "../../components/public-landing-header";
 
 // 🔴 매 요청 SSR(`force-dynamic`)이었다 — 크롤러가 가장 자주 오는 목록 페이지다(2026-09-02).
 //   ISR 로 캐시하고, 발행·수정 시 `app/api/revalidate` 가 즉시 무효화한다.
@@ -69,6 +72,7 @@ export default async function PublisherPage({ params }: Props) {
   const prefix = `/${normalizedLocale}`;
   return (
     <main className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
+      <PublicLandingHeader locale={locale} />
       {/* 🔴 이 페이지는 JSON-LD 가 **0개**였다(실측 2026-09-02) — 인사이트 허브인데
           엔티티를 선언하지 않아 검색·AI 엔진이 "누가 무엇을 발행하는 곳"인지 알 수 없었다.
           `Blog` + 발행 주체 `Organization` + 글 목록(`blogPost`)을 함께 낸다. */}
@@ -154,6 +158,8 @@ export default async function PublisherPage({ params }: Props) {
           </article>
         ))}
       </section>
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </main>
   );
 }

@@ -12,6 +12,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { NewsletterSubscribe } from "@/components/content/newsletter-subscribe";
 import { listPublishedContent } from "@/lib/content";
+import { Footer } from "../components/footer";
+import { PublicLandingHeader } from "../components/public-landing-header";
+import { FooterCTA } from "../(home)/components/footer-cta";
 
 export const dynamic = "force-dynamic";
 const TYPES = ["all", "research", "guide", "case_study", "analysis"] as const;
@@ -128,39 +131,7 @@ export default async function PublicInsightsPage({
           },
         }}
       />
-      <header className="border-white/10 border-b px-5 py-5 md:px-8">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6">
-          <Link
-            className="font-semibold tracking-[-0.03em]"
-            href={`${prefix}/insights`}
-          >
-            Findable <span className="font-normal text-white/45">Insights</span>
-          </Link>
-          <nav
-            aria-label={ko ? "인사이트 메뉴" : "Insights navigation"}
-            className="flex items-center gap-5 text-sm text-white/55"
-          >
-            <a
-              className="hidden transition-colors hover:text-white sm:block"
-              href="#library"
-            >
-              {ko ? "인사이트 라이브러리" : "Insights library"}
-            </a>
-            <Link
-              className="hidden transition-colors hover:text-white sm:block"
-              href={`${prefix}/glossary`}
-            >
-              {ko ? "검색·AI 가이드" : "Search & AI guide"}
-            </Link>
-            <Link
-              className="rounded-full border border-white/15 px-4 py-2 transition-colors hover:border-[#ff7a4d] hover:text-white"
-              href={`${prefix}/contact`}
-            >
-              {ko ? "측정 문의" : "Talk to us"}
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <PublicLandingHeader locale={locale} />
 
       <section className="relative overflow-hidden border-white/10 border-b px-5 py-20 md:px-8 md:py-28">
         <div className="pointer-events-none absolute inset-0 [background:linear-gradient(115deg,transparent_48%,rgba(255,122,77,.07)_48%,rgba(255,122,77,.07)_49%,transparent_49%),radial-gradient(circle_at_75%_20%,rgba(255,122,77,.13),transparent_26%)]" />
@@ -415,7 +386,9 @@ export default async function PublicInsightsPage({
                   INDUSTRY REPORT · 2026 Q2
                 </p>
                 <h3 className="mt-3 font-semibold text-2xl tracking-tight">
-                  {ko ? "K-뷰티 GEO 산업 리포트" : "K-Beauty GEO Industry Report"}
+                  {ko
+                    ? "K-뷰티 GEO 산업 리포트"
+                    : "K-Beauty GEO Industry Report"}
                 </h3>
                 <p className="mt-3 text-black/50 text-sm leading-6">
                   {ko
@@ -444,6 +417,8 @@ export default async function PublicInsightsPage({
           </div>
         </div>
       </section>
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </main>
   );
 }

@@ -4,8 +4,9 @@
 // D-060 (2026-05-12): 헤더 언어 토글 추가
 
 import type { Dictionary } from "@repo/internationalization";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { PublicLandingHeader } from "../../components/public-landing-header";
 
 const ENGINE_MARKS = [
   {
@@ -59,43 +60,6 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
   // secondary CTA는 primary(진단)와 목적지가 겹치지 않게 요금제로 분리.
   const ctaSecondary = isKo ? "요금제 보기" : "See pricing";
   const enginesLabel = isKo ? "진단 대상 AI" : "Engines covered";
-  // 인사이트 드롭다운: 공개 검색 자산의 정규 허브(`/insights`)를
-  // 전면에 노출하고, 리포트·리서치도 같은 콘텐츠 축으로 묶는다.
-  const insightMenu = isKo
-    ? {
-        label: "인사이트·블로그",
-        href: `${lp}/insights`,
-        children: [
-          { label: "블로그 전체", href: `${lp}/insights` },
-          { label: "GEO 리포트", href: `${lp}/report/k-beauty-geo-2026q2` },
-          { label: "벤치마크 리서치", href: `${lp}/research/k-geo-bench-v0_1` },
-        ],
-      }
-    : {
-        label: "Insights & blog",
-        href: `${lp}/insights`,
-        children: [{ label: "All insights", href: `${lp}/insights` }],
-      };
-  // 단일 링크 nav 항목. "제품"은 현재 페이지의 앵커라 이동감이 없었으므로
-  // 언제든 랜딩 첫 화면으로 돌아가는 홈 링크로 명확히 바꾼다.
-  const navItems = isKo
-    ? {
-        home: { label: "홈", href: lp || "/" },
-        knowledge: { label: "GEO·SEO 가이드", href: `${lp}/glossary` },
-        faq: { label: "FAQ", href: "#faq" },
-        pricing: { label: "요금제", href: `${lp}/pricing` },
-      }
-    : {
-        home: { label: "Home", href: lp || "/" },
-        knowledge: { label: "GEO & SEO guide", href: `${lp}/glossary` },
-        faq: { label: "FAQ", href: "#faq" },
-        pricing: { label: "Pricing", href: `${lp}/pricing` },
-      };
-  const navSignIn = isKo ? "로그인" : "Sign in";
-  // 우상단 primary CTA는 무료 진단으로 통일 (기존 데모 신청 → 진단).
-  const navAudit = isKo ? "무료로 시작" : "Start free";
-  const navLinkClass =
-    "text-[14px] text-[var(--findable-ink-subtle)] transition hover:text-[var(--findable-ink)]";
   return (
     <section className="relative w-full overflow-hidden bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
       {/* 상단 atmospheric 라벤더 글로우 (Resend 패턴) */}
@@ -108,134 +72,7 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
         }}
       />
 
-      {/* TOP NAV — Hero 안 인라인 (sticky 제거, 디자인 안정 우선) */}
-      <header className="relative z-50 flex h-14 items-center justify-between border-[var(--findable-hairline)] border-b px-5 lg:px-8">
-        <Link
-          aria-label="파인더블 Findable"
-          className="inline-flex items-baseline text-[var(--findable-ink)] transition hover:opacity-80"
-          href={lp || "/"}
-        >
-          <span
-            className="text-[24px] leading-none"
-            style={{
-              fontFamily: "var(--findable-font-wordmark)",
-              fontWeight: 400,
-              letterSpacing: "-0.01em",
-            }}
-          >
-            Findable
-          </span>
-          <span className="ml-2 text-[11px] text-[var(--findable-ink-muted)]">
-            파인더블
-          </span>
-          <span
-            aria-hidden
-            className="ml-[5px] inline-block h-[5px] w-[5px] bg-[var(--findable-primary)]"
-          />
-        </Link>
-
-        <nav
-          className="hidden items-center gap-5 xl:gap-8 md:flex"
-          style={{ fontFamily: "var(--findable-font-sans)" }}
-        >
-          <Link className={navLinkClass} href={navItems.home.href}>
-            {navItems.home.label}
-          </Link>
-
-          <Link className={navLinkClass} href={navItems.knowledge.href}>
-            {navItems.knowledge.label}
-          </Link>
-
-          <Link className={navLinkClass} href={navItems.faq.href}>
-            {navItems.faq.label}
-          </Link>
-
-          {/* 라벨은 블로그 허브로 즉시 이동하고, 화살표만 세부 메뉴를 연다.
-              기존에는 라벨 전체가 버튼이라 첫 클릭이 "무반응"처럼 보였다. */}
-          <div className="group relative flex w-fit items-center">
-            <Link
-              className={`${navLinkClass} group-focus-within:text-[var(--findable-ink)] group-hover:text-[var(--findable-ink)]`}
-              href={insightMenu.href}
-            >
-              {insightMenu.label}
-            </Link>
-            <button
-              aria-label={
-                isKo ? "인사이트 하위 메뉴 열기" : "Open insight menu"
-              }
-              aria-haspopup="menu"
-              className="ml-0.5 inline-flex items-center text-[var(--findable-ink-subtle)] transition hover:text-[var(--findable-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--findable-primary)]"
-              type="button"
-            >
-              <ChevronDown className="h-3.5 w-3.5 opacity-70 transition group-focus-within:rotate-180 group-hover:rotate-180" />
-            </button>
-            <div
-              className="findable-glass !absolute invisible top-full left-1/2 z-50 mt-2 w-52 -translate-x-1/2 translate-y-1 rounded-lg p-1.5 opacity-0 transition-all duration-150 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100"
-              role="menu"
-            >
-              {insightMenu.children.map((c) => (
-                <Link
-                  className="block rounded-md px-3 py-2 text-[13px] text-[var(--findable-ink-subtle)] transition hover:bg-white/[0.06] hover:text-[var(--findable-ink)]"
-                  href={c.href}
-                  key={c.href}
-                  role="menuitem"
-                >
-                  {c.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <Link className={navLinkClass} href={navItems.pricing.href}>
-            {navItems.pricing.label}
-          </Link>
-        </nav>
-
-        <div className="flex items-center gap-2">
-          {/* 언어 토글 — ko ↔ en */}
-          <div
-            className="hidden items-center gap-1 rounded-md border border-[var(--findable-hairline)] px-1.5 py-1 text-[12px] sm:flex"
-            style={{ fontFamily: "var(--findable-font-mono)" }}
-          >
-            {/* 플레인 <a> 사용 — Next.js prefetch가 /ko·/en 미들웨어를 트리거해
-                Next-Locale 쿠키를 덮어쓰는 문제 방지 (D-061) */}
-            <a
-              className={`rounded px-1.5 py-0.5 transition ${
-                isKo
-                  ? "bg-[var(--findable-surface-2)] text-[var(--findable-ink)]"
-                  : "text-[var(--findable-ink-tertiary)] hover:text-[var(--findable-ink)]"
-              }`}
-              href="/ko"
-            >
-              KO
-            </a>
-            <a
-              className={`rounded px-1.5 py-0.5 transition ${
-                isKo
-                  ? "text-[var(--findable-ink-tertiary)] hover:text-[var(--findable-ink)]"
-                  : "bg-[var(--findable-surface-2)] text-[var(--findable-ink)]"
-              }`}
-              href="/en"
-            >
-              EN
-            </a>
-          </div>
-          <a
-            className="hidden rounded-md px-3 py-1.5 text-[14px] text-[var(--findable-ink)] transition hover:bg-[var(--findable-surface-1)] sm:inline-block"
-            href={`${process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr"}/sign-in`}
-            style={{ fontFamily: "var(--findable-font-sans)" }}
-          >
-            {navSignIn}
-          </a>
-          <Link
-            className="findable-btn-primary flex h-9 items-center rounded-md bg-[var(--findable-ink)] px-3.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-ink-muted)]"
-            href={`${process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr"}/sign-up`}
-            style={{ fontFamily: "var(--findable-font-sans)" }}
-          >
-            {navAudit}
-          </Link>
-        </div>
-      </header>
+      <PublicLandingHeader locale={locale} />
 
       {/* HERO CONTENT */}
       <div className="relative z-10 mx-auto flex max-w-[1200px] flex-col items-center px-8 pt-16 pb-12 text-center md:pt-24 md:pb-14">

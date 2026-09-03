@@ -18,6 +18,9 @@ import { createMetadata } from "@repo/seo/metadata";
 import { ArrowRight, ExternalLink, Info } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { FooterCTA } from "../../(home)/components/footer-cta";
+import { Footer } from "../../components/footer";
+import { PublicLandingHeader } from "../../components/public-landing-header";
 
 /**
  * 🔴 정적 `metadata` 였다 → canonical·hreflang·og:url 이 **하나도 없었다**(실측 2026-09-02).
@@ -194,9 +197,15 @@ function severityLabel(s: "green" | "amber" | "red") {
   return "Risk";
 }
 
-export default function ABrandCasePage() {
+export default async function ABrandCasePage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
+      <PublicLandingHeader locale={locale} />
       {/* Hero */}
       <section className="relative w-full overflow-hidden border-[var(--findable-hairline)] border-b">
         <div className="mx-auto max-w-5xl px-6 pt-24 pb-16 md:pt-32 md:pb-20">
@@ -464,6 +473,8 @@ export default function ABrandCasePage() {
           </div>
         </div>
       </section>
+      <FooterCTA locale={locale} />
+      <Footer locale={locale} />
     </div>
   );
 }
