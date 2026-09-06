@@ -224,7 +224,9 @@ export const createMetadata = ({
   //     (그 실측이 이번에 파일을 `app/` 루트로 옮기려던 시도를 막아줬다 — 옮기기만
   //      하면 이 줄의 URL 이 404 가 됐다.)
   // ──────────────────────────────────────────────────────────────────
-  const ogImageUrl = image ?? `${siteOrigin}/opengraph-image.png`;
+  // LinkedIn은 본문 URL과 OG 이미지 URL을 별도 캐시한다. 이미지 파일을 교체해도
+  // 같은 URL이면 과거 카드가 오래 남으므로, 브랜드 카드 버전을 URL에 명시한다.
+  const ogImageUrl = image ?? `${siteOrigin}/opengraph-image.png?v=20260906`;
 
   if (metadata.openGraph) {
     metadata.openGraph.images = [
