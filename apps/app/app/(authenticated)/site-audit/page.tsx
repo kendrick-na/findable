@@ -45,17 +45,26 @@ const SiteAuditPage = async ({
   const candidateRun = brand
     ? await scopedLatestSiteReadinessRun(brand.id)
     : null;
-  const latestRun =
-    candidateRun &&
-    brand &&
-    readinessUrlMatchesBrand(candidateRun.targetUrl, brand.domain)
-      ? candidateRun
-      : null;
   const completedRuns = brand
     ? await scopedCompletedSiteReadinessRuns(brand.id)
     : [];
+  const matchingCompletedRuns = brand
+    ? completedRuns.filter((run) =>
+        readinessUrlMatchesBrand(run.targetUrl, brand.domain)
+      )
+    : [];
+  const candidateMatchesBrand = Boolean(
+    candidateRun &&
+      brand &&
+      readinessUrlMatchesBrand(candidateRun.targetUrl, brand.domain)
+  );
+  // 최신 행이 과거 데이터 오염으로 다른 도메인을 가리키면, 정상 완료 이력까지
+  // 빈 화면으로 만들지 않고 같은 브랜드 도메인의 가장 최근 결과로 복구한다.
+  const latestRun = candidateMatchesBrand
+    ? candidateRun
+    : (matchingCompletedRuns[0] ?? null);
   const previousRun =
-    latestRun?.status === "completed" ? completedRuns[1] : completedRuns[0];
+    matchingCompletedRuns.find((run) => run.id !== latestRun?.id) ?? null;
   const siteTaskCompletions = brand
     ? await database.actionCompletion.findMany({
         where: { brandId: brand.id, kind: "site_readiness" },

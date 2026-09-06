@@ -29,5 +29,6 @@ describe("운영 릴리스 계약", () => {
 
   it("선택 브랜드 도메인과 다른 준비도 결과를 렌더하지 않는다", () => {
     expect(SITE_AUDIT_PAGE).toContain("readinessUrlMatchesBrand");
+    expect(SITE_AUDIT_PAGE).toContain("matchingCompletedRuns[0]");
   });
 });

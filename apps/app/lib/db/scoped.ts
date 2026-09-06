@@ -239,14 +239,25 @@ export async function scopedLatestSiteReadinessRun(brandId: string) {
   });
 }
 
-/** 전후 비교용 완료 실행 2건. 실패·진행 중 실행은 비교 기준에서 제외한다. */
+/**
+ * 전후 비교용 완료 실행 후보.
+ * 과거 잘못 저장된 다른 도메인 행을 표시층에서 건너뛴 뒤에도 정상 2건을 찾을 수 있게
+ * 소량의 후보를 넉넉히 반환한다.
+ */
 export async function scopedCompletedSiteReadinessRuns(brandId: string) {
   const orgId = await requireOrg();
   return database.siteReadinessRun.findMany({
     where: { brandId, organizationId: orgId, status: "completed" },
     orderBy: { createdAt: "desc" },
-    take: 2,
-    select: { id: true, report: true },
+    take: 10,
+    select: {
+      id: true,
+      status: true,
+      trigger: true,
+      targetUrl: true,
+      report: true,
+      errorCode: true,
+    },
   });
 }
 
