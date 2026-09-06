@@ -109,7 +109,7 @@ const Home = async ({ params }: HomeProps) => {
           url: siteUrl,
           email: "kendrick@indigochild.kr",
           description:
-            "파인더블(Findable)은 생성형 AI 답변에서 브랜드의 인식·언급·인용을 측정하는 한국어 GEO 플랫폼입니다.",
+            "파인더블(Findable)은 ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바 AI 검색에서 브랜드 언급·인용·가시성을 진단하고, SEO·GEO·AEO 개선 액션부터 브랜드별 AI 검색 전략 컨설팅까지 제공합니다.",
           founder: {
             "@type": "Person",
             name: "나현덕",
