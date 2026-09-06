@@ -129,6 +129,7 @@ export interface SidebarLabels {
   brandMeasure: string;
   compare: string;
   content: string;
+  contentPerformance: string;
   currentPlan: string;
   dashboard: string;
   export: string;
@@ -174,6 +175,7 @@ const workspaceGroups = (
       //   "브랜드 측정", 폼은 "새 브랜드 등록"). 게다가 이 화면은 **등록**이 주 동작이고
       //   측정은 브랜드별 버튼이 한다 → 「브랜드·측정」으로 통일.
       { title: t.brandMeasure, url: "/brand", icon: SparklesIcon },
+      // 라우트만 남기고 메뉴에서 빼면 고객에게는 기능이 사라진 것과 같다.
       {
         title: t.siteAudit,
         url: "/site-audit",
@@ -234,6 +236,11 @@ const insightsNav = (t: SidebarLabels): NavItem[] => [
     title: t.content,
     url: "/insights",
     icon: PenLineIcon,
+  },
+  {
+    title: t.contentPerformance,
+    url: "/content-performance",
+    icon: TrendingUpIcon,
   },
   {
     // 리포트·벤치마크를 개별 마케팅 탭으로 흩뜨리지 않는다. 공개 허브가

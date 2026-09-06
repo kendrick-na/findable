@@ -7,6 +7,7 @@ import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
 import { requireOrg, scopedBrandById } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
+import { scheduleSiteReadinessRun } from "@/lib/site-readiness/schedule";
 import { startOrgTracking } from "./start-tracking";
 
 /**
@@ -42,6 +43,8 @@ export type AssignBrandOwnerResult =
   | {
       ok: true;
       measurement: BrandMeasurementOutcome;
+      /** 가입/브랜드 등록과 함께 예약된 SEO·GEO 기술 진단 실행. */
+      siteReadinessRunId?: string;
       /** 측정이 시작됐을 때만. 대기 화면이 이 id 로 진행 상태를 폴링한다. */
       jobId?: string;
       /** rate_limited·failed 사유를 사용자 말로. 토스트에 그대로 쓴다. */
@@ -75,6 +78,8 @@ export interface AssignBrandOwnerInput {
    *   자동 채움이 필요하면 정적 사전만(`suggestBrandName` · 원가 0) — 폼이 이미 쓴다.
    */
   name: string;
+  /** 화면 출처. 실행 권한이 아니라 실행 이력의 원인만 구분한다. */
+  source?: "onboarding" | "brand_create";
 }
 
 /** DB Industry enum(닫힌 집합). 유효값일 때만 저장하고 아니면 null(=자동 추론). */
@@ -158,6 +163,30 @@ const startMeasurementAfterAssign = async (
   }
 };
 
+/**
+ * 도메인 등록 직후의 기술 준비도 진단을 예약한다.
+ *
+ * 사이트 스캐너 실행은 `after()`에서 이어지므로 가입 응답을 기다리게 하지 않는다.
+ * 예약 실패는 브랜드 저장과 AI 노출도 측정을 막지 않으며, 실패 원인은 scheduler가 기록한다.
+ */
+const scheduleReadinessAfterAssign = async ({
+  brandId,
+  domain,
+  orgId,
+  trigger,
+}: {
+  brandId: string;
+  domain: string;
+  orgId: string;
+  trigger: "onboarding" | "brand_create" | "domain_change";
+}) =>
+  scheduleSiteReadinessRun({
+    brandId,
+    organizationId: orgId,
+    targetUrl: domain,
+    trigger,
+  });
+
 export const assignBrandOwner = async (
   input: AssignBrandOwnerInput
 ): Promise<AssignBrandOwnerResult> => {
@@ -194,6 +223,7 @@ export const assignBrandOwner = async (
         // 존재하지 않거나 다른 org 소속 → 존재 여부를 흘리지 않도록 동일 메시지.
         return { error: "해당 브랜드에 접근할 수 없습니다." };
       }
+      const domainChanged = owned.domain !== domain;
       await database.brand.update({
         where: { id: owned.id },
         // organizationId 는 재확인차 현재 org 로 고정(이미 owned 이므로 멱등).
@@ -201,7 +231,19 @@ export const assignBrandOwner = async (
       });
       revalidatePath("/brand");
       revalidatePath("/");
-      return { ok: true, ...(await startMeasurementAfterAssign(domain, name)) };
+      const siteReadinessRunId = domainChanged
+        ? await scheduleReadinessAfterAssign({
+            brandId: owned.id,
+            domain,
+            orgId,
+            trigger: "domain_change",
+          })
+        : undefined;
+      return {
+        ok: true,
+        ...(await startMeasurementAfterAssign(domain, name)),
+        siteReadinessRunId: siteReadinessRunId ?? undefined,
+      };
     }
 
     // 3-B) 신규 생성 — org 내 동일 도메인 중복 차단.
@@ -226,13 +268,23 @@ export const assignBrandOwner = async (
       }
     }
 
-    await database.brand.create({
+    const brand = await database.brand.create({
       // organizationId 는 입력이 아니라 현재 orgId 강제(남의 org 생성 불가).
       data: { name, domain, organizationId: orgId, industry, marketScope },
     });
     revalidatePath("/brand");
     revalidatePath("/");
-    return { ok: true, ...(await startMeasurementAfterAssign(domain, name)) };
+    const siteReadinessRunId = await scheduleReadinessAfterAssign({
+      brandId: brand.id,
+      domain,
+      orgId,
+      trigger: input.source ?? "brand_create",
+    });
+    return {
+      ok: true,
+      ...(await startMeasurementAfterAssign(domain, name)),
+      siteReadinessRunId: siteReadinessRunId ?? undefined,
+    };
   } catch (error) {
     // 6) DB 실패 — 로그만 남기고 사용자에겐 일반 메시지.
     log.error(

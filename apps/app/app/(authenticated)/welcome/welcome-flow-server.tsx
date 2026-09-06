@@ -29,6 +29,11 @@ export const WelcomeFlowServer = async ({
   initialStep?: number;
   initialVariants?: string[];
   measurement?: "failed" | "rate_limited" | "started";
+  readiness?: {
+    id: string;
+    report: unknown;
+    status: "queued" | "processing" | "completed" | "failed";
+  };
   suggestedCompetitors?: string[];
 }) => {
   // 🔴 사전은 **서버에서만** 읽는다(`server-only`) — 뷰에 문자열만 내려보낸다.

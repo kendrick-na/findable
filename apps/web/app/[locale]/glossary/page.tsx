@@ -78,7 +78,7 @@ export default async function GlossaryPage({
 }) {
   const { locale } = await params;
   const ko = locale.startsWith("ko");
-  const prefix = ko ? "/ko" : "";
+  const prefix = ko ? "/ko" : "/en";
 
   return (
     <main className="min-h-screen bg-[#0b0c0d] text-[#f4f1e8]">

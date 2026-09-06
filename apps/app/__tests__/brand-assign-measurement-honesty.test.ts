@@ -79,6 +79,10 @@ const OK_CARRIES_OUTCOME =
 const MAPS_RATE_LIMITED = /code\s*===\s*"rate_limited"\s*\?\s*"rate_limited"/;
 /** 측정은 기존 액션에 **위임**한다(정책 복제 금지). */
 const DELEGATES_TO_TRACKING = /await startOrgTracking\(/;
+/** 가입 때 기술 진단 scheduler 를 실제로 호출한다. */
+const DELEGATES_TO_SITE_READINESS = /scheduleSiteReadinessRun\(/;
+/** 온보딩 출처를 실행 이력에 보존한다. */
+const ONBOARDING_TRIGGER = /trigger:\s*input\.source\s*\?\?\s*"brand_create"/;
 /** 🔴 복제 금지: 24시간 한도를 이 파일에서 **다시 계산**하면 두 경로가 갈린다. */
 const DUPLICATED_POLICY =
   /24\s*\*\s*60\s*\*\s*60\s*\*\s*1000|auditJob\.findFirst/;
@@ -121,6 +125,11 @@ describe("브랜드 등록 → 자동 측정: 결말을 숨기지 않는다", ()
     expect(DELEGATES_TO_TRACKING.test(actionCode)).toBe(true);
     // 24시간 한도·job 조회가 여기 다시 나타나면 두 경로가 서로 다른 한도를 적용한다.
     expect(DUPLICATED_POLICY.test(actionCode)).toBe(false);
+  });
+
+  test("🔴 브랜드 등록은 SEO·GEO 사이트 준비도 진단도 예약한다", () => {
+    expect(DELEGATES_TO_SITE_READINESS.test(actionCode)).toBe(true);
+    expect(ONBOARDING_TRIGGER.test(actionCode)).toBe(true);
   });
 
   test("🔴 화면이 결말로 분기한다 (성공 문구 하나로 뭉개지 않는다)", () => {

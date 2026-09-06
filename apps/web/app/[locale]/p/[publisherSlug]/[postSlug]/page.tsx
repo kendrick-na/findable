@@ -20,6 +20,7 @@ import {
 } from "@/lib/public-url";
 import { FooterCTA } from "../../../(home)/components/footer-cta";
 import { PublicLandingHeader } from "../../../components/public-landing-header";
+import { ShareActions } from "./share-actions";
 
 /**
  * 🔴🔴 **발행 즉시 살아나야 한다 — `dynamicParams` 를 끄지 않는다**(2026-09-02).
@@ -149,6 +150,8 @@ export default async function ArticlePage({ params }: Props) {
     postSlug: post.slug,
     publisherSlug: post.publisher.slug,
   });
+  const shareUrl = canonical;
+  const isFindablePublisher = post.publisher.slug === "findable";
   const words = post.bodyMarkdown
     .replace(MARKDOWN_PUNCTUATION_RE, " ")
     .split(WHITESPACE_RE)
@@ -247,7 +250,7 @@ export default async function ArticlePage({ params }: Props) {
         }}
       />
       <article>
-        <header className="border-black/10 border-b px-6 pt-12 pb-14 md:pt-16 md:pb-20">
+        <header className="border-black/10 border-b px-6 pt-12 pb-7 md:pt-16 md:pb-10">
           <div className="mx-auto max-w-5xl">
             <Link
               className="inline-flex items-center gap-1.5 font-medium text-black/45 text-xs hover:text-[#e86f45]"
@@ -256,10 +259,17 @@ export default async function ArticlePage({ params }: Props) {
               <ArrowLeftIcon className="size-3.5" />{" "}
               {ko ? "Findable 인사이트" : "Findable Insights"}
             </Link>
-            <p className="mt-10 font-semibold text-[#d95f38] text-xs uppercase tracking-[0.17em]">
-              {post.series || post.contentType.replace("_", " ")}
-            </p>
-            <h1 className="mt-4 max-w-4xl text-balance font-semibold font-serif text-4xl leading-[1.04] tracking-[-0.035em] md:text-7xl">
+            <div className="mt-10 flex flex-wrap gap-2" aria-label={ko ? "글 주제" : "Article topics"}>
+              {(post.tags.length > 0 ? post.tags : [post.series || post.contentType.replace("_", " ")]).map((tag) => (
+                <span
+                  className="rounded-full bg-[#e9e2d7] px-3 py-1.5 font-medium text-[11px] text-[#6c5a4d]"
+                  key={tag}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+            <h1 className="mt-6 max-w-4xl text-balance font-semibold text-4xl leading-[1.06] tracking-[-0.045em] md:text-7xl">
               {post.title}
             </h1>
             {post.excerpt ? (
@@ -267,16 +277,44 @@ export default async function ArticlePage({ params }: Props) {
                 {post.excerpt}
               </p>
             ) : null}
-            <div className="mt-8 flex flex-wrap items-center gap-3 text-black/45 text-xs">
-              <span>{post.publisher.name}</span>
-              <span aria-hidden>·</span>
-              <time>{post.publishedAt?.toLocaleDateString(input.locale)}</time>
-              <span aria-hidden>·</span>
-              <span className="inline-flex items-center gap-1">
-                <Clock3Icon className="size-3.5" /> {readingMinutes}
-                {ko ? "분 읽기" : " min read"}
-              </span>
-              {post.sourceMeasuredAt ? (
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-5 border-black/10 border-t pt-4">
+              <div className="flex items-center gap-3 text-black/45 text-xs">
+                <Link className="flex items-center gap-2.5 text-[#292a28]" href={sitePublisherUrl(locale, post.publisher.slug)}>
+                  {isFindablePublisher ? (
+                    <Image
+                      alt="Findable"
+                      className="size-9 object-contain"
+                      height={36}
+                      src="/icon.svg"
+                      width={36}
+                    />
+                  ) : post.publisher.logoUrl ? (
+                    <Image
+                      alt=""
+                      className="size-9 rounded-full object-cover"
+                      height={36}
+                      src={post.publisher.logoUrl}
+                      unoptimized={REMOTE_IMAGE_RE.test(post.publisher.logoUrl)}
+                      width={36}
+                    />
+                  ) : (
+                    <span className="grid size-9 place-items-center rounded-full bg-[#ff744d] font-semibold text-sm text-white">
+                      {post.publisher.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <span>
+                    <span className="block font-semibold text-[13px]">{post.publisher.name}</span>
+                    <time className="mt-0.5 block text-[11px] text-black/40">
+                      {post.publishedAt?.toLocaleDateString(input.locale)}
+                    </time>
+                  </span>
+                </Link>
+                <span aria-hidden className="text-black/20">·</span>
+                <span className="inline-flex items-center gap-1">
+                  <Clock3Icon className="size-3.5" /> {readingMinutes}
+                  {ko ? "분 읽기" : " min read"}
+                </span>
+                {post.sourceMeasuredAt ? (
                 <>
                   <span aria-hidden>·</span>
                   <span>
@@ -284,18 +322,20 @@ export default async function ArticlePage({ params }: Props) {
                     {post.sourceMeasuredAt.toLocaleDateString(input.locale)}
                   </span>
                 </>
-              ) : null}
+                ) : null}
+              </div>
+              <ShareActions ko={ko} url={shareUrl} />
             </div>
           </div>
         </header>
         {post.coverImageUrl ? (
-          <div className="mx-auto max-w-6xl px-6 pt-10">
+          <div className="mx-auto max-w-6xl px-6 pt-6 md:pt-8">
             <Image
               // 🔴 alt 폴백을 제목으로 바꿨다 — 빈 alt 는 "장식용 이미지" 선언이라
               //   대표 이미지에 쓰면 스크린리더·이미지 검색이 내용을 알 수 없다(3차 리서치 §A).
               alt={post.coverImageAlt ?? post.title}
-              className="aspect-[16/8] w-full rounded-sm object-cover"
-              height={630}
+              className="aspect-video w-full rounded-sm object-cover"
+              height={675}
               priority
               sizes="(min-width: 1024px) 1152px, 100vw"
               src={post.coverImageUrl}
@@ -365,10 +405,20 @@ export default async function ArticlePage({ params }: Props) {
                   href={`${prefix}/p/${item.publisher.slug}/${item.slug}`}
                   key={item.id}
                 >
+                  {item.coverImageUrl ? (
+                    <Image
+                      alt={item.coverImageAlt ?? item.title}
+                      className="mb-5 aspect-video w-full rounded-sm object-cover grayscale-[0.15] transition duration-300 group-hover:grayscale-0"
+                      height={270}
+                      src={item.coverImageUrl}
+                      unoptimized={REMOTE_IMAGE_RE.test(item.coverImageUrl)}
+                      width={480}
+                    />
+                  ) : null}
                   <p className="text-[11px] text-black/40 uppercase tracking-[0.12em]">
                     {item.publisher.name}
                   </p>
-                  <h3 className="mt-3 font-semibold text-lg leading-snug group-hover:text-[#d95f38]">
+                  <h3 className="mt-3 font-semibold text-lg leading-snug tracking-[-0.02em] group-hover:text-[#d95f38]">
                     {item.title}
                   </h3>
                 </Link>

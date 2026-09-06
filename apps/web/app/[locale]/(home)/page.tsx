@@ -60,7 +60,7 @@ const Home = async ({ params }: HomeProps) => {
   const dictionary = await getDictionary(locale);
   // JSON-LD의 대표 URL을 실제 canonical(`/ko` 또는 `/`)과 일치시킨다.
   // 루트 URL만 사용하면 한국어 홈과 브랜드 엔티티 신호가 분리될 수 있다.
-  const siteUrl = `${siteOrigin}${locale.startsWith("ko") ? "/ko" : ""}`;
+  const siteUrl = `${siteOrigin}${locale.startsWith("ko") ? "/ko" : "/en"}`;
 
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)]">

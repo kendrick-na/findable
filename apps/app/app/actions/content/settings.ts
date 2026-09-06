@@ -20,6 +20,43 @@ function normalizeDomain(value: string) {
     .split("/")[0];
 }
 
+const HTML_LOGO_META_RE =
+  /<meta[^>]+(?:property|name)=["'](?:og:logo|twitter:image:src)["'][^>]+content=["']([^"']+)["'][^>]*>/i;
+const HTML_LOGO_LINK_RE =
+  /<link[^>]+rel=["'][^"']*(?:apple-touch-icon|icon|shortcut icon)[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i;
+const HTML_JSON_LOGO_RE = /["']logo["']\s*:\s*["'](https?:\/\/[^"']+)["']/i;
+
+/**
+ * 고객사 사이트의 공개 브랜드 마크를 한 번 수집한다.
+ * 매 요청마다 외부 사이트를 호출하지 않고 Publisher.logoUrl에 저장해
+ * 아티클 로딩 속도와 외부 사이트 장애의 영향을 줄인다.
+ */
+async function discoverPublisherLogo(domain: string) {
+  const origin = `https://${domain}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(origin, {
+      headers: { accept: "text/html,application/xhtml+xml" },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const html = (await response.text()).slice(0, 500_000);
+    const rawLogo =
+      html.match(HTML_LOGO_META_RE)?.[1] ??
+      html.match(HTML_JSON_LOGO_RE)?.[1] ??
+      html.match(HTML_LOGO_LINK_RE)?.[1] ??
+      "/favicon.ico";
+    return new URL(rawLogo, origin).toString();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function ownedPublisher(id: string) {
   const { orgId } = await auth();
   if (!orgId) {
@@ -155,9 +192,13 @@ export async function verifyPublisherDomain(formData: FormData) {
   }
   try {
     const vercel = await addDomainToVercel(publisher.customDomain);
+    const discoveredLogo = publisher.logoUrl
+      ? null
+      : await discoverPublisherLogo(publisher.customDomain);
     await database.publisher.update({
       where: { id: publisher.id },
       data: {
+        ...(discoveredLogo ? { logoUrl: discoveredLogo } : {}),
         customDomainStatus:
           vercel.configured && vercel.verified ? "active" : "verified",
         customDomainVerification: {

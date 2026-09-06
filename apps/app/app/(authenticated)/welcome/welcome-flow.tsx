@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
 import { WelcomeShell } from "./welcome-shell";
@@ -137,6 +137,12 @@ interface WelcomeFlowProps {
    *   📕 이 저장소가 이미 고쳤던 「조용한 실패」와 같은 형태(§3-b ⑴).
    */
   measurement?: "failed" | "rate_limited" | "started";
+  /** 가입 시 자동 예약한 SEO·GEO 기술 진단의 실제 상태. */
+  readiness?: {
+    id: string;
+    report: unknown;
+    status: "queued" | "processing" | "completed" | "failed";
+  };
   /**
    * 🔴 **서버액션을 import 하지 않고 주입받는다**(N-44 · 실제로 Storybook 이 죽고서 고침).
    *   `@/app/actions/...` 를 여기서 import 하면 Prisma·`server-only` 가 브라우저 번들에
@@ -302,6 +308,7 @@ export const WelcomeFlow = ({
   initialVariants = [],
   measurement = "started",
   onSave,
+  readiness,
   t,
   suggestedCompetitors = [],
 }: WelcomeFlowProps) => {
@@ -320,6 +327,15 @@ export const WelcomeFlow = ({
   );
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // 진단은 서버의 after()에서 실행된다. 진행 중일 때만 새로 읽어 결과를 갱신한다.
+  useEffect(() => {
+    if (!(readiness?.status === "queued" || readiness?.status === "processing")) {
+      return;
+    }
+    const timer = window.setInterval(() => router.refresh(), 5_000);
+    return () => window.clearInterval(timer);
+  }, [readiness?.status, router]);
 
   const TOTAL = 5;
 
@@ -657,9 +673,46 @@ export const WelcomeFlow = ({
           </dd>
         </div>
       </dl>
+      <SiteReadinessStatus readiness={readiness} t={t} />
       <div className="border-[color:var(--findable-hairline,#23252a)] border-t pt-4">
         <GrowthFeaturePreview t={t} />
       </div>
     </WelcomeShell>
+  );
+};
+
+const SiteReadinessStatus = ({
+  readiness,
+  t,
+}: {
+  readiness?: WelcomeFlowProps["readiness"];
+  t: Record<string, string>;
+}) => {
+  const status = readiness?.status;
+  const statusKey =
+    status === "completed"
+      ? "siteReadinessCompleted"
+      : status === "failed"
+        ? "siteReadinessFailed"
+        : status === "queued" || status === "processing"
+          ? "siteReadinessRunning"
+          : "siteReadinessUnavailable";
+
+  return (
+    <section className="rounded-md border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-2,rgba(255,255,255,0.03))] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+            {t.siteReadinessTitle}
+          </h2>
+          <p aria-live="polite" className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+            {t[statusKey]}
+          </p>
+        </div>
+        <Link className="shrink-0 text-[color:var(--findable-primary,#ff7a4d)] text-sm" href="/site-audit">
+          {t.siteReadinessLink}
+        </Link>
+      </div>
+    </section>
   );
 };

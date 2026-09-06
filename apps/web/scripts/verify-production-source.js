@@ -8,9 +8,13 @@ if (process.env.VERCEL_ENV !== "production") {
   process.exit(0);
 }
 
-if (!process.env.VERCEL_GIT_COMMIT_SHA) {
+if (
+  process.env.VERCEL_GIT_PROVIDER !== "github" ||
+  process.env.VERCEL_GIT_COMMIT_REF !== "main" ||
+  !process.env.VERCEL_GIT_COMMIT_SHA
+) {
   throw new Error(
-    "Production deployment requires a Git commit. Use the Git-connected release flow."
+    "Production deployment blocked: use the GitHub-connected main branch release flow."
   );
 }
 
@@ -23,7 +27,7 @@ try {
   ).trim();
   dirtyWebFiles = execFileSync(
     "git",
-    ["-C", repositoryRoot, "status", "--porcelain", "--", "apps/web"],
+    ["-C", repositoryRoot, "status", "--porcelain"],
     { encoding: "utf8" }
   ).trim();
 } catch {
@@ -35,6 +39,6 @@ try {
 
 if (dirtyWebFiles) {
   throw new Error(
-    `Production deployment blocked: apps/web has uncommitted changes.\n${dirtyWebFiles}`
+    `Production deployment blocked: repository has uncommitted changes.\n${dirtyWebFiles}`
   );
 }

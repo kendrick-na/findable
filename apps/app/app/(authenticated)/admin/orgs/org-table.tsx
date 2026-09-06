@@ -357,6 +357,9 @@ export const OrgTable = ({
                 </tr>
               </thead>
               <tbody>
+                {/* 표의 기간·상세·권한 제어가 한 행에 모여 있어 분기를 분리하면 오히려
+                    데이터/버튼 결합이 끊어진다. 준비도 표시는 ReadinessCell로 분리했다. */}
+                {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 운영 행의 기존 권한·기간 조건을 한 번에 렌더한다. */}
                 {orgs.map((o) => {
                   const left = daysLeft(o.planExpiresAt);
                   const open = openOrgId === o.id;

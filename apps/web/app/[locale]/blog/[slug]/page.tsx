@@ -14,6 +14,6 @@ export default async function LegacyBlogPostRedirect({
     select: { slug: true, publisher: { select: { slug: true } } },
   });
   if (!post) notFound();
-  const prefix = locale.startsWith("ko") ? "/ko" : "";
+  const prefix = locale.startsWith("ko") ? "/ko" : "/en";
   permanentRedirect(`${prefix}/p/${post.publisher.slug}/${post.slug}`);
 }

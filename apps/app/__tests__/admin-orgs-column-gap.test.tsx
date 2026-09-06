@@ -86,7 +86,7 @@ const ORGS = [
     name: "My Organization",
     plan: "free" as const,
     planExpiresAt: null,
-    readinessMissingCount: 0,
+    readinessMissingCount: 1,
     trackingCount: 42,
   },
   {

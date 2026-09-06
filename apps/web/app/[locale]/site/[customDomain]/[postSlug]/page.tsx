@@ -1,5 +1,6 @@
 import { JsonLd } from "@repo/seo/json-ld";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MarkdownArticle } from "@/components/content/markdown-article";
@@ -30,7 +31,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return {};
   }
   const locale = input.locale.startsWith("ko") ? "ko" : "en";
-  const canonical = customDomainArticleUrl({
+const canonical = customDomainArticleUrl({
     customDomain: input.customDomain,
     locale,
     postSlug: post.slug,
@@ -186,16 +187,31 @@ export default async function CustomArticlePage({ params }: Props) {
         ) : null}
         {/* 저자·발행일 표시(byline) — 1차 리서치 §3-1 의 아티클 템플릿 7번.
             이전에는 발행일이 화면에 없어 사람도 신선도를 판단할 수 없었다. */}
-        <div className="mt-6 flex flex-wrap items-center gap-3 text-black/45 text-xs">
-          <span>{post.publisher.name}</span>
-          {post.publishedAt ? (
-            <>
-              <span aria-hidden>·</span>
-              <time dateTime={post.publishedAt.toISOString()}>
-                {post.publishedAt.toLocaleDateString(locale)}
-              </time>
-            </>
-          ) : null}
+        <div className="mt-8 flex flex-wrap items-center gap-4 border-black/10 border-t pt-4 text-black/45 text-xs">
+          <div className="flex items-center gap-2.5 text-[#292a28]">
+            {post.publisher.logoUrl ? (
+              <Image
+                alt={post.publisher.name}
+                className="size-9 object-contain"
+                height={36}
+                src={post.publisher.logoUrl}
+                unoptimized
+                width={36}
+              />
+            ) : (
+              <span className="grid size-9 place-items-center rounded-full bg-[#ff744d] font-semibold text-sm text-white">
+                {post.publisher.name.charAt(0).toUpperCase()}
+              </span>
+            )}
+            <span>
+              <span className="block font-semibold text-[13px]">{post.publisher.name}</span>
+              {post.publishedAt ? (
+                <time className="mt-0.5 block text-[11px] text-black/40" dateTime={post.publishedAt.toISOString()}>
+                  {post.publishedAt.toLocaleDateString(locale)}
+                </time>
+              ) : null}
+            </span>
+          </div>
           <span aria-hidden>·</span>
           <span>
             {ko ? "업데이트 " : "Updated "}

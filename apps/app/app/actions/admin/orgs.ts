@@ -169,6 +169,7 @@ export async function backfillMissingSiteReadiness(
       brandId: brand.id,
       organizationId,
       targetUrl: brand.domain,
+      // 운영자가 과거 누락분을 보완한 실행임을 이력에 남긴다.
       trigger: "manual",
     });
     if (await executeSiteReadinessRun(run.id)) {

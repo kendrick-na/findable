@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "bun --bun next dev -p 3000",
     "prebuild": "vitest run __tests__/admin-consulting-data-hub.test.ts __tests__/operator-release-contract.test.ts __tests__/site-readiness-brand-domain.test.ts",
-    "build": "bun --bun next build",
+    "build": "node scripts/verify-production-source.js && bun --bun next build",
     "start": "bun --bun next start",
     "analyze": "ANALYZE=true npm run build",
     "test": "NODE_ENV=test vitest run",

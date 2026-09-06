@@ -78,6 +78,7 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
             brandMeasure: t.sidebar.brandMeasure,
             compare: t.sidebar.compare,
             content: t.sidebar.content,
+            contentPerformance: t.sidebar.contentPerformance,
             currentPlan: t.sidebar.currentPlan,
             dashboard: t.sidebar.dashboard,
             export: t.sidebar.export,
