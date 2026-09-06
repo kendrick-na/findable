@@ -29,6 +29,7 @@ describe("고객사 데이터 허브", () => {
     expect(ACTION).toContain("requireAdmin()");
     expect(ACTION).toContain("auditJobs:");
     expect(ACTION).toContain("siteReadinessRuns:");
+    expect(ACTION).toContain("readinessUrlMatchesBrand");
     expect(ACTION).toContain("searchPerformanceConnections:");
     expect(ACTION).toContain("engineResponses");
     expect(ACTION).toContain("failedEngineIds");

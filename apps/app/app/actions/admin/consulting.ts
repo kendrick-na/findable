@@ -5,6 +5,7 @@ import { requireAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import { readinessUrlMatchesBrand } from "@/lib/site-readiness/brand-domain";
 import type { SiteReadinessReport } from "@/lib/site-readiness/types";
 
 const NOTE_MAX_LENGTH = 2000;
@@ -232,12 +233,13 @@ export async function getConsultingWorkspace(
             select: {
               status: true,
               trigger: true,
+              targetUrl: true,
               report: true,
               errorCode: true,
               createdAt: true,
               completedAt: true,
             },
-            take: 1,
+            take: 10,
           },
           searchPerformanceConnections: {
             orderBy: { provider: "asc" },
@@ -291,7 +293,9 @@ export async function getConsultingWorkspace(
     },
     brands: organization.brands.map((brand) => {
       const audits = brand.auditJobs.map(toAuditSnapshot);
-      const readiness = brand.siteReadinessRuns[0];
+      const readiness = brand.siteReadinessRuns.find((run) =>
+        readinessUrlMatchesBrand(run.targetUrl, brand.domain)
+      );
       return {
         id: brand.id,
         name: brand.name,
