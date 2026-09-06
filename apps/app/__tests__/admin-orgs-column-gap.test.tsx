@@ -70,6 +70,7 @@ const ORGS = [
     name: "Naver",
     plan: "free" as const,
     planExpiresAt: null,
+    readinessMissingCount: 0,
     trackingCount: 0,
   },
   {
@@ -81,6 +82,7 @@ const ORGS = [
     name: "My Organization",
     plan: "free" as const,
     planExpiresAt: null,
+    readinessMissingCount: 0,
     trackingCount: 42,
   },
   {
@@ -92,6 +94,7 @@ const ORGS = [
     name: "Indigochild's Organization",
     plan: "growth" as const,
     planExpiresAt: null,
+    readinessMissingCount: 0,
     trackingCount: 340,
   },
 ];

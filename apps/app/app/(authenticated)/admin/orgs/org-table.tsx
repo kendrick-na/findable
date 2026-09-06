@@ -35,11 +35,57 @@ function daysLeft(at: Date | null): number | null {
 const fmt = (d: Date | null) =>
   d ? new Date(d).toLocaleDateString("ko-KR") : "—";
 
+const ReadinessCell = ({
+  brandCount,
+  busy,
+  missingCount,
+  onBackfill,
+}: {
+  brandCount: number;
+  busy: boolean;
+  missingCount: number;
+  onBackfill?: () => void;
+}) => {
+  if (brandCount === 0) {
+    return (
+      <span className="text-[color:var(--findable-ink-tertiary,#7e8289)]">
+        —
+      </span>
+    );
+  }
+  if (missingCount === 0) {
+    return (
+      <Badge className="border-emerald-400/20 bg-emerald-400/10 text-emerald-200">
+        기록 있음
+      </Badge>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Badge className="border-amber-400/20 bg-amber-400/10 text-amber-200">
+        미측정 {missingCount}
+      </Badge>
+      {onBackfill ? (
+        <Button
+          disabled={busy}
+          onClick={onBackfill}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          보완
+        </Button>
+      ) : null}
+    </div>
+  );
+};
+
 export const OrgTable = ({
   orgs,
   invites,
   onSetDays,
   onCreateCode,
+  onBackfillReadiness,
   onUpdateCode,
   onLoadDetail,
 }: {
@@ -51,6 +97,8 @@ export const OrgTable = ({
     maxRedemptions: number | null;
     validUntil: Date | null;
   }) => Promise<AdminResult>;
+  /** 자동 실행 도입 전 누락된 사이트 준비도만 보완한다. */
+  onBackfillReadiness?: (organizationId: string) => Promise<AdminResult>;
   /**
    * 조직 상세(가입자·브랜드·질문)를 **펼칠 때만** 부른다 — 목록은 200행까지 뽑으므로
    * 미리 join 하면 N+1 이 200배가 된다.
@@ -293,7 +341,7 @@ export const OrgTable = ({
                 ⚠️ 셀마다 `px-*` 를 덧붙이면 새 칸이 생길 때마다 또 빠뜨린다.
                 → `border-separate` + `border-spacing-x` 로 **표 차원에서** 보장한다
                 (`border-spacing-y-0` 이라 행 높이는 그대로, 행 구분선도 그대로다). */}
-            <table className="w-full min-w-[720px] border-separate border-spacing-x-4 border-spacing-y-0 text-sm">
+            <table className="w-full min-w-[900px] border-separate border-spacing-x-4 border-spacing-y-0 text-sm">
               <thead>
                 <tr className="text-left text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
                   <th className="py-2">조직</th>
@@ -301,7 +349,9 @@ export const OrgTable = ({
                   <th className="py-2">만료</th>
                   <th className="py-2 text-right">브랜드</th>
                   <th className="py-2 text-right">측정</th>
+                  <th className="py-2">준비도</th>
                   <th className="py-2">가입</th>
+                  <th className="py-2 text-right">컨설팅</th>
                   <th className="py-2 text-right">기간</th>
                 </tr>
               </thead>
@@ -364,8 +414,33 @@ export const OrgTable = ({
                         <td className="py-2.5 text-right tabular-nums">
                           {o.trackingCount}
                         </td>
+                        <td className="py-2.5">
+                          <ReadinessCell
+                            brandCount={o.brandCount}
+                            busy={busy === `readiness-${o.id}`}
+                            missingCount={o.readinessMissingCount}
+                            onBackfill={
+                              onBackfillReadiness
+                                ? () =>
+                                    run(`readiness-${o.id}`, () =>
+                                      onBackfillReadiness(o.id)
+                                    )
+                                : undefined
+                            }
+                          />
+                        </td>
                         <td className="py-2.5 text-[color:var(--findable-ink-subtle,#8a8f98)]">
                           {fmt(o.createdAt)}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <Button
+                            onClick={() => router.push(`/admin/orgs/${o.id}`)}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            실측 데이터
+                          </Button>
                         </td>
                         <td className="py-2.5 text-right">
                           {onSetDays ? (
@@ -402,8 +477,8 @@ export const OrgTable = ({
                       </tr>
                       {open && details[o.id] ? (
                         <tr key={`${o.id}-detail`}>
-                          {/* colSpan 은 위 헤더 열 수(7)와 같아야 표가 어긋나지 않는다. */}
-                          <td className="p-0" colSpan={7}>
+                          {/* colSpan 은 위 헤더 열 수(9)와 같아야 표가 어긋나지 않는다. */}
+                          <td className="p-0" colSpan={9}>
                             <OrgDetailPanel detail={details[o.id]} />
                           </td>
                         </tr>

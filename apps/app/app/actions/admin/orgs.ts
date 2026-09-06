@@ -6,6 +6,10 @@ import { grantPlan } from "@repo/auth/plan-grant";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import {
+  createSiteReadinessRun,
+  executeSiteReadinessRun,
+} from "@/lib/site-readiness/runs";
 
 /**
  * 운영 콘솔 — 가입 조직·초대 코드 조회/조작 (세션N-42).
@@ -33,6 +37,8 @@ export interface OrgRow {
   plan: Plan;
   /** 만료일. 초대 코드로 받은 기간이 여기 보인다. null = 만료 없음(정상 유료·free). */
   planExpiresAt: Date | null;
+  /** 브랜드는 있으나 사이트 준비도 실행 이력이 없는 수. */
+  readinessMissingCount: number;
   /** 이 조직이 실제로 측정을 돌렸는지 — "가입만 하고 안 쓰는" 곳을 가른다. */
   trackingCount: number;
 }
@@ -59,10 +65,23 @@ export async function listOrgs(): Promise<OrgRow[]> {
     _count: { _all: true },
   });
   const brandOwners = await database.brand.findMany({
-    select: { id: true, organizationId: true },
+    select: {
+      id: true,
+      organizationId: true,
+      _count: { select: { siteReadinessRuns: true } },
+    },
   });
   const orgOfBrand = new Map(brandOwners.map((b) => [b.id, b.organizationId]));
   const trackingCount = new Map<string, number>();
+  const readinessMissingCount = new Map<string, number>();
+  for (const brand of brandOwners) {
+    if (brand._count.siteReadinessRuns === 0) {
+      readinessMissingCount.set(
+        brand.organizationId,
+        (readinessMissingCount.get(brand.organizationId) ?? 0) + 1
+      );
+    }
+  }
   for (const row of trackingByOrg) {
     const orgId = orgOfBrand.get(row.brandId);
     if (orgId) {
@@ -82,8 +101,56 @@ export async function listOrgs(): Promise<OrgRow[]> {
     brandCount: o._count.brands,
     memberCount: o._count.users,
     trackingCount: trackingCount.get(o.id) ?? 0,
+    readinessMissingCount: readinessMissingCount.get(o.id) ?? 0,
     autoRefreshHours: planCapabilities(o.plan).autoRefreshHours,
   }));
+}
+
+/**
+ * 자동 실행 도입 전 가입한 조직의 준비도만 보완한다.
+ * 이미 실행 이력이 있는 브랜드는 건드리지 않아 과거 스냅샷을 덮어쓰지 않는다.
+ */
+export async function backfillMissingSiteReadiness(
+  organizationId: string
+): Promise<AdminResult> {
+  const adminId = await requireAdmin();
+  const brands = await database.brand.findMany({
+    where: { organizationId, siteReadinessRuns: { none: {} } },
+    select: { domain: true, id: true },
+  });
+  if (brands.length === 0) {
+    return { ok: true };
+  }
+
+  let completed = 0;
+  let failed = 0;
+  for (const brand of brands) {
+    const run = await createSiteReadinessRun({
+      brandId: brand.id,
+      organizationId,
+      targetUrl: brand.domain,
+      trigger: "manual",
+    });
+    if (await executeSiteReadinessRun(run.id)) {
+      completed += 1;
+    } else {
+      failed += 1;
+    }
+  }
+
+  log.info("admin.org.site_readiness_backfilled", {
+    adminId,
+    organizationId,
+    completed,
+    failed,
+  });
+  revalidatePath("/admin/orgs");
+  revalidatePath(`/admin/orgs/${organizationId}`);
+  return failed > 0
+    ? {
+        error: `${completed}건 완료, ${failed}건은 사이트 응답을 확인하지 못했어요.`,
+      }
+    : { ok: true };
 }
 
 export interface InviteRow {
