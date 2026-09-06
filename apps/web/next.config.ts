@@ -55,15 +55,6 @@ if (process.env.NODE_ENV === "production") {
       destination: "/legal/privacy",
       statusCode: 301,
     },
-    // Naver discovered this pre-localisation EN URL. The Korean post slug
-    // never existed in the EN collection, so serve the matching EN article
-    // as a permanent redirect instead of a crawl error.
-    {
-      source:
-        "/en/p/findable/seo와-geo의-차이-검색-순위와-ai-답변-노출을-함께-높이는-방법-mtfct1xy",
-      destination: "/en/p/findable/seo-vs-geo-search-rankings-ai-visibility",
-      statusCode: 301,
-    },
   ];
 
   nextConfig.redirects = redirects;
