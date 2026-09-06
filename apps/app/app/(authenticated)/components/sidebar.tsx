@@ -38,6 +38,7 @@ import {
   MessageSquareIcon,
   PenLineIcon,
   PlayIcon,
+  ScanSearchIcon,
   ShieldCheckIcon,
   SparklesIcon,
   TrendingUpIcon,
@@ -141,6 +142,7 @@ export interface SidebarLabels {
   lockedHint: string;
   prompts: string;
   publicInsights: string;
+  siteAudit: string;
   sources: string;
   support: string;
   todo: string;
@@ -172,6 +174,12 @@ const workspaceGroups = (
       //   "브랜드 측정", 폼은 "새 브랜드 등록"). 게다가 이 화면은 **등록**이 주 동작이고
       //   측정은 브랜드별 버튼이 한다 → 「브랜드·측정」으로 통일.
       { title: t.brandMeasure, url: "/brand", icon: SparklesIcon },
+      {
+        title: t.siteAudit,
+        url: "/site-audit",
+        icon: ScanSearchIcon,
+        requiredPlan: "growth",
+      },
       // 🔴 「추적 질문」(2026-08-17 세션N-41) — 경쟁사 4곳(Profound·Otterly·Peec·
       //   Scrunch)이 **전부** `Prompts` 를 최상위 탭으로 갖는다(내비 OCR 실측).
       //   GEO 는 *"어떤 질문으로 재나"* 가 결과를 정하는데, 우리는 그 자산

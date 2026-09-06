@@ -299,7 +299,13 @@ export async function getConsultingWorkspace(
         promptCount: brand._count.prompts,
         trackingCount: brand._count.trackings,
         audits,
-        lastAudit: audits[0] ?? null,
+        // 실패·전 엔진 오류 회차가 최신이어도 고객이 마지막으로 받은 정상 점수를 보여준다.
+        lastAudit:
+          audits.find(
+            (audit) => audit.status === "completed" && audit.usable
+          ) ??
+          audits[0] ??
+          null,
         readiness: readiness
           ? {
               status: readiness.status,

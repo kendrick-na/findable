@@ -91,6 +91,7 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
             lockedHint: t.sidebar.lockedHint,
             prompts: t.sidebar.prompts,
             publicInsights: t.sidebar.publicInsights,
+            siteAudit: t.sidebar.siteAudit,
             sources: t.sidebar.sources,
             support: t.sidebar.support,
             todo: t.sidebar.todo,

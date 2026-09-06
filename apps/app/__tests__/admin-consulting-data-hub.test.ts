@@ -43,5 +43,8 @@ describe("고객사 데이터 허브", () => {
   it("부분 성공 측정을 정상 완료처럼 숨기지 않는다", () => {
     expect(PANEL).toContain("부분 측정입니다.");
     expect(PANEL).toContain("audit.failedEngineIds");
+    expect(ACTION).toContain(
+      'audit.status === "completed" && audit.usable'
+    );
   });
 });

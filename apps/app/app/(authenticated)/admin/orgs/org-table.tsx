@@ -341,14 +341,15 @@ export const OrgTable = ({
                 ⚠️ 셀마다 `px-*` 를 덧붙이면 새 칸이 생길 때마다 또 빠뜨린다.
                 → `border-separate` + `border-spacing-x` 로 **표 차원에서** 보장한다
                 (`border-spacing-y-0` 이라 행 높이는 그대로, 행 구분선도 그대로다). */}
-            <table className="w-full min-w-[900px] border-separate border-spacing-x-4 border-spacing-y-0 text-sm">
+            <table className="w-full min-w-[1040px] border-separate border-spacing-x-4 border-spacing-y-0 text-sm">
               <thead>
                 <tr className="text-left text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
                   <th className="py-2">조직</th>
                   <th className="py-2">플랜</th>
                   <th className="py-2">만료</th>
                   <th className="py-2 text-right">브랜드</th>
-                  <th className="py-2 text-right">측정</th>
+                  <th className="py-2 text-right">누적 응답</th>
+                  <th className="py-2 text-right">최신 GEO</th>
                   <th className="py-2">준비도</th>
                   <th className="py-2">가입</th>
                   <th className="py-2 text-right">컨설팅</th>
@@ -414,6 +415,18 @@ export const OrgTable = ({
                         <td className="py-2.5 text-right tabular-nums">
                           {o.trackingCount}
                         </td>
+                        <td
+                          className="py-2.5 text-right tabular-nums"
+                          title={
+                            o.latestGeoBrandName
+                              ? `최신 정상 측정 · ${o.latestGeoBrandName}`
+                              : "정상 완료된 측정 없음"
+                          }
+                        >
+                          {o.latestGeoScore === null
+                            ? "—"
+                            : `${o.latestGeoScore}점`}
+                        </td>
                         <td className="py-2.5">
                           <ReadinessCell
                             brandCount={o.brandCount}
@@ -477,8 +490,8 @@ export const OrgTable = ({
                       </tr>
                       {open && details[o.id] ? (
                         <tr key={`${o.id}-detail`}>
-                          {/* colSpan 은 위 헤더 열 수(9)와 같아야 표가 어긋나지 않는다. */}
-                          <td className="p-0" colSpan={9}>
+                          {/* colSpan 은 위 헤더 열 수(10)와 같아야 표가 어긋나지 않는다. */}
+                          <td className="p-0" colSpan={10}>
                             <OrgDetailPanel detail={details[o.id]} />
                           </td>
                         </tr>
