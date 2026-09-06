@@ -42,6 +42,18 @@ export function MarkdownArticle({ markdown }: { markdown: string }) {
             {children}
           </blockquote>
         ),
+        // The article shell already supplies the document's one H1 from
+        // `post.title`. Drafts occasionally arrive with a Markdown `# title`
+        // as well; render that as an H2 so it cannot create a second document
+        // H1 in the public HTML (Naver flags those as an SEO error).
+        h1: ({ children }) => (
+          <h2
+            className="mt-14 mb-4 scroll-mt-24 font-semibold font-serif text-2xl text-[#1f211f] tracking-tight md:text-3xl"
+            id={headingId(children)}
+          >
+            {children}
+          </h2>
+        ),
         h2: ({ children }) => (
           <h2
             className="mt-14 mb-4 scroll-mt-24 font-semibold font-serif text-2xl text-[#1f211f] tracking-tight md:text-3xl"
