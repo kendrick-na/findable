@@ -41,6 +41,7 @@ describe("운영 릴리스 계약", () => {
       expect(guard).toContain('VERCEL_GIT_PROVIDER !== "github"');
       expect(guard).toContain('VERCEL_GIT_COMMIT_REF !== "main"');
       expect(guard).toContain("VERCEL_GIT_COMMIT_SHA");
+      expect(guard).toContain('process.env.VERCEL === "1"');
     }
     expect(APP_PACKAGE).toContain("verify-production-source.js");
     expect(WEB_PACKAGE).toContain("verify-production-source.js");

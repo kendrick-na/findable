@@ -18,6 +18,14 @@ if (
   );
 }
 
+// Vercel prepares the checkout before the build (for example, it generates a
+// project-level vercel.json and applies .vercelignore). Those platform changes
+// are not source changes. Git provenance above is authoritative there; the
+// working-tree check below is only for local runs.
+if (process.env.VERCEL === "1") {
+  process.exit(0);
+}
+
 let dirtyWebFiles;
 try {
   const repositoryRoot = execFileSync(

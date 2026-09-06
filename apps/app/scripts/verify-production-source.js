@@ -14,6 +14,13 @@ if (
   );
 }
 
+// Vercel mutates its build checkout while applying project settings and
+// .vercelignore. Git provenance above is authoritative there; a local
+// production build still has to pass the clean-working-tree check below.
+if (process.env.VERCEL === "1") {
+  process.exit(0);
+}
+
 try {
   const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
     encoding: "utf8",
