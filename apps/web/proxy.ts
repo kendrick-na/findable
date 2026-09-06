@@ -42,7 +42,9 @@ const LOCALE_NEUTRAL_PATHS = new Set(["/ai-instructions"]);
  * a 403. Form/API routes retain their route-level rate limits.
  */
 const isPublicLandingPath = (pathname: string): boolean =>
-  pathname === "/" || EXPLICIT_LOCALE_PATH_RE.test(pathname);
+  pathname === "/" ||
+  LOCALE_NEUTRAL_PATHS.has(pathname) ||
+  EXPLICIT_LOCALE_PATH_RE.test(pathname);
 
 export const config = {
   // matcher tells Next.js which routes to run the middleware on. This runs the
