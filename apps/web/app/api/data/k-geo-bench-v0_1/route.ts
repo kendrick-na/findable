@@ -35,12 +35,11 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: "Dataset not found",
-        message: error instanceof Error ? error.message : String(error),
-      },
-      { status: 404 }
-    );
+    // 🔒 응답 본문에 error.message 를 실으면 ENOENT 메시지에 서버 절대경로가
+    //    그대로 나간다(`... open '/var/task/apps/web/public/data/...'`). 인증 없는
+    //    공개 라우트라 배포 구조가 그대로 새므로, 진단은 서버 로그로만 남긴다.
+    console.error("[api/data/k-geo-bench-v0_1] read failed:", error);
+
+    return NextResponse.json({ error: "Dataset not found" }, { status: 404 });
   }
 }

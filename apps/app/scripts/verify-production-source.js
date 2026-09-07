@@ -14,9 +14,6 @@ if (
   );
 }
 
-// Vercel mutates its build checkout while applying project settings and
-// .vercelignore. Git provenance above is authoritative there; a local
-// production build still has to pass the clean-working-tree check below.
 if (process.env.VERCEL === "1") {
   process.exit(0);
 }
@@ -39,6 +36,4 @@ try {
   if (error instanceof Error && error.message.includes("uncommitted changes")) {
     throw error;
   }
-  // Git-connected Vercel builds do not include .git. Provenance was validated
-  // above from Vercel's Git-triggered system variables.
 }

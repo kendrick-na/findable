@@ -36,40 +36,13 @@ const EXPLICIT_LOCALE_PATH_RE = /^\/(?:ko|en)(?:\/|$)/;
  */
 const LOCALE_NEUTRAL_PATHS = new Set(["/ai-instructions"]);
 
-// Naver discovered this pre-localisation EN URL. The Korean post slug never
-// existed in the EN collection, so keep its historical crawl target useful
-// with a permanent redirect to the corresponding English article.
-const LEGACY_EN_ARTICLE_PATH =
-  "/en/p/findable/seo와-geo의-차이-검색-순위와-ai-답변-노출을-함께-높이는-방법-mtfct1xy";
-const LEGACY_EN_ARTICLE_DESTINATION =
-  "/en/p/findable/seo-vs-geo-search-rankings-ai-visibility";
-
-const decodePathname = (pathname: string) => {
-  try {
-    return decodeURIComponent(pathname);
-  } catch {
-    return pathname;
-  }
-};
-
-const legacyArticleRedirect = (request: NextRequest) => {
-  if (decodePathname(request.nextUrl.pathname) !== LEGACY_EN_ARTICLE_PATH) {
-    return null;
-  }
-  const url = request.nextUrl.clone();
-  url.pathname = LEGACY_EN_ARTICLE_DESTINATION;
-  return NextResponse.redirect(url, 301);
-};
-
 /**
  * Public landing pages are the first unauthenticated entry point. A bot
  * classification false positive must not turn a visitor's first request into
  * a 403. Form/API routes retain their route-level rate limits.
  */
 const isPublicLandingPath = (pathname: string): boolean =>
-  pathname === "/" ||
-  LOCALE_NEUTRAL_PATHS.has(pathname) ||
-  EXPLICIT_LOCALE_PATH_RE.test(pathname);
+  pathname === "/" || EXPLICIT_LOCALE_PATH_RE.test(pathname);
 
 export const config = {
   // matcher tells Next.js which routes to run the middleware on. This runs the
@@ -217,11 +190,6 @@ export default authMiddleware(async (_auth, request, event) => {
     pathname.startsWith("/trpc/")
   ) {
     return headersResponse;
-  }
-
-  const legacyRedirectResponse = legacyArticleRedirect(request as NextRequest);
-  if (legacyRedirectResponse) {
-    return withSecurityHeaders(legacyRedirectResponse, headersResponse);
   }
 
   const domainResponse = customDomainRewrite(request as NextRequest);

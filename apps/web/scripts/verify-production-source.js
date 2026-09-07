@@ -18,10 +18,9 @@ if (
   );
 }
 
-// Vercel prepares the checkout before the build (for example, it generates a
-// project-level vercel.json and applies .vercelignore). Those platform changes
-// are not source changes. Git provenance above is authoritative there; the
-// working-tree check below is only for local runs.
+// Vercel prepares the checkout before the build. Its generated files and
+// .vercelignore changes are not source edits; Git provenance above is the
+// authoritative check in that environment.
 if (process.env.VERCEL === "1") {
   process.exit(0);
 }

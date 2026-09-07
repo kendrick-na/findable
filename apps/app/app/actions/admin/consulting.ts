@@ -5,7 +5,6 @@ import { requireAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
-import { readinessUrlMatchesBrand } from "@/lib/site-readiness/brand-domain";
 import type { SiteReadinessReport } from "@/lib/site-readiness/types";
 
 const NOTE_MAX_LENGTH = 2000;
@@ -233,13 +232,12 @@ export async function getConsultingWorkspace(
             select: {
               status: true,
               trigger: true,
-              targetUrl: true,
               report: true,
               errorCode: true,
               createdAt: true,
               completedAt: true,
             },
-            take: 10,
+            take: 1,
           },
           searchPerformanceConnections: {
             orderBy: { provider: "asc" },
@@ -293,9 +291,7 @@ export async function getConsultingWorkspace(
     },
     brands: organization.brands.map((brand) => {
       const audits = brand.auditJobs.map(toAuditSnapshot);
-      const readiness = brand.siteReadinessRuns.find((run) =>
-        readinessUrlMatchesBrand(run.targetUrl, brand.domain)
-      );
+      const readiness = brand.siteReadinessRuns[0];
       return {
         id: brand.id,
         name: brand.name,
@@ -303,13 +299,7 @@ export async function getConsultingWorkspace(
         promptCount: brand._count.prompts,
         trackingCount: brand._count.trackings,
         audits,
-        // 실패·전 엔진 오류 회차가 최신이어도 고객이 마지막으로 받은 정상 점수를 보여준다.
-        lastAudit:
-          audits.find(
-            (audit) => audit.status === "completed" && audit.usable
-          ) ??
-          audits[0] ??
-          null,
+        lastAudit: audits[0] ?? null,
         readiness: readiness
           ? {
               status: readiness.status,

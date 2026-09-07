@@ -183,6 +183,7 @@ export const TruthMirrorSection = ({
                 답변 원문이 저장되지 않았어요.
               </p>
             )}
+
           </li>
         ))}
       </ul>

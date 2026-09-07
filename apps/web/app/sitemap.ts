@@ -163,6 +163,8 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
     requestHost &&
     requestHost !== "findable.co.kr" &&
     requestHost !== "www.findable.co.kr" &&
+    requestHost !== "localhost" &&
+    requestHost !== "127.0.0.1" &&
     !requestHost.endsWith(".vercel.app")
   ) {
     const publisher = await getPublicPublisherByDomain(requestHost);
@@ -219,10 +221,15 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
       url: localizedUrl(post.locale, `/p/${post.publisher.slug}/${post.slug}`),
       lastModified: post.updatedAt,
     }));
-    return [...staticEntries, ...publisherEntries, ...postEntries];
+    return [
+      ...staticEntries,
+      ...rootStaticEntries,
+      ...publisherEntries,
+      ...postEntries,
+    ];
   } catch {
     // 빌드·일시 DB 장애 때 정적 사이트맵 전체를 500으로 만들지 않는다.
-    return staticEntries;
+    return [...staticEntries, ...rootStaticEntries];
   }
 };
 
