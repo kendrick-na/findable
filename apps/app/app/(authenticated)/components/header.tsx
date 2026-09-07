@@ -9,6 +9,7 @@ import { Separator } from "@repo/design-system/components/ui/separator";
 import { SidebarTrigger } from "@repo/design-system/components/ui/sidebar";
 import { Fragment, type ReactNode } from "react";
 import { scopedHeaderMetric } from "@/lib/db/scoped";
+import { LocaleSwitcher } from "./locale-switcher";
 
 interface HeaderProps {
   children?: ReactNode;
@@ -84,6 +85,7 @@ export const Header = ({ pages, page, children }: HeaderProps) => (
       </Breadcrumb>
     </div>
     <div className="flex items-center gap-2">
+      <LocaleSwitcher />
       {/* D11: 브레드크럼 반대쪽 끝. children 이 있는 화면에서도 자리가 겹치지 않는다. */}
       <HeaderMetric />
       {children}

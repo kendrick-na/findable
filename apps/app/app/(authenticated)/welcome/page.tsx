@@ -3,9 +3,14 @@ import { currentUser } from "@repo/auth/server";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { requireOrg, scopedBrands } from "@/lib/db/scoped";
+import {
+  requireOrg,
+  scopedBrands,
+  scopedLatestSiteReadinessRun,
+} from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 import { hasCompletedSetup } from "@/lib/onboarding";
+import type { SiteReadinessRunStatus } from "@/lib/site-readiness/types";
 import { AssignBrandForm } from "../features/brand/assign-brand-form";
 import { getPrimaryEmail } from "../lib/user";
 import { WelcomeFlowServer } from "./welcome-flow-server";
@@ -85,6 +90,9 @@ const WelcomePage = async ({
     select: { onboardingStep: true },
     where: { id: orgId },
   });
+  // 1단계에서 예약된 기술 진단은 가입 흐름과 분리돼 백그라운드에서 돈다.
+  // 마지막 단계가 추측으로 "완료"라고 말하지 않도록 실제 상태를 내려보낸다.
+  const readinessRun = await scopedLatestSiteReadinessRun(brand.id);
 
   // 2~4단계 — 등록이 끝났으니 별칭·경쟁사를 받는다.
   // 🔴 측정이 실제로 돌고 있는지 — 마지막 단계가 이 값으로 **말을 바꾼다**.
@@ -116,6 +124,15 @@ const WelcomePage = async ({
       initialStep={organization?.onboardingStep ?? 2}
       initialVariants={stringList(brand.entityVariants)}
       measurement={toOutcome(measurement)}
+      readiness={
+        readinessRun
+          ? {
+              id: readinessRun.id,
+              report: readinessRun.report,
+              status: readinessRun.status as SiteReadinessRunStatus,
+            }
+          : undefined
+      }
       suggestedCompetitors={suggestedCompetitors}
     />
   );

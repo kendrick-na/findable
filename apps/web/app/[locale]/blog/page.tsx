@@ -6,5 +6,7 @@ export default async function BlogRedirect({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  permanentRedirect(locale.startsWith("ko") ? "/ko/insights" : "/insights");
+  permanentRedirect(
+    locale.startsWith("ko") ? "/ko/insights" : "/en/insights"
+  );
 }

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(600 0) rotate(90) scale(470 960)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF7A4D" stop-opacity="0.30"/>
+      <stop offset="0.42" stop-color="#A73A1D" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#010102" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="line" x1="98" y1="484" x2="1102" y2="484" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF7A4D" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FF7A4D" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#FF7A4D" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#010102"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <text x="96" y="166" fill="#FF7A4D" font-family="Georgia, serif" font-size="96" font-weight="400">F.</text>
+  <text x="96" y="264" fill="#F7F8F8" font-family="Arial, sans-serif" font-size="38" font-weight="600" letter-spacing="-1.2">Findable</text>
+  <text x="96" y="370" fill="#F7F8F8" font-family="Arial, sans-serif" font-size="68" font-weight="700" letter-spacing="-3.2">AI가 우리 브랜드를 먼저 답하게.</text>
+  <text x="100" y="444" fill="#D0D6E0" font-family="Arial, sans-serif" font-size="26" font-weight="400">AI Search Visibility for Brands</text>
+  <rect x="96" y="483" width="1008" height="1" fill="url(#line)"/>
+  <text x="100" y="543" fill="#FF7A4D" font-family="Arial, sans-serif" font-size="22" font-weight="600" letter-spacing="3">SEO · GEO · AEO</text>
+</svg>

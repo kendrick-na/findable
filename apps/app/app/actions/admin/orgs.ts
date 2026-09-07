@@ -1,11 +1,17 @@
 "use server";
 
+import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { requireAdmin } from "@repo/auth/admin";
 import { type Plan, planCapabilities } from "@repo/auth/plan";
 import { grantPlan } from "@repo/auth/plan-grant";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import { readinessUrlMatchesBrand } from "@/lib/site-readiness/brand-domain";
+import {
+  createSiteReadinessRun,
+  executeSiteReadinessRun,
+} from "@/lib/site-readiness/runs";
 
 /**
  * 운영 콘솔 — 가입 조직·초대 코드 조회/조작 (세션N-42).
@@ -28,11 +34,17 @@ export interface OrgRow {
   brandCount: number;
   createdAt: Date;
   id: string;
+  /** 최신 GEO 점수의 대상 브랜드. */
+  latestGeoBrandName: string | null;
+  /** 가장 최근의 정상 완료 측정에서 계산한 실제 GEO 점수. */
+  latestGeoScore: number | null;
   memberCount: number;
   name: string;
   plan: Plan;
   /** 만료일. 초대 코드로 받은 기간이 여기 보인다. null = 만료 없음(정상 유료·free). */
   planExpiresAt: Date | null;
+  /** 브랜드는 있으나 사이트 준비도 실행 이력이 없는 수. */
+  readinessMissingCount: number;
   /** 이 조직이 실제로 측정을 돌렸는지 — "가입만 하고 안 쓰는" 곳을 가른다. */
   trackingCount: number;
 }
@@ -59,10 +71,55 @@ export async function listOrgs(): Promise<OrgRow[]> {
     _count: { _all: true },
   });
   const brandOwners = await database.brand.findMany({
-    select: { id: true, organizationId: true },
+    select: {
+      id: true,
+      name: true,
+      domain: true,
+      organizationId: true,
+      auditJobs: {
+        where: { status: "completed" },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { completedAt: true, createdAt: true, result: true },
+      },
+      siteReadinessRuns: { select: { targetUrl: true } },
+    },
   });
   const orgOfBrand = new Map(brandOwners.map((b) => [b.id, b.organizationId]));
   const trackingCount = new Map<string, number>();
+  const readinessMissingCount = new Map<string, number>();
+  const latestGeoByOrg = new Map<
+    string,
+    { brandName: string; measuredAt: Date; score: number }
+  >();
+  for (const brand of brandOwners) {
+    const hasMatchingReadiness = brand.siteReadinessRuns.some((run) =>
+      readinessUrlMatchesBrand(run.targetUrl, brand.domain)
+    );
+    if (!hasMatchingReadiness) {
+      readinessMissingCount.set(
+        brand.organizationId,
+        (readinessMissingCount.get(brand.organizationId) ?? 0) + 1
+      );
+    }
+
+    const latestUsableAudit = brand.auditJobs.find((audit) =>
+      isUsableRun(audit.result)
+    );
+    const score = latestUsableAudit ? scoreOf(latestUsableAudit.result) : null;
+    if (latestUsableAudit && score !== null) {
+      const measuredAt =
+        latestUsableAudit.completedAt ?? latestUsableAudit.createdAt;
+      const current = latestGeoByOrg.get(brand.organizationId);
+      if (!current || measuredAt > current.measuredAt) {
+        latestGeoByOrg.set(brand.organizationId, {
+          score,
+          measuredAt,
+          brandName: brand.name,
+        });
+      }
+    }
+  }
   for (const row of trackingByOrg) {
     const orgId = orgOfBrand.get(row.brandId);
     if (orgId) {
@@ -81,9 +138,60 @@ export async function listOrgs(): Promise<OrgRow[]> {
     createdAt: o.createdAt,
     brandCount: o._count.brands,
     memberCount: o._count.users,
+    latestGeoScore: latestGeoByOrg.get(o.id)?.score ?? null,
+    latestGeoBrandName: latestGeoByOrg.get(o.id)?.brandName ?? null,
     trackingCount: trackingCount.get(o.id) ?? 0,
+    readinessMissingCount: readinessMissingCount.get(o.id) ?? 0,
     autoRefreshHours: planCapabilities(o.plan).autoRefreshHours,
   }));
+}
+
+/**
+ * 자동 실행 도입 전 가입한 조직의 준비도만 보완한다.
+ * 이미 실행 이력이 있는 브랜드는 건드리지 않아 과거 스냅샷을 덮어쓰지 않는다.
+ */
+export async function backfillMissingSiteReadiness(
+  organizationId: string
+): Promise<AdminResult> {
+  const adminId = await requireAdmin();
+  const brands = await database.brand.findMany({
+    where: { organizationId, siteReadinessRuns: { none: {} } },
+    select: { domain: true, id: true },
+  });
+  if (brands.length === 0) {
+    return { ok: true };
+  }
+
+  let completed = 0;
+  let failed = 0;
+  for (const brand of brands) {
+    const run = await createSiteReadinessRun({
+      brandId: brand.id,
+      organizationId,
+      targetUrl: brand.domain,
+      // 운영자가 과거 누락분을 보완한 실행임을 이력에 남긴다.
+      trigger: "manual",
+    });
+    if (await executeSiteReadinessRun(run.id)) {
+      completed += 1;
+    } else {
+      failed += 1;
+    }
+  }
+
+  log.info("admin.org.site_readiness_backfilled", {
+    adminId,
+    organizationId,
+    completed,
+    failed,
+  });
+  revalidatePath("/admin/orgs");
+  revalidatePath(`/admin/orgs/${organizationId}`);
+  return failed > 0
+    ? {
+        error: `${completed}건 완료, ${failed}건은 사이트 응답을 확인하지 못했어요.`,
+      }
+    : { ok: true };
 }
 
 export interface InviteRow {

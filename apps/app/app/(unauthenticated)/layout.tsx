@@ -1,10 +1,18 @@
 import { auth } from "@repo/auth/server";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 interface AuthLayoutProps {
   readonly children: ReactNode;
 }
+
+// 인증 화면은 공개 검색·AI 유입 대상이 아니다. redirect_url 쿼리마다
+// 별도 URL로 수집되면 Search Console에 중복 페이지로 쌓이므로 전체 인증
+// 라우트에서 일관되게 색인을 차단한다.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 /**
  * 비로그인 화면(로그인·회원가입·SSO 콜백)의 레이아웃.

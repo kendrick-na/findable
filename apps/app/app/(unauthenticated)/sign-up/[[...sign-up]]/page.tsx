@@ -8,7 +8,14 @@ const SignUp = dynamic(() =>
   import("@repo/auth/components/sign-up").then((mod) => mod.SignUp)
 );
 
-export const metadata: Metadata = createMetadata({ title, description });
+export const metadata: Metadata = {
+  ...createMetadata({ title, description }),
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: { index: false, follow: false },
+  },
+};
 
 const SignUpPage = () => <SignUp />;
 
