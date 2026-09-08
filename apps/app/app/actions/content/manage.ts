@@ -135,6 +135,57 @@ function refreshContentPaths(content?: {
   }
 }
 
+function cacheBustedCoverImageUrl(
+  url: string | null,
+  version: number
+): string | null {
+  if (!url) {
+    return null;
+  }
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.hostname === "www.findable.co.kr" &&
+      parsed.pathname.startsWith("/images/")
+    ) {
+      // Public web and dashboard are separate Vercel deployments. A versioned
+      // asset URL prevents an overwritten image from being served by an old
+      // CDN cache after a content edit.
+      parsed.searchParams.set("v", String(version));
+      return parsed.toString();
+    }
+  } catch {
+    return url;
+  }
+  return url;
+}
+
+async function assertPublishableCoverImage(url: string | null) {
+  if (!url) {
+    return;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("대표 이미지 URL을 확인해 주세요.");
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error("대표 이미지는 HTTPS URL이어야 합니다.");
+  }
+  const response = await fetch(parsed, {
+    cache: "no-store",
+    redirect: "follow",
+    signal: AbortSignal.timeout(10_000),
+  });
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!response.ok || !contentType.startsWith("image/")) {
+    throw new Error(
+      "대표 이미지를 공개 URL에서 확인할 수 없습니다. 배포 후 다시 승인해 주세요."
+    );
+  }
+}
+
 export async function generateDraftFromLatestAction(input: {
   brandId: string;
   locale: "ko" | "en";
@@ -465,6 +516,11 @@ async function publishContent(
   content: NonNullable<Awaited<ReturnType<typeof ownedContent>>>,
   actorId: string
 ) {
+  const publishedCoverImageUrl = cacheBustedCoverImageUrl(
+    content.coverImageUrl,
+    content.updatedAt.getTime()
+  );
+  await assertPublishableCoverImage(publishedCoverImageUrl);
   const startedAt = new Date();
   const sourceMetrics = content.revisions[0]?.sourceMetrics as {
     enginesMeasured?: number;
@@ -492,7 +548,12 @@ async function publishContent(
     await database.$transaction([
       database.content.update({
         where: { id: content.id },
-        data: { status: "published", noindex: false, publishedAt: new Date() },
+        data: {
+          status: "published",
+          noindex: false,
+          publishedAt: new Date(),
+          coverImageUrl: publishedCoverImageUrl,
+        },
       }),
       database.contentReviewEvent.create({
         data: { contentId: content.id, type: "published", actorId },
