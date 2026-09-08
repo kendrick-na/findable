@@ -55,6 +55,24 @@ if (process.env.NODE_ENV === "production") {
       destination: "/legal/privacy",
       statusCode: 301,
     },
+    // The official Findable publisher directory is an implementation detail
+    // of the publishing platform. Route brand-search visitors to the curated
+    // editorial hub instead of a generic, duplicate post list.
+    {
+      source: "/p/findable",
+      destination: "/ko/insights",
+      statusCode: 301,
+    },
+    {
+      source: "/ko/p/findable",
+      destination: "/ko/insights",
+      statusCode: 301,
+    },
+    {
+      source: "/en/p/findable",
+      destination: "/en/insights",
+      statusCode: 301,
+    },
   ];
 
   nextConfig.redirects = redirects;
