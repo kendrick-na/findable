@@ -100,16 +100,24 @@ const DashboardNoResultState = ({
             브랜드 설정은 완료됐지만 첫 측정에 실패했어요
           </h1>
           <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-            브랜드를 다시 입력할 필요는 없어요. 실패 사유를 확인한 뒤 기존
-            브랜드에서 측정만 다시 시작하세요.
+            브랜드를 다시 입력할 필요는 없어요. 기존 브랜드에서 측정만 다시
+            시작하면 됩니다.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
+          {/* 🔴 `/history/{jobId}` 로 보내고 있었는데 **그 라우트는 존재하지 않는다**
+              (2026-09-09 실측 · git 이력에도 한 번도 없었음) → 주 버튼이 404 였다.
+              「실패 사유 보기」라는 라벨도 사유를 보여주는 화면이 어디에도 없어 지킬 수
+              없는 약속이었다. 작동하는 `/history` 목록으로 보내고 라벨을 실제와 맞춘다.
+              그 목록은 실패 회차에 「측정에 실패해서 결과가 없어요」를 정직하게 표시한다.
+              ⚠️ 상세 사유 화면을 실제로 만들면 이 링크를 그 주소로 되돌릴 것
+                (`__tests__/measurement-status-and-ia` · `__tests__/empty-state` 가
+                 그 화면을 기다리며 아직 실패 상태로 남아 있다). */}
           <Link
             className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
-            href={`/history/${failedJobId}`}
+            href="/history"
           >
-            실패 사유 보기
+            측정 이력 보기
           </Link>
           <Link
             className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
@@ -135,11 +143,12 @@ const DashboardNoResultState = ({
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
+          {/* 위와 같은 404 — `/history/{jobId}` 미존재. 작동하는 목록으로 보낸다. */}
           <Link
             className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
-            href={`/history/${unavailableJobId}`}
+            href="/history"
           >
-            측정 상세 보기
+            측정 이력 보기
           </Link>
           <Link
             className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
