@@ -1,11 +1,13 @@
 "use server";
 
+import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { requireAdmin } from "@repo/auth/admin";
 import { type Plan, planCapabilities } from "@repo/auth/plan";
 import { grantPlan } from "@repo/auth/plan-grant";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import { readinessUrlMatchesBrand } from "@/lib/site-readiness/brand-domain";
 import {
   createSiteReadinessRun,
   executeSiteReadinessRun,
@@ -32,6 +34,10 @@ export interface OrgRow {
   brandCount: number;
   createdAt: Date;
   id: string;
+  /** 최신 GEO 점수의 대상 브랜드. */
+  latestGeoBrandName: string | null;
+  /** 가장 최근의 정상 완료 측정에서 계산한 실제 GEO 점수. */
+  latestGeoScore: number | null;
   memberCount: number;
   name: string;
   plan: Plan;
@@ -67,19 +73,51 @@ export async function listOrgs(): Promise<OrgRow[]> {
   const brandOwners = await database.brand.findMany({
     select: {
       id: true,
+      name: true,
+      domain: true,
       organizationId: true,
-      _count: { select: { siteReadinessRuns: true } },
+      auditJobs: {
+        where: { status: "completed" },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { completedAt: true, createdAt: true, result: true },
+      },
+      siteReadinessRuns: { select: { targetUrl: true } },
     },
   });
   const orgOfBrand = new Map(brandOwners.map((b) => [b.id, b.organizationId]));
   const trackingCount = new Map<string, number>();
   const readinessMissingCount = new Map<string, number>();
+  const latestGeoByOrg = new Map<
+    string,
+    { brandName: string; measuredAt: Date; score: number }
+  >();
   for (const brand of brandOwners) {
-    if (brand._count.siteReadinessRuns === 0) {
+    const hasMatchingReadiness = brand.siteReadinessRuns.some((run) =>
+      readinessUrlMatchesBrand(run.targetUrl, brand.domain)
+    );
+    if (!hasMatchingReadiness) {
       readinessMissingCount.set(
         brand.organizationId,
         (readinessMissingCount.get(brand.organizationId) ?? 0) + 1
       );
+    }
+
+    const latestUsableAudit = brand.auditJobs.find((audit) =>
+      isUsableRun(audit.result)
+    );
+    const score = latestUsableAudit ? scoreOf(latestUsableAudit.result) : null;
+    if (latestUsableAudit && score !== null) {
+      const measuredAt =
+        latestUsableAudit.completedAt ?? latestUsableAudit.createdAt;
+      const current = latestGeoByOrg.get(brand.organizationId);
+      if (!current || measuredAt > current.measuredAt) {
+        latestGeoByOrg.set(brand.organizationId, {
+          score,
+          measuredAt,
+          brandName: brand.name,
+        });
+      }
     }
   }
   for (const row of trackingByOrg) {
@@ -100,6 +138,8 @@ export async function listOrgs(): Promise<OrgRow[]> {
     createdAt: o.createdAt,
     brandCount: o._count.brands,
     memberCount: o._count.users,
+    latestGeoScore: latestGeoByOrg.get(o.id)?.score ?? null,
+    latestGeoBrandName: latestGeoByOrg.get(o.id)?.brandName ?? null,
     trackingCount: trackingCount.get(o.id) ?? 0,
     readinessMissingCount: readinessMissingCount.get(o.id) ?? 0,
     autoRefreshHours: planCapabilities(o.plan).autoRefreshHours,

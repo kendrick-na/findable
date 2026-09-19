@@ -60,6 +60,18 @@ describe("SEO/GEO content platform contract", () => {
     expect(generation).not.toContain('status: "published"');
   });
 
+  it("verifies and cache-busts cover images before publication", () => {
+    const action = read("apps/app/app/actions/content/manage.ts");
+    const publishing = action.slice(action.indexOf("async function publishContent"));
+    expect(action).toContain("function cacheBustedCoverImageUrl");
+    expect(action).toContain("async function assertPublishableCoverImage");
+    expect(action).toContain('cache: "no-store"');
+    expect(action).toContain('contentType.startsWith("image/")');
+    expect(publishing).toContain("cacheBustedCoverImageUrl");
+    expect(publishing).toContain("assertPublishableCoverImage");
+    expect(publishing).toContain("coverImageUrl: publishedCoverImageUrl");
+  });
+
   it("does not expose an empty publisher profile to search engines", () => {
     const content = read("apps/web/lib/content.ts");
     expect(content).toMatch(/contents:\s*\{\s*some:/);

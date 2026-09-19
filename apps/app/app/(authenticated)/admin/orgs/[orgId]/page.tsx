@@ -53,8 +53,7 @@ const ConsultingWorkspacePage = async ({
               {workspace.organization.name}
             </h1>
             <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)]">
-              원본 측정·사이트 준비도·검색 연동 현황을 확인하고 컨설팅 이력을
-              남깁니다.
+              원본 측정·사이트 준비도·검색 연동 현황을 확인하고 컨설팅 이력을 남깁니다.
             </p>
           </div>
           <Badge variant="outline">{workspace.organization.plan}</Badge>

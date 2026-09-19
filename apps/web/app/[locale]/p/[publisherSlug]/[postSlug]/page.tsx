@@ -152,6 +152,36 @@ export default async function ArticlePage({ params }: Props) {
   });
   const shareUrl = canonical;
   const isFindablePublisher = post.publisher.slug === "findable";
+  const publisherAvatar = (() => {
+    if (isFindablePublisher) {
+      return (
+        <Image
+          alt="Findable"
+          className="size-9 object-contain"
+          height={36}
+          src="/icon.svg"
+          width={36}
+        />
+      );
+    }
+    if (post.publisher.logoUrl) {
+      return (
+        <Image
+          alt=""
+          className="size-9 rounded-full object-cover"
+          height={36}
+          src={post.publisher.logoUrl}
+          unoptimized={REMOTE_IMAGE_RE.test(post.publisher.logoUrl)}
+          width={36}
+        />
+      );
+    }
+    return (
+      <span className="grid size-9 place-items-center rounded-full bg-[#ff744d] font-semibold text-sm text-white">
+        {post.publisher.name.charAt(0).toUpperCase()}
+      </span>
+    );
+  })();
   const words = post.bodyMarkdown
     .replace(MARKDOWN_PUNCTUATION_RE, " ")
     .split(WHITESPACE_RE)
@@ -259,16 +289,22 @@ export default async function ArticlePage({ params }: Props) {
               <ArrowLeftIcon className="size-3.5" />{" "}
               {ko ? "Findable 인사이트" : "Findable Insights"}
             </Link>
-            <div className="mt-10 flex flex-wrap gap-2" aria-label={ko ? "글 주제" : "Article topics"}>
-              {(post.tags.length > 0 ? post.tags : [post.series || post.contentType.replace("_", " ")]).map((tag) => (
+            <fieldset
+              aria-label={ko ? "글 주제" : "Article topics"}
+              className="m-0 mt-10 flex flex-wrap gap-2 border-0 p-0"
+            >
+              {(post.tags.length > 0
+                ? post.tags
+                : [post.series || post.contentType.replace("_", " ")]
+              ).map((tag) => (
                 <span
-                  className="rounded-full bg-[#e9e2d7] px-3 py-1.5 font-medium text-[11px] text-[#6c5a4d]"
+                  className="rounded-full bg-[#e9e2d7] px-3 py-1.5 font-medium text-[#6c5a4d] text-[11px]"
                   key={tag}
                 >
                   {tag}
                 </span>
               ))}
-            </div>
+            </fieldset>
             <h1 className="mt-6 max-w-4xl text-balance font-semibold text-4xl leading-[1.06] tracking-[-0.045em] md:text-7xl">
               {post.title}
             </h1>
@@ -279,49 +315,35 @@ export default async function ArticlePage({ params }: Props) {
             ) : null}
             <div className="mt-8 flex flex-wrap items-center justify-between gap-5 border-black/10 border-t pt-4">
               <div className="flex items-center gap-3 text-black/45 text-xs">
-                <Link className="flex items-center gap-2.5 text-[#292a28]" href={sitePublisherUrl(locale, post.publisher.slug)}>
-                  {isFindablePublisher ? (
-                    <Image
-                      alt="Findable"
-                      className="size-9 object-contain"
-                      height={36}
-                      src="/icon.svg"
-                      width={36}
-                    />
-                  ) : post.publisher.logoUrl ? (
-                    <Image
-                      alt=""
-                      className="size-9 rounded-full object-cover"
-                      height={36}
-                      src={post.publisher.logoUrl}
-                      unoptimized={REMOTE_IMAGE_RE.test(post.publisher.logoUrl)}
-                      width={36}
-                    />
-                  ) : (
-                    <span className="grid size-9 place-items-center rounded-full bg-[#ff744d] font-semibold text-sm text-white">
-                      {post.publisher.name.charAt(0).toUpperCase()}
-                    </span>
-                  )}
+                <Link
+                  className="flex items-center gap-2.5 text-[#292a28]"
+                  href={sitePublisherUrl(locale, post.publisher.slug)}
+                >
+                  {publisherAvatar}
                   <span>
-                    <span className="block font-semibold text-[13px]">{post.publisher.name}</span>
+                    <span className="block font-semibold text-[13px]">
+                      {post.publisher.name}
+                    </span>
                     <time className="mt-0.5 block text-[11px] text-black/40">
                       {post.publishedAt?.toLocaleDateString(input.locale)}
                     </time>
                   </span>
                 </Link>
-                <span aria-hidden className="text-black/20">·</span>
+                <span aria-hidden className="text-black/20">
+                  ·
+                </span>
                 <span className="inline-flex items-center gap-1">
                   <Clock3Icon className="size-3.5" /> {readingMinutes}
                   {ko ? "분 읽기" : " min read"}
                 </span>
                 {post.sourceMeasuredAt ? (
-                <>
-                  <span aria-hidden>·</span>
-                  <span>
-                    {input.locale.startsWith("ko") ? "측정 기준" : "Measured"}{" "}
-                    {post.sourceMeasuredAt.toLocaleDateString(input.locale)}
-                  </span>
-                </>
+                  <>
+                    <span aria-hidden>·</span>
+                    <span>
+                      {input.locale.startsWith("ko") ? "측정 기준" : "Measured"}{" "}
+                      {post.sourceMeasuredAt.toLocaleDateString(input.locale)}
+                    </span>
+                  </>
                 ) : null}
               </div>
               <ShareActions ko={ko} url={shareUrl} />

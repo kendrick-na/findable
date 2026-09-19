@@ -206,15 +206,21 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
         LOCALES.includes(post.locale as (typeof LOCALES)[number]) &&
         isCanonicalOnSite(post.publisher)
     );
+    // Findable's public editorial hub is `/insights`; `/p/findable` is the
+    // platform's generic publisher directory and permanently redirects there.
+    // Keep redirect targets out of the sitemap so crawlers receive one clean
+    // discovery URL per content collection.
     const publisherEntries = [
       ...new Map(
-        visible.map((post) => [
-          `${post.locale}:${post.publisher.slug}`,
-          {
-            url: localizedUrl(post.locale, `/p/${post.publisher.slug}`),
-            lastModified: post.updatedAt,
-          },
-        ])
+        visible
+          .filter((post) => post.publisher.slug !== "findable")
+          .map((post) => [
+            `${post.locale}:${post.publisher.slug}`,
+            {
+              url: localizedUrl(post.locale, `/p/${post.publisher.slug}`),
+              lastModified: post.updatedAt,
+            },
+          ])
       ).values(),
     ];
     const postEntries = visible.map((post) => ({
