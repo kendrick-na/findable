@@ -1,0 +1,26 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Findable symbol concept v1</title>
+  <desc>Two-color rounded-square symbol with an ivory magnifying glass and angular handle.</desc>
+  <rect x="64" y="64" width="896" height="896" rx="214" fill="#FF7A4D"/>
+  <path
+    d="M 525 214
+       C 363 214 232 345 232 507
+       C 232 669 363 800 525 800
+       C 604 800 677 769 732 718
+       L 806 792
+       L 875 723
+       L 801 649
+       C 852 594 883 520 883 438
+       C 883 315 783 214 660 214
+       Z
+       M 525 310
+       C 416 310 328 398 328 507
+       C 328 616 416 704 525 704
+       C 634 704 722 616 722 507
+       C 722 398 634 310 525 310
+       Z"
+    fill="#F7F1E6"
+    fill-rule="evenodd"
+  />
+  <path d="M 716 669 L 781 734 L 748 767 L 683 702 Z" fill="#F7F1E6"/>
+</svg>

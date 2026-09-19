@@ -2,6 +2,7 @@ import { isAdmin } from "@repo/auth/admin";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
+  backfillMissingSiteReadiness,
   createInviteCode,
   getOrgDetail,
   listInviteCodes,
@@ -53,6 +54,7 @@ const AdminOrgsPage = async () => {
         {/* 🔴 서버액션을 **주입**한다(직접 import 하면 Storybook 이 죽는다 — N-41). */}
         <OrgTable
           invites={invites}
+          onBackfillReadiness={backfillMissingSiteReadiness}
           onCreateCode={createInviteCode}
           onLoadDetail={getOrgDetail}
           onSetDays={setOrgPlanDays}

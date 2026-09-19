@@ -193,6 +193,7 @@ export const AssignBrandForm = ({
         industry,
         // 🔴 2026-08-21 복원 — 선택하지 않았으면 자동 감지값(둘 다)을 쓴다.
         marketScope: marketScopeOverride ?? detected?.scope,
+        source: isOnboarding ? "onboarding" : "brand_create",
       });
       if ("error" in result) {
         return { status: "idle", error: result.error };

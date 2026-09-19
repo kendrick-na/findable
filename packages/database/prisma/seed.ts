@@ -12,12 +12,10 @@
 //     naver-briefing)는 false. 대시보드/집계는 isActive로 본류만 노출.
 //   - 멱등(upsert): 여러 번 돌려도 안전. name/provider/language/ordering/isActive를 항상 최신화.
 //
-// Prisma 7: PrismaClient는 driver adapter 필수(@prisma/adapter-neon). seeding은
+// Prisma 7: PrismaClient는 driver adapter 필수(@prisma/adapter-pg). seeding은
 //   `npx prisma db seed`로만 명시 실행(migrate 시 자동 실행 없음). config는 prisma.config.ts.
 
-import { neonConfig } from "@neondatabase/serverless";
-import { PrismaNeon } from "@prisma/adapter-neon";
-import ws from "ws";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/client";
 
 // 엔진 시드 데이터. @repo/database는 @repo/ai를 의존하지 않으므로(순환·exports 회피)
@@ -102,9 +100,7 @@ async function main(): Promise<void> {
     throw new Error("DATABASE_URL is not set");
   }
 
-  // seed는 로컬/CI Node 실행 → ws 폴백(index.ts는 Vercel용 fetch 모드였음).
-  neonConfig.webSocketConstructor = ws;
-  const adapter = new PrismaNeon({ connectionString });
+  const adapter = new PrismaPg({ connectionString });
   const prisma = new PrismaClient({ adapter });
 
   try {

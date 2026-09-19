@@ -1,0 +1,9 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Findable F. badge concept v2</title>
+  <desc>Findable favicon F. mark scaled proportionally inside an orange rounded-square badge.</desc>
+  <rect x="64" y="64" width="896" height="896" rx="214" fill="#FF7A4D"/>
+  <g transform="translate(368 332) scale(12)">
+    <text x="1.5" y="25.5" font-family="'Instrument Serif', Georgia, 'Times New Roman', serif" font-size="30" font-weight="400" fill="#F7F1E6">F</text>
+    <rect x="21.2" y="21.5" width="4.3" height="4.3" fill="#F7F1E6"/>
+  </g>
+</svg>

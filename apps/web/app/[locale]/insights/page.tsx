@@ -74,7 +74,10 @@ export default async function PublicInsightsPage({
 }) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
   const ko = locale.startsWith("ko");
-  const prefix = ko ? "/ko" : "";
+  // Both localized routes are canonical on the Findable host. Keeping the
+  // /en prefix is important: the unprefixed route redirects to Korean and
+  // turns English cards into 404/locale-mismatch links.
+  const prefix = ko ? "/ko" : "/en";
   const selectedType = TYPES.includes(query.type as (typeof TYPES)[number])
     ? (query.type ?? "all")
     : "all";

@@ -1,22 +1,14 @@
 import "server-only";
 
-import { neonConfig } from "@neondatabase/serverless";
-import { PrismaNeon } from "@prisma/adapter-neon";
-import ws from "ws";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "./generated/client";
 import { keys } from "./keys";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
-// Vercel Functions(serverless)에서는 WebSocket이 작동 안 하므로 HTTP fetch 모드 강제.
-// 로컬 dev(Node 18+)에선 ws 모듈로 WebSocket 폴백.
-if (process.env.VERCEL || process.env.NEXT_RUNTIME === "edge") {
-  neonConfig.poolQueryViaFetch = true;
-} else {
-  neonConfig.webSocketConstructor = ws;
-}
-
-const adapter = new PrismaNeon({ connectionString: keys().DATABASE_URL });
+// Supabase/Neon/자체 호스팅 PostgreSQL을 모두 사용할 수 있도록
+// Neon 전용 어댑터 대신 표준 PostgreSQL 어댑터를 사용한다.
+const adapter = new PrismaPg({ connectionString: keys().DATABASE_URL });
 
 export const database = globalForPrisma.prisma || new PrismaClient({ adapter });
 

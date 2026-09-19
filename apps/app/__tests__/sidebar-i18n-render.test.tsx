@@ -95,4 +95,10 @@ describe("사이드바 i18n — 사전이 화면까지 닿는다", () => {
     // 화면이 그 치환을 실제로 수행하는지 — 안 하면 「{plan}에서 해제」가 그대로 뜬다.
     expect(SRC).toMatch(/lockedHint\.replace\(\s*"\{plan\}"/);
   });
+
+  it("🔴 사이트 준비도 진단은 사이드바에서 항상 찾을 수 있다", () => {
+    // 라우트만 남기고 메뉴에서 빼면 기능이 사용자에게는 사라진 것과 같다.
+    expect(SRC).toContain("title: t.siteAudit");
+    expect(SRC).toContain('url: "/site-audit"');
+  });
 });

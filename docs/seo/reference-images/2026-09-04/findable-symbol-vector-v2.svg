@@ -1,0 +1,11 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Findable symbol concept v2</title>
+  <desc>Recognizable two-color magnifying glass in a rounded-square badge.</desc>
+  <rect x="64" y="64" width="896" height="896" rx="214" fill="#FF7A4D"/>
+
+  <!-- Clear circular lens, intentionally preserved for immediate recognition -->
+  <circle cx="455" cy="455" r="214" stroke="#F7F1E6" stroke-width="96"/>
+
+  <!-- Previous preferred diagonal handle, with only a restrained angled tip -->
+  <path d="M 608 608 L 676 676 L 838 838 L 796 880 L 634 718 L 566 650 Z" fill="#F7F1E6"/>
+</svg>

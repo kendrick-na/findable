@@ -133,7 +133,7 @@ export default async function GlossaryTermPage({
   if (!term) {
     notFound();
   }
-  const prefix = locale.startsWith("ko") ? "/ko" : "";
+  const prefix = locale.startsWith("ko") ? "/ko" : "/en";
 
   return (
     <main className="min-h-screen bg-[#0b0c0d] text-[#f4f1e8]">

@@ -38,6 +38,14 @@ import { isValidDomain, normalizeDomain } from "@/lib/domain";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 
+/** DB JSON 필드에 저장된 별칭만 안전하게 러너 입력으로 넘긴다. */
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter(
+        (item): item is string => typeof item === "string" && item.trim() !== ""
+      )
+    : [];
+
 /**
  * org row가 DB에 있도록 보장(lazy 적재). relationMode="prisma"라 FK가 강제되지 않아
  *   org 없이 brand.create하면 고아 row가 조용히 생긴다 → 먼저 Clerk 기반 upsert로 채운다.
@@ -248,7 +256,7 @@ export const startOrgTracking = async (
     //   비어 있으면 러너가 도메인으로 자동 추론하므로 기존 동작과 동일하다.
     const brandRecord = await database.brand.findUnique({
       where: { id: brandId },
-      select: { industry: true, marketScope: true },
+      select: { entityVariants: true, industry: true, marketScope: true },
     });
 
     // 6) AuditJob 생성. email은 org 트리거 식별자(비로그인 intake와 스코프 구분).
@@ -281,6 +289,9 @@ export const startOrgTracking = async (
           domain,
           language,
           brandName,
+          // 가입/설정 단계에서 저장한 한글·영문·제품 별칭도 판정기에 전달한다.
+          // 비어 있으면 러너가 도메인 기반으로 추론한 별칭을 그대로 사용한다.
+          brandVariants: stringList(brandRecord?.entityVariants),
           organizationId: orgId,
           brandId,
           // 동명이인 분별 단서(mention-verdict). 없으면 기존과 동일 동작.

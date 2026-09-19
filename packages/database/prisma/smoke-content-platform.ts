@@ -1,4 +1,4 @@
-import { PrismaNeon } from "@prisma/adapter-neon";
+import { PrismaPg } from "@prisma/adapter-pg";
 import {
   ContentQualityStatus,
   ContentReviewEventType,
@@ -16,7 +16,7 @@ if (!connectionString) {
 }
 
 const database = new PrismaClient({
-  adapter: new PrismaNeon({ connectionString }),
+  adapter: new PrismaPg({ connectionString }),
 });
 
 const marker = `smoke-${Date.now()}`;

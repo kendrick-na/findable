@@ -3,10 +3,8 @@ import { planFromPublicMetadata } from "@repo/auth/plan";
 import { auth, currentUser } from "@repo/auth/server";
 import { SidebarProvider } from "@repo/design-system/components/ui/sidebar";
 import { showBetaFeature } from "@repo/feature-flags";
-import { secure } from "@repo/security";
 import type { ReactNode } from "react";
 import { getMyPartnerStatus } from "@/app/actions/partner/query";
-import { env } from "@/env";
 import { scopedHeaderMetric } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 import { CreateOrgGate } from "./components/create-org-gate";
@@ -18,10 +16,6 @@ interface AppLayoutProperties {
 }
 
 const AppLayout = async ({ children }: AppLayoutProperties) => {
-  if (env.ARCJET_KEY) {
-    await secure(["CATEGORY:PREVIEW"]);
-  }
-
   const user = await currentUser();
   const { orgId, redirectToSignIn } = await auth();
   const betaFeature = await showBetaFeature();
@@ -78,6 +72,7 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
             brandMeasure: t.sidebar.brandMeasure,
             compare: t.sidebar.compare,
             content: t.sidebar.content,
+            contentPerformance: t.sidebar.contentPerformance,
             currentPlan: t.sidebar.currentPlan,
             dashboard: t.sidebar.dashboard,
             export: t.sidebar.export,
@@ -91,6 +86,7 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
             lockedHint: t.sidebar.lockedHint,
             prompts: t.sidebar.prompts,
             publicInsights: t.sidebar.publicInsights,
+            siteAudit: t.sidebar.siteAudit,
             sources: t.sidebar.sources,
             support: t.sidebar.support,
             todo: t.sidebar.todo,
