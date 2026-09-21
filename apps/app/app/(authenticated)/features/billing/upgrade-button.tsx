@@ -18,7 +18,7 @@ import {
 
 /**
  * 앱 내 업그레이드 결제 버튼 (결제→plan 자동화, 2026-07-30).
- * 서버액션이 paymentId·금액을 확정 → PortOne 위젯(토스) → 서버 검증+grantPlan.
+ * 서버액션이 paymentId·금액을 확정 → PortOne 카카오페이 위젯 → 서버 검증+grantPlan.
  * PortOne env 미설정이면 상담 링크로 폴백(안 죽음).
  *
  * ⚠️ @repo/payments index 는 server-only 라 여기선 타입만 로컬 정의.
@@ -81,7 +81,8 @@ export const UpgradeButton = ({
         orderName: intent.orderName,
         totalAmount: intent.amount,
         currency: "CURRENCY_KRW",
-        payMethod: "CARD",
+        // 카카오페이 V2 채널은 CARD가 아니라 EASY_PAY여야 결제창이 열린다.
+        payMethod: "EASY_PAY",
         customer: {
           fullName: intent.customerName,
           email: intent.customerEmail,

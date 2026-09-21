@@ -26,6 +26,10 @@ model Organization {
   billingStatus     BillingStatus    @default(trialing)
   billingCustomerId String? // PortOne billingKey(정기결제) · Toss billingKey · PayPal payerId
   billingProvider   BillingProvider?
+  // 다음 예약 결제를 한 건만 유지한다. 웹훅 재전송 때 이 ID를 기준으로 중복 청구를 막는다.
+  billingLastPaymentId String?
+  billingNextPaymentId String?
+  billingNextPaymentAt DateTime?
   // 회원가입 이후 브랜드 설정 진행 상태. 측정 성공 여부와 온보딩 완료 여부를 분리한다.
   onboardingStep        Int       @default(1)
   onboardingCompletedAt DateTime?

@@ -11,8 +11,10 @@ import {
   cancelBillingKeySchedules,
   deleteBillingKey,
   isPortOneConfigured,
+  nextBillingDate,
   type PayablePlan,
   payWithBillingKey,
+  schedulePaymentWithBillingKey,
 } from "@repo/payments";
 import { ensureOrgExists } from "@/lib/db/ensure-org";
 
@@ -33,8 +35,7 @@ import { ensureOrgExists } from "@/lib/db/ensure-org";
  *   ①을 빠뜨리면 포트원 리커버리가 계속 청구를 시도해 **무한 과금 사고**가 난다.
  *   그래서 `unsubscribe()` 가 항상 이 순서로 부른다.
  *
- * ⚠️ 지금은 **테스트 채널**(카카오페이 CID `TCSUBSCRIP`)이라 실제 청구가 없다.
- *   라이브 전환은 심사 승인 후 채널키 교체로 한다.
+ * 라이브 전환 뒤에는 첫 결제 직후 다음 달 예약을 만들고, Paid 웹훅이 이후 회차를 이어 예약한다.
  */
 
 /** 정기결제 채널키(빌링키 발급 전용 채널). 단건 채널과 **다른 값**이다. */
@@ -99,7 +100,12 @@ export const createSubscribeIntent = async (
 };
 
 export type ConfirmSubscriptionResult =
-  | { ok: true; plan: PayablePlan; granted: boolean }
+  | {
+      ok: true;
+      plan: PayablePlan;
+      granted: boolean;
+      renewalScheduled: boolean;
+    }
   | { error: string };
 
 /**
@@ -130,6 +136,12 @@ export const confirmSubscription = async (
     "Findable 고객";
 
   const paymentId = buildPaymentId(plan, userId);
+  // 결제 전에 구독 소유 조직을 보장한다. 돈은 받았는데 빌링키·해지·다음 예약을 기록할
+  // 조직이 없는 상태를 만들면 안 된다.
+  const ensuredOrgId = await ensureOrgExists();
+  if (!ensuredOrgId) {
+    return { error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+  }
 
   try {
     await payWithBillingKey({
@@ -143,31 +155,60 @@ export const confirmSubscription = async (
       customerEmail,
     });
 
+    // 결제 시각을 기준으로 다음 결제일과 ID를 정한다. 같은 예약을 재시도해도 ID가 변하지 않아야
+    // PortOne의 중복예약 방지와 웹훅 재시도가 안전하다.
+    const paidAt = new Date();
+    const nextPaymentAt = nextBillingDate(paidAt);
+    const nextPaymentId = buildPaymentId(plan, userId, nextPaymentAt.getTime());
+
     // 빌링키를 저장해 둬야 나중에 해지(예약 취소 + 삭제)를 할 수 있다.
     // ⚠️ Clerk 웹훅 지연으로 org row 가 아직 없을 수 있다 → `ensureOrgExists` 로 먼저 보장한다.
     //   (`relationMode="prisma"` 라 없는 org 에 update 하면 예외가 난다.)
     // ⚠️ 저장 실패가 **결제 성공을 뒤집지 않게** catch 로 가둔다 — 돈은 이미 나갔다.
     //   대신 error 로그를 남겨 수동 복구가 가능하게 한다(빌링키가 로그에 남으면 안 되므로 키는 제외).
-    const ensuredOrgId = await ensureOrgExists().catch(() => null);
-    if (ensuredOrgId) {
-      await database.organization
-        .update({
-          where: { id: ensuredOrgId },
-          data: {
-            billingCustomerId: billingKey,
-            billingProvider: "portone",
-            billingStatus: "active",
-          },
-        })
-        .catch((error: unknown) => {
-          log.error("billing.subscribe.store_key_failed", {
-            orgId: ensuredOrgId,
-            error: parseError(error),
-          });
-        });
-    } else {
-      // org 가 없으면 해지 버튼이 빌링키를 못 찾는다 → 반드시 눈에 띄게 남긴다.
-      log.error("billing.subscribe.no_org_cannot_store_key", { userId });
+    await database.organization.update({
+      where: { id: ensuredOrgId },
+      data: {
+        billingCustomerId: billingKey,
+        billingProvider: "portone",
+        billingStatus: "active",
+        billingLastPaymentId: paymentId,
+        billingNextPaymentId: nextPaymentId,
+        billingNextPaymentAt: nextPaymentAt,
+      },
+    });
+
+    let renewalScheduled = false;
+    try {
+      await schedulePaymentWithBillingKey({
+        billingKey,
+        channelKey: BILLING_CHANNEL_KEY,
+        paymentId: nextPaymentId,
+        orderName: `Findable ${plan} 월 정기결제`,
+        totalAmount: amount,
+        currency: "KRW",
+        customerName,
+        customerEmail,
+        timeToPay: nextPaymentAt,
+      });
+      renewalScheduled = true;
+    } catch (error) {
+      // 첫 결제는 이미 완료됐다. 고객에게 실패로 보이게 하지 않고, 자동갱신만 보류 상태로 남긴다.
+      // 운영자는 billing.schedule_initial_failed 로그와 past_due 상태를 보고 복구한다.
+      log.error("billing.schedule_initial_failed", {
+        userId,
+        paymentId,
+        nextPaymentId,
+        error: parseError(error),
+      });
+      await database.organization.update({
+        where: { id: ensuredOrgId },
+        data: {
+          billingStatus: "past_due",
+          billingNextPaymentId: null,
+          billingNextPaymentAt: null,
+        },
+      });
     }
 
     const granted = await grantPlan(userId, plan);
@@ -177,9 +218,10 @@ export const confirmSubscription = async (
       plan,
       amount,
       granted,
+      renewalScheduled,
     });
 
-    return { ok: true, plan, granted };
+    return { ok: true, plan, granted, renewalScheduled };
   } catch (error) {
     log.error("billing.subscribe.failed", {
       userId,
@@ -231,6 +273,9 @@ export const unsubscribe = async (): Promise<UnsubscribeResult> => {
         billingCustomerId: null,
         billingProvider: null,
         billingStatus: "canceled",
+        billingLastPaymentId: null,
+        billingNextPaymentId: null,
+        billingNextPaymentAt: null,
       },
     });
 

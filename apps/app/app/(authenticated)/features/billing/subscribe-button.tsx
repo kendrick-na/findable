@@ -138,9 +138,11 @@ export const SubscribeButton = ({
       }
 
       toast.success(
-        result.granted
+        result.granted && result.renewalScheduled
           ? "정기결제가 시작되었어요."
-          : "결제는 완료됐어요. 권한 반영이 지연되면 새로고침해 주세요."
+          : result.granted
+            ? "첫 결제는 완료됐어요. 다음 결제 예약을 확인 중이니 잠시 후 다시 확인해 주세요."
+            : "결제는 완료됐어요. 권한 반영이 지연되면 새로고침해 주세요."
       );
       setNoticeOpen(false);
       router.refresh();
@@ -212,17 +214,6 @@ export const SubscribeButton = ({
           </dt>
           <dd className="text-[color:var(--findable-ink-muted,#d0d6e0)]">
             등록일로부터 1개월 후 같은 날
-          </dd>
-        </div>
-        {/* 🔴 지금은 **최초 1회만** 실제로 청구된다(2회차 자동청구=결제예약 미연결).
-            "매월 자동결제" 만 적어두면 고객에게 없는 동작을 약속하는 것이 된다.
-            ⚠️ 라이브 전환 + 결제예약을 붙이면 이 줄을 지울 것. */}
-        <div className="flex justify-between gap-2">
-          <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            현재 안내
-          </dt>
-          <dd className="text-[color:var(--findable-ink-muted,#d0d6e0)]">
-            지금은 첫 회만 결제되며, 자동 청구는 준비 중이에요
           </dd>
         </div>
         <div className="flex justify-between gap-2">

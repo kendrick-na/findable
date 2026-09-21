@@ -12,6 +12,8 @@ export const keys = () =>
     client: {
       NEXT_PUBLIC_PORTONE_STORE_ID: z.string().optional(),
       NEXT_PUBLIC_PORTONE_CHANNEL_KEY: z.string().optional(),
+      // 카카오페이 정기결제용 라이브 채널. 일반결제 채널과 분리한다.
+      NEXT_PUBLIC_PORTONE_CHANNEL_KEY_BILLING: z.string().optional(),
     },
     runtimeEnv: {
       STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
@@ -21,5 +23,7 @@ export const keys = () =>
       NEXT_PUBLIC_PORTONE_STORE_ID: process.env.NEXT_PUBLIC_PORTONE_STORE_ID,
       NEXT_PUBLIC_PORTONE_CHANNEL_KEY:
         process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
+      NEXT_PUBLIC_PORTONE_CHANNEL_KEY_BILLING:
+        process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_BILLING,
     },
   });

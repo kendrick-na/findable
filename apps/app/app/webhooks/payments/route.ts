@@ -25,13 +25,17 @@
  */
 
 import { grantPlan } from "@repo/auth/plan-grant";
+import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import {
   getPortOnePayment,
   isPaidEvent,
+  buildPaymentId,
+  nextBillingDate,
   parseWebhookBody,
   planForAmount,
+  schedulePaymentWithBillingKey,
   userIdFromPaymentId,
   verifyWebhookSignature,
 } from "@repo/payments";
@@ -44,6 +48,84 @@ const done = (reason: string) => NextResponse.json({ ok: true, reason });
 /** 일시 장애 — PortOne 이 재전송하도록 5xx. */
 const retryable = (reason: string) =>
   NextResponse.json({ ok: false, reason }, { status: 500 });
+
+/**
+ * 정기결제는 항상 미래 예약을 정확히 한 건만 둔다.
+ *
+ * 최초 결제는 subscribe action이 다음 달 예약을 먼저 기록한다. 이후에는 그 예약 결제가
+ * Paid 웹훅으로 들어올 때만 다음 회차를 만든다. 이 조건이 없으면 최초 결제 웹훅과 action이
+ * 각각 예약을 만들어 이중 청구될 수 있다.
+ */
+async function scheduleFollowingSubscription(input: {
+  payment: Awaited<ReturnType<typeof getPortOnePayment>>;
+  paymentId: string;
+  plan: NonNullable<ReturnType<typeof planForAmount>>;
+  userId: string;
+}): Promise<void> {
+  const user = await database.user.findUnique({
+    where: { id: input.userId },
+    select: {
+      email: true,
+      name: true,
+      organization: {
+        select: {
+          id: true,
+          billingCustomerId: true,
+          billingNextPaymentId: true,
+          billingProvider: true,
+          billingStatus: true,
+        },
+      },
+    },
+  });
+  const org = user?.organization;
+
+  // 단건결제와 최초 정기결제 웹훅은 여기서 끝난다. 최초 정기결제의 다음 예약은
+  // subscribe action이 저장한 nextPaymentId와 현재 paymentId가 다르기 때문이다.
+  if (
+    !(
+      org &&
+      org.billingProvider === "portone" &&
+      org.billingStatus === "active" &&
+      org.billingCustomerId &&
+      org.billingNextPaymentId === input.paymentId
+    )
+  ) {
+    return;
+  }
+
+  const paidAt = input.payment.paidAt ? new Date(input.payment.paidAt) : new Date();
+  const safePaidAt = Number.isNaN(paidAt.getTime()) ? new Date() : paidAt;
+  const nextPaymentAt = nextBillingDate(safePaidAt);
+  // 다음 청구 시각으로 ID를 고정한다. 웹훅이 재전송돼도 PortOne에는 같은 예약만 요청한다.
+  const nextPaymentId = buildPaymentId(
+    input.plan,
+    input.userId,
+    nextPaymentAt.getTime()
+  );
+
+  await schedulePaymentWithBillingKey({
+    billingKey: org.billingCustomerId,
+    channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_BILLING ?? "",
+    paymentId: nextPaymentId,
+    orderName: `Findable ${input.plan} 월 정기결제`,
+    totalAmount: input.payment.amount.total,
+    currency: "KRW",
+    customerName: user.name || user.email || "Findable 고객",
+    customerEmail: user.email,
+    timeToPay: nextPaymentAt,
+  });
+
+  await database.organization.update({
+    where: { id: org.id },
+    data: {
+      billingStatus: "active",
+      billingLastPaymentId: input.paymentId,
+      billingNextPaymentId: nextPaymentId,
+      billingNextPaymentAt: nextPaymentAt,
+    },
+  });
+}
 
 export const POST = async (request: Request): Promise<Response> => {
   // 1) raw body — ⚠️ 반드시 text(). JSON.parse 후 재직렬화하면 서명이 깨진다.
@@ -120,6 +202,19 @@ export const POST = async (request: Request): Promise<Response> => {
       // Clerk push 실패 = 일시 장애일 수 있다 → 재전송으로 복구 기회를 준다.
       log.error("payments.webhook.grant_failed", { userId, paymentId, plan });
       return retryable("grant_failed");
+    }
+
+    try {
+      await scheduleFollowingSubscription({ payment, paymentId, plan, userId });
+    } catch (error) {
+      // 현재 회차는 결제됐다. 다음 회차 예약을 다시 시도할 수 있도록 5xx를 돌린다.
+      // schedulePaymentWithBillingKey는 동일 ID의 기존 예약을 성공으로 취급하므로 재전송도 안전하다.
+      log.error("billing.schedule_renewal_failed", {
+        userId,
+        paymentId,
+        error: parseError(error),
+      });
+      return retryable("schedule_renewal_failed");
     }
 
     log.info("payments.webhook.granted", {

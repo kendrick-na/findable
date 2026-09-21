@@ -140,7 +140,12 @@ const BillingPage = async () => {
   const org = orgId
     ? await database.organization.findUnique({
         where: { id: orgId },
-        select: { billingCustomerId: true, billingProvider: true },
+        select: {
+          billingCustomerId: true,
+          billingNextPaymentAt: true,
+          billingProvider: true,
+          billingStatus: true,
+        },
       })
     : null;
   const hasSubscription = Boolean(
@@ -171,7 +176,14 @@ const BillingPage = async () => {
             {hasSubscription && (
               <div className="mt-1 flex flex-col gap-2">
                 <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                  매월 자동결제가 켜져 있어요.
+                  {org?.billingNextPaymentAt
+                    ? `다음 결제 예정일: ${new Intl.DateTimeFormat("ko-KR", {
+                        dateStyle: "long",
+                        timeZone: "Asia/Seoul",
+                      }).format(org.billingNextPaymentAt)}`
+                    : org?.billingStatus === "past_due"
+                      ? "다음 결제 예약을 확인 중이에요."
+                      : "매월 자동결제가 켜져 있어요."}
                 </p>
                 <CancelSubscription />
               </div>

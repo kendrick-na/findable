@@ -141,7 +141,7 @@ export function isPortOneConfigured(): boolean {
 //
 // 흐름: 브라우저 `requestIssueBillingKey` (빌링키 발급)
 //        → 서버가 빌링키로 첫 결제 `POST /payments/{paymentId}/billing-key`
-//        → 이후 갱신은 결제 예약(`/payments/{id}/schedule`) — 라이브 전환 후 켠다.
+//        → 다음 달 결제 예약(`/payments/{id}/schedule`) → Paid 웹훅마다 다음 회차 재예약.
 //
 // 🔴 **해지 시 예약 취소를 반드시 함께** 할 것(`DELETE /payment-schedules`).
 //   빌링키만 지우고 예약을 남기면 포트원 리커버리가 계속 청구를 시도한다(무한 과금 사고).
@@ -201,10 +201,7 @@ export async function payWithBillingKey(input: {
  * 왜 필요한가: `payWithBillingKey` 는 **그 순간 1회**만 청구한다. 예약을 걸지 않으면
  *   "구독"이라 팔면서 2회차부터 청구가 없는 상태가 된다(표시와 실제가 다름).
  *
- * 🔴 **라이브 전환 전에는 호출하지 말 것.** 카카오페이 심사 회신(2026-08-11)에
- *   「2회차 이후 자동 청구는 라이브 채널키로 전환한 뒤 연결할 예정」이라고 고지했다.
- *   테스트 채널은 실제 청구가 없어 동작 검증도 안 된다.
- *   → 지금은 **정의만 해 두고 호출부를 연결하지 않는다**(승인 후 연결).
+ * 🔴 라이브 카카오페이 채널과 웹훅이 확인된 배포에서만 호출한다.
  *
  * ⚠️ `paymentId` 는 **매 회차 새 값**이어야 한다. 같은 값으로 두 번 예약하면
  *   포트원이 `PAYMENT_SCHEDULE_ALREADY_EXISTS` 로 거절한다.
@@ -257,6 +254,11 @@ export async function schedulePaymentWithBillingKey(input: {
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    // 동일 paymentId로 재시도한 경우 이미 예약돼 있을 수 있다.
+    // 이 호출은 웹훅 재전송에도 쓰이므로, 이 경우를 성공으로 취급해야 중복 청구를 만들지 않는다.
+    if (data.type === "PAYMENT_SCHEDULE_ALREADY_EXISTS") {
+      return;
+    }
     throw new Error(
       `PortOne payment schedule failed: ${data.code ?? res.status} ${data.message ?? ""}`
     );
