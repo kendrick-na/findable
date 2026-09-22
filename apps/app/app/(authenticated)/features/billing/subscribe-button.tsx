@@ -1,6 +1,7 @@
 "use client";
 
 import { requestIssueBillingKey } from "@portone/browser-sdk/v2";
+import { useUser } from "@repo/auth/client";
 import {
   trackCheckoutCompleted,
   trackCheckoutFailed,
@@ -52,6 +53,7 @@ export const SubscribeButton = ({
   plan: PayablePlan;
 }) => {
   const router = useRouter();
+  const { user } = useUser();
   const [isPending, setIsPending] = useState(false);
   // ⚖️ 사전 고지 단계. 버튼을 누르면 곧바로 결제창을 띄우지 않고 고지부터 보여준다.
   const [isNoticeOpen, setNoticeOpen] = useState(false);
@@ -145,6 +147,8 @@ export const SubscribeButton = ({
             : "결제는 완료됐어요. 권한 반영이 지연되면 새로고침해 주세요."
       );
       setNoticeOpen(false);
+      // 결제 서버가 갱신한 publicMetadata를 현재 세션에도 반영한 뒤 화면을 다시 그린다.
+      await user?.reload();
       router.refresh();
     } catch {
       trackCheckoutFailed({

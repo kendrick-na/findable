@@ -1,6 +1,7 @@
 "use client";
 
 import { requestPayment } from "@portone/browser-sdk/v2";
+import { useUser } from "@repo/auth/client";
 import {
   trackCheckoutCompleted,
   trackCheckoutFailed,
@@ -41,6 +42,7 @@ export const UpgradeButton = ({
   contactHref: string;
 }) => {
   const router = useRouter();
+  const { user } = useUser();
   const [isPending, setIsPending] = useState(false);
 
   const className = cn(
@@ -129,6 +131,9 @@ export const UpgradeButton = ({
       // 결제 성공 **그리고** 플랜 부여 성공 — 둘 다 된 경우만 완료로 센다.
       trackCheckoutCompleted({ plan, amountKrw: intent.amount });
       toast.success(`${verified.plan} 플랜이 활성화됐어요!`);
+      // Clerk publicMetadata는 결제 서버가 갱신한다. 기존 세션 토큰을 그대로
+      // 새로고침하면 방금 결제한 고객에게도 Free가 보일 수 있으므로 먼저 갱신한다.
+      await user?.reload();
       router.refresh();
     } catch (error) {
       trackCheckoutFailed({ plan, stage: "widget", reasonCode: "exception" });
