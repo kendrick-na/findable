@@ -1,7 +1,7 @@
 import "server-only";
 
 import { clerkClient } from "@clerk/nextjs/server";
-import type { Plan } from "./plan";
+import { hasPlan, normalizePlan, type Plan } from "./plan";
 
 /**
  * plan 부여(grant) — 서버 전용 공용 헬퍼.
@@ -26,6 +26,106 @@ const MAX_PUSH_RETRIES = 3;
  * publicMetadata는 화면·게이팅용 plan만 유지하고, 결제 식별자는 노출하지 않는다.
  */
 const PAYMENT_GRANT_ID_KEY = "findablePaymentId";
+const PAYMENT_GRANT_STACK_KEY = "findablePaymentGrantStack";
+
+type PaymentGrantState = {
+  paymentId: string | null;
+  plan: Plan;
+};
+
+type PaymentGrantResult = {
+  plan: Plan;
+  privateMetadata: Record<string, unknown> | null;
+};
+
+function paymentGrantStack(
+  privateMetadata: Record<string, unknown> | null | undefined
+): PaymentGrantState[] {
+  const value = privateMetadata?.[PAYMENT_GRANT_STACK_KEY];
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const candidate = entry as Record<string, unknown>;
+    if (
+      (typeof candidate.paymentId !== "string" && candidate.paymentId !== null) ||
+      typeof candidate.plan !== "string"
+    ) {
+      return [];
+    }
+    const plan = normalizePlan(candidate.plan);
+    return candidate.plan === plan
+      ? [{ paymentId: candidate.paymentId, plan }]
+      : [];
+  });
+}
+
+function privateMetadataForStack(
+  stack: PaymentGrantState[]
+): Record<string, unknown> | null {
+  if (
+    stack.length === 0 ||
+    (stack.length === 1 && stack[0]?.plan === "free" && stack[0].paymentId === null)
+  ) {
+    return null;
+  }
+  return {
+    [PAYMENT_GRANT_ID_KEY]: stack[0]?.paymentId ?? null,
+    [PAYMENT_GRANT_STACK_KEY]: stack,
+  };
+}
+
+/**
+ * 결제가 기존보다 낮은 플랜을 덮어쓰지 않게 하고, 환불 때 복구할 현재 권한을 저장한다.
+ * Clerk 호출과 분리해 결제/환불 권한 전이를 순수하게 검증한다.
+ */
+export function paymentGrantAfterPayment(
+  currentPlan: Plan,
+  privateMetadata: Record<string, unknown> | null | undefined,
+  purchasedPlan: Plan,
+  paymentId: string
+): PaymentGrantResult {
+  // Enterprise 등이 이미 있는 계정이 하위 플랜을 결제해도 권한을 낮추거나
+  // 환불 웹훅의 회수 대상으로 표시하지 않는다.
+  if (currentPlan !== purchasedPlan && hasPlan(currentPlan, purchasedPlan)) {
+    return { plan: currentPlan, privateMetadata: null };
+  }
+
+  const existing = paymentGrantStack(privateMetadata);
+  const currentPaymentId =
+    typeof privateMetadata?.[PAYMENT_GRANT_ID_KEY] === "string"
+      ? privateMetadata[PAYMENT_GRANT_ID_KEY]
+      : null;
+  const prior =
+    existing[0]?.plan === currentPlan &&
+    existing[0]?.paymentId === currentPaymentId
+      ? existing
+      : [{ paymentId: currentPaymentId, plan: currentPlan }, ...existing];
+
+  return {
+    plan: purchasedPlan,
+    privateMetadata: privateMetadataForStack(
+      [{ paymentId, plan: purchasedPlan }, ...prior].slice(0, 8)
+    ),
+  };
+}
+
+/** 현재 결제가 전면에 있을 때만 직전 권한으로 되돌린다. */
+export function paymentGrantAfterRefund(
+  privateMetadata: Record<string, unknown> | null | undefined,
+  paymentId: string
+): PaymentGrantResult & { revoked: boolean } {
+  if (!isCurrentPaymentGrant(privateMetadata, paymentId)) {
+    return { plan: "free", privateMetadata: null, revoked: false };
+  }
+
+  const remaining = paymentGrantStack(privateMetadata).slice(1);
+  return {
+    plan: remaining[0]?.plan ?? "free",
+    privateMetadata: privateMetadataForStack(remaining),
+    revoked: true,
+  };
+}
 
 /** 결제 취소가 현재 결제에서 부여한 권한에만 닿도록 하는 순수 가드. */
 export function isCurrentPaymentGrant(
@@ -36,8 +136,8 @@ export function isCurrentPaymentGrant(
 }
 
 async function updatePlanMetadata(input: {
-  paymentId?: string | null;
   plan: Plan;
+  privateMetadata?: Record<string, unknown> | null;
   userId: string;
 }): Promise<boolean> {
   const clerk = await clerkClient();
@@ -45,7 +145,10 @@ async function updatePlanMetadata(input: {
     try {
       await clerk.users.updateUserMetadata(input.userId, {
         publicMetadata: { plan: input.plan },
-        privateMetadata: { [PAYMENT_GRANT_ID_KEY]: input.paymentId ?? null },
+        privateMetadata: input.privateMetadata ?? {
+          [PAYMENT_GRANT_ID_KEY]: null,
+          [PAYMENT_GRANT_STACK_KEY]: null,
+        },
       });
       return true;
     } catch {
@@ -59,7 +162,7 @@ async function updatePlanMetadata(input: {
 
 export async function grantPlan(userId: string, plan: Plan): Promise<boolean> {
   // 파트너·초대코드·관리자 부여는 결제 취소로 회수하면 안 된다.
-  return updatePlanMetadata({ userId, plan, paymentId: null });
+  return updatePlanMetadata({ userId, plan, privateMetadata: null });
 }
 
 /** 결제로 plan 을 부여하고, 전액 취소 때만 회수할 출처(paymentId)를 비공개로 보관한다. */
@@ -68,7 +171,24 @@ export async function grantPlanFromPayment(
   plan: Plan,
   paymentId: string
 ): Promise<boolean> {
-  return updatePlanMetadata({ userId, plan, paymentId });
+  const clerk = await clerkClient();
+  try {
+    const user = await clerk.users.getUser(userId);
+    const next = paymentGrantAfterPayment(
+      normalizePlan(user.publicMetadata.plan),
+      user.privateMetadata as Record<string, unknown> | undefined,
+      plan,
+      paymentId
+    );
+    // 상위 권한 보유자의 하위 결제는 entitlement 변경이 없다. "부여 성공"으로
+    // 처리해 webhook 재시도를 막되, 결제 ID를 권한 출처로 기록하지 않는다.
+    if (next.plan === normalizePlan(user.publicMetadata.plan) && next.privateMetadata === null) {
+      return true;
+    }
+    return updatePlanMetadata({ userId, ...next });
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -80,11 +200,13 @@ export async function revokePlanFromPayment(
   paymentId: string
 ): Promise<{ revoked: boolean; reason: "not_current_payment" | "push_failed" | "revoked" }> {
   const clerk = await clerkClient();
+  let privateMetadata: Record<string, unknown> | undefined;
   try {
     const user = await clerk.users.getUser(userId);
+    privateMetadata = user.privateMetadata as Record<string, unknown> | undefined;
     if (
       !isCurrentPaymentGrant(
-        user.privateMetadata as Record<string, unknown> | undefined,
+        privateMetadata,
         paymentId
       )
     ) {
@@ -94,11 +216,11 @@ export async function revokePlanFromPayment(
     return { revoked: false, reason: "push_failed" };
   }
 
-  const revoked = await updatePlanMetadata({
-    userId,
-    plan: "free",
-    paymentId: null,
-  });
+  const next = paymentGrantAfterRefund(
+    privateMetadata,
+    paymentId
+  );
+  const revoked = next.revoked && (await updatePlanMetadata({ userId, ...next }));
   return revoked
     ? { revoked: true, reason: "revoked" }
     : { revoked: false, reason: "push_failed" };
