@@ -16,6 +16,7 @@ import {
   confirmSubscription,
   createSubscribeIntent,
 } from "@/app/actions/billing/subscription";
+import { kakaoBillingKeyDisplayAmount } from "@/lib/billing/kakao-billing-key";
 import { describeSubscriptionError } from "@/lib/billing/subscription-error";
 
 /**
@@ -94,6 +95,9 @@ export const SubscribeButton = ({
         storeId: STORE_ID,
         channelKey: intent.billingChannelKey,
         billingKeyMethod: "EASY_PAY",
+        // 카카오페이는 빌링키 발급 주문에도 금액이 필요하다. PortOne V2에서
+        // displayAmount는 발급 UI 표시용이므로 실제 초회 청구는 아래 서버 확인 단계가 맡는다.
+        ...kakaoBillingKeyDisplayAmount(intent.amount),
         issueId: intent.issueId,
         issueName: intent.issueName,
         customer: {

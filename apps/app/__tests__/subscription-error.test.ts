@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { kakaoBillingKeyDisplayAmount } from "@/lib/billing/kakao-billing-key";
 import { describeSubscriptionError } from "@/lib/billing/subscription-error";
 
 describe("describeSubscriptionError", () => {
@@ -14,5 +15,14 @@ describe("describeSubscriptionError", () => {
 
   test("uses a safe fallback for an unknown exception", () => {
     expect(describeSubscriptionError(null)).toBe("알 수 없는 오류");
+  });
+});
+
+describe("kakaoBillingKeyDisplayAmount", () => {
+  test("sends the first order amount and its KRW currency when issuing a billing key", () => {
+    expect(kakaoBillingKeyDisplayAmount(108_900)).toEqual({
+      displayAmount: 108_900,
+      currency: "KRW",
+    });
   });
 });
