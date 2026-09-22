@@ -26,20 +26,26 @@ import {
  */
 
 type PayablePlan = "starter" | "growth" | "scale";
+type PaymentMethod = "easy-pay" | "card";
 
 const STORE_ID = process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "";
-const CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? "";
+const EASY_PAY_CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? "";
+// 법인카드용 PG 채널이 실제로 개통된 뒤에만 주입한다. 미설정 상태에서 카드결제
+// 버튼을 보이면 고객에게 실패하는 결제 동선을 제시하게 되므로, 이 값은 의도적으로 선택값이다.
+const CARD_CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY ?? "";
 
 export const UpgradeButton = ({
   plan,
   label,
   featured,
   contactHref,
+  paymentMethod = "easy-pay",
 }: {
   plan: PayablePlan;
   label: string;
   featured?: boolean;
   contactHref: string;
+  paymentMethod?: PaymentMethod;
 }) => {
   const router = useRouter();
   const { user } = useUser();
@@ -52,8 +58,17 @@ export const UpgradeButton = ({
       : "border border-[color:var(--findable-hairline-strong,#34343a)] text-[color:var(--findable-ink,#f7f8f8)] hover:bg-[color:var(--findable-surface-2,#141516)]"
   );
 
-  // 위젯 키 미설정 배포에선 기존 상담 동선 유지(기능 저하일 뿐 죽지 않게).
-  if (!(STORE_ID && CHANNEL_KEY)) {
+  const channelKey =
+    paymentMethod === "card" ? CARD_CHANNEL_KEY : EASY_PAY_CHANNEL_KEY;
+
+  // 법인카드 채널은 PG 계약·채널 키 배포 전에는 아예 노출하지 않는다. 상담 버튼으로
+  // 대체해 "카드결제 가능"이라고 오인시키지 않기 위해서다.
+  if (paymentMethod === "card" && !(STORE_ID && channelKey)) {
+    return null;
+  }
+
+  // 간편결제 키 미설정 배포에선 기존 상담 동선 유지(기능 저하일 뿐 죽지 않게).
+  if (!(STORE_ID && channelKey)) {
     return (
       <a className={className} href={contactHref}>
         {label}
@@ -78,13 +93,14 @@ export const UpgradeButton = ({
 
       const response = await requestPayment({
         storeId: STORE_ID,
-        channelKey: CHANNEL_KEY,
+        channelKey,
         paymentId: intent.paymentId,
         orderName: intent.orderName,
         totalAmount: intent.amount,
         currency: "CURRENCY_KRW",
-        // 카카오페이 V2 채널은 CARD가 아니라 EASY_PAY여야 결제창이 열린다.
-        payMethod: "EASY_PAY",
+        // 카카오페이 V2는 EASY_PAY, 토스 일반 카드채널은 CARD로 분리한다.
+        // 채널 키가 없으면 위에서 버튼 자체를 렌더링하지 않는다.
+        payMethod: paymentMethod === "card" ? "CARD" : "EASY_PAY",
         customer: {
           fullName: intent.customerName,
           email: intent.customerEmail,

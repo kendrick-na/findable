@@ -71,6 +71,12 @@ const TierCta = ({
         label="1회만 결제하기"
         plan={plan}
       />
+      <UpgradeButton
+        contactHref={`${webUrl}/ko/contact`}
+        label="법인카드로 결제하기"
+        paymentMethod="card"
+        plan={plan}
+      />
     </div>
   );
 };
