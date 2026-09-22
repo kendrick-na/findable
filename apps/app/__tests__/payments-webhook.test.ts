@@ -28,6 +28,7 @@ import {
   withVat,
 } from "@repo/payments/catalog";
 import {
+  isFullCancellationEvent,
   isPaidEvent,
   parseWebhookBody,
   verifyWebhookSignature,
@@ -223,6 +224,15 @@ describe("parseWebhookBody / isPaidEvent", () => {
     expect(isPaidEvent("Transaction.Paid")).toBe(true);
     expect(isPaidEvent("Transaction.VirtualAccountIssued")).toBe(false);
     expect(isPaidEvent("Transaction.Cancelled")).toBe(false);
+  });
+
+  it("전액 취소만 즉시 권한 회수 후보가 된다", () => {
+    expect(isFullCancellationEvent("Transaction.Cancelled")).toBe(true);
+    expect(isFullCancellationEvent("Transaction.PartialCancelled")).toBe(
+      false
+    );
+    expect(isFullCancellationEvent("Transaction.CancelPending")).toBe(false);
+    expect(isFullCancellationEvent("Transaction.Paid")).toBe(false);
   });
 });
 

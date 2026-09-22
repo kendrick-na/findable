@@ -130,3 +130,11 @@ export function parseWebhookBody(rawBody: string): PortOneWebhookBody | null {
 export function isPaidEvent(type: string): boolean {
   return type === "Transaction.Paid";
 }
+
+/**
+ * 전액 취소는 결제 대가로 부여한 권한을 회수할 수 있는 최종 이벤트다.
+ * 부분 취소는 남은 결제 대가가 있으므로 권한을 즉시 내리지 않는다.
+ */
+export function isFullCancellationEvent(type: string): boolean {
+  return type === "Transaction.Cancelled";
+}

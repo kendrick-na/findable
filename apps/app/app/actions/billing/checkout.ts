@@ -1,6 +1,6 @@
 "use server";
 
-import { grantPlan } from "@repo/auth/plan-grant";
+import { grantPlanFromPayment } from "@repo/auth/plan-grant";
 import { auth, currentUser } from "@repo/auth/server";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -140,7 +140,7 @@ export const verifyPaymentAndGrant = async (
       };
     }
 
-    const granted = await grantPlan(userId, plan);
+    const granted = await grantPlanFromPayment(userId, plan, paymentId);
     log.info("billing.verify.granted", {
       userId,
       paymentId,

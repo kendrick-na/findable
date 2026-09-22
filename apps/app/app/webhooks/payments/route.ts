@@ -24,12 +24,16 @@
  *      일시 장애(조회 실패 등)만 5xx 로 돌려 재전송을 유도한다.
  */
 
-import { grantPlan } from "@repo/auth/plan-grant";
+import {
+  grantPlanFromPayment,
+  revokePlanFromPayment,
+} from "@repo/auth/plan-grant";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import {
   getPortOnePayment,
+  isFullCancellationEvent,
   isPaidEvent,
   buildPaymentId,
   nextBillingDate,
@@ -153,7 +157,49 @@ export const POST = async (request: Request): Promise<Response> => {
     return done("unparsable_body");
   }
 
-  // 결제 완료 이벤트만 plan 을 올린다(가상계좌 발급·취소 등은 해당 없음).
+  // 전액 취소는 해당 결제에서 부여한 plan만 안전하게 회수한다.
+  // 부분 취소는 남은 결제 대가가 있으므로 권한을 내리지 않는다.
+  if (isFullCancellationEvent(body.type)) {
+    const userId = userIdFromPaymentId(body.data.paymentId);
+    if (!userId) {
+      log.warn("payments.webhook.cancel_no_uid_in_payment_id", {
+        paymentId: body.data.paymentId,
+      });
+      return done("cancel_no_uid_in_payment_id");
+    }
+    try {
+      const payment = await getPortOnePayment(body.data.paymentId);
+      if (payment.status !== "CANCELLED") {
+        log.warn("payments.webhook.cancel_not_final", {
+          paymentId: body.data.paymentId,
+          status: payment.status,
+        });
+        return retryable(`cancel_not_final:${payment.status}`);
+      }
+      const result = await revokePlanFromPayment(userId, body.data.paymentId);
+      if (result.reason === "push_failed") {
+        log.error("payments.webhook.cancel_revoke_failed", {
+          userId,
+          paymentId: body.data.paymentId,
+        });
+        return retryable("cancel_revoke_failed");
+      }
+      log.info("payments.webhook.cancel_processed", {
+        userId,
+        paymentId: body.data.paymentId,
+        revoked: result.revoked,
+      });
+      return done(result.reason);
+    } catch (error) {
+      log.error("payments.webhook.cancel_lookup_failed", {
+        paymentId: body.data.paymentId,
+        error: parseError(error),
+      });
+      return retryable("cancel_lookup_failed");
+    }
+  }
+
+  // 결제 완료 이벤트만 plan 을 올린다(가상계좌 발급·부분 취소 등은 해당 없음).
   if (!isPaidEvent(body.type)) {
     log.info("payments.webhook.ignored_event", { type: body.type });
     return done(`ignored_event:${body.type}`);
@@ -197,7 +243,7 @@ export const POST = async (request: Request): Promise<Response> => {
     }
 
     // 3) 부여(멱등). 이미 verify 경로가 올렸어도 같은 값이라 안전하다.
-    const granted = await grantPlan(userId, plan);
+    const granted = await grantPlanFromPayment(userId, plan, paymentId);
     if (!granted) {
       // Clerk push 실패 = 일시 장애일 수 있다 → 재전송으로 복구 기회를 준다.
       log.error("payments.webhook.grant_failed", { userId, paymentId, plan });

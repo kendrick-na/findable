@@ -37,6 +37,7 @@ export {
   schedulePaymentWithBillingKey,
 } from "./portone";
 export {
+  isFullCancellationEvent,
   isPaidEvent,
   type PortOneWebhookBody,
   parseWebhookBody,
