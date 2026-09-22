@@ -39,8 +39,9 @@ const PaymentSchema = z.object({
     total: z.number(),
     paid: z.number().optional(),
     cancelled: z.number().optional(),
-    currency: z.string(),
   }),
+  // PortOne V2 returns currency beside amount, not inside it.
+  currency: z.string(),
   orderName: z.string().optional(),
   method: z.unknown().optional(),
   channel: z

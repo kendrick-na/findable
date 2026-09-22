@@ -124,9 +124,9 @@ export const verifyPaymentAndGrant = async (
     if (payment.status !== "PAID") {
       return { error: `결제가 완료되지 않았습니다. (상태: ${payment.status})` };
     }
-    if (payment.amount.currency !== "KRW") {
+    if (payment.currency !== "KRW") {
       return {
-        error: `지원하지 않는 통화입니다. (${payment.amount.currency})`,
+        error: `지원하지 않는 통화입니다. (${payment.currency})`,
       };
     }
     const plan = planForAmount(payment.amount.total);

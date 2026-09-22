@@ -178,10 +178,10 @@ export const POST = async (request: Request): Promise<Response> => {
       });
       return done(`not_paid:${payment.status}`);
     }
-    if (payment.amount.currency !== "KRW") {
+    if (payment.currency !== "KRW") {
       log.warn("payments.webhook.unsupported_currency", {
         paymentId,
-        currency: payment.amount.currency,
+        currency: payment.currency,
       });
       return done("unsupported_currency");
     }
