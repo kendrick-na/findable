@@ -16,6 +16,7 @@ import {
   confirmSubscription,
   createSubscribeIntent,
 } from "@/app/actions/billing/subscription";
+import { describeSubscriptionError } from "@/lib/billing/subscription-error";
 
 /**
  * 정기결제(월 자동결제) 등록 버튼 — 2026-08-11 세션N-18.
@@ -150,16 +151,16 @@ export const SubscribeButton = ({
       // 결제 서버가 갱신한 publicMetadata를 현재 세션에도 반영한 뒤 화면을 다시 그린다.
       await user?.reload();
       router.refresh();
-    } catch {
+    } catch (error) {
       trackCheckoutFailed({
         plan,
         stage: "widget",
         isSubscription: true,
         reasonCode: "exception",
       });
-      toast.error(
-        "정기결제 등록 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
-      );
+      // SDK/채널 설정 문제를 일반 문구로 덮으면 안전한 수정이 불가능하다.
+      // 코드·메시지만 표시하고 billingKey 등 예외 객체 전체는 노출하지 않는다.
+      toast.error(`정기결제 등록 실패: ${describeSubscriptionError(error)}`);
     } finally {
       setIsPending(false);
     }
