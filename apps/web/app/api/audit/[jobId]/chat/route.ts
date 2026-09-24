@@ -18,6 +18,7 @@ import {
 } from "@repo/ai/lib/crew";
 // 🔴 분모 단일 진실(세션N-28) — 결과 화면·OG 이미지와 같은 함수를 쓴다.
 import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -74,7 +75,9 @@ function buildMetricsSummary(result: StoredResult): string {
   //   프롬프트에 *"언급된 엔진: 7/29개"* 로 나갔다. 엔진은 7곳뿐이다.
   //   → 분자·분모 모두 **엔진 단위**로 맞춘다. 분모는 결과 화면과 같은 단일 진실 함수.
   const covered = result.engineResponses
-    ? countMeasurementCoverage(result.engineResponses).measured
+    ? countMeasurementCoverage(
+        result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
+      ).measured
     : new Set(m.enginesCovered ?? []).size;
   const mentioned = new Set(m.enginesWithMention ?? []).size;
   const s = m.sentimentDistribution;
@@ -170,7 +173,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const crew = job.crewResult as unknown as StoredCrewReport;
-    const result = (job.result as unknown as StoredResult) ?? {};
+    const result = withRecomputedAuditMetrics(
+      (job.result as unknown as StoredResult) ?? {}
+    );
     if (!(crew.analysts && crew.strategist)) {
       return NextResponse.json(
         { error: "이 진단은 코파일럿을 지원하지 않는 옛 형식입니다." },

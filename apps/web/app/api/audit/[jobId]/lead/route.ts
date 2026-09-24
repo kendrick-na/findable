@@ -4,6 +4,7 @@
 
 import { geoAxisScores, scoreTier, TIER_LABEL_KO } from "@repo/audit/geo-score";
 import { maskEmail } from "@repo/audit/mask";
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { database } from "@repo/database";
 import { resend } from "@repo/email";
 import { AuditReportEmail } from "@repo/email/templates/audit-report";
@@ -141,7 +142,9 @@ export async function POST(
 
   // 이메일 발송
   try {
-    const result = job.result as unknown as AuditResult;
+    const result = withRecomputedAuditMetrics(
+      job.result as unknown as AuditResult
+    );
     const metrics = result.metrics ?? {
       enginesCovered: [],
       enginesWithMention: [],

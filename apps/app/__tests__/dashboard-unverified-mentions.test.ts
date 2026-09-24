@@ -37,6 +37,13 @@ describe("dashboard verified brand metrics", () => {
         mentionPosition: 1,
         sentiment: "negative",
       },
+      {
+        ...base,
+        brandMentioned: false,
+        engineId: "naver-briefing",
+        mentionPosition: null,
+        mentionListSize: null,
+      },
     ];
     const dashboard = buildTrackingDashboardData(rows);
 

@@ -604,7 +604,7 @@ export function summarizeSentiment(
   let neutral = 0;
   let negative = 0;
   for (const row of rows) {
-    if (!row.brandMentioned) {
+    if (!row.brandMentioned || row.engineId === "naver-briefing") {
       continue;
     }
     if (row.sentiment === "positive") {
@@ -674,7 +674,11 @@ export function buildTrackingDashboardData(
   rows: TrackingRowInput[],
   selectedBrandId?: string
 ): DashboardData | null {
-  const runs = foldTrackingRuns(rows);
+  // Naver AI Briefing is an auxiliary search-result measurement. The report's
+  // core metrics exclude it; including it here silently changes the same
+  // run from 82% (18/22) to 78% (18/23) and inflates missed-visit estimates.
+  const coreRows = rows.filter((row) => row.engineId !== "naver-briefing");
+  const runs = foldTrackingRuns(coreRows);
   if (runs.length === 0) {
     return null;
   }
@@ -723,7 +727,7 @@ export function buildTrackingDashboardData(
   //   여러 run 을 섞으면 과거 질문이 현재 성적표에 끼어 오독이 된다.
   const latestRunMs = latest.measuredAt.getTime();
   const promptScores = foldPromptScores(
-    rows.filter(
+    coreRows.filter(
       (row) =>
         row.brandId === latest.brandId &&
         row.trackedAt.getTime() === latestRunMs

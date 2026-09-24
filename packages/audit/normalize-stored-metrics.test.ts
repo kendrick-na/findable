@@ -1,0 +1,94 @@
+import { describe, expect, it } from "vitest";
+import { countMeasurementCoverage } from "./measurement-coverage";
+import { withRecomputedAuditMetrics } from "./normalize-stored-metrics";
+
+describe("saved audit metric normalization", () => {
+  it("keeps Naver Briefing separate and repairs legacy sentiment", () => {
+    const result = {
+      metrics: {
+        sov: 50,
+        sentimentDistribution: { positive: 0, neutral: 3, negative: 0 },
+      },
+      engineResponses: [
+        {
+          engineId: "chatgpt",
+          brandMentioned: true,
+          sentiment: "positive",
+          mentionPosition: 2,
+          mentionListSize: 5,
+          citedSources: [
+            { domain: "official.example", url: "https://official.example" },
+          ],
+        },
+        {
+          engineId: "gemini",
+          brandMentioned: false,
+          sentiment: "negative",
+          mentionPosition: 1,
+          mentionListSize: 2,
+          citedSources: [
+            { domain: "unrelated.example", url: "https://unrelated.example" },
+          ],
+        },
+        {
+          engineId: "naver-briefing",
+          brandMentioned: false,
+          sentiment: "neutral",
+        },
+      ],
+    };
+    const normalized = withRecomputedAuditMetrics(result);
+
+    expect(normalized.metrics.sov).toBe(50);
+    expect(normalized.metrics.averageMentionPosition).toBe(2);
+    expect(normalized.metrics.sentimentDistribution).toEqual({
+      positive: 1,
+      neutral: 0,
+      negative: 0,
+    });
+    expect(normalized.metrics.topCitedDomains).toEqual([
+      { domain: "official.example", count: 1 },
+    ]);
+    expect(normalized.metrics.enginesCovered).toEqual(["chatgpt", "gemini"]);
+  });
+
+  it("matches a 22-response core run even when a separate briefing is saved", () => {
+    const core = Array.from({ length: 22 }, (_, index) => ({
+      engineId: [
+        "chatgpt",
+        "claude",
+        "gemini",
+        "perplexity",
+        "hyperclova",
+        "naver",
+        "daum",
+      ][index % 7],
+      brandMentioned: index < 18,
+      sentiment: index < 17 ? "neutral" : null,
+      mentionPosition: index < 5 ? 2 : null,
+      mentionListSize: index < 5 ? 4 : null,
+      citedSources: [],
+    }));
+    const result = withRecomputedAuditMetrics({
+      metrics: {
+        sov: 78,
+        sentimentDistribution: { positive: 0, neutral: 21, negative: 0 },
+      },
+      engineResponses: [
+        ...core,
+        { engineId: "naver-briefing", brandMentioned: false, sentiment: null },
+      ],
+    });
+    expect(result.metrics.sov).toBe(82);
+    expect(result.metrics.sentimentDistribution).toEqual({
+      positive: 0,
+      neutral: 17,
+      negative: 0,
+    });
+    expect(
+      countMeasurementCoverage(
+        result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
+      )
+    ).toEqual({ attempted: 7, measured: 7 });
+  });
+});

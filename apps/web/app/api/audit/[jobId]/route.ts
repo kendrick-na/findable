@@ -9,6 +9,7 @@ import {
   EMPTY_HISTORY,
 } from "@repo/audit/history";
 import { maskEmail } from "@repo/audit/mask";
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
@@ -58,13 +59,16 @@ async function loadHistory(job: {
       take: HISTORY_TAKE,
     });
     return buildAuditHistory(
-      rows.map((r) => ({
-        id: r.id,
-        domain: r.domain,
-        createdAt: r.createdAt,
-        score: scoreOf(r.result),
-        usable: isUsableRun(r.result),
-      })),
+      rows.map((r) => {
+        const result = withRecomputedAuditMetrics(r.result);
+        return {
+          id: r.id,
+          domain: r.domain,
+          createdAt: r.createdAt,
+          score: scoreOf(result),
+          usable: isUsableRun(result),
+        };
+      }),
       job.id,
       job.domain
     );
@@ -151,7 +155,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       domain: job.domain,
       language: job.language,
       pdfUrl: job.pdfUrl,
-      result: job.result,
+      result: withRecomputedAuditMetrics(job.result),
       crewStatus: job.crewStatus,
       crewResult: job.crewResult,
       crewStartedAt: job.crewStartedAt?.toISOString() ?? null,

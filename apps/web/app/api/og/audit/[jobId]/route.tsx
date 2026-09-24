@@ -97,7 +97,11 @@ export async function GET(
   //   1회라도 실패한 엔진을 통째로 빼서 「7/6」 같은 값을 만들었다).
   //   engineResponses 가 없는 옛 회차는 고유 엔진 수로 폴백한다(분자보다 작아지지 않게).
   const total = job?.result?.engineResponses
-    ? countMeasurementCoverage(job.result.engineResponses).measured
+    ? countMeasurementCoverage(
+        job.result.engineResponses.filter(
+          (r) => r.engineId !== "naver-briefing"
+        )
+      ).measured
     : uniqueEngineCount(metrics?.enginesCovered ?? []);
 
   return new ImageResponse(

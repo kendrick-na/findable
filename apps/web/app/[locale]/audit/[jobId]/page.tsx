@@ -1,6 +1,7 @@
 // /audit/[jobId] — Audit 결과 페이지 (PRD §13.1)
 
 import { database } from "@repo/database";
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { createMetadata } from "@repo/seo/metadata";
@@ -52,10 +53,13 @@ async function loadSummaryJob(jobId: string) {
     return null;
   }
   try {
-    return await database.auditJob.findUnique({
+    const job = await database.auditJob.findUnique({
       where: { id: jobId },
       select: { domain: true, result: true, status: true },
     });
+    return job
+      ? { ...job, result: withRecomputedAuditMetrics(job.result) }
+      : null;
   } catch (error) {
     log.error("audit.ssr_summary.failed", { error: parseError(error) });
     return null;

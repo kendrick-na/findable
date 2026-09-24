@@ -131,12 +131,15 @@ interface AnalystReport {
  * 에이전트나 실존 컨설턴트가 아니다. 이름을 먼저 보이면 개인 에이전트의 응답을
  * 수집·표시하는 기능으로 오해할 수 있으므로, 고객이 얻는 분석 범위로 번역한다.
  */
-const ANALYST_PRESENTATION: Record<AnalystReport["agentId"], {
-  scopeKo: string;
-  titleKo: string;
-  scopeEn: string;
-  titleEn: string;
-}> = {
+const ANALYST_PRESENTATION: Record<
+  AnalystReport["agentId"],
+  {
+    scopeKo: string;
+    titleKo: string;
+    scopeEn: string;
+    titleEn: string;
+  }
+> = {
   minji: {
     titleKo: "국내 AI 검색 분석",
     scopeKo: "국내 AI 응답의 브랜드 인식과 검색 맥락",
@@ -856,11 +859,7 @@ export function AuditResultView({ jobId, locale }: Props) {
 
   return (
     <>
-      <CompletedView
-        job={job}
-        locale={locale}
-        result={displayResult}
-      />
+      <CompletedView job={job} locale={locale} result={displayResult} />
       <ViralBar job={job} locale={locale} />
     </>
   );
@@ -1148,7 +1147,9 @@ function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
               size="sm"
             >
               <Mail className="h-3.5 w-3.5" />
-              {isKo ? "리포트 이메일로 받기 · 무료" : "Email me this report · Free"}
+              {isKo
+                ? "리포트 이메일로 받기 · 무료"
+                : "Email me this report · Free"}
             </Button>
             <Button
               className="gap-1.5"
@@ -1354,7 +1355,9 @@ function CompletedView({
 }) {
   const isKo = locale.startsWith("ko");
   // 계산은 `@repo/audit/measurement-coverage` 단일 진실을 쓴다(규칙 복제 금지).
-  const coverage = countMeasurementCoverage(result.engineResponses);
+  const coverage = countMeasurementCoverage(
+    result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
+  );
   const { measured, attempted } = coverage;
   const impact = buildMeasurementImpact({
     appearanceRate: result.metrics.sov,
@@ -1476,7 +1479,9 @@ function HeroSection({
   );
   // stub인 고유 엔진 ID 카운트 (백엔드 stubCount는 응답 단위라 중복됨)
   const stubEngineIds = new Set<string>();
-  for (const r of result.engineResponses) {
+  for (const r of result.engineResponses.filter(
+    (row) => row.engineId !== "naver-briefing"
+  )) {
     if (r.isStub) {
       stubEngineIds.add(r.engineId);
     }
@@ -1522,7 +1527,12 @@ function HeroSection({
   // 감사 8번: 평균 순위가 **몇 건을 평균낸 값인지**. null 제외(세션N-5 교훈 —
   //   `mentionPosition`은 일부 응답에만 있어서 0으로 깔면 순위가 왜곡된다).
   const rankedResponses = result.engineResponses.filter(
-    (r) => r.mentionPosition !== null
+    (r) =>
+      r.engineId !== "naver-briefing" &&
+      r.brandMentioned &&
+      !r.isStub &&
+      !r.errorMessage &&
+      r.mentionPosition !== null
   ).length;
   // 순위의 분모(세션N-10). **집계값을 그대로 쓴다** — 화면에서 다시 평균내면
   //   같은 숫자를 두 벌 계산하는 것이라 언젠가 어긋난다(감사 §10 3중 복제와 같은 함정).
@@ -1534,7 +1544,9 @@ function HeroSection({
   const label = scoreTierLabel(totalScore, isKo);
   // 🔴 측정 성공 엔진 수 = 단일 진실(`countMeasurementCoverage`). 헤드라인·KPI·언급률이
   //   **같은 값**을 쓰게 하려고 여기서 한 번만 구한다(세션N-28 — 아래 §분모 주석 참고).
-  const coverage = countMeasurementCoverage(result.engineResponses);
+  const coverage = countMeasurementCoverage(
+    result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
+  );
   const measuredEnginesCoverage = coverage.measured;
   const headline = mckinseyHeadline(
     result.brandName,
@@ -2898,7 +2910,9 @@ function NaverBriefingReadOnlyCard({
         className="mt-4 inline-flex text-sm text-[var(--brand-2)] hover:underline"
         href="https://app.findable.co.kr/"
       >
-        {isKo ? "대시보드에서 측정 관리하기 →" : "Manage measurements in dashboard →"}
+        {isKo
+          ? "대시보드에서 측정 관리하기 →"
+          : "Manage measurements in dashboard →"}
       </a>
     </section>
   );
@@ -3498,7 +3512,9 @@ function AnalystAccordion({
 }) {
   // 결과를 만들지 못했으면 접힌 카드 안에 숨기지 않는다. 사용자는 "아직 분석 중"으로
   // 오해하지 않고 즉시 재시도/문의할 근거를 본다.
-  const [open, setOpen] = useState(() => !report.output || Boolean(report.errorMessage));
+  const [open, setOpen] = useState(
+    () => !report.output || Boolean(report.errorMessage)
+  );
   const out = report.output;
   const presentation = ANALYST_PRESENTATION[report.agentId];
 
@@ -4155,7 +4171,7 @@ function EngineGapCta({ result, isKo }: { isKo: boolean; result: JobResult }) {
   const mentioned = new Set(result.metrics.enginesWithMention);
   // 측정 성공 엔진만 대상(스텁·에러 엔진은 "모른다"고 말할 근거가 없다).
   const measured = result.engineResponses.filter(
-    (r) => !(r.isStub || r.errorMessage)
+    (r) => r.engineId !== "naver-briefing" && !(r.isStub || r.errorMessage)
   );
   const missing = dedupeByEngine(measured).filter(
     (r) => !mentioned.has(r.engineId)
@@ -4442,7 +4458,9 @@ function ReportToDashboardGuide({ isKo }: { isKo: boolean }) {
   return (
     <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5 md:p-6">
       <h2 className="font-semibold text-base text-zinc-100">
-        {isKo ? "이 리포트와 대시보드는 이렇게 이어집니다" : "How this report continues in the dashboard"}
+        {isKo
+          ? "이 리포트와 대시보드는 이렇게 이어집니다"
+          : "How this report continues in the dashboard"}
       </h2>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-lg border border-white/10 bg-zinc-900/50 p-4">
@@ -4602,7 +4620,7 @@ function UpsellCard({
   //   "AI 8곳 중 7곳"처럼 **재보지도 못한 엔진을 분모에 넣는다**.
   //   `isFullCoverage` 판정(= 전 엔진 인지)도 이 값으로 갈리므로 문장이 뒤집힌다.
   const measuredCount = countMeasurementCoverage(
-    result.engineResponses
+    result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
   ).measured;
 
   const { headline, bodyCopy } = buildUpsellCopy({
