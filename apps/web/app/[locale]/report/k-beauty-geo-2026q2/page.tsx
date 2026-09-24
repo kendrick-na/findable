@@ -31,6 +31,8 @@ import { PublicLandingHeader } from "../../components/public-landing-header";
 
 const DESCRIPTION =
   "한국 K-뷰티 5사 (메디큐브·라운드랩·아누아·조선미녀·달바)의 7 AI 엔진 가시성 측정 + Princeton GEO 시뮬레이션. 광고주·마케터를 위한 산업 인사이트.";
+const EN_DESCRIPTION =
+  "AI search visibility measured for five K-beauty brands across seven engines, alongside clearly labeled findings from Princeton's GEO research.";
 const PATHNAME = "/report/k-beauty-geo-2026q2";
 const SITE_URL = "https://www.findable.co.kr";
 const canonicalFor = (locale: string) =>
@@ -54,10 +56,11 @@ export const generateMetadata = async ({
   params: Promise<{ locale: string }>;
 }) => {
   const { locale } = await params;
+  const ko = locale.startsWith("ko");
   return createMetadata({
-    title: "K-뷰티 GEO Report 2026 Q2",
-    description: DESCRIPTION,
-    locale: locale.startsWith("ko") ? "ko" : "en",
+    title: ko ? "K-뷰티 GEO Report 2026 Q2" : "K-Beauty GEO Report | Q2 2026",
+    description: ko ? DESCRIPTION : EN_DESCRIPTION,
+    locale: ko ? "ko" : "en",
     pathname: PATHNAME,
   });
 };
@@ -91,6 +94,13 @@ const HEADLINE_INSIGHTS = [
   },
 ];
 
+const EN_HEADLINE_INSIGHTS = [
+  { metric: "93.2", suffix: "/100", label: "Average K-beauty SoV", note: "Five brands measured" },
+  { metric: "100%", suffix: "", label: "Mention rate in four global engines", note: "ChatGPT · Claude · Perplexity · Gemini" },
+  { metric: "55%", suffix: "", label: "Average Daum mention rate", note: "Across the five brands" },
+  { metric: "+41%", suffix: "", label: "Relative lift from quotations", note: "KDD '24 Table 1 experimental mean" },
+] as const;
+
 const INSIGHTS = [
   {
     n: "01",
@@ -121,6 +131,33 @@ const INSIGHTS = [
       "동일 질문·엔진·지역 조건으로 기준선을 저장한 뒤 한 번에 한 가지 편집 변경을 적용하고 재측정해 차이를 기록하세요.",
   },
 ];
+
+const EN_INSIGHTS = [
+  {
+    n: "01",
+    title: "K-beauty brands appeared consistently in global AI answers",
+    body: "The five brands averaged 93.2/100 in Share of Voice (SoV), with Anua highest at 96/100. Brand mentions appeared in responses from all four global engines measured. This dataset does not establish whether distribution or reviews caused those mentions.",
+    actionable: "Check whether official English product information and verifiable third-party sources agree on the facts. Compare cited domains in the next measurement.",
+  },
+  {
+    n: "02",
+    title: "All five brands appeared in HyperCLOVA X responses",
+    body: "Each of the five brands was mentioned by HyperCLOVA X for the four questions measured. This result is limited to those dates and questions; it does not stand in for Naver Search or AI Briefing visibility.",
+    actionable: "Measure Naver Search and HyperCLOVA X separately. Prioritize content according to the sources each answer actually uses.",
+  },
+  {
+    n: "03",
+    title: "Daum mentions were lower, but varied by brand",
+    body: "Daum's average brand mention rate was 55% across the five brands. Anua reached 75%, so it would be inaccurate to say every brand scored 50% or lower. This measurement alone cannot identify the cause.",
+    actionable: "Compare the questions with and without a Daum mention and examine their cited sources. Fill gaps in the official pages, then measure again under the same conditions.",
+  },
+  {
+    n: "04",
+    title: "Search results and AI answers need separate metrics",
+    body: "Search impressions and brand mentions in AI answers come from different measurement methods. This dataset did not measure revenue, so a visibility gap should not be presented as a sales gap.",
+    actionable: "Save a baseline using the same question, engine, and region. Make one editorial change at a time and record the difference after remeasurement.",
+  },
+] as const;
 
 const APPLY_STRATEGIES = [
   {
@@ -155,12 +192,22 @@ const APPLY_STRATEGIES = [
   },
 ];
 
+const EN_APPLY_STRATEGIES = [
+  { code: "S1", name: "Cite Sources", impact: "+27%", body: "Mean relative improvement for citing original sources in the paper's experiments." },
+  { code: "S2", name: "Quotation Inclusion", impact: "+41%", body: "Mean relative improvement for including quotations in the paper's experiments." },
+  { code: "S3", name: "Statistics & Data", impact: "+31%", body: "Mean relative improvement for adding statistics in the paper's experiments." },
+  { code: "S4", name: "Korean Entity Grounding", impact: "To validate", body: "Unify Korean, English, and mixed-script brand names, then measure before and after." },
+  { code: "S5", name: "AI Briefing Visibility", impact: "To validate", body: "Measure Naver AI Briefing appearances in a separate sample." },
+] as const;
+
 export default async function KBeautyReportPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const ko = locale.startsWith("ko");
+  const prefix = ko ? "/ko" : "/en";
   const CANONICAL = canonicalFor(locale);
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
@@ -174,11 +221,11 @@ export default async function KBeautyReportPage({
         code={{
           "@context": "https://schema.org",
           "@type": "Article",
-          headline: "K-뷰티 GEO Report 2026 Q2",
-          description: DESCRIPTION,
+          headline: ko ? "K-뷰티 GEO Report 2026 Q2" : "K-Beauty GEO Report | Q2 2026",
+          description: ko ? DESCRIPTION : EN_DESCRIPTION,
           url: CANONICAL,
           mainEntityOfPage: { "@type": "WebPage", "@id": CANONICAL },
-          inLanguage: "ko",
+          inLanguage: ko ? "ko" : "en",
           datePublished: "2026-05-08",
           author: { "@type": "Organization", name: "Findable", url: SITE_URL },
           publisher: {
@@ -186,7 +233,9 @@ export default async function KBeautyReportPage({
             name: "Findable",
             url: SITE_URL,
           },
-          about: ["생성형엔진최적화", "GEO", "AI 검색 가시성", "K-뷰티"],
+          about: ko
+            ? ["생성형엔진최적화", "GEO", "AI 검색 가시성", "K-뷰티"]
+            : ["generative engine optimization", "GEO", "AI search visibility", "K-beauty"],
           isAccessibleForFree: true,
         }}
       />
@@ -205,27 +254,26 @@ export default async function KBeautyReportPage({
               className="text-[12px] text-[var(--findable-ink-muted)]"
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
-              한국 K-뷰티 5사 · 7 AI 엔진
+              {ko ? "한국 K-뷰티 5사 · 7 AI 엔진" : "Five K-beauty brands · Seven AI engines"}
             </span>
           </div>
           <h1
             className="mb-6 font-medium text-[40px] leading-[1.1] tracking-tight md:text-[56px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            K-뷰티 GEO Report
+            {ko ? "K-뷰티 GEO Report" : "K-Beauty GEO Report"}
             <br />
             <span className="text-[var(--findable-primary)]">
-              2026 Q2, 어디에서 발견되고 있나.
+              {ko ? "2026 Q2, 어디에서 발견되고 있나." : "Where did brands appear in Q2 2026?"}
             </span>
           </h1>
           <p
             className="max-w-2xl text-[18px] text-[var(--findable-ink-muted)] leading-[1.6]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
-            메디큐브·라운드랩·아누아·조선미녀·달바 5사를
-            ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X·네이버·다음 7개
-            엔진에서 측정한 결과와 Princeton KDD&apos;24 GEO 실험에서 검증한
-            편집 전략을 구분해 정리했습니다.
+            {ko
+              ? "메디큐브·라운드랩·아누아·조선미녀·달바 5사를 ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X·네이버·다음 7개 엔진에서 측정한 결과와 Princeton KDD'24 GEO 실험에서 검증한 편집 전략을 구분해 정리했습니다."
+              : "We measured Medicube, Round Lab, Anua, Beauty of Joseon, and d'Alba across ChatGPT, Claude, Perplexity, Gemini, HyperCLOVA X, Naver, and Daum. We report those observations separately from editorial techniques tested in Princeton's KDD '24 GEO study."}
           </p>
           <div
             className="mt-6 inline-flex items-start gap-2 rounded-md border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] px-3 py-2 text-[12px] text-[var(--findable-ink-muted)]"
@@ -234,12 +282,11 @@ export default async function KBeautyReportPage({
             <Info aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               <strong className="text-[var(--findable-ink)]">
-                정직성 안내:
+                {ko ? "정직성 안내:" : "Methodology note:"}
               </strong>{" "}
-              5사는 모두 공개 K-뷰티 D2C 브랜드이며 Findable 고객이 아닙니다.
-              측정은 공개 LLM 답변에 대한 외부 분석으로 GEO 업계 표준
-              패턴(Profound·Athena·Ahrefs). 시뮬레이션 수치는 Princeton 학술
-              검증치이며 실측 아님.
+              {ko
+                ? "5사는 모두 공개 K-뷰티 D2C 브랜드이며 Findable 고객이 아닙니다. 측정은 공개 LLM 답변에 대한 외부 분석으로 GEO 업계 표준 패턴(Profound·Athena·Ahrefs). 시뮬레이션 수치는 Princeton 학술 검증치이며 실측 아님."
+                : "All five are public K-beauty D2C brands, not Findable customers. Our measurements analyze public AI answers. The reported simulation figures come from Princeton's academic experiments; they are not observed outcomes for these brands."}
             </span>
           </div>
         </div>
@@ -258,10 +305,10 @@ export default async function KBeautyReportPage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            5사 측정, 한눈에.
+            {ko ? "5사 측정, 한눈에." : "Five brands at a glance."}
           </h2>
           <div className="grid grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
-            {HEADLINE_INSIGHTS.map((m) => (
+            {(ko ? HEADLINE_INSIGHTS : EN_HEADLINE_INSIGHTS).map((m) => (
               <div className="flex flex-col gap-1" key={m.label}>
                 <span
                   className="font-medium text-[36px] leading-none tracking-tight md:text-[44px]"
@@ -303,10 +350,10 @@ export default async function KBeautyReportPage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            5사 측정에서 보이는 4 패턴.
+            {ko ? "5사 측정에서 보이는 4 패턴." : "Four patterns in the five-brand sample."}
           </h2>
           <div className="space-y-6">
-            {INSIGHTS.map((ins) => (
+            {(ko ? INSIGHTS : EN_INSIGHTS).map((ins) => (
               <article
                 className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6"
                 key={ins.n}
@@ -360,27 +407,28 @@ export default async function KBeautyReportPage({
               3.0 · Apply 5 Strategies
             </span>
             <span className="rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-[10px] text-amber-600 uppercase tracking-[0.12em]">
-              논문 근거 + 검증 과제
+              {ko ? "논문 근거 + 검증 과제" : "Published evidence + questions to test"}
             </span>
           </div>
           <h2
             className="mb-4 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            검증된 편집 전략과 후속 실험 항목.
+            {ko ? "검증된 편집 전략과 후속 실험 항목." : "Editorial methods tested in research—and what remains to test."}
           </h2>
           <div
             className="mb-8 rounded-md border border-amber-500/30 bg-amber-500/5 p-4 text-[13px] text-[var(--findable-ink-muted)] leading-relaxed"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
-            <strong className="text-amber-600">⚠ 근거 범위.</strong> +27%·+41%·
-            +31%는 Princeton KDD&apos;24 GEO-Bench의 영문 실험에서 보고된 1차
-            지표 상대 향상 평균입니다. 이 리포트의 5개 브랜드에 적용한 결과가
-            아니며 한국어 환경의 성과를 보장하지 않습니다. 나머지 두 항목은 수치
-            예측이 아닌 후속 검증 과제입니다.
+            <strong className="text-amber-600">
+              {ko ? "⚠ 근거 범위." : "⚠ Scope of evidence."}
+            </strong>{" "}
+            {ko
+              ? "+27%·+41%·+31%는 Princeton KDD'24 GEO-Bench의 영문 실험에서 보고된 1차 지표 상대 향상 평균입니다. 이 리포트의 5개 브랜드에 적용한 결과가 아니며 한국어 환경의 성과를 보장하지 않습니다. 나머지 두 항목은 수치 예측이 아닌 후속 검증 과제입니다."
+              : "The +27%, +41%, and +31% figures are mean relative improvements in the primary metric reported by Princeton's English-language KDD '24 GEO-Bench experiments. They are not results for these five brands and do not predict outcomes in Korean. The other two items are questions for future validation, not numerical forecasts."}
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {APPLY_STRATEGIES.map((s) => (
+            {(ko ? APPLY_STRATEGIES : EN_APPLY_STRATEGIES).map((s) => (
               <article
                 className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-5"
                 key={s.code}
@@ -427,12 +475,12 @@ export default async function KBeautyReportPage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            관련 자료.
+            {ko ? "관련 자료." : "Related resources."}
           </h2>
           <div className="grid gap-3 md:grid-cols-2">
             <Link
               className="group flex items-start gap-3 rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-5 transition hover:border-[var(--findable-primary)]/40"
-              href="/ko/research/k-geo-bench-v0_1"
+              href={`${prefix}/research/k-geo-bench-v0_1`}
             >
               <BarChart3 className="mt-0.5 h-5 w-5 text-[var(--findable-primary)]" />
               <div className="flex-1">
@@ -440,20 +488,22 @@ export default async function KBeautyReportPage({
                   className="mb-1 font-medium text-[15px]"
                   style={{ fontFamily: "var(--findable-font-sans)" }}
                 >
-                  K-GEO-Bench v0.1 (학술 데이터셋)
+                  {ko ? "K-GEO-Bench v0.1 (학술 데이터셋)" : "K-GEO-Bench v0.1 (open dataset)"}
                 </h3>
                 <p
                   className="text-[13px] text-[var(--findable-ink-muted)] leading-relaxed"
                   style={{ fontFamily: "var(--findable-font-sans)" }}
                 >
-                  140 측정 응답 raw 데이터. JSONL/JSON 다운로드. CC BY 4.0.
+                  {ko
+                    ? "140 측정 응답 raw 데이터. JSONL/JSON 다운로드. CC BY 4.0."
+                    : "Raw data for 140 measured responses. Download JSONL or JSON under CC BY 4.0."}
                 </p>
               </div>
               <ExternalLink className="h-4 w-4 text-[var(--findable-ink-muted)] transition group-hover:text-[var(--findable-primary)]" />
             </Link>
             <Link
               className="group flex items-start gap-3 rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-5 transition hover:border-[var(--findable-primary)]/40"
-              href="/ko/case/a-brand"
+              href={`${prefix}/case/a-brand`}
             >
               <TrendingUp className="mt-0.5 h-5 w-5 text-[var(--findable-primary)]" />
               <div className="flex-1">
@@ -461,13 +511,15 @@ export default async function KBeautyReportPage({
                   className="mb-1 font-medium text-[15px]"
                   style={{ fontFamily: "var(--findable-font-sans)" }}
                 >
-                  Case Study: Before/After 시뮬레이션
+                  {ko ? "Case Study: Before/After 시뮬레이션" : "Case study: Before/after simulation"}
                 </h3>
                 <p
                   className="text-[13px] text-[var(--findable-ink-muted)] leading-relaxed"
                   style={{ fontFamily: "var(--findable-font-sans)" }}
                 >
-                  5사가 GEO 적용 시 예상되는 가시성 변화 시각화.
+                  {ko
+                    ? "5사가 GEO 적용 시 예상되는 가시성 변화 시각화."
+                    : "A clearly labeled simulation of possible GEO changes for five brands."}
                 </p>
               </div>
               <ExternalLink className="h-4 w-4 text-[var(--findable-ink-muted)] transition group-hover:text-[var(--findable-primary)]" />
@@ -484,16 +536,16 @@ export default async function KBeautyReportPage({
               className="max-w-2xl font-medium text-[28px] leading-tight tracking-tight md:text-[40px]"
               style={{ fontFamily: "var(--findable-font-display)" }}
             >
-              우리 브랜드는 7 AI 답변에서
+              {ko ? "우리 브랜드는 7 AI 답변에서" : "Where does your brand appear"}
               <br />
-              어디에 있을까요?
+              {ko ? "어디에 있을까요?" : "across seven AI engines?"}
             </h2>
             <Link
               className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
-              href="/ko/audit"
+              href={`${prefix}/audit`}
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
-              무료 진단 받기
+              {ko ? "무료 진단 받기" : "Check your brand"}
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>

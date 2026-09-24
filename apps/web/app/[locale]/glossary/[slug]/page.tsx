@@ -99,6 +99,63 @@ const TERMS = {
 
 type TermSlug = keyof typeof TERMS;
 
+const EN_TERMS: Record<
+  TermSlug,
+  { title: string; lead: string; sections: readonly (readonly [string, string])[] }
+> = {
+  seo: {
+    title: "What is SEO?",
+    lead: "SEO (search engine optimization) helps search engines discover and understand a web page, so it can appear for relevant searches.",
+    sections: [
+      ["What problem does it solve?", "It connects the questions people search for with pages that answer them through clearer information and a more accessible site structure."],
+      ["What do you optimize?", "Page content, titles, structure, links, images, and technical accessibility."],
+      ["How do you measure it?", "Track search impressions, clicks, queries, indexing status, and conversions together."],
+      ["A simple example", "For a page about AI search optimization, align its title, headings, related terms, and sources with the question the page answers."],
+    ],
+  },
+  geo: {
+    title: "What is GEO?",
+    lead: "GEO (generative engine optimization) is the practice of making information easier for generative AI services to find, explain, and cite when answering questions about a brand or topic.",
+    sections: [
+      ["How is it different from SEO?", "SEO mainly tracks visibility and clicks in search results. GEO also examines mentions, descriptions, and citations in AI-generated answers."],
+      ["What do you optimize?", "Verifiable facts, clear explanations, links to sources, authorship, and information freshness."],
+      ["How do you measure it?", "Repeat the same questions and record whether the brand appears, how it is described, which sources are cited, and how answers change over time."],
+      ["A simple example", "Ask several AI services the same brand question, then compare mentions and the pages they cite."],
+    ],
+  },
+  aeo: {
+    title: "What is AEO?",
+    lead: "AEO (answer engine optimization) helps search and answer engines select and present content as an answer to a user's question.",
+    sections: [
+      ["The core principle", "Answer the question directly, then use headings and FAQs to make the supporting information easy to follow."],
+      ["How is it different from SEO?", "SEO covers discovery and ranking across search results. AEO focuses on how information is expressed so it can be selected as an answer."],
+      ["How does it relate to GEO?", "AEO concerns answer selection broadly. GEO focuses in particular on discovery and citation in generative AI answers."],
+      ["A simple example", "For 'How are GEO and SEO different?', give the short answer first, followed by evidence and relevant links."],
+    ],
+  },
+  "ai-search-visibility": {
+    title: "What is AI search visibility?",
+    lead: "AI search visibility describes how often a brand or piece of content appears in generative AI answers, and in what context and with which cited sources.",
+    sections: [
+      ["Key metrics", "You can examine mention rate, placement in the answer, description accuracy, cited sources, and variation by question."],
+      ["Unit of measurement", "Build question sets by brand, product, or topic, then compare results under the same conditions across services, models, and dates."],
+      ["What to watch out for", "Do not judge visibility from one answer. Repeat measurements across questions, models, and time."],
+      ["How does it relate to SEO?", "A high search ranking does not guarantee a mention in an AI answer. Track search visibility and AI-answer visibility separately."],
+    ],
+  },
+};
+
+const EN_FAQS = [
+  [
+    "Does this term mean the same thing as SEO?",
+    "They are related, but not identical. SEO addresses search-engine results. GEO and AEO focus more directly on how information is selected and presented in AI and answer-driven search.",
+  ],
+  [
+    "Can one search result tell me whether my brand is visible?",
+    "No. Answers can vary by wording, AI service, model, and date. Repeat the same question set under comparable conditions.",
+  ],
+] as const;
+
 export function generateStaticParams() {
   return ["ko", "en"].flatMap((locale) =>
     Object.keys(TERMS).map((slug) => ({ locale, slug }))
@@ -111,7 +168,7 @@ export async function generateMetadata({
   params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
   const { locale, slug } = await params;
-  const term = TERMS[slug as TermSlug];
+  const term = (locale.startsWith("ko") ? TERMS : EN_TERMS)[slug as TermSlug];
   if (!term) {
     return {};
   }
@@ -129,11 +186,12 @@ export default async function GlossaryTermPage({
   params: Promise<{ locale: string; slug: string }>;
 }) {
   const { locale, slug } = await params;
-  const term = TERMS[slug as TermSlug];
+  const ko = locale.startsWith("ko");
+  const term = (ko ? TERMS : EN_TERMS)[slug as TermSlug];
   if (!term) {
     notFound();
   }
-  const prefix = locale.startsWith("ko") ? "/ko" : "/en";
+  const prefix = ko ? "/ko" : "/en";
 
   return (
     <main className="min-h-screen bg-[#0b0c0d] text-[#f4f1e8]">
@@ -147,7 +205,7 @@ export default async function GlossaryTermPage({
             description: term.lead,
             inDefinedTermSet: {
               "@type": "DefinedTermSet",
-              name: "Findable 검색·AI 가이드",
+              name: ko ? "Findable 검색·AI 가이드" : "Findable search and AI guide",
               url: `https://www.findable.co.kr${prefix}/glossary`,
             },
           }}
@@ -156,7 +214,7 @@ export default async function GlossaryTermPage({
           className="text-sm text-white/55 hover:text-white"
           href={`${prefix}/glossary`}
         >
-          ← 검색·AI 가이드
+          ← {ko ? "검색·AI 가이드" : "Search and AI guide"}
         </Link>
         <p className="mt-16 font-semibold text-[#ff7a4d] text-xs uppercase tracking-[0.22em]">
           Findable glossary
@@ -176,35 +234,40 @@ export default async function GlossaryTermPage({
           ))}
         </div>
         <section className="mt-16 border-white/10 border-t pt-10">
-          <h2 className="font-semibold text-2xl">자주 묻는 질문</h2>
+          <h2 className="font-semibold text-2xl">
+            {ko ? "자주 묻는 질문" : "Frequently asked questions"}
+          </h2>
           <div className="mt-5 divide-y divide-white/10 border-white/10 border-y">
-            <details className="py-4">
-              <summary className="cursor-pointer font-medium">
-                이 용어는 SEO와 같은 의미인가?
-              </summary>
-              <p className="mt-3 text-white/60 leading-7">
-                서로 연결되어 있지만 동일하지 않다. SEO는 검색엔진 결과를, GEO와
-                AEO는 AI·답변형 검색에서 정보가 선택되고 제시되는 과정을 더
-                직접적으로 다룬다.
-              </p>
-            </details>
-            <details className="py-4">
-              <summary className="cursor-pointer font-medium">
-                한 번의 검색 결과로 노출 여부를 판단해도 되는가?
-              </summary>
-              <p className="mt-3 text-white/60 leading-7">
-                어렵다. 질문 표현, AI 서비스, 모델, 시점에 따라 답변이 달라질 수
-                있으므로 동일한 질문 세트를 반복 측정해야 한다.
-              </p>
-            </details>
+            {(ko
+              ? [
+                  [
+                    "이 용어는 SEO와 같은 의미인가?",
+                    "서로 연결되어 있지만 동일하지 않다. SEO는 검색엔진 결과를, GEO와 AEO는 AI·답변형 검색에서 정보가 선택되고 제시되는 과정을 더 직접적으로 다룬다.",
+                  ],
+                  [
+                    "한 번의 검색 결과로 노출 여부를 판단해도 되는가?",
+                    "어렵다. 질문 표현, AI 서비스, 모델, 시점에 따라 답변이 달라질 수 있으므로 동일한 질문 세트를 반복 측정해야 한다.",
+                  ],
+                ]
+              : EN_FAQS
+            ).map(([question, answer]) => (
+              <details className="py-4" key={question}>
+                <summary className="cursor-pointer font-medium">
+                  {question}
+                </summary>
+                <p className="mt-3 text-white/60 leading-7">{answer}</p>
+              </details>
+            ))}
           </div>
         </section>
         <p className="mt-16 border-white/10 border-t pt-6 text-sm text-white/45">
-          더 많은 측정 방법과 사례는{" "}
+          {ko
+            ? "더 많은 측정 방법과 사례는 "
+            : "For more measurement methods and case studies, visit "}
           <Link className="text-[#ff7a4d]" href={`${prefix}/insights`}>
-            Findable 인사이트
+            {ko ? "Findable 인사이트" : "Findable insights"}
           </Link>
-          에서 확인할 수 있다.
+          {ko ? "에서 확인할 수 있다." : "."}
         </p>
       </article>
       <FooterCTA locale={locale} />

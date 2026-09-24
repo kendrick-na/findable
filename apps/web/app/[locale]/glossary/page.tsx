@@ -31,11 +31,45 @@ const TERMS = [
   },
 ] as const;
 
+const EN_TERMS = [
+  {
+    slug: "seo",
+    title: "What is SEO?",
+    description:
+      "The basics of helping search engines discover and understand your pages.",
+  },
+  {
+    slug: "geo",
+    title: "What is GEO?",
+    description:
+      "How brands and content are found, described, and cited in generative AI answers.",
+  },
+  {
+    slug: "aeo",
+    title: "What is AEO?",
+    description:
+      "How to make content useful as a direct answer to a searcher's question.",
+  },
+  {
+    slug: "ai-search-visibility",
+    title: "What is AI search visibility?",
+    description:
+      "A way to observe when and how AI answers mention, describe, or cite a brand.",
+  },
+] as const;
+
 const COMPARISON = [
   ["SEO", "검색 결과", "페이지 순위·클릭·오가닉 트래픽"],
   ["AEO", "질문 답변", "질문 의도에 맞는 직접 답변 채택"],
   ["GEO", "생성형 AI", "브랜드 언급·설명·출처 인용"],
   ["AI 검색 가시성", "AI 답변", "질문별 노출과 답변 품질의 관찰 지표"],
+] as const;
+
+const EN_COMPARISON = [
+  ["SEO", "Search results", "Page visibility, clicks, and organic traffic"],
+  ["AEO", "Direct answers", "Selection as a relevant answer to a question"],
+  ["GEO", "Generative AI answers", "Brand mentions, descriptions, and citations"],
+  ["AI search visibility", "AI answers", "Visibility and answer quality by question"],
 ] as const;
 
 const FAQS = [
@@ -51,6 +85,35 @@ const FAQS = [
     "검색·AI 가이드가 검색 노출에 도움이 되나요?",
     "명확한 정의, 관련 용어 간 연결, 실제 질문에 답하는 문장을 제공하면 검색엔진과 답변 엔진이 주제를 이해하는 데 도움이 됩니다. 결과를 보장하는 방식은 아닙니다.",
   ],
+] as const;
+
+const EN_FAQS = [
+  [
+    "How are SEO and GEO different?",
+    "SEO addresses visibility and clicks in search results. GEO examines brand mentions and source citations in generative AI answers. The same content may perform differently across the two channels.",
+  ],
+  [
+    "How do you measure GEO?",
+    "Start with questions customers actually ask. Collect answers repeatedly across AI services, then compare brand mention rates, description accuracy, and cited sources.",
+  ],
+  [
+    "Will a search and AI glossary improve rankings?",
+    "Clear definitions, links between related terms, and direct answers can help search and answer engines understand a topic. They do not guarantee visibility or rankings.",
+  ],
+] as const;
+
+const QUESTIONS = [
+  ["SEO와 GEO의 차이는 무엇인가요?", "geo"],
+  ["AI 검색에 브랜드가 인용되지 않는 이유는?", "ai-search-visibility"],
+  ["AEO는 어떻게 시작하나요?", "aeo"],
+  ["검색 노출과 AI 노출을 어떻게 함께 측정하나요?", "seo"],
+] as const;
+
+const EN_QUESTIONS = [
+  ["How are SEO and GEO different?", "geo"],
+  ["Why isn't my brand cited in AI answers?", "ai-search-visibility"],
+  ["How do I get started with AEO?", "aeo"],
+  ["How do I measure search and AI visibility together?", "seo"],
 ] as const;
 
 export async function generateMetadata({
@@ -80,6 +143,10 @@ export default async function GlossaryPage({
   const { locale } = await params;
   const ko = locale.startsWith("ko");
   const prefix = ko ? "/ko" : "/en";
+  const terms = ko ? TERMS : EN_TERMS;
+  const comparison = ko ? COMPARISON : EN_COMPARISON;
+  const faqs = ko ? FAQS : EN_FAQS;
+  const questions = ko ? QUESTIONS : EN_QUESTIONS;
 
   return (
     <main className="min-h-screen bg-[#0b0c0d] text-[#f4f1e8]">
@@ -97,7 +164,7 @@ export default async function GlossaryPage({
             : "SEO, GEO, AEO and AI search visibility explained through real questions, comparisons, measurement, and action steps."}
         </p>
         <div className="mt-14 grid gap-4 sm:grid-cols-2">
-          {TERMS.map((term) => (
+          {terms.map((term) => (
             <Link
               className="rounded-sm border border-white/10 p-6 transition-colors hover:border-[#ff7a4d]"
               href={`${prefix}/glossary/${term.slug}`}
@@ -120,15 +187,7 @@ export default async function GlossaryPage({
               : "Start with practical questions about search rankings and AI answer visibility."}
           </p>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
-            {[
-              ["SEO와 GEO의 차이는 무엇인가요?", "geo"],
-              [
-                "AI 검색에 브랜드가 인용되지 않는 이유는?",
-                "ai-search-visibility",
-              ],
-              ["AEO는 어떻게 시작하나요?", "aeo"],
-              ["검색 노출과 AI 노출을 어떻게 함께 측정하나요?", "seo"],
-            ].map(([question, slug]) => (
+            {questions.map(([question, slug]) => (
               <Link
                 className="border border-white/10 p-5 text-sm text-white/75 transition-colors hover:border-[#ff7a4d] hover:text-white"
                 href={`${prefix}/glossary/${slug}`}
@@ -140,22 +199,25 @@ export default async function GlossaryPage({
           </div>
         </section>
         <section className="mt-20">
-          <h2 className="font-semibold text-2xl">SEO·AEO·GEO 한눈에 비교</h2>
+          <h2 className="font-semibold text-2xl">
+            {ko ? "SEO·AEO·GEO 한눈에 비교" : "SEO, AEO, and GEO at a glance"}
+          </h2>
           <p className="mt-3 max-w-2xl text-sm text-white/55 leading-6">
-            최적화 대상과 측정 지표가 다르므로, 하나의 순위로 모든 검색 노출을
-            판단하면 안 됩니다.
+            {ko
+              ? "최적화 대상과 측정 지표가 다르므로, 하나의 순위로 모든 검색 노출을 판단하면 안 됩니다."
+              : "Each discipline has a different surface and set of metrics. No single ranking captures all search visibility."}
           </p>
           <div className="mt-6 overflow-x-auto border border-white/10">
             <table className="w-full min-w-[620px] text-left text-sm">
               <thead className="bg-white/[0.04] text-white/60">
                 <tr>
-                  <th className="px-4 py-3">개념</th>
-                  <th className="px-4 py-3">주요 표면</th>
-                  <th className="px-4 py-3">핵심 관찰 지표</th>
+                  <th className="px-4 py-3">{ko ? "개념" : "Concept"}</th>
+                  <th className="px-4 py-3">{ko ? "주요 표면" : "Primary surface"}</th>
+                  <th className="px-4 py-3">{ko ? "핵심 관찰 지표" : "Key metrics"}</th>
                 </tr>
               </thead>
               <tbody>
-                {COMPARISON.map(([term, surface, metric]) => (
+                {comparison.map(([term, surface, metric]) => (
                   <tr className="border-t border-white/10" key={term}>
                     <th className="px-4 py-4 font-medium">{term}</th>
                     <td className="px-4 py-4 text-white/65">{surface}</td>
@@ -167,9 +229,11 @@ export default async function GlossaryPage({
           </div>
         </section>
         <section className="mt-20">
-          <h2 className="font-semibold text-2xl">자주 묻는 질문</h2>
+          <h2 className="font-semibold text-2xl">
+            {ko ? "자주 묻는 질문" : "Frequently asked questions"}
+          </h2>
           <div className="mt-6 space-y-3">
-            {FAQS.map(([question, answer]) => (
+            {faqs.map(([question, answer]) => (
               <details className="border border-white/10 p-5" key={question}>
                 <summary className="cursor-pointer font-medium">
                   {question}
@@ -180,13 +244,15 @@ export default async function GlossaryPage({
           </div>
         </section>
         <section className="mt-20 border-t border-white/10 pt-8">
-          <p className="text-sm text-white/45">더 자세히 읽기</p>
+          <p className="text-sm text-white/45">
+            {ko ? "더 자세히 읽기" : "Read more"}
+          </p>
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
             <Link
               className="text-[#ff7a4d] hover:underline"
               href={`${prefix}/insights`}
             >
-              Findable 인사이트
+              {ko ? "Findable 인사이트" : "Findable insights"}
             </Link>
           </div>
         </section>
@@ -201,7 +267,7 @@ export default async function GlossaryPage({
           code={{
             "@context": "https://schema.org",
             "@type": "FAQPage",
-            mainEntity: FAQS.map(([question, answer]) => ({
+            mainEntity: faqs.map(([question, answer]) => ({
               "@type": "Question",
               name: question,
               acceptedAnswer: { "@type": "Answer", text: answer },

@@ -29,6 +29,8 @@ import { PublicLandingHeader } from "../../components/public-landing-header";
 
 const DESCRIPTION =
   "한국어 GEO 측정 공개 데이터셋. K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트 = 140 측정 응답. CC BY 4.0.";
+const EN_DESCRIPTION =
+  "An open dataset for Korean-language GEO measurement: five K-beauty brands, seven AI engines, four prompts, and 140 measured responses. CC BY 4.0.";
 const PATHNAME = "/research/k-geo-bench-v0_1";
 const SITE_URL = "https://www.findable.co.kr";
 const canonicalFor = (locale: string) =>
@@ -46,10 +48,13 @@ export const generateMetadata = async ({
   params: Promise<{ locale: string }>;
 }) => {
   const { locale } = await params;
+  const ko = locale.startsWith("ko");
   return createMetadata({
-    title: "K-GEO-Bench v0.1 · Korean GEO Open Dataset",
-    description: DESCRIPTION,
-    locale: locale.startsWith("ko") ? "ko" : "en",
+    title: ko
+      ? "K-GEO-Bench v0.1 · Korean GEO Open Dataset"
+      : "K-GEO-Bench v0.1 | Open Korean GEO Dataset",
+    description: ko ? DESCRIPTION : EN_DESCRIPTION,
+    locale: ko ? "ko" : "en",
     pathname: PATHNAME,
   });
 };
@@ -106,6 +111,14 @@ const BRAND_SUMMARY = [
   },
 ];
 
+const EN_BRAND_SUMMARY = [
+  { name: "Medicube", category: "Dermocosmetics" },
+  { name: "Round Lab", category: "Clean skincare" },
+  { name: "Anua", category: "Soothing and sensitive skin" },
+  { name: "Beauty of Joseon", category: "Heritage-inspired skincare" },
+  { name: "d'Alba", category: "Global D2C" },
+] as const;
+
 const FINDINGS = [
   {
     title: "K-뷰티 카테고리는 한국어·영문 AI 모두에서 강세",
@@ -124,12 +137,32 @@ const FINDINGS = [
   },
 ];
 
+const EN_FINDINGS = [
+  {
+    title: "K-beauty brands appeared in both Korean and global AI answers",
+    detail:
+      "The five brands averaged 93.2/100 in Share of Voice (SoV). Brand mentions were observed in responses from four global engines (ChatGPT, Claude, Perplexity, and Gemini) and two Korean engines (HyperCLOVA X and Naver). This sample does not establish why they appeared.",
+  },
+  {
+    title: "Daum had the lowest average mention rate in this sample",
+    detail:
+      "Daum mentioned the five brands in 55% of measured answers on average, below the other engines measured. Anua reached 75%, showing variation by brand. The dataset alone cannot establish the cause.",
+  },
+  {
+    title: "Anua recorded the highest SoV among the five brands",
+    detail:
+      "Anua scored 96/100 in this sample. Identifying whether distribution, reviews, or web documents influenced the result would require source analysis and repeated measurements.",
+  },
+] as const;
+
 export default async function KGeoBenchPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const ko = locale.startsWith("ko");
+  const prefix = ko ? "/ko" : "/en";
   const CANONICAL = canonicalFor(locale);
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
@@ -139,10 +172,10 @@ export default async function KGeoBenchPage({
           "@context": "https://schema.org",
           "@type": "Dataset",
           name: "K-GEO-Bench v0.1",
-          description: DESCRIPTION,
+          description: ko ? DESCRIPTION : EN_DESCRIPTION,
           url: CANONICAL,
           datePublished: "2026-05-08",
-          inLanguage: "ko",
+          inLanguage: ko ? "ko" : "en",
           license: "https://creativecommons.org/licenses/by/4.0/",
           creator: { "@type": "Organization", name: "Findable", url: SITE_URL },
           distribution: [
@@ -184,16 +217,18 @@ export default async function KGeoBenchPage({
             K-GEO-Bench v0.1
             <br />
             <span className="text-[var(--findable-primary)]">
-              한국어 GEO 측정 공개 데이터셋
+              {ko
+                ? "한국어 GEO 측정 공개 데이터셋"
+                : "Open dataset for Korean-language GEO"}
             </span>
           </h1>
           <p
             className="max-w-2xl text-[18px] text-[var(--findable-ink-muted)] leading-[1.6]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
-            K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트로 수집한 140개 측정 응답입니다.
-            한국어 AI 검색 가시성을 재현하고 비교할 수 있도록 측정 결과와 조건을
-            공개합니다.
+            {ko
+              ? "K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트로 수집한 140개 측정 응답입니다. 한국어 AI 검색 가시성을 재현하고 비교할 수 있도록 측정 결과와 조건을 공개합니다."
+              : "This dataset contains 140 measured responses across five K-beauty brands, seven AI engines, and four prompts. We publish the results and measurement conditions so others can reproduce and compare Korean-language AI search visibility."}
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -205,7 +240,7 @@ export default async function KGeoBenchPage({
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               <Download className="h-4 w-4" />
-              JSONL 다운로드 (17 KB)
+              {ko ? "JSONL 다운로드 (17 KB)" : "Download JSONL (17 KB)"}
             </Link>
             <Link
               className="inline-flex items-center gap-2 rounded-md border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-ink)] transition hover:border-[var(--findable-primary)]/40"
@@ -215,7 +250,7 @@ export default async function KGeoBenchPage({
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               <FileJson className="h-4 w-4" />
-              JSON 다운로드 (31 KB)
+              {ko ? "JSON 다운로드 (31 KB)" : "Download JSON (31 KB)"}
             </Link>
           </div>
         </div>
@@ -310,13 +345,15 @@ export default async function KGeoBenchPage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            5 brands across K-뷰티 categories.
+            {ko
+              ? "5 brands across K-뷰티 categories."
+              : "Five brands across K-beauty categories."}
           </h2>
           <div className="space-y-2">
-            {BRAND_SUMMARY.map((b) => (
+            {BRAND_SUMMARY.map((b, index) => (
               <Link
                 className="group flex items-center justify-between gap-4 rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-4 transition hover:border-[var(--findable-primary)]/40"
-                href={`/ko/audit/${b.jobId}`}
+                href={`${prefix}/audit/${b.jobId}`}
                 key={b.slug}
               >
                 <div className="flex items-center gap-4">
@@ -324,13 +361,15 @@ export default async function KGeoBenchPage({
                     className="font-medium text-[16px]"
                     style={{ fontFamily: "var(--findable-font-sans)" }}
                   >
-                    {b.name}
+                    {ko ? b.name : EN_BRAND_SUMMARY[index].name}
                   </span>
                   <span
                     className="text-[12px] text-[var(--findable-ink-tertiary)]"
                     style={{ fontFamily: "var(--findable-font-mono)" }}
                   >
-                    {b.category}
+                    {ko
+                      ? b.category
+                      : EN_BRAND_SUMMARY[index].category}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -358,10 +397,12 @@ export default async function KGeoBenchPage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            5사 측정에서 보이는 한국어 GEO 패턴.
+            {ko
+              ? "5사 측정에서 보이는 한국어 GEO 패턴."
+              : "What five brands reveal about Korean-language GEO."}
           </h2>
           <div className="space-y-4">
-            {FINDINGS.map((f, i) => (
+            {(ko ? FINDINGS : EN_FINDINGS).map((f, i) => (
               <article
                 className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6"
                 key={f.title}
@@ -400,7 +441,9 @@ export default async function KGeoBenchPage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            CC BY 4.0. 자유 활용·재배포 가능, 출처 표기 필수.
+            {ko
+              ? "CC BY 4.0. 자유 활용·재배포 가능, 출처 표기 필수."
+              : "CC BY 4.0. Reuse and redistribution are allowed with attribution."}
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             <article className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6">
@@ -410,16 +453,16 @@ export default async function KGeoBenchPage({
                   className="font-medium text-[16px]"
                   style={{ fontFamily: "var(--findable-font-sans)" }}
                 >
-                  연구용 활용
+                  {ko ? "연구용 활용" : "Research use"}
                 </h3>
               </div>
               <p
                 className="text-[14px] text-[var(--findable-ink-muted)] leading-relaxed"
                 style={{ fontFamily: "var(--findable-font-sans)" }}
               >
-                한국어 LLM 평가, GEO 방법 검토, K-뷰티 산업 분석에 활용할 수
-                있습니다. 필드 정의와 측정 조건은 내려받은 파일에서 확인할 수
-                있습니다.
+                {ko
+                  ? "한국어 LLM 평가, GEO 방법 검토, K-뷰티 산업 분석에 활용할 수 있습니다. 필드 정의와 측정 조건은 내려받은 파일에서 확인할 수 있습니다."
+                  : "Use the dataset to evaluate Korean-language LLMs, examine GEO methods, or analyze K-beauty. Field definitions and measurement conditions are included in the downloadable files."}
               </p>
             </article>
             <article className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6">
@@ -429,16 +472,16 @@ export default async function KGeoBenchPage({
                   className="font-medium text-[16px]"
                   style={{ fontFamily: "var(--findable-font-sans)" }}
                 >
-                  로드맵 (v0.2~v1.0)
+                  {ko ? "로드맵 (v0.2~v1.0)" : "Roadmap (v0.2–v1.0)"}
                 </h3>
               </div>
               <p
                 className="text-[14px] text-[var(--findable-ink-muted)] leading-relaxed"
                 style={{ fontFamily: "var(--findable-font-sans)" }}
               >
-                인큐베이팅 6개월 동안 K-뷰티 50사 → v0.5 (2026.09).
-                K-뷰티·K-패션·K-콘텐츠 200사 → v1.0 (2026.12). 네이버 R&D 공동
-                발표 검토.
+                {ko
+                  ? "인큐베이팅 6개월 동안 K-뷰티 50사 → v0.5 (2026.09). K-뷰티·K-패션·K-콘텐츠 200사 → v1.0 (2026.12). 네이버 R&D 공동 발표 검토."
+                  : "Planned expansion: 50 K-beauty brands in v0.5 (September 2026), then 200 brands across K-beauty, K-fashion, and K-content in v1.0 (December 2026). A joint R&D publication with Naver is under consideration; it is not confirmed."}
               </p>
             </article>
           </div>
@@ -453,16 +496,16 @@ export default async function KGeoBenchPage({
               className="max-w-2xl font-medium text-[28px] leading-tight tracking-tight md:text-[40px]"
               style={{ fontFamily: "var(--findable-font-display)" }}
             >
-              한국어 GEO의 출발선,
+              {ko ? "한국어 GEO의 출발선," : "A starting point for Korean-language GEO."}
               <br />
-              지금 같이 만듭니다.
+              {ko ? "지금 같이 만듭니다." : "Help build the next dataset."}
             </h2>
             <Link
               className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
-              href="/ko/audit"
+              href={`${prefix}/audit`}
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
-              우리 브랜드 측정 추가
+              {ko ? "우리 브랜드 측정 추가" : "Measure your brand"}
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>

@@ -2,7 +2,7 @@
 //
 // 정직성 룰:
 //   - 측정 결과 = 모두 실측 jobId (5/6~5/8 라이브 측정)
-//   - "After" 시뮬레이션 = Princeton KDD'24 GEO-Bench 논문의 visibility +40% 검증치 기반
+//   - "After" 시뮬레이션 = Princeton KDD'24 GEO-Bench 논문의 전략별 실험값과 별도 검증 과제
 //   - "베타 고객" "운영" "도입" 같은 단어 절대 사용 금지
 //   - 측정 대상은 모두 공개 K-뷰티 D2C 브랜드 (Profound·Athena·Ahrefs 표준 패턴)
 //   - "시뮬레이션" 명시 워터마크 5곳
@@ -33,11 +33,15 @@ export const generateMetadata = async ({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> => {
   const { locale } = await params;
+  const ko = locale.startsWith("ko");
   return createMetadata({
-    title: "K-뷰티 5사 AI 가시성 시뮬레이션 · Findable Case Study",
-    description:
-      "메디큐브·라운드랩·아누아·조선미녀·달바 5사의 7 AI 엔진 실측 데이터 + Princeton GEO 알고리즘 시뮬레이션. AI 시대 K-뷰티 가시성 분석.",
-    locale: locale.startsWith("ko") ? "ko" : "en",
+    title: ko
+      ? "K-뷰티 5사 AI 가시성 시뮬레이션 · Findable Case Study"
+      : "K-Beauty AI Search Visibility Simulation | Findable",
+    description: ko
+      ? "메디큐브·라운드랩·아누아·조선미녀·달바 5사의 7 AI 엔진 실측 데이터 + Princeton GEO 알고리즘 시뮬레이션. AI 시대 K-뷰티 가시성 분석."
+      : "Observed AI search visibility for five K-beauty brands across seven engines, with a separately labeled simulation based on published GEO research.",
+    locale: ko ? "ko" : "en",
     pathname: "/case/a-brand",
   });
 };
@@ -138,43 +142,71 @@ const FINDINGS = [
   },
 ];
 
+const EN_FINDINGS = [
+  {
+    title: "Global engines mentioned Medicube and Round Lab in all four tested prompts",
+    detail: "Across the measured prompts, the four global engines—ChatGPT, Claude, Perplexity, and Gemini—mentioned Medicube and Round Lab in 4/4 answers. This observation does not establish why those brands appeared.",
+    severity: "green" as const,
+  },
+  {
+    title: "Daum mentioned Medicube and Round Lab in two of four prompts",
+    detail: "For both brands, Daum mentioned the brand in 2/4 tested prompts. The result shows a gap in this sample, but does not establish that Daum's index caused it.",
+    severity: "amber" as const,
+  },
+  {
+    title: "HyperCLOVA X mentioned both brands in four of four prompts",
+    detail: "Medicube and Round Lab appeared in all four tested HyperCLOVA X responses. This result is limited to the questions and dates measured; it is not a category-wide claim.",
+    severity: "green" as const,
+  },
+] as const;
+
 const SIMULATION_STRATEGIES = [
   {
     code: "S1",
     name: "Cite Sources",
-    impact: "+40%",
-    source: "Princeton KDD'24 GEO-Bench 검증",
+    impact: "+27%",
+    source: "Princeton KDD'24 GEO-Bench 영문 실험 평균",
     body: "브랜드 페이지에 표준 인용 형식 도입. AI가 신뢰 가능한 출처로 인식.",
   },
   {
     code: "S2",
     name: "Quotation Inclusion",
-    impact: "+40%",
-    source: "Princeton KDD'24 검증",
+    impact: "+41%",
+    source: "Princeton KDD'24 GEO-Bench 영문 실험 평균",
     body: "전문가 인용·고객 후기를 직접 인용 형태로 콘텐츠에 삽입.",
   },
   {
     code: "S3",
     name: "Statistics & Data",
-    impact: "+40%",
-    source: "Princeton KDD'24 검증",
+    impact: "+31%",
+    source: "Princeton KDD'24 GEO-Bench 영문 실험 평균",
     body: "정량 통계·임상 데이터 노출. AI가 사실 기반 답변에 우선 인용.",
   },
   {
     code: "S4",
     name: "Korean Entity Grounding",
-    impact: "+25% (예상)",
-    source: "Findable 독자 알고리즘",
+    impact: "검증 필요",
+    source: "Findable 가설 · 효과 미검증",
     body: "한·영·혼용 표기 변형 통합 추적 → 인용 누락 방지. 인큐베이팅 6개월 내 검증.",
   },
   {
     code: "S5",
     name: "AI 브리핑 최적화",
-    impact: "+30% (예상)",
-    source: "Findable 독자 알고리즘",
+    impact: "검증 필요",
+    source: "Findable 가설 · 효과 미검증",
     body: "네이버 AI 브리핑 영역 진입 콘텐츠 최적화. 검색 점유율 20%→40% 확대 영역.",
   },
 ];
+
+const EN_SIMULATION_STRATEGIES = [
+  { code: "S1", name: "Cite Sources", impact: "+27%", source: "Mean relative change in Princeton's English-language experiment", body: "Add clear references to original sources on brand pages so claims can be checked." },
+  { code: "S2", name: "Quotation Inclusion", impact: "+41%", source: "Mean relative change in Princeton's English-language experiment", body: "Use attributed expert statements or customer reviews where appropriate and verifiable." },
+  { code: "S3", name: "Statistics & Data", impact: "+31%", source: "Mean relative change in Princeton's English-language experiment", body: "Present sourced statistics and measured data rather than unsupported claims." },
+  { code: "S4", name: "Korean Entity Grounding", impact: "To validate", source: "Findable hypothesis; effect not yet measured", body: "Track Korean, English, and mixed-script brand names together to reduce missed mentions." },
+  { code: "S5", name: "AI Briefing Visibility", impact: "To validate", source: "Findable hypothesis; effect not yet measured", body: "Test changes intended to improve visibility in Naver AI Briefing separately." },
+] as const;
+
+const EN_BRAND_NAMES = ["Medicube", "Round Lab", "Anua", "Beauty of Joseon", "d'Alba"] as const;
 
 function severityClass(s: "green" | "amber" | "red") {
   if (s === "green") {
@@ -202,6 +234,8 @@ export default async function ABrandCasePage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const ko = locale.startsWith("ko");
+  const prefix = ko ? "/ko" : "/en";
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
       <PublicLandingHeader locale={locale} />
@@ -219,27 +253,28 @@ export default async function ABrandCasePage({
               className="text-[12px] text-[var(--findable-ink-muted)]"
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
-              한국 K-뷰티 D2C 5사 · 7 AI 엔진 실측 + 시뮬레이션
+              {ko
+                ? "한국 K-뷰티 D2C 5사 · 7 AI 엔진 실측 + 시뮬레이션"
+                : "Five K-beauty D2C brands · Seven AI engines · Measured results and simulation"}
             </span>
           </div>
           <h1
             className="mb-6 font-medium text-[40px] leading-[1.1] tracking-tight md:text-[56px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            K-뷰티 5사가
+            {ko ? "K-뷰티 5사가" : "Five K-beauty brands"}
             <br />
             <span className="text-[var(--findable-primary)]">
-              AI 답변 속 가시성을 재배치하면.
+              {ko ? "AI 답변 속 가시성을 재배치하면." : "and their visibility in AI answers."}
             </span>
           </h1>
           <p
             className="max-w-2xl text-[18px] text-[var(--findable-ink-muted)] leading-[1.6]"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
-            메디큐브·라운드랩·아누아·조선미녀·달바 5사의
-            ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X·네이버·다음 7 AI 엔진
-            실측 데이터를 기반으로, Princeton KDD&apos;24 GEO 알고리즘을
-            적용했을 때 예상되는 변화를 정리한 산업 분석 리포트입니다.
+            {ko
+              ? "메디큐브·라운드랩·아누아·조선미녀·달바 5사의 ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X·네이버·다음 7 AI 엔진 실측 데이터를 기반으로, Princeton KDD'24 GEO 알고리즘을 적용했을 때 예상되는 변화를 정리한 산업 분석 리포트입니다."
+              : "This case study separates observed responses for Medicube, Round Lab, Anua, Beauty of Joseon, and d'Alba across seven AI engines from a projected scenario informed by Princeton's KDD '24 GEO research."}
           </p>
           <div
             className="mt-6 inline-flex items-start gap-2 rounded-md border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] px-3 py-2 text-[12px] text-[var(--findable-ink-muted)]"
@@ -248,15 +283,15 @@ export default async function ABrandCasePage({
             <Info aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               <strong className="text-[var(--findable-ink)]">
-                정직성 안내:
+                {ko ? "정직성 안내:" : "Methodology note:"}
               </strong>{" "}
-              5사는 모두 공개 K-뷰티 D2C 브랜드이며 Findable 고객이 아닙니다.
-              측정은 공개 LLM 답변에 대한 외부 분석으로, GEO 업계 표준
-              패턴(Profound·Athena·Ahrefs 동일)입니다. After 시뮬레이션은 학술
-              검증치 기반의 예상값으로, 실측이 아닙니다.{" "}
+              {ko
+                ? "5사는 모두 공개 K-뷰티 D2C 브랜드이며 Findable 고객이 아닙니다. 측정은 공개 LLM 답변에 대한 외부 분석으로, GEO 업계 표준 패턴(Profound·Athena·Ahrefs 동일)입니다. After 시뮬레이션은 학술 검증치 기반의 예상값으로, 실측이 아닙니다. "
+                : "All five are public K-beauty D2C brands, not Findable customers. The measurements analyze public AI answers. The after scenario is a projection informed by academic research, not a measured outcome. "}
               <strong className="text-[var(--findable-ink)]">
-                수치는 공개 데이터셋(k-geo-bench v0.1)의 job_id 기준이며, 아래
-                「실측 발견」은 메디큐브·라운드랩 2사 측정에서 도출했습니다.
+                {ko
+                  ? "수치는 공개 데이터셋(k-geo-bench v0.1)의 job_id 기준이며, 아래 「실측 발견」은 메디큐브·라운드랩 2사 측정에서 도출했습니다."
+                  : "Figures are tied to job IDs in the public K-GEO-Bench v0.1 dataset. The findings below are drawn from the Medicube and Round Lab measurements."}
               </strong>
             </span>
           </div>
@@ -276,7 +311,9 @@ export default async function ABrandCasePage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            5사, 7 엔진, 4 프롬프트, 28회 라이브 측정.
+            {ko
+              ? "5사, 7 엔진, 4 프롬프트, 28회 라이브 측정."
+              : "Five brands, seven engines, four prompts, 28 live runs."}
           </h2>
           {/* 🔴 2026-08-16 — 세션N-32가 여기에 "3사는 인용 0건" 이라고 적었으나
               **없는 사실이었다.** 페이지 데이터의 `sov:0` 을 그대로 믿고 쓴 것인데,
@@ -287,17 +324,23 @@ export default async function ABrandCasePage({
             className="mb-8 max-w-3xl text-[14px] text-[var(--findable-ink-muted)] leading-relaxed"
             style={{ wordBreak: "keep-all" }}
           >
-            5사 모두 글로벌 엔진에서는 안정적으로 인용됐지만,{" "}
+            {ko
+              ? "5사 모두 글로벌 엔진에서는 안정적으로 인용됐지만, "
+              : "All five brands appeared consistently in global-engine responses, while "}
             <strong className="text-[var(--findable-ink)]">
-              한국 엔진(특히 다음)에서는 15~54%로 갈렸습니다
+              {ko
+                ? "한국 엔진(특히 다음)에서는 15~54%로 갈렸습니다"
+                : "Daum results varied by brand"}
             </strong>
-            . 같은 브랜드가 어디서 답해지느냐에 따라 달라진다는 뜻입니다.
+            {ko
+              ? ". 같은 브랜드가 어디서 답해지느냐에 따라 달라진다는 뜻입니다."
+              : ". Where an answer comes from changes what users see."}
           </p>
           <div className="grid gap-3 md:grid-cols-2">
-            {BRANDS.map((b) => (
+            {BRANDS.map((b, index) => (
               <Link
                 className="group flex items-start justify-between gap-4 rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-5 transition hover:border-[var(--findable-primary)]/40"
-                href={`/ko/audit/${b.jobId}`}
+                href={`${prefix}/audit/${b.jobId}`}
                 key={b.jobId}
               >
                 <div className="flex flex-col gap-1">
@@ -305,7 +348,7 @@ export default async function ABrandCasePage({
                     className="font-medium text-[16px]"
                     style={{ fontFamily: "var(--findable-font-sans)" }}
                   >
-                    {b.name}
+                    {ko ? b.name : EN_BRAND_NAMES[index]}
                   </span>
                   <span
                     className="text-[12px] text-[var(--findable-ink-muted)]"
@@ -317,7 +360,7 @@ export default async function ABrandCasePage({
                     className="text-[11px] text-[var(--findable-ink-tertiary)]"
                     style={{ fontFamily: "var(--findable-font-mono)" }}
                   >
-                    측정일 {b.measuredAt} · SoV {b.sov}
+                    {ko ? "측정일" : "Measured"} {b.measuredAt} · SoV {b.sov}
                   </span>
                 </div>
                 <ExternalLink className="h-4 w-4 text-[var(--findable-ink-muted)] transition group-hover:text-[var(--findable-primary)]" />
@@ -338,17 +381,17 @@ export default async function ABrandCasePage({
               2.0 · Before · Live Findings
             </span>
             <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-[10px] text-emerald-600 uppercase tracking-[0.12em]">
-              실측
+              {ko ? "실측" : "Observed"}
             </span>
           </div>
           <h2
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            지금 K-뷰티 5사는 어디에 있나.
+            {ko ? "지금 K-뷰티 5사는 어디에 있나." : "Where did these brands appear?"}
           </h2>
           <div className="space-y-4">
-            {FINDINGS.map((f) => (
+            {(ko ? FINDINGS : EN_FINDINGS).map((f) => (
               <article
                 className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6"
                 key={f.title}
@@ -389,27 +432,30 @@ export default async function ABrandCasePage({
               3.0 · After · Projected Impact
             </span>
             <span className="rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-[10px] text-amber-600 uppercase tracking-[0.12em]">
-              시뮬레이션
+              {ko ? "시뮬레이션" : "Simulation"}
             </span>
           </div>
           <h2
             className="mb-4 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            Princeton GEO 알고리즘을 적용하면.
+            {ko
+              ? "Princeton GEO 알고리즘을 적용하면."
+              : "What published GEO methods might change."}
           </h2>
           <div
             className="mb-8 rounded-md border border-amber-500/30 bg-amber-500/5 p-4 text-[13px] text-[var(--findable-ink-muted)] leading-relaxed"
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
-            <strong className="text-amber-600">⚠ 시뮬레이션 안내.</strong> 아래
-            5 전략의 영향 수치(+40%, +25%, +30%)는 Princeton KDD&apos;24
-            GEO-Bench 학술 논문 검증치(영문 환경) 또는 Findable의 한국어 환경
-            추정치입니다. 실제 적용 결과는 인큐베이팅 6개월 동안 50사로 확장하며
-            종단 검증할 예정입니다.
+            <strong className="text-amber-600">
+              {ko ? "⚠ 시뮬레이션 안내." : "⚠ Simulation, not observed results."}
+            </strong>{" "}
+            {ko
+              ? "+27%·+41%·+31%는 Princeton KDD'24 GEO-Bench 영문 실험의 1차 지표 상대 향상 평균입니다. 이 페이지의 5개 브랜드에 적용한 실측 결과가 아니며 한국어 환경 성과를 보장하지 않습니다. 나머지 두 전략은 수치 예측이 아닌 후속 검증 과제입니다."
+              : "The +27%, +41%, and +31% figures are mean relative improvements in the primary metric reported by Princeton's English-language KDD '24 GEO-Bench experiments. They are not measured results for these five brands and do not predict outcomes in Korean. The other two methods are questions for future validation, not numerical forecasts."}
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            {SIMULATION_STRATEGIES.map((s) => (
+            {(ko ? SIMULATION_STRATEGIES : EN_SIMULATION_STRATEGIES).map((s) => (
               <article
                 className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6"
                 key={s.code}
@@ -457,16 +503,16 @@ export default async function ABrandCasePage({
               className="max-w-2xl font-medium text-[28px] leading-tight tracking-tight md:text-[40px]"
               style={{ fontFamily: "var(--findable-font-display)" }}
             >
-              우리 브랜드는 어디에 있을까.
+              {ko ? "우리 브랜드는 어디에 있을까." : "Where does your brand appear?"}
               <br />
-              3분이면 측정 끝.
+              {ko ? "3분이면 측정 끝." : "Check it in three minutes."}
             </h2>
             <Link
               className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
-              href="/ko/audit"
+              href={`${prefix}/audit`}
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
-              무료 진단 받기
+              {ko ? "무료 진단 받기" : "Check your brand"}
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>

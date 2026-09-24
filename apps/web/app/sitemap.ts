@@ -94,17 +94,17 @@ const STATIC_PATHS: readonly { lastModified: string; path: string }[] = [
   { path: "/pricing", lastModified: "2026-08-22" },
   { path: "/contact", lastModified: "2026-09-02" },
   { path: "/insights", lastModified: "2026-08-31" },
-  { path: "/glossary", lastModified: "2026-09-01" },
-  { path: "/glossary/seo", lastModified: "2026-08-31" },
-  { path: "/glossary/geo", lastModified: "2026-08-31" },
-  { path: "/glossary/aeo", lastModified: "2026-08-31" },
-  { path: "/glossary/ai-search-visibility", lastModified: "2026-08-31" },
+  { path: "/glossary", lastModified: "2026-09-25" },
+  { path: "/glossary/seo", lastModified: "2026-09-25" },
+  { path: "/glossary/geo", lastModified: "2026-09-25" },
+  { path: "/glossary/aeo", lastModified: "2026-09-25" },
+  { path: "/glossary/ai-search-visibility", lastModified: "2026-09-25" },
   // 🔴 2026-08-17 세션N-38 — `/synergy` 는 **페이지째 삭제**됐다(👤 *"필요 없어"*).
   //   N-34 는 *"제안 자산일 수 있어 색인만 끊는다"* 로 남겼으나, D2SF(5월 신청)가 끝났고
   //   진입 경로도 0 이라 유지 근거가 사라졌다. 백업만 남긴다.
-  { path: "/case/a-brand", lastModified: "2026-09-02" },
-  { path: "/report/k-beauty-geo-2026q2", lastModified: "2026-09-02" },
-  { path: "/research/k-geo-bench-v0_1", lastModified: "2026-09-02" },
+  { path: "/case/a-brand", lastModified: "2026-09-25" },
+  { path: "/report/k-beauty-geo-2026q2", lastModified: "2026-09-25" },
+  { path: "/research/k-geo-bench-v0_1", lastModified: "2026-09-25" },
   { path: "/legal/privacy", lastModified: "2026-09-02" },
   { path: "/legal/terms", lastModified: "2026-09-02" },
 ];
