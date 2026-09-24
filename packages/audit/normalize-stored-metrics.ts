@@ -73,10 +73,24 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
     errorMessage:
       typeof row.errorMessage === "string" ? row.errorMessage : null,
   }));
-  return {
+  const corrected = {
     ...result,
     metrics: { ...result.metrics, ...aggregateAudit(responses) },
-  } as T;
+  };
+  // Historical region scores were also built with the old aggregator, but the
+  // saved rows have no prompt-language tag to recompute them reliably.
+  if (
+    hasStaleAuditPdf(result, corrected) &&
+    Array.isArray(result.regions) &&
+    result.regions.length > 0
+  ) {
+    return {
+      ...corrected,
+      regions: undefined,
+      regionScoresOutdated: true,
+    } as T;
+  }
+  return corrected as T;
 }
 
 /** A generated PDF is immutable; don't offer it when its displayed metrics are stale. */

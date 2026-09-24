@@ -232,6 +232,7 @@ interface JobResult {
   metrics: JobMetrics;
   promptsCount: number;
   regions?: RegionScoreView[];
+  regionScoresOutdated?: boolean;
   /**
    * 고객이 등록한 경쟁사 — ⛔ **거르는 목록이 아니라 표기 병합 사전**(👤 승인 ⓐ).
    * 로그인 측정에만 있다(무료 진단은 `brandId` 가 없다) · 구 job 엔 없다 → optional.
@@ -1892,6 +1893,15 @@ function MarketRegionCards({
   //   Ahrefs·Peec·Otterly **전부 "필터"** 방식이다(선택한 시장만 보여줌). "통합 합산"을
   //   공개 방법론으로 발행하는 곳은 **업계에 없다** — 아래 both 분기가 그 공백을 채운다.
   const SHOW_MARKET_CARDS = true;
+  if (result.regionScoresOutdated) {
+    return (
+      <p className="mt-8 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-400">
+        {isKo
+          ? "이전 시장별 점수는 옛 계산 기준이라 표시하지 않습니다. 전체 점수는 원자료로 다시 계산했으며, 시장별 점수는 다음 측정부터 확인할 수 있어요."
+          : "Older market scores used a previous calculation and are hidden. The overall score was recalculated from raw responses; market scores resume with the next measurement."}
+      </p>
+    );
+  }
   const scope = result.marketScope ?? "both";
   const all = result.regions ?? [];
   // 구 job(regions 없음)은 아무것도 렌더하지 않는다 — 기존 화면 그대로(회귀 0).

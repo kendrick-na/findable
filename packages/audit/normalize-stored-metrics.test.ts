@@ -12,6 +12,7 @@ describe("saved audit metric normalization", () => {
         sov: 50,
         sentimentDistribution: { positive: 0, neutral: 3, negative: 0 },
       },
+      regions: [{ region: "korea", score: 99 }],
       engineResponses: [
         {
           engineId: "chatgpt",
@@ -53,6 +54,8 @@ describe("saved audit metric normalization", () => {
       { domain: "official.example", count: 1 },
     ]);
     expect(normalized.metrics.enginesCovered).toEqual(["chatgpt", "gemini"]);
+    expect(normalized).toMatchObject({ regionScoresOutdated: true });
+    expect(normalized.regions).toBeUndefined();
     expect(hasStaleAuditPdf(result, normalized)).toBe(true);
   });
 
