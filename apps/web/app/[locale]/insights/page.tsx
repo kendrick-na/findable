@@ -82,7 +82,7 @@ export default async function PublicInsightsPage({
     ? (query.type ?? "all")
     : "all";
   const search = query.q?.trim().slice(0, 80) ?? "";
-  const posts = await listPublishedContent(locale, undefined, {
+  const posts = await listPublishedContent(locale, "findable", {
     contentType: selectedType === "all" ? undefined : selectedType,
     query: search || undefined,
   });

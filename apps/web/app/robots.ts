@@ -50,8 +50,6 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
       ? `https://${requestHost}`
       : origin;
   const publicHost = new URL(publicOrigin).host;
-  const isFindableHost =
-    publicHost === "findable.co.kr" || publicHost === "www.findable.co.kr";
 
   // 🤖 **AI 크롤러를 이름으로 허용한다**(2026-09-02).
   //   [실측] 이전 robots.txt 에는 `User-Agent: *` 한 벌뿐이었다. 와일드카드로도 허용되지만,
@@ -119,14 +117,10 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         ],
       },
     ],
-    // 🔴 **뉴스 사이트맵은 우리 호스트에서만 알린다**(2026-09-02). 고객 커스텀 도메인에는
-    //   `/news-sitemap.xml` 라우트가 우리 글 목록을 돌려주므로, 그 호스트에서 광고하면
-    //   남의 도메인에 우리 기사 목록을 신고하게 된다.
-    //   ⚠️ `sitemap` 값은 **프로토콜·호스트를 포함한 절대 URL** 이어야 한다(구글 공식 스펙).
-    //      여러 줄 제출은 허용된다(상한 없음).
-    sitemap: isFindableHost
-      ? [`${publicOrigin}/sitemap.xml`, `${publicOrigin}/news-sitemap.xml`]
-      : `${publicOrigin}/sitemap.xml`,
+    // 뉴스 사이트맵은 최근 48시간 발행물이 없으면 빈 urlset 이 되어 Search Console 이
+    // "XML 태그 누락"으로 판정한다. 일반 사이트맵은 계속 광고하고, 뉴스 사이트맵은
+    // 실제 해당 기간의 뉴스 발행이 있을 때에만 별도로 제출한다.
+    sitemap: `${publicOrigin}/sitemap.xml`,
     // ⚠️ `host` 는 **구글이 지원하지 않는 필드**다(공식 스펙의 지원 목록 = user-agent·allow·
     //   disallow·sitemap). Yandex 계열 파서 호환용으로만 남기고, 값은 URL 이 아니라
     //   **호스트명**을 준다(이전 값 `https://…` 는 그 파서들에서도 무의미했다).

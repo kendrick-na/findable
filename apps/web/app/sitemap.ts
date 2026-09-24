@@ -87,7 +87,7 @@ const DEFAULT_LOCALE = "en";
  *     거짓 `lastmod` 는 없느니만 못하다(구글이 사이트 전체의 lastmod 를 불신하게 된다).
  */
 const STATIC_PATHS: readonly { lastModified: string; path: string }[] = [
-  { path: "/", lastModified: "2026-08-31" },
+  { path: "/", lastModified: "2026-09-25" },
   // 🟡 2026-08-19(👤 결정 A): 무료 진단은 **동선에서 뺐다**(랜딩 CTA → `/sign-up`).
   //   페이지는 남기므로 사이트맵에도 남긴다 — 다만 신규 유입 설계의 기준점은 아니다.
   { path: "/audit", lastModified: "2026-08-22" },
@@ -107,12 +107,6 @@ const STATIC_PATHS: readonly { lastModified: string; path: string }[] = [
   { path: "/research/k-geo-bench-v0_1", lastModified: "2026-09-02" },
   { path: "/legal/privacy", lastModified: "2026-09-02" },
   { path: "/legal/terms", lastModified: "2026-09-02" },
-];
-
-// This is an intentionally locale-neutral machine-readable endpoint.
-// ⚠️ 내용을 고치면 `lastModified` 도 함께 고친다(거짓 lastmod 는 없느니만 못하다).
-const ROOT_STATIC_PATHS: readonly { lastModified: string; path: string }[] = [
-  { path: "/ai-instructions", lastModified: "2026-09-02" },
 ];
 
 const TRAILING_SLASH_RE = /\/$/;
@@ -192,10 +186,6 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
   const staticEntries = STATIC_PATHS.flatMap((entry) =>
     entriesFor(entry.path, new Date(entry.lastModified))
   );
-  const rootStaticEntries = ROOT_STATIC_PATHS.map((entry) => ({
-    url: `${origin}${entry.path}`,
-    lastModified: new Date(entry.lastModified),
-  }));
   try {
     const posts = await listAllPublishedContentForDiscovery();
     // 🔴 커스텀 도메인으로 **정본을 넘긴 글은 제외**한다(2026-09-02). 그 글의 정규 URL 은
@@ -229,13 +219,12 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
     }));
     return [
       ...staticEntries,
-      ...rootStaticEntries,
       ...publisherEntries,
       ...postEntries,
     ];
   } catch {
     // 빌드·일시 DB 장애 때 정적 사이트맵 전체를 500으로 만들지 않는다.
-    return [...staticEntries, ...rootStaticEntries];
+    return staticEntries;
   }
 };
 

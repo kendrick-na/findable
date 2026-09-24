@@ -83,6 +83,7 @@ export async function GET(): Promise<Response> {
   const posts = (await listAllPublishedContentForDiscovery()).filter(
     (post) =>
       post.locale === "ko" &&
+      post.publisher.slug === "findable" &&
       post.publishedAt &&
       isCanonicalOnSite(post.publisher)
   );

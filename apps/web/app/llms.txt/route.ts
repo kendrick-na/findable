@@ -1,5 +1,6 @@
 import { env } from "@/env";
 import { listAllPublishedContentForDiscovery } from "@/lib/content";
+import { isCanonicalOnSite } from "@/lib/public-url";
 
 /**
  * `/llms.txt` — AI 엔진에게 이 사이트를 설명하는 표준 파일(llmstxt.org).
@@ -37,22 +38,23 @@ const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
 const origin = `${protocol}://${env.VERCEL_PROJECT_PRODUCTION_URL ?? "www.findable.co.kr"}`;
 
 // 실제로 200 을 주는 페이지만 싣는다(현재 EN 은 전량 `/ko` 로 리다이렉트된다).
-const baseBody = `# Findable
+const baseBody = `# 파인더블 (Findable)
 
 > 한국어 브랜드가 ChatGPT·Perplexity·Gemini·네이버 등 AI 답변에 얼마나, 어떻게 인용되는지 측정하고 개선하는 GEO(생성형엔진최적화) 도구입니다. 도메인만 입력하면 7개 AI 엔진을 병렬 호출해 3분 안에 결과를 제공합니다.
 
-Findable은 검색 순위(SEO)가 아니라 **AI 답변에서의 인용/등장(GEO·AEO)** 을 다룹니다.
-한국어 기업 정보는 대형 언어모델 학습 비중이 매우 낮아, 글로벌 GEO 도구가 놓치는
-한국어 표기 변형(영문 약칭·영문 정식명·한글명)을 자동으로 묶어 추적하는 것이 차별점입니다.
+검색 결과의 노출·클릭과 AI 답변의 언급·인용은 다른 지표입니다. 파인더블은
+AI 답변에서 브랜드가 등장한 방식과 인용 출처를 측정하고 개선 우선순위를 제안합니다.
+한글명·영문명 등 브랜드 표기 변형을 함께 추적합니다.
 
 측정 대상 엔진은 글로벌 4곳(ChatGPT·Claude·Perplexity·Gemini)과
-한국 3곳(HyperCLOVA·네이버·다음)입니다. 점유율은 Princeton GEO-Bench 산식을 따릅니다.
+한국 3곳(HyperCLOVA·네이버·다음)입니다.
 
 운영: 인디고차일드(대표 나현덕) · 사업자등록번호 534-15-01132
 
 ## 주요 페이지
 
 - [홈](${origin}/ko): 제품 개요와 4단계(측정·분석·추천·발행) 설명
+- [공식 사실 문서](${origin}/ai-instructions): 운영 주체, 제품 범위, 측정 지표와 공개 자료
 - [요금제](${origin}/ko/pricing): Free Audit · Starter · Growth · Scale · Enterprise
 - [문의](${origin}/ko/contact)
 
@@ -74,10 +76,13 @@ export async function GET(): Promise<Response> {
   let published = "";
   try {
     const posts = (await listAllPublishedContentForDiscovery()).filter(
-      (post) => post.locale === "ko"
+      (post) =>
+        post.locale === "ko" &&
+        post.publisher.slug === "findable" &&
+        isCanonicalOnSite(post.publisher)
     );
     if (posts.length > 0) {
-      published = `\n## 발행 인사이트\n\n- [전체 인사이트](${origin}/ko/insights): Findable과 고객사 퍼블리셔의 검증 콘텐츠\n${posts
+      published = `\n## 발행 인사이트\n\n- [전체 인사이트](${origin}/ko/insights): 파인더블 공식 발행 콘텐츠\n${posts
         .slice(0, 50)
         .map(
           (post) =>

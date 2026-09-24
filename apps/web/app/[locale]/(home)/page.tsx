@@ -103,13 +103,18 @@ const Home = async ({ params }: HomeProps) => {
         code={{
           "@context": "https://schema.org",
           "@type": "Organization",
+          "@id": `${siteOrigin}/#organization`,
           name: "Findable",
           legalName: "인디고차일드",
           alternateName: ["파인더블", "Findable Korea"],
-          url: siteUrl,
+          url: siteOrigin,
+          logo: `${siteOrigin}/apple-icon.png`,
+          sameAs: [
+            "https://www.linkedin.com/company/findableglobal/",
+            "https://medium.com/@findableglobal",
+          ],
           email: "kendrick@indigochild.kr",
-          description:
-            "파인더블(Findable)은 ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바 AI 검색에서 브랜드 언급·인용·가시성을 진단하고, SEO·GEO·AEO 개선 액션부터 브랜드별 AI 검색 전략 컨설팅까지 제공합니다.",
+          description: dictionary.web.home.meta.description,
           founder: {
             "@type": "Person",
             name: "나현덕",
@@ -120,16 +125,18 @@ const Home = async ({ params }: HomeProps) => {
         code={{
           "@context": "https://schema.org",
           "@type": "WebSite",
+          "@id": `${siteOrigin}/#website`,
           name: "Findable",
           alternateName: ["파인더블", "Findable Korea"],
-          url: siteUrl,
+          url: siteOrigin,
           description: dictionary.web.home.meta.description,
           inLanguage: locale.startsWith("ko") ? "ko-KR" : "en-US",
           publisher: {
             "@type": "Organization",
+            "@id": `${siteOrigin}/#organization`,
             name: "Findable",
             alternateName: ["파인더블", "Findable Korea"],
-            url: siteUrl,
+            url: siteOrigin,
           },
         }}
       />
