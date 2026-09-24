@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect } from "react";
 import type { PromptScore } from "../lib/dashboard-data";
 
 // 🔴 `export`(세션N-39): 스토리(`satisfies Meta<typeof …>`)가 이 타입을 이름으로
@@ -26,6 +29,15 @@ export interface PromptScoreboardProps {
  *   · 순위가 없는 질문은 `—`. 0으로 깔면 "1등"이라는 정반대 신호가 된다.
  */
 export const PromptScoreboard = ({ scores }: PromptScoreboardProps) => {
+  // The dashboard streams after navigation. Native hash scrolling can run
+  // before this section exists, leaving the user at the top of the page.
+  useEffect(() => {
+    if (window.location.hash === "#tracked-prompts") {
+      document.getElementById("tracked-prompts")?.scrollIntoView({
+        block: "start",
+      });
+    }
+  }, []);
   // 🔴 0건 상태(v4 §4-b 탭2 — *"현재 `null` 반환 → 빈 상태 신설 필요"*, 세션N-39).
   //   `return null` 이면 섹션이 **통째로 사라진다**. 그러면 사용자는
   //   *"내 질문 성적표가 원래 없는 기능인가?"* 로 읽는다 —
