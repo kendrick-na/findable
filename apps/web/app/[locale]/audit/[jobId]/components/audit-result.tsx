@@ -1491,7 +1491,7 @@ function HeroSection({
     }
   }
   const stubEnginesCount = stubEngineIds.size;
-  // 측정 실패(오류) 고유 엔진 수 — 점수·언급률 분모에서 제외됨(geo-score와 동일 원칙)
+  // 한 번이라도 오류가 난 고유 엔진 수. 다른 질문에 답한 엔진은 측정된 엔진으로 남는다.
   const erroredEnginesCount = new Set(
     (result.metrics.errors ?? []).map((e) => e.engineId)
   ).size;
@@ -1848,8 +1848,8 @@ function HeroSection({
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             {isKo
-              ? `${erroredEnginesCount}개 AI는 일시 오류로 응답을 받지 못했어요. 점수와 등장률은 측정에 성공한 곳만으로 계산했어요.`
-              : `${erroredEnginesCount} engines failed temporarily. Scores are based on successfully measured engines.`}
+              ? `${erroredEnginesCount}개 AI에서 응답 오류 ${failedResponses}건이 발생했어요. 오류 응답은 제외하고 성공한 응답만 점수와 등장률에 반영했어요.`
+              : `${erroredEnginesCount} engines returned ${failedResponses} response errors. Scores and appearance rates use only successful responses.`}
           </span>
         </div>
       )}
