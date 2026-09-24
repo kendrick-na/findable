@@ -195,6 +195,15 @@ export function buildCompetitorAnalysis(
   if (!first) {
     return null;
   }
+  // Text in an AI list is not proof that the registered entity was recognized.
+  // Keep comparison from contradicting a zero-verified-mention dashboard.
+  if (
+    !rows.some(
+      (row) => row.engineId !== BRIEFING_ENGINE_ID && row.brandMentioned
+    )
+  ) {
+    return null;
+  }
 
   /**
    * 🔴 **브리핑은 경쟁사 집계에서 뺀다**(N-45 · #4-b B-5).

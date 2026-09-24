@@ -1417,6 +1417,7 @@ function CompletedView({
           brandName={result.brandName}
           brandVariants={result.brandVariants}
           excerpts={coreResponses.map((r) => r.excerpt)}
+          hasVerifiedBrandMention={result.metrics.enginesWithMention.length > 0}
           isKo={isKo}
           registeredCompetitors={result.registeredCompetitors}
         />

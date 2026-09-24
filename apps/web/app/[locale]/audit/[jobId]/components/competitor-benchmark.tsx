@@ -11,6 +11,7 @@ interface CompetitorBenchmarkProps {
   brandName: string;
   brandVariants?: string[];
   excerpts: string[];
+  hasVerifiedBrandMention: boolean;
   isKo: boolean;
   /** ⛔ 거르는 목록이 아니라 **표기 병합 사전**(👤 승인 ⓐ). 구 job 엔 없다 → optional. */
   registeredCompetitors?: Array<{ aliases?: string[]; name: string } | string>;
@@ -69,11 +70,18 @@ const TOP_N = 6;
  */
 export function CompetitorBenchmark({
   excerpts,
+  hasVerifiedBrandMention,
   brandName,
   brandVariants = [],
   isKo,
   registeredCompetitors = [],
 }: CompetitorBenchmarkProps) {
+  // A numbered list can repeat the supplied brand name without identifying
+  // the actual company. Don't call that "my brand" when every answer failed
+  // the entity-verification step used by the GEO score and Truth Mirror.
+  if (!hasVerifiedBrandMention) {
+    return null;
+  }
   const t = T(isKo);
   const landscape = extractCompetitorLandscape(
     excerpts,
