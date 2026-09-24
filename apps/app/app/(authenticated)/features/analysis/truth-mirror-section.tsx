@@ -140,7 +140,7 @@ export const TruthMirrorSection = ({
                 {ENGINE_LABELS[engine.engineId] ?? engine.engineId}
               </span>
               {renderMentionBadge(engine.engineId, engine.brandMentioned)}
-              {engine.mentionPosition ? (
+              {engine.brandMentioned && engine.mentionPosition ? (
                 <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
                   {engine.mentionPosition}번째
                 </span>
