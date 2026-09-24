@@ -106,6 +106,8 @@ export interface GeoAction {
 
 /** 액션 생성에 필요한 측정 신호(구조적 타이핑 — 호출부가 무엇이든 이 모양만 맞추면 된다). */
 export interface ActionInput {
+  /** 순위가 나온 추천 목록의 평균 항목 수. 2개 중 1위는 "방어"를 권할 만큼 깊은 경쟁이 아니다. */
+  averageMentionListSize?: number | null;
   averageMentionPosition: number | null;
   brandName: string;
   /** 경쟁사 순위(경쟁 지형에서 추출). 내 브랜드 포함. */
@@ -157,6 +159,20 @@ function rankStrategyAction(input: ActionInput): GeoAction | null {
   }
   const band = RANK_LIFT_TABLE.find((b) => pos <= b.maxRank);
   if (!band) {
+    return null;
+  }
+
+  // "2개 중 1위"는 추천 경쟁에서 우세하다는 근거가 아니라, 얕은 목록에 이름이
+  // 한 번 나온 것에 가깝다. 특히 동명이사 오분류가 이 숫자를 만들 수 있으므로
+  // 목록 크기를 기록한 새 측정에서는 최소 3개 후보가 확인되기 전까지
+  // "이미 1순위/방어"라는 강한 처방을 만들지 않는다. 과거 회차(undefined)는
+  // 소급으로 데이터를 지어내지 않기 위해 기존 경로를 유지한다.
+  if (
+    band.tone === "risk" &&
+    input.averageMentionListSize !== null &&
+    input.averageMentionListSize !== undefined &&
+    input.averageMentionListSize < 3
+  ) {
     return null;
   }
 

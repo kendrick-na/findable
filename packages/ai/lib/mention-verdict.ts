@@ -155,6 +155,21 @@ const IDENTITY_TOKEN_STOPWORDS = new Set([
   "with",
   "official",
   "service",
+  // 홈페이지 상투어는 동명이사 판별 근거가 아니다. 특히 "회사·기술·기업"은
+  // IT/클라우드 일반론에도 흔하게 나타나므로 두 개만 겹쳐도 confirmed가 되는
+  // 오분류를 만든다. 고유한 설명 또는 공식 출처가 필요하다.
+  "회사",
+  "기업",
+  "기술",
+  "코드",
+  "대표님",
+  "무엇",
+  "실력",
+  "서비스를",
+  "제공하는",
+  "클라우드",
+  "보안",
+  "운영",
 ]);
 const KOREAN_PARTICLE_SUFFIX_RE = /(?:에서|으로|에게|부터|까지|처럼|보다|은|는|이|가|을|를|과|와|도|로|의)$/;
 
@@ -165,10 +180,23 @@ function identityTokens(value: string): string[] {
     .map((token) => token.replace(KOREAN_PARTICLE_SUFFIX_RE, ""))
     .filter(
       (token) =>
-        token.length >= 2 &&
+        // 단독 2~3글자 낱말은 "기술·회사·실사"처럼 업종 일반론일 확률이 높다.
+        // 공식 도메인 없이 엔티티를 확정하는 보조 증거는 충분히 구체적인 토큰만 쓴다.
+        token.length >= 4 &&
         !IDENTITY_TOKEN_STOPWORDS.has(token) &&
         !/^\d+$/.test(token)
     );
+}
+
+/** 등록 도메인의 하위 서비스와 본사 도메인은 같은 공식 소유 범위로 본다. */
+function isOfficialDomain(domain: string, brandDomain?: string): boolean {
+  const official = brandDomain ? normalizedHost(brandDomain) : "";
+  const candidate = normalizedHost(domain);
+  return Boolean(
+    official &&
+      candidate &&
+      (candidate === official || official.endsWith(`.${candidate}`))
+  );
 }
 
 /**
@@ -183,14 +211,11 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
   if (mentionsOfficialDomain(input.text, input.brandDomain)) {
     return true;
   }
-  const officialHost = input.brandDomain
-    ? normalizedHost(input.brandDomain)
-    : "";
+  const hasConflictingDomain = hasConflictingBrandDomain(input);
   if (
-    officialHost &&
+    !hasConflictingDomain &&
     (input.citedDomains ?? []).some((domain) => {
-      const cited = normalizedHost(domain);
-      return cited === officialHost || cited.endsWith(`.${officialHost}`);
+      return isOfficialDomain(domain, input.brandDomain);
     })
   ) {
     return true;
@@ -238,15 +263,15 @@ function hasConflictingBrandDomain(input: {
   if (!(official && cited.length)) {
     return false;
   }
-  if (cited.some((domain) => domain === official || domain.endsWith(`.${official}`))) {
-    return false;
-  }
-
   const brandToken = compactIdentity(input.brandName);
   if (brandToken.length < 5) {
     return false;
   }
-  return cited.some((domain) => compactIdentity(domain).includes(brandToken));
+  return cited.some(
+    (domain) =>
+      !isOfficialDomain(domain, input.brandDomain) &&
+      compactIdentity(domain).includes(brandToken)
+  );
 }
 
 function isShortHangul(name: string): boolean {
@@ -443,6 +468,7 @@ export const __internal = {
   UNRESOLVED_IDENTITY_RE,
   hasConflictingBrandDomain,
   hasOfficialIdentityEvidence,
+  isOfficialDomain,
   mentionsOfficialDomain,
 };
 

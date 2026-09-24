@@ -94,6 +94,15 @@ describe("순위 구간 액션 — 구간마다 다른 처방이 나온다", () 
     expect(rankAction(0)).toBeUndefined();
   });
 
+  it("⛔ **2개 중 1위는 방어 처방을 만들지 않는다** — 얕은 표본은 우세 근거가 아니다", () => {
+    const action = buildGeoActions({
+      ...base,
+      averageMentionListSize: 2,
+      averageMentionPosition: 1,
+    }).find((item) => item.kind === "rank_strategy");
+    expect(action).toBeUndefined();
+  });
+
   it("⛔ **근거 숫자를 지어내지 않는다** — 입력한 순위가 그대로 나온다", () => {
     // 📕 이 저장소 제1 규칙: 사실 자동 생성 금지.
     expect(rankAction(3)?.evidence).toContain("3");

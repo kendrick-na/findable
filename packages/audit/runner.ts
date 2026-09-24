@@ -547,6 +547,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
 
     const geoActions = buildGeoActions({
       brandName,
+      averageMentionListSize: metrics.averageMentionListSize,
       averageMentionPosition: metrics.averageMentionPosition,
       enginesMeasured: new Set(metrics.enginesCovered).size,
       enginesMentioned: new Set(metrics.enginesWithMention).size,

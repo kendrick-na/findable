@@ -187,9 +187,14 @@ export function aggregateAudit(responses: EngineResponse[]): AuditMetrics {
     }
   }
 
-  // 도메인 카운트
+  // 인용 도메인은 **확인된 브랜드 언급이 있는 답변**에서만 센다.
+  // 검색형 엔진은 브랜드를 언급하지 않은 답변에도 질문 관련 검색결과를 수십 개
+  // 붙여 반환할 수 있다. 이를 전부 합치면 "AI가 이 브랜드를 인용한 출처"가 아니라
+  // "질문을 위해 검색한 모든 페이지"가 되어 GEO 점수·처방을 오염시킨다.
+  // 언급 품질 검증은 runner에서 집계 전에 brandMentioned를 교정하므로, 여기서는
+  // 그 단일 판정을 그대로 신뢰한다.
   const domainCount = new Map<string, number>();
-  for (const r of responses) {
+  for (const r of responses.filter((response) => response.brandMentioned)) {
     for (const src of r.citedSources) {
       if (!src.domain) {
         continue;
