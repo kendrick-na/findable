@@ -215,13 +215,20 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
       recommendation =
         "Your global position is strong, but Korean channels mention you less. Strengthen content that directly answers the missed queries, then remeasure.";
     }
+  } else if (korean.rate === 0 && global.rate === 0) {
+    headline = isKo
+      ? "한국·글로벌 AI 모두 이번 측정에서 등록 브랜드를 확인하지 못했습니다."
+      : "Neither Korean nor global AI verified the registered brand in this run.";
+    recommendation = isKo
+      ? "먼저 등록 브랜드명·도메인이 실제 서비스와 일치하는지 확인하고, 공식 사이트에 브랜드 설명을 명확히 적은 뒤 재측정하세요."
+      : "First check that the registered name and domain match your service, clarify the brand on your official site, then remeasure.";
   } else {
     headline = isKo
-      ? `한국·글로벌 AI 답변 가시성이 균형을 이룹니다 (${korean.rate}% vs ${global.rate}%).`
-      : `Korean and global AI visibility are balanced (${korean.rate}% vs ${global.rate}%).`;
+      ? `한국·글로벌 AI 언급률 차이는 크지 않습니다 (${korean.rate}% vs ${global.rate}%).`
+      : `The mention-rate gap is small (${korean.rate}% vs ${global.rate}%).`;
     recommendation = isKo
-      ? "양쪽 채널 모두 안정적으로 측정됩니다. 다음 단계는 점유율 자체를 끌어올리는 콘텐츠 전략입니다."
-      : "Both channels measure stably. The next step is a content strategy to lift share of voice itself.";
+      ? "두 채널의 격차보다 브랜드가 빠진 질문을 우선 확인하고, 해당 질문에 답하는 콘텐츠를 보강하세요."
+      : "Prioritize the questions where your brand was absent, then improve content that answers them.";
   }
 
   return (
