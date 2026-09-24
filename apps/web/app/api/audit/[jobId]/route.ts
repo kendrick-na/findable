@@ -127,7 +127,18 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    job.status = (await reconcileStaleAuditJob(job)) ?? job.status;
+    const reconciledStatus = await reconcileStaleAuditJob(job);
+    if (reconciledStatus && reconciledStatus !== job.status) {
+      const refreshed = await database.auditJob.findUnique({
+        where: { id: job.id },
+        select: { status: true, completedAt: true, errorMessage: true },
+      });
+      if (refreshed) {
+        job.status = refreshed.status;
+        job.completedAt = refreshed.completedAt;
+        job.errorMessage = refreshed.errorMessage;
+      }
+    }
 
     // 히스토리는 **완료된 job 에서만** 조회한다. 이 라우트는 진행 중 1초 간격으로
     //   폴링되므로, 아직 결과가 없는 동안 매번 추가 쿼리를 도는 건 낭비다.
