@@ -1,3 +1,4 @@
+import { isUsableRun } from "@repo/audit/run-quality";
 import type { AuditJob } from "@repo/database";
 
 // AuditJob.result 는 Prisma Json?(=unknown). apps/web audit-result.tsx 의
@@ -301,7 +302,9 @@ function measuredAt(job: AuditJob): Date {
 // jobs 는 page.tsx 에서 createdAt desc 로 조회된다는 전제.
 // completed 측정만으로 KPI·추세를 구성한다.
 export function buildDashboardData(jobs: AuditJob[]): DashboardData {
-  const completed = jobs.filter((job) => job.status === "completed");
+  const completed = jobs.filter(
+    (job) => job.status === "completed" && isUsableRun(job.result)
+  );
 
   // desc 로 들어온 completed 중 SoV 가 유효한 것들
   const completedWithSov = completed
@@ -327,7 +330,17 @@ export function buildDashboardData(jobs: AuditJob[]): DashboardData {
     latestBrandName === null
       ? []
       : completedWithSov.filter(
-          ({ job }) => extractBrandName(job.result) === latestBrandName
+          ({ job }) =>
+            extractBrandName(job.result) === latestBrandName &&
+            job.domain === latestJob?.domain
+        );
+  const sameBrandCompleted =
+    latestBrandName === null
+      ? []
+      : completed.filter(
+          (job) =>
+            extractBrandName(job.result) === latestBrandName &&
+            job.domain === latestJob?.domain
         );
 
   const latest = sameBrand[0] ?? null;
@@ -362,7 +375,7 @@ export function buildDashboardData(jobs: AuditJob[]): DashboardData {
     // "밀리는 질문": AuditJob 폴백에는 **프롬프트 원장(Tracking)이 없다** → 빈 배열.
     //   brandOptions 를 비우는 것과 같은 이유(식별할 원장이 없으면 지어내지 않는다).
     promptScores: [],
-    totalCount: jobs.length,
+    totalCount: sameBrandCompleted.length,
     latestSov,
     sovDeltaPoints,
     coverage,

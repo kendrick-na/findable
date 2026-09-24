@@ -9,7 +9,9 @@ import { MeasuringView } from "./measuring-view";
  */
 const meta: Meta<typeof MeasuringView> = {
   args: {
+    createdAt: "2026-09-25T00:00:00.000Z",
     domain: "amorepacific.com",
+    initialStatus: "processing",
     jobId: "job-1",
     // 계속 측정 중인 상태로 둔다(화면을 그대로 보기 위해).
     pollStatus: () => Promise.resolve("processing"),

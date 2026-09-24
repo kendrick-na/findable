@@ -51,7 +51,7 @@ describe("측정 상태·결과 IA 계약", () => {
     expect(detail).toContain("성공한 답변");
     expect(detail).toContain("successfulResponseCount(metrics)");
     expect(detail).toContain("countMeasurementCoverage");
-    expect(detail).toContain('value.engineId === "naver-briefing"');
+    expect(detail).toContain('value.engineId !== "naver-briefing"');
   });
 
   it("공개 리포트도 등장률을 경쟁 점유율처럼 말하지 않는다", () => {
@@ -75,8 +75,10 @@ describe("측정 상태·결과 IA 계약", () => {
 
   it("지금 할 일은 현재 조직과 무관한 이메일 무료진단을 섞지 않는다", () => {
     const actions = read("app/(authenticated)/actions/page.tsx");
-    expect(actions).toContain("selectEmailAuditForBrands");
-    expect(actions).toContain("brand.domain === emailAudit.domain");
+    expect(actions).toContain("const brands = await scopedBrands()");
+    expect(actions).toContain(
+      "domain: { in: brands.map((brand) => brand.domain) }"
+    );
     expect(actions).toContain("다른 브랜드의 과거 처방은 섞지 않아요");
   });
 

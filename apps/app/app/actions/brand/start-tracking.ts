@@ -1,5 +1,6 @@
 "use server";
 
+import { isUsableRun } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
 import { AUDIT_JOB_STALE_AFTER_MS } from "@repo/audit/stale-job";
 import { hasPlan } from "@repo/auth/plan";
@@ -172,7 +173,11 @@ async function checkRemeasurePolicy(
     },
     orderBy: { createdAt: "desc" },
   });
-  if (!recent || recent.status === "failed") {
+  if (
+    !recent ||
+    recent.status === "failed" ||
+    (recent.status === "completed" && !isUsableRun(recent.result))
+  ) {
     return null;
   }
 

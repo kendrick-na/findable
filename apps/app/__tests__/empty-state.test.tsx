@@ -8,6 +8,8 @@
  *   → 렌더링 테스트를 새로 만들면 **이 지시문을 반드시 붙일 것.**
  *   (`sign-in.test.tsx` 가 지금까지 무사한 건 window 를 안 건드려서다.)
  */
+
+import type { AuditJob } from "@repo/database";
 import { cleanup, render, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -100,9 +102,19 @@ const jobFixture = (status: string, id: string) =>
     createdAt: new Date("2026-08-01T00:00:00Z"),
     domain: "example.com",
     id,
-    result: null,
+    result:
+      status === "completed"
+        ? {
+            brandName: "Example",
+            metrics: {
+              enginesCovered: ["chatgpt"],
+              enginesWithMention: [],
+              sov: 0,
+            },
+          }
+        : null,
     status,
-  }) as never;
+  }) as unknown as AuditJob;
 
 describe("AuditHistoryList 상태별 결과 링크", () => {
   test("대기·측정중 행은 실제 상태 화면으로 연결한다", () => {
@@ -135,6 +147,19 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
     const link = container.querySelector("a");
     expect(link?.getAttribute("href")).toContain("/ko/audit/job-done");
     expect(container.textContent).toContain("결과 보기");
+  });
+
+  test("실제 AI 응답이 없는 완료 행은 0%가 아닌 측정 불가로 연결한다", () => {
+    const { container } = render(
+      <AuditHistoryList
+        jobs={[{ ...jobFixture("completed", "job-empty"), result: null }]}
+      />
+    );
+    expect(container.textContent).toContain("측정 불가");
+    expect(container.textContent).not.toContain("등장률 0%");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe(
+      "/history/job-empty"
+    );
   });
 });
 

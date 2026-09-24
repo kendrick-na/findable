@@ -43,7 +43,10 @@ export const PromptScoreboard = ({ scores }: PromptScoreboardProps) => {
   //   이미 측정이 있다(`hasData` 분기 안). 원인은 **질문이 안 붙은 것**이다.
   if (scores.length === 0) {
     return (
-      <section className="findable-card flex flex-col gap-2 p-6">
+      <section
+        className="findable-card flex flex-col gap-2 p-6"
+        id="tracked-prompts"
+      >
         {/* 🔴 제목·크기를 **데이터 있을 때와 똑같이** 맞춘다(아래 :61 과 동일).
             스크린샷으로 잡은 실수: 처음엔 「밀리는 질문」 `text-base` 로 썼는데
             실제 화면은 「질문별 성적」 `text-lg` 다 → **같은 섹션이 상태에 따라
@@ -60,7 +63,7 @@ export const PromptScoreboard = ({ scores }: PromptScoreboardProps) => {
   }
 
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col gap-3" id="tracked-prompts">
       <div className="flex flex-col gap-1">
         <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
           질문별 성적

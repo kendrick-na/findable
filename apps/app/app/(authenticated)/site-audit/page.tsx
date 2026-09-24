@@ -54,8 +54,15 @@ const SiteAuditPage = async ({
   const completedRuns = brand
     ? await scopedCompletedSiteReadinessRuns(brand.id)
     : [];
+  const matchingCompletedRuns = brand
+    ? completedRuns.filter((run) =>
+        readinessUrlMatchesBrand(run.targetUrl, brand.domain)
+      )
+    : [];
   const previousRun =
-    latestRun?.status === "completed" ? completedRuns[1] : completedRuns[0];
+    latestRun?.status === "completed"
+      ? (matchingCompletedRuns[1] ?? null)
+      : (matchingCompletedRuns[0] ?? null);
   const siteTaskCompletions = brand
     ? await database.actionCompletion.findMany({
         where: { brandId: brand.id, kind: "site_readiness" },

@@ -8,7 +8,7 @@ import { database } from "@repo/database";
 import { ListChecksIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { scopedLatestRunTracking } from "@/lib/db/scoped";
+import { scopedBrands, scopedLatestRunTracking } from "@/lib/db/scoped";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { type ActionItem, ActionList } from "../features/analysis/action-list";
@@ -59,8 +59,18 @@ async function findEmailAuditActions(): Promise<{
   if (!email) {
     return null;
   }
+  const brands = await scopedBrands();
+  // A user may have audited many domains before joining this organization.
+  // Once it has brands, only bring the matching domain's past actions into it.
+  // With no brands yet, keep the first-signup free-audit onboarding path.
   const job = await database.auditJob.findFirst({
-    where: { email, status: "completed" },
+    where: {
+      email,
+      status: "completed",
+      ...(brands.length > 0
+        ? { domain: { in: brands.map((brand) => brand.domain) } }
+        : {}),
+    },
     orderBy: { createdAt: "desc" },
     select: { domain: true, result: true },
   });
@@ -181,6 +191,9 @@ const AuditActions = ({
           {domain
             ? "무료 진단에서 나온 처방 전체예요. 완료로 표시하면 이 브랜드가 내 목록에 등록돼요. 추적을 시작하면 다음 측정에서 점수 변화까지 이어집니다."
             : "무료 진단에서 나온 처방 전체예요. 브랜드를 등록하고 추적을 시작하면 완료 체크와 다음 측정에서의 점수 변화까지 이어집니다."}
+        </p>
+        <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+          다른 브랜드의 과거 처방은 섞지 않아요.
         </p>
       </div>
       {domain ? (

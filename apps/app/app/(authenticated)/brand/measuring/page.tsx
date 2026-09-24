@@ -1,5 +1,5 @@
-import { database } from "@repo/database";
 import { isStaleAuditJob } from "@repo/audit/stale-job";
+import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getTrackingStatus } from "@/app/actions/brand/tracking-status";
@@ -60,7 +60,9 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
     <>
       <Header page="측정 중" pages={["Findable"]} />
       <MeasuringView
+        createdAt={job.createdAt.toISOString()}
         domain={job.domain}
+        initialStatus={job.status}
         jobId={jobId}
         pollStatus={getTrackingStatus}
         sampleUrl={sampleReportUrl(env.NEXT_PUBLIC_WEB_URL)}

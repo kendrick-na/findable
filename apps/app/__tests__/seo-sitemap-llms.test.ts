@@ -47,7 +47,7 @@ const PREFIX_USES_UNPREFIXED =
 // 발행 콘텐츠를 DB에서 읽는 현재 구현은 async. 정적·비동기 GET 모두 라우트 계약이다.
 const LLMS_EXPORTS_GET = /export (?:async )?function GET\(\)/;
 const LLMS_PLAIN_TEXT = /text\/plain/;
-const LLMS_H1 = /# Findable/;
+const LLMS_H1 = /# (?:파인더블 \(Findable\)|Findable)/;
 const LLMS_BLOCKQUOTE = /\n> /;
 
 /**

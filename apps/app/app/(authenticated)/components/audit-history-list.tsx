@@ -1,3 +1,4 @@
+import { isUsableRun } from "@repo/audit/run-quality";
 import type { AuditJob } from "@repo/database";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { cn } from "@repo/design-system/lib/utils";
@@ -30,6 +31,22 @@ interface AuditHistoryListProps {
   jobs: AuditJob[];
 }
 
+function actionLabel(
+  status: AuditJob["status"],
+  isUnavailable: boolean
+): string {
+  if (isUnavailable) {
+    return "측정 불가 원인 보기";
+  }
+  if (status === "failed") {
+    return "실패 사유 보기";
+  }
+  if (status === "completed") {
+    return "결과 보기";
+  }
+  return "실시간 상태 보기";
+}
+
 export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
   const webUrl = env.NEXT_PUBLIC_WEB_URL;
 
@@ -51,15 +68,15 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
   return (
     <ul className="flex flex-col gap-3">
       {jobs.map((job) => {
-        const sov = extractSov(job.result);
+        const isUnavailable =
+          job.status === "completed" && !isUsableRun(job.result);
+        const sov = isUnavailable ? null : extractSov(job.result);
         const brandName = extractBrandName(job.result);
         // Each state has a real destination: live progress, failure details, or
         // the completed public report. Never label an unfinished run as a result.
-        const isDone = job.status === "completed";
-        const rowClassName = cn(
-          "findable-card block p-4",
-          "findable-card-interactive"
-        );
+        const isDone = job.status === "completed" && !isUnavailable;
+        const rowClassName =
+          "findable-card findable-card-interactive block p-4";
         const body = (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -74,10 +91,13 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
                 )}
               </div>
               <Badge
-                className={cn("border-transparent", STATUS_TONE[job.status])}
+                className={cn(
+                  "border-transparent",
+                  isUnavailable ? STATUS_TONE.failed : STATUS_TONE[job.status]
+                )}
                 variant="outline"
               >
-                {STATUS_LABEL[job.status]}
+                {isUnavailable ? "측정 불가" : STATUS_LABEL[job.status]}
               </Badge>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
@@ -89,28 +109,17 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
                   <span className="font-semibold tabular-nums">{sov}%</span>
                 </span>
               )}
-              {isDone ? (
-                // 🔴 S7-2차(2026-08-11) — 결과는 **www(마케팅 사이트)** 에 있어서 누르면
-                //   대시보드를 통째로 벗어나고 사이드바가 사라진다. 그 페이지엔 돌아오는
-                //   링크가 없어 **브라우저 뒤로가기밖에 길이 없었다**(이력 여러 건을 비교하려면
-                //   매번 뒤로가기 → 전체 재로딩). → 새 탭으로 열어 **이력을 잃지 않게** 한다.
-                //   ⚠️ "새 탭"을 글자로 밝힌다 — 말없이 탭이 늘어나는 건 그 자체로 결함이다.
-                <span className="ml-auto inline-flex items-center gap-1 text-[color:var(--findable-primary,#ff7a4d)]">
-                  결과 보기
-                  <ExternalLinkIcon aria-hidden="true" className="size-3" />
-                  <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-                    새 탭
-                  </span>
-                </span>
-              ) : job.status === "failed" ? (
-                <span className="ml-auto text-[color:var(--findable-primary,#ff7a4d)]">
-                  실패 사유 보기
-                </span>
-              ) : (
-                <span className="ml-auto text-[color:var(--findable-ink-tertiary,#7e8289)]">
-                  실시간 상태 보기
-                </span>
-              )}
+              <span className="ml-auto inline-flex items-center gap-1 text-[color:var(--findable-primary,#ff7a4d)]">
+                {actionLabel(job.status, isUnavailable)}
+                {isDone && (
+                  <>
+                    <ExternalLinkIcon aria-hidden="true" className="size-3" />
+                    <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+                      새 탭
+                    </span>
+                  </>
+                )}
+              </span>
             </div>
           </>
         );
@@ -130,7 +139,7 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
               <a
                 className={rowClassName}
                 href={
-                  job.status === "failed"
+                  job.status === "failed" || isUnavailable
                     ? `/history/${job.id}`
                     : `/brand/measuring?job=${job.id}`
                 }

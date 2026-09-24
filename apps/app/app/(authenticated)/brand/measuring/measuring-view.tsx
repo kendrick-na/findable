@@ -48,14 +48,18 @@ const MOOD_ROTATE_MS = 4000;
 type ViewState = "measuring" | "slow" | "failed";
 
 export const MeasuringView = ({
+  createdAt,
   jobId,
   domain,
+  initialStatus,
   pollStatus,
   sampleUrl,
 }: {
+  createdAt: string;
   jobId: string;
   /** 무엇을 측정 중인지. 지금 화면에서 유일하게 개인화된 정보다. */
   domain: string | null;
+  initialStatus: "queued" | "processing";
   /**
    * 진행 상태 폴링 — **주입받는다**(N-44).
    *
@@ -82,6 +86,7 @@ export const MeasuringView = ({
 }) => {
   const router = useRouter();
   const [view, setView] = useState<ViewState>("measuring");
+  const [status, setStatus] = useState<"queued" | "processing">(initialStatus);
   const [moodIndex, setMoodIndex] = useState(0);
   const [moodVisible, setMoodVisible] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -121,10 +126,12 @@ export const MeasuringView = ({
         if (status === "completed") {
           stop();
           // 결과가 있는 곳으로. replace = 뒤로가기로 대기 화면에 돌아오지 않게 한다.
-          router.replace("/");
+          router.replace(`/history/${jobId}`);
         } else if (status === "failed") {
           stop();
           setView("failed");
+        } else if (status === "queued" || status === "processing") {
+          setStatus(status);
         }
         // queued/processing/not_found → 다음 폴링까지 대기.
         //   ⚠️ not_found 로 즉시 실패 처리하지 않는다: 방금 만든 job 이 복제 지연으로
@@ -159,13 +166,23 @@ export const MeasuringView = ({
               aria-live="polite"
               className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]"
             >
-              AI 7곳에 물어보고 있어요
+              {status === "queued"
+                ? "측정 대기 중이에요"
+                : "AI 7곳에 물어보고 있어요"}
             </h1>
             {domain ? (
               <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
                 {domain}
               </p>
             ) : null}
+            <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+              회차 {jobId.slice(-8)} · 시작{" "}
+              {new Intl.DateTimeFormat("ko-KR", {
+                timeZone: "Asia/Seoul",
+                hour: "numeric",
+                minute: "2-digit",
+              }).format(new Date(createdAt))}
+            </p>
           </div>
 
           {/* 순환 무드 카피 — aria-hidden: 진행 상태가 아니라 분위기이므로
@@ -233,6 +250,12 @@ export const MeasuringView = ({
           href="/"
         >
           대시보드로 가기
+        </a>
+        <a
+          className="inline-flex items-center rounded-md px-4 py-2 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm"
+          href="/history"
+        >
+          측정 이력 보기
         </a>
         {view !== "measuring" && (
           <a

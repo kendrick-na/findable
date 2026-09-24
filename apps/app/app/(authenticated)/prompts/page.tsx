@@ -72,6 +72,13 @@ const PromptsPage = async () => {
             ChatGPT·Perplexity·네이버 등에 물어보고, 우리 브랜드가 답변에
             나오는지 셉니다.
           </p>
+          <p className="max-w-2xl text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+            질문 저장 → 다음 측정에 사용 → 결과 누적. 측정 후에는
+            <Link className="ml-1 underline" href="/#tracked-prompts">
+              대시보드의 질문별 성적
+            </Link>
+            에서 답변 등장률을 확인하세요.
+          </p>
         </section>
 
         {brands.length === 0 ? (

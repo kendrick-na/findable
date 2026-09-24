@@ -82,7 +82,7 @@ const STORES_SERVER_TRUTH = /setEmailSent\(\s*data\.emailSent/;
  *   (`{isKo ? "곧 메일로…" : …}` 로 되돌리기)이 **그대로 통과**했다.
  *   → 형태가 아니라 **"문구가 어디에 있는가"** 로 판정한다(판정 함수 안 1회).
  */
-const PROMISE_TEXT_ANY = /전체 리포트를 곧 메일로 보내드려요\./g;
+const PROMISE_TEXT_ANY = /이 리포트를 이메일로 보내드려요\./g;
 /** 서버가 안 보낸 갈래에서도 `emailSent:false` 를 **명시**한다. */
 const EXPLICIT_FALSE = /emailSent:\s*false/g;
 /** 실제로 보낸 갈래는 true. */
@@ -148,7 +148,7 @@ describe("화면 배선 — 서버가 아는 진실을 무시하지 않는다", 
 
     const fnStart = viewCode.indexOf("function getLeadResultMessage");
     const fnEnd = viewCode.indexOf("function ViralBar");
-    const promiseAt = viewCode.indexOf("전체 리포트를 곧 메일로 보내드려요.");
+    const promiseAt = viewCode.indexOf("이 리포트를 이메일로 보내드려요.");
     expect(fnStart).toBeGreaterThan(-1);
     expect(promiseAt).toBeGreaterThan(fnStart);
     expect(promiseAt).toBeLessThan(fnEnd);
