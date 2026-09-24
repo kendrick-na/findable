@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@repo/auth/server";
+import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { AuditHistoryList } from "../components/audit-history-list";
@@ -44,6 +45,10 @@ const HistoryPage = async () => {
           database.auditJob.count({ where: scope }),
         ])
       : [[], 0];
+
+  for (const job of jobs.filter(isStaleAuditJob)) {
+    job.status = (await reconcileStaleAuditJob(job)) ?? job.status;
+  }
 
   // 🔴 S7-b(2026-08-11) — 진행 중 건수를 **서버에서** 센다. 클라이언트가 다시 조회하면
   //   스코프(이메일 ∪ org) 권한 로직이 두 벌이 된다.

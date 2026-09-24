@@ -1,3 +1,4 @@
+import { reconcileStaleAuditJob, isStaleAuditJob } from "@repo/audit/stale-job";
 import type { AuditJob } from "@repo/database";
 import { database } from "@repo/database";
 import { Badge } from "@repo/design-system/components/ui/badge";
@@ -50,14 +51,26 @@ const BrandPage = async () => {
     domains.length > 0
       ? await database.auditJob.findMany({
           where: { email: `org:${orgId}`, domain: { in: domains } },
+          select: {
+            id: true,
+            email: true,
+            domain: true,
+            status: true,
+            createdAt: true,
+          },
           orderBy: { createdAt: "desc" },
           take: 100,
         })
       : [];
-  const latestByDomain = new Map<string, AuditJob>();
+  const latestByDomain = new Map<string, (typeof recentJobs)[number]>();
   for (const job of recentJobs) {
     if (!latestByDomain.has(job.domain)) {
       latestByDomain.set(job.domain, job);
+    }
+  }
+  for (const job of latestByDomain.values()) {
+    if (isStaleAuditJob(job)) {
+      job.status = (await reconcileStaleAuditJob(job)) ?? job.status;
     }
   }
 
