@@ -111,12 +111,10 @@ export const MeasuringView = ({
     };
 
     timerRef.current = setInterval(async () => {
-      // 4분이 넘으면 폴링을 멈춘다. 🔴 "실패"라 부르지 않는다 — 백그라운드 실행이라
-      //   대개 **계속 돌고 있다**. 없는 실패를 알리면 사용자가 원가를 또 쓰게 만든다.
+      // 4분부터 지연을 알리되 폴링은 계속한다. 서버가 6분 초과 작업을
+      // 실패로 정리하면 이 화면도 반드시 최종 상태로 전환해야 한다.
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-        stop();
         setView("slow");
-        return;
       }
       try {
         const status = await pollStatus(jobId);
@@ -199,7 +197,7 @@ export const MeasuringView = ({
             측정이 조금 오래 걸리고 있어요
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            멈춘 건 아니에요. 결과가 나오면 대시보드에 반영돼요.
+            아직 완료되지 않았어요. 계속 상태를 확인하고 있습니다.
           </p>
         </div>
       )}

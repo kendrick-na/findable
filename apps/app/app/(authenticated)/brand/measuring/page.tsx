@@ -1,4 +1,5 @@
 import { database } from "@repo/database";
+import { isStaleAuditJob } from "@repo/audit/stale-job";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getTrackingStatus } from "@/app/actions/brand/tracking-status";
@@ -35,7 +36,7 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
 
   const job = await database.auditJob.findFirst({
     where: { id: jobId, email: `org:${orgId}` },
-    select: { domain: true, status: true },
+    select: { domain: true, status: true, createdAt: true },
   });
 
   // 내 org 것이 아니거나 없는 job → 대기할 것이 없다.
@@ -46,6 +47,13 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
   // 이미 끝난 job 으로 들어오면 기다리게 하지 않는다(뒤로가기·새로고침 경로).
   if (job.status === "completed") {
     redirect("/");
+  }
+  if (job.status === "failed") {
+    redirect("/history");
+  }
+  if (isStaleAuditJob(job)) {
+    await getTrackingStatus(jobId);
+    redirect("/history");
   }
 
   return (

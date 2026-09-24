@@ -1,6 +1,7 @@
 "use server";
 
 import { runAuditJob } from "@repo/audit/runner";
+import { AUDIT_JOB_STALE_AFTER_MS } from "@repo/audit/stale-job";
 import { hasPlan } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth, clerkClient } from "@repo/auth/server";
@@ -36,7 +37,7 @@ import { isValidDomain, normalizeDomain } from "@/lib/domain";
 //   **동기 함수를 export 할 수 없다** — 하면 tsc·lint 는 통과하고 빌드에서만 터진다).
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+const STALE_THRESHOLD_MS = AUDIT_JOB_STALE_AFTER_MS;
 
 /** DB JSON 필드에 저장된 별칭만 안전하게 러너 입력으로 넘긴다. */
 const stringList = (value: unknown): string[] =>

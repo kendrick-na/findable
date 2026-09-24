@@ -1,4 +1,5 @@
 import { isUsableRun } from "@repo/audit/run-quality";
+import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { hasPlan, isPaid } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth, currentUser } from "@repo/auth/server";
@@ -107,9 +108,9 @@ const DashboardNoResultState = ({
         <div className="flex flex-wrap justify-center gap-2">
           <Link
             className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
-            href={`/history/${failedJobId}`}
+            href="/history"
           >
-            실패 사유 보기
+            측정 이력 보기
           </Link>
           <Link
             className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
@@ -137,7 +138,7 @@ const DashboardNoResultState = ({
         <div className="flex flex-wrap justify-center gap-2">
           <Link
             className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
-            href={`/history/${unavailableJobId}`}
+            href="/history"
           >
             측정 상세 보기
           </Link>
@@ -178,22 +179,28 @@ const App = async ({ searchParams }: AppProperties) => {
   //     `hasData`·`buildDashboardData` 계약은 그대로다.
   const JOB_WHERE = auditJobScope(email, orgId);
   // 1차: 가벼운 컬럼만(= 화면이 Tracking 경로로 갈 때 필요한 전부).
-  const jobsLite =
-    JOB_WHERE
-      ? await database.auditJob.findMany({
-          where: JOB_WHERE,
-          select: {
-            id: true,
-            domain: true,
-            status: true,
-            createdAt: true,
-            completedAt: true,
-            brandId: true,
-          },
-          orderBy: { createdAt: "desc" },
-          take: 20,
-        })
-      : [];
+  const jobsLite = JOB_WHERE
+    ? await database.auditJob.findMany({
+        where: JOB_WHERE,
+        select: {
+          id: true,
+          email: true,
+          domain: true,
+          status: true,
+          createdAt: true,
+          completedAt: true,
+          brandId: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      })
+    : [];
+  // 서버리스 함수가 300초에 강제 종료되면 runner의 catch가 실행되지 않아
+  // 오래된 job이 processing으로 남는다. 대시보드 진입 시 정확히 만료된 것만
+  // 실패로 확정해 무한 "측정 중" 배너와 이력 자동 새로고침을 끊는다.
+  for (const job of jobsLite.filter(isStaleAuditJob)) {
+    job.status = (await reconcileStaleAuditJob(job)) ?? job.status;
+  }
 
   // P5 8-d: KPI·추세의 1차 소스 = Tracking(org 시계열 원장, scopedTracking 으로 brand 경유
   // org 격리). Tracking 이 비면(무료 email 진단만 있는 유저 · 롤백 시) AuditJob 집계로 폴백
@@ -227,14 +234,15 @@ const App = async ({ searchParams }: AppProperties) => {
   const data = trackingData ?? buildDashboardData(jobsWithResult ?? []);
   // Tracking 한 회차는 runner 가 AuditJob.completedAt 과 동일한 trackedAt 을 기록한다.
   // 이 연결을 화면에도 유지해야 리포트와 대시보드가 서로 다른 회차를 말하지 않는다.
-  const currentRunJob = data.latestBrandId && data.latestMeasuredAt
-    ? jobsLite.find(
-        (job) =>
-          job.status === "completed" &&
-          job.brandId === data.latestBrandId &&
-          job.completedAt?.getTime() === data.latestMeasuredAt?.getTime()
-      )
-    : null;
+  const currentRunJob =
+    data.latestBrandId && data.latestMeasuredAt
+      ? jobsLite.find(
+          (job) =>
+            job.status === "completed" &&
+            job.brandId === data.latestBrandId &&
+            job.completedAt?.getTime() === data.latestMeasuredAt?.getTime()
+        )
+      : null;
   // 생성형 분석도 반드시 현재 대시보드 회차에만 붙인다. 최신 브랜드의 다른 과거
   // 결과를 가져오면 점수와 분석 근거가 서로 다른 회차가 되는 오류가 재발한다.
   const currentRunAnalysis = currentRunJob
@@ -374,7 +382,7 @@ const App = async ({ searchParams }: AppProperties) => {
             </div>
 
             <DashboardDeepAnalysis
-              crewResult={currentRunAnalysis?.crewResult as never ?? null}
+              crewResult={(currentRunAnalysis?.crewResult as never) ?? null}
               crewStatus={currentRunAnalysis?.crewStatus ?? "not_requested"}
               jobId={currentRunJob?.id ?? null}
             />

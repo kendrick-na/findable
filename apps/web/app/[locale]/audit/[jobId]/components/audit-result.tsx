@@ -1355,10 +1355,11 @@ function CompletedView({
   locale: string;
 }) {
   const isKo = locale.startsWith("ko");
-  // 계산은 `@repo/audit/measurement-coverage` 단일 진실을 쓴다(규칙 복제 금지).
-  const coverage = countMeasurementCoverage(
-    result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
+  const coreResponses = result.engineResponses.filter(
+    (r) => r.engineId !== "naver-briefing"
   );
+  // 계산은 `@repo/audit/measurement-coverage` 단일 진실을 쓴다(규칙 복제 금지).
+  const coverage = countMeasurementCoverage(coreResponses);
   const { measured, attempted } = coverage;
   const impact = buildMeasurementImpact({
     appearanceRate: result.metrics.sov,
@@ -1414,14 +1415,14 @@ function CompletedView({
         <CompetitorBenchmark
           brandName={result.brandName}
           brandVariants={result.brandVariants}
-          excerpts={result.engineResponses.map((r) => r.excerpt)}
+          excerpts={coreResponses.map((r) => r.excerpt)}
           isKo={isKo}
           registeredCompetitors={result.registeredCompetitors}
         />
 
         <TruthMirror
           brandName={result.brandName}
-          engineResponses={result.engineResponses}
+          engineResponses={coreResponses}
           isKo={isKo}
         />
 
@@ -1438,7 +1439,7 @@ function CompletedView({
           jobId={job.jobId}
         />
 
-        <NaverVsAiGap engineResponses={result.engineResponses} isKo={isKo} />
+        <NaverVsAiGap engineResponses={coreResponses} isKo={isKo} />
 
         <EnginesTabsSection isKo={isKo} result={result} />
 
@@ -3204,6 +3205,11 @@ function NaverBriefingCompletedCard({
         {isKo ? "네이버 AI 브리핑 측정 완료" : "Naver AI Briefing measured"}
       </div>
       <p className="mt-2 text-xs text-zinc-400">{queryNotice}</p>
+      <p className="mt-1 text-xs text-zinc-500">
+        {isKo
+          ? "이 결과는 기본 7엔진 GEO 점수·등장률과 별도로 보여줍니다."
+          : "This result is separate from the core seven-engine GEO score and appearance rate."}
+      </p>
       {!briefing || briefing.errorMessage ? (
         // 🔴 **「미노출」과 「못 쟀다」를 구분한다**(N-45).
         //   예전엔 둘을 한 칸에 뭉개 `errorMessage` 가 있으면 무조건
@@ -3757,8 +3763,8 @@ function EnginesTabsSection({
         </div>
         <p className="mt-1.5 text-xs text-zinc-500 leading-relaxed">
           {isKo
-            ? `위 ‘진실의 거울’의 판정 근거가 되는 대표 원문입니다. 이 리포트에는 엔진마다 1개만 보여드리며, ${result.promptsCount}개 질문별 전체 원문·날짜별 변화는 대시보드의 ‘추적 질문’에서 관리할 수 있어요.`
-            : `These are the representative source responses behind the Truth Mirror. This report shows one per engine; manage all responses across ${result.promptsCount} prompts and dates in the dashboard after sign-up.`}
+            ? `기본 7엔진 ‘진실의 거울’ 판정 근거와 별도 네이버 AI 브리핑 원문입니다. 엔진마다 대표 답변 1개를 보여드리며, ${result.promptsCount}개 질문별 전체 원문·날짜별 변화는 대시보드의 ‘추적 질문’에서 관리할 수 있어요.`
+            : `Representative evidence for the core seven-engine Truth Mirror, plus the separate Naver AI Briefing response. Manage all responses across ${result.promptsCount} prompts and dates in the dashboard after sign-up.`}
         </p>
       </div>
       <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900/60 backdrop-blur-sm">

@@ -14,6 +14,7 @@ import {
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
+import { reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -125,6 +126,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         { status: 404 }
       );
     }
+
+    job.status = (await reconcileStaleAuditJob(job)) ?? job.status;
 
     // 히스토리는 **완료된 job 에서만** 조회한다. 이 라우트는 진행 중 1초 간격으로
     //   폴링되므로, 아직 결과가 없는 동안 매번 추가 쿼리를 도는 건 낭비다.
