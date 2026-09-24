@@ -156,16 +156,17 @@ export interface AuditMetrics {
 
 export function aggregateAudit(responses: EngineResponse[]): AuditMetrics {
   const enginesCovered = responses.map((r) => r.engineId);
-  const enginesWithMention = responses
-    .filter((r) => r.brandMentioned)
-    .map((r) => r.engineId);
-  const positions = responses
+  const confirmedResponses = responses.filter(
+    (r) => r.brandMentioned && !r.errorMessage && !r.isStub
+  );
+  const enginesWithMention = confirmedResponses.map((r) => r.engineId);
+  const positions = confirmedResponses
     .map((r) => r.mentionPosition)
     .filter((p): p is number => p !== null);
 
   // 분모(목록 크기)가 함께 있는 응답만 상대 위치를 낼 수 있다.
   //   세션N-10 이전 측정분은 mentionListSize 가 null 이라 여기서 자연히 빠진다(소급 안전).
-  const ranked = responses.filter(
+  const ranked = confirmedResponses.filter(
     (
       r
     ): r is EngineResponse & {
@@ -181,7 +182,7 @@ export function aggregateAudit(responses: EngineResponse[]): AuditMetrics {
   const listSizes = ranked.map((r) => r.mentionListSize);
 
   const sentiments = { positive: 0, neutral: 0, negative: 0 };
-  for (const r of responses) {
+  for (const r of confirmedResponses) {
     if (r.sentiment) {
       sentiments[r.sentiment]++;
     }
@@ -194,7 +195,7 @@ export function aggregateAudit(responses: EngineResponse[]): AuditMetrics {
   // 언급 품질 검증은 runner에서 집계 전에 brandMentioned를 교정하므로, 여기서는
   // 그 단일 판정을 그대로 신뢰한다.
   const domainCount = new Map<string, number>();
-  for (const r of responses.filter((response) => response.brandMentioned)) {
+  for (const r of confirmedResponses) {
     for (const src of r.citedSources) {
       if (!src.domain) {
         continue;
@@ -221,7 +222,10 @@ export function aggregateAudit(responses: EngineResponse[]): AuditMetrics {
   //   분모를 "브랜드가 하나라도 등장한 응답"으로 잡아 경쟁 대비로 만든다. 여기서 분모를 바꾸면
   //   기존 시계열이 전부 끊기므로, 등장률은 그대로 두고 **경쟁 점유율을 별도 지표로 추가**한다
   //   (competitiveSov). 표시·채점은 두 값을 구분해 쓴다.
-  const successCount = responses.length - stubCount - errors.length;
+  // A stub may also carry an error; subtracting both counts double-excludes it.
+  const successCount = responses.filter(
+    (r) => !r.isStub && !r.errorMessage
+  ).length;
   const sov =
     successCount === 0
       ? 0

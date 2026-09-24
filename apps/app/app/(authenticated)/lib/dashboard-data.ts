@@ -477,6 +477,7 @@ function foldPromptScores(rows: TrackingRowInput[]): PromptScore[] {
   for (const [text, group] of groups) {
     // 순위는 언급 행에서도 파싱 실패하면 null → 평균 분모에서 제외(0으로 깔면 왜곡).
     const positions = group
+      .filter((r) => r.brandMentioned)
       .map((r) => r.mentionPosition)
       .filter((p): p is number => typeof p === "number" && p > 0);
     scores.push({
@@ -521,6 +522,7 @@ interface TrackingRun {
  */
 function averagePosition(rows: TrackingRowInput[]): number | null {
   const positions = rows
+    .filter((r) => r.brandMentioned)
     .map((r) => r.mentionPosition)
     .filter(
       (p): p is number => typeof p === "number" && Number.isFinite(p) && p > 0
@@ -555,6 +557,7 @@ function averagePosition(rows: TrackingRowInput[]): number | null {
 function positionSampleCount(rows: TrackingRowInput[]): number {
   return rows.filter(
     (r) =>
+      r.brandMentioned &&
       typeof r.mentionPosition === "number" &&
       Number.isFinite(r.mentionPosition) &&
       r.mentionPosition > 0
@@ -569,6 +572,7 @@ function positionSampleCount(rows: TrackingRowInput[]): number {
  */
 function averageListSize(rows: TrackingRowInput[]): number | null {
   const sizes = rows
+    .filter((r) => r.brandMentioned)
     .map((r) => r.mentionListSize)
     .filter(
       (n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0
@@ -591,6 +595,9 @@ export function summarizeSentiment(
   let neutral = 0;
   let negative = 0;
   for (const row of rows) {
+    if (!row.brandMentioned) {
+      continue;
+    }
     if (row.sentiment === "positive") {
       positive += 1;
     } else if (row.sentiment === "neutral") {
