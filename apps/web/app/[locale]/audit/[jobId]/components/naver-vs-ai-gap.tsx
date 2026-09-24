@@ -196,24 +196,24 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
   let recommendation = "";
   if (koreanLeads) {
     headline = isKo
-      ? `네이버 채널은 ${korean.rate}%인데, 글로벌 AI는 ${global.rate}%입니다.`
-      : `Naver channels are at ${korean.rate}%, but global AI is only ${global.rate}%.`;
+      ? `국내 AI 채널은 ${korean.rate}%인데, 글로벌 AI는 ${global.rate}%입니다.`
+      : `Korean AI channels are at ${korean.rate}%, but global AI is only ${global.rate}%.`;
     recommendation = isKo
       ? "한국에서는 잘 발견되지만 글로벌 AI 답변에서는 공백이 큽니다. 영문 콘텐츠·해외 인용 소스 확보가 필요합니다."
       : "You're well discovered in Korea but have a large gap in global AI answers. Securing English content and overseas citation sources is needed.";
   } else if (globalLeads) {
     headline = isKo
-      ? `글로벌 AI는 ${global.rate}%인데, 네이버 채널은 ${korean.rate}%입니다.`
-      : `Global AI is at ${global.rate}%, but Naver channels are only ${korean.rate}%.`;
+      ? `글로벌 AI는 ${global.rate}%인데, 국내 AI 채널은 ${korean.rate}%입니다.`
+      : `Global AI is at ${global.rate}%, but Korean AI channels are only ${korean.rate}%.`;
     // "한국 사용자는 못 찾습니다"는 54% 같은 값에 과장 — 실측 엔진명으로 대체.
     if (isKo && weakestKorean) {
-      recommendation = `격차의 주범은 ${weakestKorean.label}입니다 — ${weakestKorean.total}번 물어 ${weakestKorean.total - weakestKorean.hit}번 브랜드를 언급하지 않았습니다. 해당 채널에 노출될 콘텐츠(네이버 AI 브리핑·블로그)부터 보강하세요.`;
+      recommendation = `${weakestKorean.label}에서 ${weakestKorean.total}번 중 ${weakestKorean.total - weakestKorean.hit}번 브랜드가 빠졌습니다. 해당 질문에 답하는 공식 설명·콘텐츠를 보강한 뒤 이 채널을 재측정하세요.`;
     } else if (isKo) {
       recommendation =
-        "글로벌 대비 한국 채널 언급이 약합니다. 네이버 AI 브리핑·블로그 SEO 강화가 필요합니다.";
+        "글로벌 대비 국내 AI 채널의 언급이 약합니다. 빠진 질문에 답하는 공식 설명·콘텐츠를 보강한 뒤 재측정하세요.";
     } else {
       recommendation =
-        "Your global position is strong, but Korean channels mention you less. Strengthening Naver AI Briefing and blog SEO is needed.";
+        "Your global position is strong, but Korean channels mention you less. Strengthen content that directly answers the missed queries, then remeasure.";
     }
   } else {
     headline = isKo
@@ -229,7 +229,7 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
       <div className="mb-4 flex items-center gap-2">
         <span className="inline-flex h-1.5 w-1.5 rounded-full bg-indigo-400" />
         <span className="font-medium text-xs text-zinc-400">
-          Naver × Global AI · Visibility Gap
+          Korean × Global AI · Visibility Gap
         </span>
       </div>
 
