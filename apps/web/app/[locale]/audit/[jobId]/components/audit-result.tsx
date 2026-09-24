@@ -4738,7 +4738,7 @@ function UpsellCard({
         </Button>
         {email && (
           <Button asChild size="lg" variant="outline">
-            <a href={`${appUrl}/history/${job.jobId}`}>
+            <a href={`${appUrl}/history/${encodeURIComponent(job.jobId)}`}>
               {isKo
                 ? "이미 가입했다면 이 회차 대시보드에서 보기"
                 : "Already signed up? Open this run in the dashboard"}
