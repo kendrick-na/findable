@@ -572,7 +572,16 @@ function positionSampleCount(rows: TrackingRowInput[]): number {
  */
 function averageListSize(rows: TrackingRowInput[]): number | null {
   const sizes = rows
-    .filter((r) => r.brandMentioned)
+    // The AuditJob aggregate only averages lists with a measured rank.
+    // A list size without a confirmed position must not shift the dashboard
+    // denominator away from the report for the same run.
+    .filter(
+      (r) =>
+        r.brandMentioned &&
+        typeof r.mentionPosition === "number" &&
+        Number.isFinite(r.mentionPosition) &&
+        r.mentionPosition > 0
+    )
     .map((r) => r.mentionListSize)
     .filter(
       (n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0

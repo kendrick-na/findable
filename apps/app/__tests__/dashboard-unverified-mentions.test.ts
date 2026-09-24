@@ -24,6 +24,13 @@ describe("dashboard verified brand metrics", () => {
       base,
       {
         ...base,
+        engineId: "claude",
+        mentionListSize: 12,
+        mentionPosition: null,
+        sentiment: "neutral",
+      },
+      {
+        ...base,
         brandMentioned: false,
         engineId: "gemini",
         mentionListSize: 2,
@@ -33,16 +40,16 @@ describe("dashboard verified brand metrics", () => {
     ];
     const dashboard = buildTrackingDashboardData(rows);
 
-    expect(dashboard?.latestSov).toBe(50);
+    expect(dashboard?.latestSov).toBe(67);
     expect(dashboard?.averageMentionPosition).toBe(2);
     expect(dashboard?.averageMentionListSize).toBe(5);
     expect(dashboard?.positionSampleCount).toBe(1);
-    expect(dashboard?.promptScores[0]).toMatchObject({ hit: 1, position: 2 });
+    expect(dashboard?.promptScores[0]).toMatchObject({ hit: 2, position: 2 });
     expect(summarizeSentiment(rows)).toEqual({
       positive: 1,
-      neutral: 0,
+      neutral: 1,
       negative: 0,
-      total: 1,
+      total: 2,
     });
   });
 });
