@@ -78,7 +78,7 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
       <div className="relative z-10 mx-auto flex max-w-[1200px] flex-col items-center px-8 pt-16 pb-12 text-center md:pt-24 md:pb-14">
         {/* H1 — Toss 톤 명사구 단언 */}
         <h1
-          className="max-w-[1100px] opacity-0"
+          className="max-w-[1100px]"
           style={{
             fontFamily: isKo
               ? "var(--findable-font-display-kr)"
@@ -88,12 +88,8 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
             // 한글은 정사각 격자라 자간을 좁히면 글자가 붙는다 → 한국어에선 0
             letterSpacing: isKo ? "0" : "-0.035em",
             fontWeight: 500,
-            // 🔴 2026-08-15 모션 실측 — 0.8s+0.2s delay = 1.0s 였다.
-            //   MD3 공식 토큰(json/motion.json): extra-long(700ms~)은 일반 UI 에 쓰지 않는다.
-            //   경쟁사 실측(60fps 프레임차분): Profound 헤드라인 전환 83~100ms.
-            //   → long2(500ms) + delay 0.1s = 0.6s 로 압축.
-            animation:
-              "findable-fade-up 0.5s var(--findable-ease-out-soft) 0.1s forwards",
+            // Largest Contentful Paint 대상 문구는 첫 페인트부터 보여준다.
+            // opacity-0 애니메이션은 실제 가시성과 LCP를 불필요하게 늦춘다.
           }}
         >
           {h1}
