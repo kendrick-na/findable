@@ -83,7 +83,7 @@ if (process.env.NODE_ENV === "production") {
     },
     {
       source:
-        "/en/p/findable/seo와-geo의-차이-검색-순위와-ai-답변-노출을-함께-높이는-방법-mtfct1xy",
+        "/en/p/findable/seo%EC%99%80-geo%EC%9D%98-%EC%B0%A8%EC%9D%B4-%EA%B2%80%EC%83%89-%EC%88%9C%EC%9C%84%EC%99%80-ai-%EB%8B%B5%EB%B3%80-%EB%85%B8%EC%B6%9C%EC%9D%84-%ED%95%A8%EA%BB%98-%EB%86%92%EC%9D%B4%EB%8A%94-%EB%B0%A9%EB%B2%95-mtfct1xy",
       destination:
         "/ko/p/findable/seo와-geo의-차이-검색-순위와-ai-답변-노출을-함께-높이는-방법-mtfct1xy",
       statusCode: 301,
