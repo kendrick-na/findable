@@ -9,7 +9,10 @@ import {
   EMPTY_HISTORY,
 } from "@repo/audit/history";
 import { maskEmail } from "@repo/audit/mask";
-import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
+import {
+  hasStaleAuditPdf,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
@@ -134,6 +137,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     //      그게 바로 이 항목이 생긴 이유다(닫히는 쪽이 안전한 기본값).
     const isOwner = await resolveIsOwner(job);
 
+    const result = withRecomputedAuditMetrics(job.result);
+    const pdfOutdated = Boolean(
+      job.pdfUrl && hasStaleAuditPdf(job.result, result)
+    );
     return NextResponse.json({
       jobId: job.id,
       // 세션L L-1: 결과 소유권 연결용. 무료 진단은 "이 진단에 쓴 이메일로 가입해야"
@@ -154,8 +161,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       status: job.status,
       domain: job.domain,
       language: job.language,
-      pdfUrl: job.pdfUrl,
-      result: withRecomputedAuditMetrics(job.result),
+      pdfUrl: pdfOutdated ? null : job.pdfUrl,
+      pdfOutdated,
+      result,
       crewStatus: job.crewStatus,
       crewResult: job.crewResult,
       crewStartedAt: job.crewStartedAt?.toISOString() ?? null,

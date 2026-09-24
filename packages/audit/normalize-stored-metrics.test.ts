@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { countMeasurementCoverage } from "./measurement-coverage";
-import { withRecomputedAuditMetrics } from "./normalize-stored-metrics";
+import {
+  hasStaleAuditPdf,
+  withRecomputedAuditMetrics,
+} from "./normalize-stored-metrics";
 
 describe("saved audit metric normalization", () => {
   it("keeps Naver Briefing separate and repairs legacy sentiment", () => {
@@ -50,6 +53,7 @@ describe("saved audit metric normalization", () => {
       { domain: "official.example", count: 1 },
     ]);
     expect(normalized.metrics.enginesCovered).toEqual(["chatgpt", "gemini"]);
+    expect(hasStaleAuditPdf(result, normalized)).toBe(true);
   });
 
   it("matches a 22-response core run even when a separate briefing is saved", () => {
@@ -90,5 +94,6 @@ describe("saved audit metric normalization", () => {
         result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
       )
     ).toEqual({ attempted: 7, measured: 7 });
+    expect(hasStaleAuditPdf({ metrics: result.metrics }, result)).toBe(false);
   });
 });

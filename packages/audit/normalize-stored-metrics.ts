@@ -78,3 +78,30 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
     metrics: { ...result.metrics, ...aggregateAudit(responses) },
   } as T;
 }
+
+/** A generated PDF is immutable; don't offer it when its displayed metrics are stale. */
+export function hasStaleAuditPdf(
+  original: unknown,
+  corrected: unknown
+): boolean {
+  if (!(isRecord(original) && isRecord(corrected))) {
+    return false;
+  }
+  const oldMetrics = original.metrics;
+  const newMetrics = corrected.metrics;
+  if (!(isRecord(oldMetrics) && isRecord(newMetrics))) {
+    return false;
+  }
+  const displayed = [
+    "sov",
+    "averageMentionPosition",
+    "enginesCovered",
+    "enginesWithMention",
+    "sentimentDistribution",
+    "stubCount",
+    "topCitedDomains",
+  ];
+  return displayed.some(
+    (key) => JSON.stringify(oldMetrics[key]) !== JSON.stringify(newMetrics[key])
+  );
+}

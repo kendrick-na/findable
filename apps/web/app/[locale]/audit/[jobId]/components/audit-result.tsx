@@ -309,6 +309,7 @@ interface JobResponse {
   jobId: string;
   language: string;
   pdfUrl: string | null;
+  pdfOutdated?: boolean;
   result: JobResult | null;
   status: "queued" | "processing" | "completed" | "failed";
 }
@@ -1620,6 +1621,13 @@ function HeroSection({
               PDF
             </a>
           </Button>
+        )}
+        {job.pdfOutdated && (
+          <span className="text-xs text-zinc-400">
+            {isKo
+              ? "이전 PDF는 현재 재계산된 수치와 달라 제공하지 않습니다. 최신 결과는 이 페이지에서 확인하세요."
+              : "The old PDF differs from recalculated metrics. Use this page for the corrected result."}
+          </span>
         )}
       </div>
 
