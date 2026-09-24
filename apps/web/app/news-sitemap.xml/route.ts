@@ -30,7 +30,10 @@ function escapeXml(value: string) {
   return value.replace(XML_UNSAFE_RE, (char) => XML_ENTITIES[char] ?? char);
 }
 
-export const revalidate = 300;
+// News entries depend on a live publication window and the database. Prerendering
+// this route at build time can exhaust Supabase's small session pool when web and
+// app deployments overlap. The response still has a five-minute CDN cache below.
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const cutoff = Date.now() - TWO_DAYS_MS;
