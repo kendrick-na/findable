@@ -73,6 +73,21 @@ if (process.env.NODE_ENV === "production") {
       destination: "/en/insights",
       statusCode: 301,
     },
+    // Search Advisor still reports these historical article URLs as 404s.
+    // Preserve their inbound search links and consolidate them on the live posts.
+    {
+      source: "/ko/p/findable/ai-search-brand-information-checklist",
+      destination:
+        "/ko/p/findable/ai-검색-최적화-우리-브랜드-정보를-정리하는-7단계-mti7yxab",
+      statusCode: 301,
+    },
+    {
+      source:
+        "/en/p/findable/seo와-geo의-차이-검색-순위와-ai-답변-노출을-함께-높이는-방법-mtfct1xy",
+      destination:
+        "/ko/p/findable/seo와-geo의-차이-검색-순위와-ai-답변-노출을-함께-높이는-방법-mtfct1xy",
+      statusCode: 301,
+    },
   ];
 
   nextConfig.redirects = redirects;
