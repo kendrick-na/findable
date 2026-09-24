@@ -62,14 +62,13 @@ export const StartTrackingButton = ({
 
   const watchJob = (jobId: string) => {
     const startedAt = Date.now();
+    let delayNotified = false;
     timerRef.current = setInterval(async () => {
-      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-        stopPolling();
-        setPhase("idle");
+      if (!delayNotified && Date.now() - startedAt > POLL_TIMEOUT_MS) {
+        delayNotified = true;
         toast.info(
-          `${brandName} 측정이 아직 진행 중이에요. 잠시 후 대시보드에서 확인해 주세요.`
+          `${brandName} 측정이 예상보다 오래 걸려 상태를 계속 확인하고 있어요.`
         );
-        return;
       }
       try {
         const status = await getTrackingStatus(jobId);
