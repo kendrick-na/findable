@@ -134,7 +134,7 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
     );
     const link = container.querySelector("a");
     expect(link?.getAttribute("href")).toContain("/ko/audit/job-done");
-    expect(container.textContent).toContain("측정 상세");
+    expect(container.textContent).toContain("결과 보기");
   });
 });
 

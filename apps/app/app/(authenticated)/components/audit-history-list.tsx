@@ -53,15 +53,12 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
       {jobs.map((job) => {
         const sov = extractSov(job.result);
         const brandName = extractBrandName(job.result);
-        // 🔴 S6-c#4(2026-08-11) — 예전에는 **상태와 무관하게** 행 전체가 결과 링크였고
-        //   "결과 보기 →" 도 항상 떴다. 실패·대기 중인 측정에는 **볼 결과가 없다**
-        //   (= 없는 것을 약속하는 원인② 계열 결함). 같은 저장소 안에 이미 올바른 선례가
-        //   있었다: `brand/page.tsx:117` 은 `completed` 일 때만 링크를 건다 → **자기모순**.
-        //   → 완료 건만 링크·CTA 를 주고, 나머지는 지금 상태에 맞는 안내를 준다.
+        // Each state has a real destination: live progress, failure details, or
+        // the completed public report. Never label an unfinished run as a result.
         const isDone = job.status === "completed";
         const rowClassName = cn(
           "findable-card block p-4",
-          isDone && "findable-card-interactive"
+          "findable-card-interactive"
         );
         const body = (
           <>
@@ -105,11 +102,13 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
                     새 탭
                   </span>
                 </span>
+              ) : job.status === "failed" ? (
+                <span className="ml-auto text-[color:var(--findable-primary,#ff7a4d)]">
+                  실패 사유 보기
+                </span>
               ) : (
                 <span className="ml-auto text-[color:var(--findable-ink-tertiary,#7e8289)]">
-                  {job.status === "failed"
-                    ? "측정에 실패해서 결과가 없어요"
-                    : "측정이 끝나면 결과를 볼 수 있어요"}
+                  실시간 상태 보기
                 </span>
               )}
             </div>
@@ -128,7 +127,16 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
                 {body}
               </a>
             ) : (
-              <div className={rowClassName}>{body}</div>
+              <a
+                className={rowClassName}
+                href={
+                  job.status === "failed"
+                    ? `/history/${job.id}`
+                    : `/brand/measuring?job=${job.id}`
+                }
+              >
+                {body}
+              </a>
             )}
           </li>
         );
