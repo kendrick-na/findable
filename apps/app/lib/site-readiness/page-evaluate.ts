@@ -208,6 +208,25 @@ function normalizedComparableUrl(value: string): string {
   return url.toString();
 }
 
+function canonicalMatchesPage(canonical: string, finalUrl: string): boolean {
+  if (
+    normalizedComparableUrl(canonical) === normalizedComparableUrl(finalUrl)
+  ) {
+    return true;
+  }
+  const actual = new URL(finalUrl);
+  const declared = new URL(canonical);
+  // A locale-neutral homepage may render the selected language at `/` and
+  // intentionally declare its localized homepage as the canonical URL.
+  return (
+    actual.origin === declared.origin &&
+    actual.pathname === "/" &&
+    !actual.search &&
+    !declared.search &&
+    (declared.pathname === "/ko" || declared.pathname === "/en")
+  );
+}
+
 export function evaluateCrawledPage(input: {
   errorCode?: string | null;
   finalUrl: string;
@@ -230,9 +249,7 @@ export function evaluateCrawledPage(input: {
   let canonicalMatches: boolean | null = null;
   if (canonical) {
     try {
-      canonicalMatches =
-        normalizedComparableUrl(canonical) ===
-        normalizedComparableUrl(input.finalUrl);
+      canonicalMatches = canonicalMatchesPage(canonical, input.finalUrl);
     } catch {
       canonicalMatches = false;
     }
