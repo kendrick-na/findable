@@ -26,6 +26,18 @@ function positiveNumber(value: unknown): number | null {
     : null;
 }
 
+function semanticJson(value: unknown): string | undefined {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    isRecord(item)
+      ? Object.fromEntries(
+          Object.entries(item).sort(([left], [right]) =>
+            left.localeCompare(right)
+          )
+        )
+      : item
+  );
+}
+
 /**
  * Rebuild displayed metrics from the immutable engine rows in saved jobs.
  * Old snapshots counted sentiment for unrelated answers and could carry a
@@ -116,6 +128,6 @@ export function hasStaleAuditPdf(
     "topCitedDomains",
   ];
   return displayed.some(
-    (key) => JSON.stringify(oldMetrics[key]) !== JSON.stringify(newMetrics[key])
+    (key) => semanticJson(oldMetrics[key]) !== semanticJson(newMetrics[key])
   );
 }

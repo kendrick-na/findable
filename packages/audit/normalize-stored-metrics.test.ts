@@ -99,4 +99,24 @@ describe("saved audit metric normalization", () => {
     ).toEqual({ attempted: 7, measured: 7 });
     expect(hasStaleAuditPdf({ metrics: result.metrics }, result)).toBe(false);
   });
+
+  it("does not mark a fresh PDF or market score stale because JSON keys were reordered", () => {
+    const original = {
+      metrics: {
+        sov: 0,
+        enginesCovered: ["chatgpt"],
+        enginesWithMention: [],
+        sentimentDistribution: { neutral: 0, negative: 0, positive: 0 },
+        topCitedDomains: [],
+        stubCount: 0,
+        averageMentionPosition: null,
+      },
+      regions: [{ region: "korea", score: 0 }],
+      engineResponses: [{ engineId: "chatgpt", brandMentioned: false }],
+    };
+    const corrected = withRecomputedAuditMetrics(original);
+    expect(hasStaleAuditPdf(original, corrected)).toBe(false);
+    expect(corrected.regions).toEqual(original.regions);
+    expect(corrected).not.toHaveProperty("regionScoresOutdated");
+  });
 });
