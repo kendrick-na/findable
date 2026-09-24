@@ -48,4 +48,14 @@ describe("public search identity contract", () => {
       'path: "/ai-instructions"'
     );
   });
+
+  it("redirects the published English article's draft URL to its editorial slug", () => {
+    const config = read("apps/web/next.config.ts");
+    expect(config).toContain(
+      'source: "/en/p/findable/new-blog-post-draft-mtmpt3um"'
+    );
+    expect(config).toContain(
+      'destination: "/en/p/findable/ai-search-optimization-7-steps"'
+    );
+  });
 });
