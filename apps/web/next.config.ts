@@ -73,13 +73,6 @@ if (process.env.NODE_ENV === "production") {
       destination: "/en/insights",
       statusCode: 301,
     },
-    // This article was published with its initial editor-template slug.
-    // Keep inbound links working after assigning a descriptive canonical URL.
-    {
-      source: "/en/p/findable/new-blog-post-draft-mtmpt3um",
-      destination: "/en/p/findable/ai-search-optimization-7-steps",
-      statusCode: 301,
-    },
     // Search Advisor still reports these historical article URLs as 404s.
     // Preserve their inbound search links and consolidate them on the live posts.
     {

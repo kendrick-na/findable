@@ -49,13 +49,10 @@ describe("public search identity contract", () => {
     );
   });
 
-  it("redirects the published English article's draft URL to its editorial slug", () => {
+  it("does not redirect the published English article to a nonexistent slug", () => {
     const config = read("apps/web/next.config.ts");
-    expect(config).toContain(
+    expect(config).not.toContain(
       'source: "/en/p/findable/new-blog-post-draft-mtmpt3um"'
-    );
-    expect(config).toContain(
-      'destination: "/en/p/findable/ai-search-optimization-7-steps"'
     );
   });
 });
