@@ -48,6 +48,8 @@ describe("public landing navigation contract", () => {
     expect(read("apps/web/app/[locale]/(home)/components/faq.tsx")).toContain(
       'id="faq"'
     );
+    expect(glossary).toContain('ko ? "관련 인사이트" : "Related insights"');
+    expect(glossary).toContain("SEO·GEO 사례와 분석 보기 →");
     expect(layout).not.toContain('"scroll-smooth"');
   });
 

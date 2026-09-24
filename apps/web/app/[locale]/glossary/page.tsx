@@ -245,14 +245,14 @@ export default async function GlossaryPage({
         </section>
         <section className="mt-20 border-t border-white/10 pt-8">
           <p className="text-sm text-white/45">
-            {ko ? "더 자세히 읽기" : "Read more"}
+            {ko ? "관련 인사이트" : "Related insights"}
           </p>
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
             <Link
               className="text-[#ff7a4d] hover:underline"
               href={`${prefix}/insights`}
             >
-              {ko ? "Findable 인사이트" : "Findable insights"}
+              {ko ? "SEO·GEO 사례와 분석 보기 →" : "Browse SEO and GEO analysis →"}
             </Link>
           </div>
         </section>
