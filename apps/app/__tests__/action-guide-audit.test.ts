@@ -45,7 +45,7 @@ describe("액션 가이드 — 상황별로 맞는 처방이 나온다", () => {
     expect(actions.length).toBeGreaterThan(0);
     const first = actions[0];
     // 0건일 때 「문장 품질을 높이세요」라고 하면 헛다리다 — 읽히지도 않는 상태다.
-    expect(first?.evidence).toMatch(/어디도|인지하지 못/);
+    expect(first?.evidence).toMatch(/어디도|인지하지 못|확인된 답변은 0개/);
     // ⛔ 숫자를 지어내지 않는다: 분모는 입력값이어야 한다.
     expect(first?.evidence).toContain("7곳");
   });
@@ -84,6 +84,18 @@ describe("액션 가이드 — 상황별로 맞는 처방이 나온다", () => {
     expect(
       `${portfolio?.title}${portfolio?.how}${portfolio?.evidence}`
     ).toContain("blog.naver.com");
+  });
+
+  it("등록 브랜드를 확인한 답변이 없으면 출처 편중을 자사 설명의 근거로 주장하지 않는다", () => {
+    const actions = buildGeoActions({
+      ...base,
+      enginesMentioned: 0,
+      averageMentionPosition: null,
+      sourceMix: { community: 0, media: 0, other: 0, owned: 10, reference: 0 },
+    });
+    expect(actions.some((action) => action.kind === "source_portfolio")).toBe(
+      false
+    );
   });
 
   it("🔴 **하지 말 것**이 항상 있다 (효과 없는 통설을 막는다)", () => {

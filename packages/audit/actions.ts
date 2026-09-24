@@ -312,6 +312,12 @@ function communityChannelHint(scope: MarketScope): string {
 }
 
 function sourcePortfolioAction(input: ActionInput): GeoAction | null {
+  // A cited URL alone does not establish that an answer described the brand.
+  // Search results can cite the submitted domain while no engine verifies the
+  // registered entity; calling those "sources AI uses to explain us" is false.
+  if (input.enginesMentioned === 0) {
+    return null;
+  }
   const mix = input.sourceMix;
   if (!mix) {
     return null;
