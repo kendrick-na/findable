@@ -243,6 +243,9 @@ const MiniMock = ({ kind, isKo = true }: { kind: string; isKo?: boolean }) => {
   if (kind === "engines") {
     return (
       <div className="text-[12px] leading-[1.7]" style={fontMono}>
+        <div className="mb-2 text-[var(--findable-ink-tertiary)]">
+          {isKo ? "화면 예시 · 실제 측정값 아님" : "UI example · not measured data"}
+        </div>
         <div className="text-[var(--findable-ink-subtle)]">
           $ findable audit your-brand.co.kr
         </div>
@@ -273,7 +276,9 @@ const MiniMock = ({ kind, isKo = true }: { kind: string; isKo?: boolean }) => {
           </span>
         </div>
         <div className="mt-2 border-[var(--findable-hairline)] border-t pt-2 text-[var(--findable-primary)]">
-          → 7/7 engines OK · 25s avg
+          {isKo
+            ? "→ 성공한 답변만 점수에 반영"
+            : "→ Only successful responses count toward the score"}
         </div>
       </div>
     );
