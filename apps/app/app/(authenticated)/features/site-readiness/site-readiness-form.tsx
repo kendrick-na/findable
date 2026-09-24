@@ -74,12 +74,11 @@ export interface SiteReadinessLabels {
   pageSpeedSeoLabel: string;
   pageSpeedTitle: string;
   pageSpeedUnavailable: string;
-  performanceTitle: string;
-  previousComparison: string;
   passedChecksLabel: string;
+  performanceTitle: string;
   playbookLinkLabel: string;
+  previousComparison: string;
   prioritySummaryLabel: string;
-  technicalLinkLabel: string;
   recheckCta: string;
   responseColumn: string;
   responseSizeLabel: string;
@@ -89,6 +88,7 @@ export interface SiteReadinessLabels {
   schemaColumn: string;
   severity: Record<ReadinessSeverity, string>;
   status: Record<ReadinessStatus, string>;
+  technicalLinkLabel: string;
   title: string;
   totalResponseLabel: string;
   ttfbLabel: string;
@@ -134,6 +134,19 @@ function submitLabel(
     return labels.measuringCta;
   }
   return hasReport ? labels.recheckCta : labels.cta;
+}
+
+// A stored brand domain is usually bare (example.com), but type="url" only
+// accepts a full URL. Keep what the user sees immediately submit-ready.
+export function siteReadinessInputUrl(domainOrUrl: string): string {
+  const value = domainOrUrl.trim();
+  if (!value) {
+    return "";
+  }
+  const lower = value.toLowerCase();
+  return lower.startsWith("https://") || lower.startsWith("http://")
+    ? value
+    : `https://${value}`;
 }
 
 function AutomaticRunStatus({
@@ -527,7 +540,7 @@ export function SiteReadinessForm({
               autoCapitalize="none"
               autoComplete="url"
               className="min-h-11 flex-1 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-0,#090a0b)] px-4 text-[color:var(--findable-ink,#f7f8f8)] text-sm transition-colors placeholder:text-[color:var(--findable-ink-tertiary,#7e8289)] focus-visible:border-[color:var(--findable-primary,#ff7a4d)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--findable-primary,#ff7a4d)]/35"
-              defaultValue={defaultUrl}
+              defaultValue={siteReadinessInputUrl(defaultUrl)}
               disabled={busy || !brandId}
               id="site-readiness-url"
               name="url"
