@@ -86,6 +86,7 @@ async function loadHistory(job: {
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
+  const startedAt = performance.now();
   const { jobId } = await params;
   log.debug("audit.poll.received", { jobId });
 
@@ -119,6 +120,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         completedAt: true,
       },
     });
+    const jobLookupMs = Math.round(performance.now() - startedAt);
 
     if (!job) {
       return NextResponse.json(
@@ -144,12 +146,24 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     //   폴링되므로, 아직 결과가 없는 동안 매번 추가 쿼리를 도는 건 낭비다.
     const history =
       job.status === "completed" ? await loadHistory(job) : EMPTY_HISTORY;
+    const historyMs = Math.round(performance.now() - startedAt) - jobLookupMs;
 
     // 🔒 소유 판별 — 비로그인이면 `auth()` 가 빈 값을 주고 그대로 **비소유자**가 된다.
     //   ⚠️ 실패해도 결과 조회 자체는 깨뜨리지 않는다. 다만 실패 시 기본값은
     //      **비소유(false)** 다 — 판별을 못 하는 상황에서 노출하는 쪽으로 기울면
     //      그게 바로 이 항목이 생긴 이유다(닫히는 쪽이 안전한 기본값).
     const isOwner = await resolveIsOwner(job);
+    const ownerMs =
+      Math.round(performance.now() - startedAt) - jobLookupMs - historyMs;
+    if (performance.now() - startedAt > 1500) {
+      log.warn("audit.poll.slow", {
+        jobId,
+        jobLookupMs,
+        historyMs,
+        ownerMs,
+        totalMs: Math.round(performance.now() - startedAt),
+      });
+    }
 
     const result = withRecomputedAuditMetrics(job.result);
     const pdfOutdated = Boolean(
