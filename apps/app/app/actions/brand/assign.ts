@@ -2,7 +2,7 @@
 
 import { planCapabilities } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
-import { database } from "@repo/database";
+import { database, Prisma } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
 import { requireOrg, scopedBrandById } from "@/lib/db/scoped";
@@ -187,6 +187,102 @@ const scheduleReadinessAfterAssign = async ({
     trigger,
   });
 
+interface BrandWrite {
+  domain: string;
+  industry: IndustryValue | null;
+  marketScope: MarketScopeValue | null;
+  name: string;
+  orgId: string;
+}
+
+async function updateOwnedBrand(id: string, write: BrandWrite): Promise<void> {
+  await database.$transaction(
+    async (tx) => {
+      const duplicate = await tx.brand.findFirst({
+        where: {
+          organizationId: write.orgId,
+          domain: write.domain,
+          id: { not: id },
+        },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new Error("DUPLICATE_DOMAIN");
+      }
+      await tx.brand.update({
+        where: { id },
+        data: {
+          name: write.name,
+          domain: write.domain,
+          organizationId: write.orgId,
+          industry: write.industry,
+          marketScope: write.marketScope,
+        },
+      });
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+  );
+}
+
+function createOwnedBrand(write: BrandWrite, brandLimit: number) {
+  return database.$transaction(
+    async (tx) => {
+      const duplicate = await tx.brand.findFirst({
+        where: { organizationId: write.orgId, domain: write.domain },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new Error("DUPLICATE_DOMAIN");
+      }
+      if (Number.isFinite(brandLimit)) {
+        const brandCount = await tx.brand.count({
+          where: { organizationId: write.orgId },
+        });
+        if (brandCount >= brandLimit) {
+          throw new Error("BRAND_LIMIT");
+        }
+      }
+      return tx.brand.create({
+        data: {
+          name: write.name,
+          domain: write.domain,
+          organizationId: write.orgId,
+          industry: write.industry,
+          marketScope: write.marketScope,
+        },
+      });
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+  );
+}
+
+async function assignFailure(
+  error: unknown,
+  orgId: string
+): Promise<{ error: string }> {
+  if (error instanceof Error && error.message === "DUPLICATE_DOMAIN") {
+    return { error: "이미 등록된 도메인의 브랜드가 있습니다." };
+  }
+  if (error instanceof Error && error.message === "BRAND_LIMIT") {
+    const brandLimit = planCapabilities(await getCurrentPlan()).brandLimit;
+    return {
+      error: `현재 플랜은 브랜드를 ${brandLimit}개까지 등록할 수 있어요. 더 등록하려면 요금제를 올려주세요.`,
+    };
+  }
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2034"
+  ) {
+    return {
+      error: "동시에 처리 중인 브랜드 변경이 있어요. 다시 시도해 주세요.",
+    };
+  }
+  log.error(
+    `[brand/assign] failed for org ${orgId}: ${error instanceof Error ? error.message : "unknown"}`
+  );
+  return { error: "브랜드 저장 중 문제가 발생했습니다." };
+}
+
 export const assignBrandOwner = async (
   input: AssignBrandOwnerInput
 ): Promise<AssignBrandOwnerResult> => {
@@ -224,19 +320,12 @@ export const assignBrandOwner = async (
         return { error: "해당 브랜드에 접근할 수 없습니다." };
       }
       const domainChanged = owned.domain !== domain;
-      if (domainChanged) {
-        const duplicate = await database.brand.findFirst({
-          where: { organizationId: orgId, domain, id: { not: owned.id } },
-          select: { id: true },
-        });
-        if (duplicate) {
-          return { error: "이미 등록된 도메인입니다." };
-        }
-      }
-      await database.brand.update({
-        where: { id: owned.id },
-        // organizationId 는 재확인차 현재 org 로 고정(이미 owned 이므로 멱등).
-        data: { name, domain, organizationId: orgId, industry, marketScope },
+      await updateOwnedBrand(owned.id, {
+        name,
+        domain,
+        orgId,
+        industry,
+        marketScope,
       });
       revalidatePath("/brand");
       revalidatePath("/");
@@ -256,31 +345,13 @@ export const assignBrandOwner = async (
     }
 
     // 3-B) 신규 생성 — org 내 동일 도메인 중복 차단.
-    const dup = await database.brand.findFirst({
-      where: { organizationId: orgId, domain },
-    });
-    if (dup) {
-      return { error: "이미 등록된 도메인의 브랜드가 있습니다." };
-    }
-
     // 브랜드 수 게이팅(planCapabilities SoT). free 1·starter 3·growth 5·scale+ 무제한.
     //   신규 생성일 때만(기존 소유지정 3-A 는 개수 불변). 서버 판정(우회 불가).
     const brandLimit = planCapabilities(await getCurrentPlan()).brandLimit;
-    if (Number.isFinite(brandLimit)) {
-      const brandCount = await database.brand.count({
-        where: { organizationId: orgId },
-      });
-      if (brandCount >= brandLimit) {
-        return {
-          error: `현재 플랜은 브랜드를 ${brandLimit}개까지 등록할 수 있어요. 더 등록하려면 요금제를 올려주세요.`,
-        };
-      }
-    }
-
-    const brand = await database.brand.create({
-      // organizationId 는 입력이 아니라 현재 orgId 강제(남의 org 생성 불가).
-      data: { name, domain, organizationId: orgId, industry, marketScope },
-    });
+    const brand = await createOwnedBrand(
+      { name, domain, orgId, industry, marketScope },
+      brandLimit
+    );
     revalidatePath("/brand");
     revalidatePath("/");
     const siteReadinessRunId = await scheduleReadinessAfterAssign({
@@ -295,12 +366,6 @@ export const assignBrandOwner = async (
       siteReadinessRunId: siteReadinessRunId ?? undefined,
     };
   } catch (error) {
-    // 6) DB 실패 — 로그만 남기고 사용자에겐 일반 메시지.
-    log.error(
-      `[brand/assign] failed for org ${orgId}: ${
-        error instanceof Error ? error.message : "unknown"
-      }`
-    );
-    return { error: "브랜드 저장 중 문제가 발생했습니다." };
+    return assignFailure(error, orgId);
   }
 };
