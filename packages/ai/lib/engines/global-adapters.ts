@@ -14,7 +14,9 @@
 
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
+import { log } from "@repo/observability/log";
 import { generateText, type LanguageModel } from "ai";
+import { describeProviderError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type {
   EngineAdapter,
@@ -597,6 +599,7 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
         },
       };
     } catch (error) {
+      logProviderFailure(engineId, useDirectProvider, error);
       return {
         engineId,
         rawResponse: "",
@@ -612,6 +615,18 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
       };
     }
   };
+}
+
+function logProviderFailure(
+  engineId: GlobalEngineId,
+  useDirectProvider: boolean,
+  error: unknown
+): void {
+  log.warn("audit.engine.provider_failure", {
+    engineId,
+    provider: useDirectProvider ? "direct" : "vercel-gateway",
+    ...describeProviderError(error),
+  });
 }
 
 export const chatgptAdapter: EngineAdapter = makeGatewayAdapter("chatgpt");
