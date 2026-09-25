@@ -295,7 +295,9 @@ export const GET = async (request: NextRequest) => {
       planExpiresAt: { not: null, lt: new Date(now) },
       plan: { not: "free" },
     },
-    data: { plan: "free", planExpiresAt: null },
+    // 만료일을 남겨야 사용자별 Clerk 캐시가 아직 유료여도 서버 게이트가
+    // 이 기간제 부여를 무효화할 수 있다. 새 권한 부여 시 새 날짜로 교체된다.
+    data: { plan: "free" },
   });
   if (expired.count > 0) {
     log.info("cron.plan.expired_downgraded", { count: expired.count });

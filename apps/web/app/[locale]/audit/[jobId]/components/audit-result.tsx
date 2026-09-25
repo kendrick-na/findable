@@ -1803,8 +1803,8 @@ function HeroSection({
           쓴다. `erroredEnginesCount`(엔진 단위)를 쓰면 ⑥에서 고친 분모 혼재가 되살아난다. */}
       <p className="mt-2 text-sm text-zinc-400">
         {isKo
-          ? `${result.promptsCount}개 프롬프트 × ${enginesCoveredUnique.length}개 AI 엔진 · 총 ${result.metrics.enginesCovered.length}회 시도 · 실제 답변 ${successfulResponses}개`
-          : `${result.promptsCount} prompts × ${enginesCoveredUnique.length} AI engines · ${result.metrics.enginesCovered.length} attempts · ${successfulResponses} successful answers`}
+          ? `질문 ${result.promptsCount}개 · 대상 AI 엔진 ${enginesCoveredUnique.length}개 · 실제 ${result.metrics.enginesCovered.length}회 시도 · 답변 ${successfulResponses}개`
+          : `${result.promptsCount} prompts · ${enginesCoveredUnique.length} eligible AI engines · ${result.metrics.enginesCovered.length} actual attempts · ${successfulResponses} answers`}
         {excludedResponses > 0 && (
           <span className="text-[var(--signal-warn)]">
             {isKo

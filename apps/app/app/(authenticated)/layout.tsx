@@ -1,5 +1,5 @@
 import { isAdmin } from "@repo/auth/admin";
-import { planFromPublicMetadata } from "@repo/auth/plan";
+import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth, currentUser } from "@repo/auth/server";
 import { SidebarProvider } from "@repo/design-system/components/ui/sidebar";
 import { showBetaFeature } from "@repo/feature-flags";
@@ -31,9 +31,7 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
     return <CreateOrgGate />;
   }
 
-  const plan = planFromPublicMetadata(
-    user.publicMetadata as Record<string, unknown> | null | undefined
-  );
+  const plan = await getCurrentPlan();
   const admin = await isAdmin();
   // 파트너 배지 노출 판정(진실=DB status). 승인 파트너만 true.
   const { status: partnerStatus } = await getMyPartnerStatus();

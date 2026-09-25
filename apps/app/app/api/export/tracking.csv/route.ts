@@ -9,7 +9,7 @@
 //   (`apps/app/lib/db/scoped.ts` 파일 상단 경고. brandId 를 URL 로 찔러도 그 헬퍼가
 //    현재 org 소속인지 함께 검증한다.)
 
-import { planFromPublicMetadata } from "@repo/auth/plan";
+import { getCurrentPlan } from "@repo/auth/plan-server";
 import { currentUser } from "@repo/auth/server";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -101,9 +101,7 @@ export async function GET(request: Request) {
     // 게이팅: 내보내기는 유료 기능(감사 §경계선 설계 — Profound Starter 와 같은 선).
     //   ⚠️ 요금제 표기와 실제 게이트가 어긋나면 "없는 기능 판매"가 된다(세션N-7 커밋 0d3d409).
     //   그래서 여기서 막는 대신 화면에서도 같은 기준으로 잠근다.
-    const plan = planFromPublicMetadata(
-      user.publicMetadata as Record<string, unknown> | null | undefined
-    );
+    const plan = await getCurrentPlan();
     if (plan === "free") {
       return new Response("Upgrade required", { status: 402 });
     }

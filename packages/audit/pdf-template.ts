@@ -166,7 +166,7 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
 </div>
 
 <h1 class="title">${escapeHtml(data.brandName)}의 AI 가시성 진단 (${escapeHtml(data.domain)})</h1>
-<p class="subtitle">${data.promptsCount}개 프롬프트 × ${uniqueCovered}개 AI 엔진 = ${data.metrics.enginesCovered.length}회 호출 분석 · 측정 언어 ${LANGUAGE_LABEL[data.language]}</p>
+<p class="subtitle">질문 ${data.promptsCount}개 · 대상 AI 엔진 ${uniqueCovered}개 · 실제 ${data.metrics.enginesCovered.length}회 호출 분석 · 측정 언어 ${LANGUAGE_LABEL[data.language]}</p>
 
 <div class="scorecard">
   <div class="card primary">

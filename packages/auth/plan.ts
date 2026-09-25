@@ -92,6 +92,47 @@ export function hasPlan(current: Plan, required: Plan): boolean {
   return PLAN_RANK[current] >= PLAN_RANK[required];
 }
 
+/**
+ * 조직 플랜과 사용자별 결제·파트너 권한을 합친 실제 게이트.
+ * 초대 코드로 한 번 올라간 Clerk 캐시는 만료 후에도 남을 수 있으므로,
+ * 해당 사용자에게 초대 사용 이력이 있으면 현재 조직/기간을 재검증한다.
+ */
+export function resolveEffectivePlan(input: {
+  clerkPlan: Plan;
+  organizationPlan: Plan;
+  organizationPlanExpiresAt: Date | null;
+  hasInviteRedemption?: boolean;
+  hasCurrentPaymentGrant?: boolean;
+  isApprovedPartner?: boolean;
+  now?: Date;
+}): Plan {
+  const nowMs = (input.now ?? new Date()).getTime();
+  const activeOrgPlan: Plan =
+    input.organizationPlanExpiresAt &&
+    input.organizationPlanExpiresAt.getTime() <= nowMs
+      ? "free"
+      : input.organizationPlan;
+  // 초대 이력이 있는 사용자의 Clerk 캐시는 초대 이후 관리자 조기 회수나
+  // 기간 만료를 알 수 없다. 초대 권한은 조직 DB만 신뢰한다.
+  // 관리자 기간제 부여는 초대 이력이 없을 수 있으므로 만료 날짜도 본다.
+  // 별도 결제나 승인된 파트너 권한은 초대 만료와 독립적이다.
+  const expiredOrgGrant = Boolean(
+    input.organizationPlanExpiresAt &&
+      input.organizationPlanExpiresAt.getTime() <= nowMs
+  );
+  const userPlan: Plan =
+    (input.hasInviteRedemption || expiredOrgGrant) &&
+    !input.hasCurrentPaymentGrant &&
+    !input.isApprovedPartner
+      ? "free"
+      : input.clerkPlan;
+  const partnerPlan: Plan = input.isApprovedPartner ? "growth" : "free";
+  return [activeOrgPlan, userPlan, partnerPlan].reduce<Plan>(
+    (best, plan) => (hasPlan(plan, best) ? plan : best),
+    "free"
+  );
+}
+
 // ──────────────────────────────────────────────────
 // 플랜 능력치(게이팅 단일 진실) — 2026-07-30 백로그 2·7.
 //

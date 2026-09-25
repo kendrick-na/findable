@@ -1,10 +1,12 @@
 "use server";
 
 import { grantPlan } from "@repo/auth/plan-grant";
+import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth } from "@repo/auth/server";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import { ensureOrgExists } from "@/lib/db/ensure-org";
 
 /**
  * 초대 코드 사용(redeem) — 프로그램 참가 기업에게 기간제 권한을 준다.
@@ -45,6 +47,23 @@ export async function redeemInviteCode(input: {
   const code = input.code.trim().toUpperCase();
   if (!code) {
     return { error: "초대 코드를 입력해 주세요." };
+  }
+
+  // 가입 직후 Clerk 조직 웹훅이 늦어도 해당 조직을 DB에 먼저 만든다.
+  // 그렇지 않으면 유효한 초대 코드가 organization.update에서 실패한다.
+  if ((await ensureOrgExists()) !== orgId) {
+    return {
+      error: "조직 정보를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.",
+    };
+  }
+
+  // grantPlan()은 기존 결제 출처 메타데이터를 교체한다. 유료/파트너/다른 코드
+  // 권한 위에 초대 코드를 덮으면 환불·만료 때 잘못 강하될 수 있으므로 막는다.
+  if ((await getCurrentPlan()) !== "free") {
+    return {
+      error:
+        "이미 이용 중인 플랜이 있습니다. 초대 코드는 무료 플랜에서만 사용할 수 있어요.",
+    };
   }
 
   const invite = await database.inviteCode.findUnique({ where: { code } });
