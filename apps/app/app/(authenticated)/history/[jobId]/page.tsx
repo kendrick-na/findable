@@ -67,7 +67,8 @@ export default async function AuditHistoryDetail({
   const result = withRecomputedAuditMetrics(job.result);
   const brandName = extractBrandName(result) ?? job.domain;
   const metrics = metricsOf(result);
-  const isPartial = (metrics?.unverifiedCount ?? 0) > 0;
+  const isPartial =
+    status === "completed" && (metrics?.unverifiedCount ?? 0) > 0;
   const storedResponses = (
     job.result as {
       engineResponses?: Array<{
@@ -116,6 +117,12 @@ export default async function AuditHistoryDetail({
               확정하지 않습니다. 자세한 응답은 공개 리포트에서 확인할 수
               있습니다.
             </p>
+            {(metrics?.errors?.length ?? 0) > 0 ? (
+              <p className="mt-2 text-muted-foreground text-sm">
+                별도로 AI 엔진 응답 오류 {metrics?.errors?.length}건이 있어 해당
+                답변은 수집되지 않았습니다.
+              </p>
+            ) : null}
             <a
               className="mt-4 inline-flex items-center gap-1 text-sm underline"
               href={`${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${job.id}`}

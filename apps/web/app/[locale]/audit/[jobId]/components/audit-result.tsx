@@ -1345,6 +1345,13 @@ function VerificationPartialView({
             ? "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
             : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
         </p>
+        {result.metrics.errors.length > 0 && (
+          <p className="mt-3 max-w-2xl text-sm text-amber-200 leading-relaxed">
+            {isKo
+              ? `별도로 AI 엔진 호출 ${result.metrics.errors.length}건이 실패했습니다. 이는 고객 사이트의 오류가 아니며 Findable 운영팀이 제공업체 연결 상태를 복구해야 합니다.`
+              : `Separately, ${result.metrics.errors.length} AI engine calls failed. This is not a problem with your site; Findable must restore the provider connection.`}
+          </p>
+        )}
         <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             [isKo ? "측정 시도" : "Attempts", coreResponses.length],
