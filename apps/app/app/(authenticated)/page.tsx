@@ -1,8 +1,8 @@
-import { isUsableRun } from "@repo/audit/run-quality";
 import {
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { isUsableRun } from "@repo/audit/run-quality";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { hasPlan, isPaid } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
@@ -20,17 +20,16 @@ import {
 } from "@/lib/db/scoped";
 import { hasCompletedSetup } from "@/lib/onboarding";
 import { BrandSwitcher } from "./components/brand-switcher";
-import { DashboardEmptyState } from "./components/dashboard-empty-state-server";
-import { DashboardKpis } from "./components/dashboard-kpis";
-import { DashboardImpactEstimate } from "./components/dashboard-impact-estimate";
 import { DashboardDeepAnalysis } from "./components/dashboard-deep-analysis";
+import { DashboardEmptyState } from "./components/dashboard-empty-state-server";
+import { DashboardImpactEstimate } from "./components/dashboard-impact-estimate";
+import { DashboardKpis } from "./components/dashboard-kpis";
 import { DashboardRunContext } from "./components/dashboard-run-context";
 import {
   DashboardSystemStatus,
   DashboardSystemStatusSkeleton,
 } from "./components/dashboard-system-status";
 import { Header } from "./components/header";
-import { auditJobScope } from "./lib/audit-job-scope";
 import { NextActionsCard } from "./components/next-actions-card";
 import { OnboardingTour } from "./components/onboarding-tour";
 import { PartnerCTA } from "./components/partner-cta";
@@ -40,6 +39,7 @@ import { TrendAnnotations } from "./components/trend-annotations";
 import { UpgradeLadder } from "./components/upgrade-ladder";
 import { TruthMirrorSection } from "./features/analysis/truth-mirror-section";
 import { StartTrackingButton } from "./features/brand/start-tracking-button";
+import { auditJobScope } from "./lib/audit-job-scope";
 import {
   buildDashboardData,
   buildTrackingDashboardData,
@@ -284,6 +284,20 @@ const App = async ({ searchParams }: AppProperties) => {
         result: withRecomputedAuditMetrics(job.result),
       }))
     );
+  // A successful AuditJob can outlive a best-effort Tracking insert. Never
+  // present the previous Tracking run as the current dashboard measurement.
+  const trackedBrandId = trackingData?.latestBrandId;
+  const latestTrackingAt = trackingData?.latestMeasuredAt;
+  const newerJobWithoutTracking =
+    trackedBrandId && latestTrackingAt
+      ? jobsLite.find(
+          (job) =>
+            job.brandId === trackedBrandId &&
+            job.status === "completed" &&
+            job.completedAt &&
+            job.completedAt > latestTrackingAt
+        )
+      : undefined;
   // Tracking 한 회차는 runner 가 AuditJob.completedAt 과 동일한 trackedAt 을 기록한다.
   // 이 연결을 화면에도 유지해야 리포트와 대시보드가 서로 다른 회차를 말하지 않는다.
   const currentRunJob =
@@ -394,7 +408,25 @@ const App = async ({ searchParams }: AppProperties) => {
           </section>
         ) : null}
 
-        {hasData && hasUsableResult ? (
+        {newerJobWithoutTracking ? (
+          <section className="findable-card flex flex-col gap-3 p-6">
+            <h1 className="font-semibold text-xl">
+              최신 측정 결과를 확인해 주세요
+            </h1>
+            <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+              최신 측정은 완료됐지만 대시보드 시계열 반영이 지연됐습니다. 이전
+              회차의 숫자를 최신 결과로 표시하지 않습니다.
+            </p>
+            <Link
+              className="text-[color:var(--findable-primary,#ff7a4d)] text-sm"
+              href={`/history/${newerJobWithoutTracking.id}`}
+            >
+              최신 측정과 리포트 보기 →
+            </Link>
+          </section>
+        ) : null}
+
+        {!newerJobWithoutTracking && hasData && hasUsableResult ? (
           <>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex flex-col gap-1">
@@ -437,7 +469,7 @@ const App = async ({ searchParams }: AppProperties) => {
             />
 
             {currentRunUnverified > 0 && currentRunJob ? (
-              <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+              <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-amber-100 text-sm">
                 이번 측정은 브랜드 판별 {currentRunUnverified}회가 완료되지
                 않았습니다. 이번 회차의 점수·등장률·추세·놓치는 유입 추정·개선
                 처방은 확정하지 않습니다.{" "}
@@ -573,7 +605,8 @@ const App = async ({ searchParams }: AppProperties) => {
             <PartnerCTA plan={plan} />
             {!isPaid(plan) && <UpgradeLadder plan={plan} />}
           </>
-        ) : (
+        ) : null}
+        {newerJobWithoutTracking || (hasData && hasUsableResult) ? null : (
           /* 🔴 S2'(2026-08-11 세션N-19) — **빈 상태에서는 영업을 걷어낸다.**
              📕설계 v3 §4-2: 측정 0건에서 `PartnerCTA`·`UpgradeLadder` 를 렌더하지 않는다.
              근거: 아직 **제품이 무엇인지도 모르는 사람**에게 업그레이드를 파는 화면이다.

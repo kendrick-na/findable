@@ -4,10 +4,37 @@ import { countMeasurementCoverage } from "./measurement-coverage";
 import {
   hasStaleAuditPdf,
   isPublishableAuditResult,
+  publicAuditResult,
   withRecomputedAuditMetrics,
 } from "./normalize-stored-metrics";
 
 describe("saved audit metric normalization", () => {
+  it("never exposes provisional scores, cited domains or prescriptions in the public API", () => {
+    const result = publicAuditResult({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {
+        sov: 27,
+        unverifiedCount: 7,
+        enginesWithMention: ["gemini"],
+        topCitedDomains: [{ domain: "unrelated.example", count: 8 }],
+      },
+      geoActions: [{ title: "Publish pages" }],
+      topRecommendations: ["Publish pages"],
+      regions: [{ region: "korea", score: 38 }],
+      engineResponses: [{ engineId: "gemini", excerpt: "raw answer" }],
+    });
+    expect(result.metrics).toMatchObject({
+      sov: null,
+      unverifiedCount: 7,
+      enginesWithMention: [],
+      topCitedDomains: [],
+    });
+    expect(result.geoActions).toEqual([]);
+    expect(result.topRecommendations).toEqual([]);
+    expect(result.regions).toBeUndefined();
+    expect(result.engineResponses[0].excerpt).toBe("raw answer");
+  });
+
   it("blocks PDFs and AI advice for legacy and unresolved entity verdicts", () => {
     const responses = [
       { engineId: "chatgpt", brandMentioned: true, isStub: false },

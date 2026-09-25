@@ -32,10 +32,16 @@ const toNameList = (value: unknown): string[] => {
 
 export const BrandProfileEditorServer = async ({
   brandId,
+  name,
+  industry,
+  marketScope,
   competitors,
   entityVariants,
 }: {
   brandId: string;
+  name: string;
+  industry: string | null;
+  marketScope: string | null;
   competitors: unknown;
   entityVariants: unknown;
 }) => {
@@ -44,6 +50,9 @@ export const BrandProfileEditorServer = async ({
   return (
     <BrandProfileEditor
       brandId={brandId}
+      name={name}
+      industry={industry}
+      marketScope={marketScope}
       competitors={toNameList(competitors)}
       entityVariants={toNameList(entityVariants)}
       onSave={updateBrandProfile}

@@ -189,7 +189,7 @@
       "saving": "Saving…",
       "saveFailedHint": "You can change these settings later.",
       "removeItem": "Remove {item}",
-      "editorSummary": "View & edit brand info — industry, market, names & competitors",
+      "editorSummary": "View & edit brand info — name, industry, market, aliases & competitors",
       "editorCounts": "{aliases} aliases · {competitors} competitors",
       "editorAliasTitle": "Other names we go by",
       "editorAliasHint": "So AI does not count Korean and English spellings separately. e.g. Amorepacific",

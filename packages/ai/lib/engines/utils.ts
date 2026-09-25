@@ -2,6 +2,25 @@
 
 import type { CitedSource } from "./types";
 
+const HANGUL_BRAND_NAME = /^[가-힣]{4,}$/;
+const BRAND_WHITESPACE = /\s+/g;
+
+/** Korean brand spellings often gain a word boundary in model answers. */
+function mentionIndex(text: string, candidate: string): number {
+  const exact = text.toLowerCase().indexOf(candidate.toLowerCase());
+  if (exact !== -1) {
+    return exact;
+  }
+  // Only long, entirely Hangul names get the spacing fallback. Applying it to
+  // short names or mixed scripts would inflate false brand mentions.
+  const compact = candidate.replaceAll(BRAND_WHITESPACE, "");
+  if (!HANGUL_BRAND_NAME.test(compact)) {
+    return -1;
+  }
+  const spaced = new RegExp([...compact].join("[ \\t]*"), "i");
+  return text.search(spaced);
+}
+
 /**
  * 답변 텍스트에서 브랜드명·변형 표기를 모두 검색해
  * 첫 등장 위치(0-based char index)와 mention 여부 반환.
@@ -20,9 +39,8 @@ export function detectBrandMention(
     .filter((s) => s.length >= 2);
 
   let firstIndex: number | null = null;
-  const lowered = text.toLowerCase();
   for (const candidate of candidates) {
-    const idx = lowered.indexOf(candidate.toLowerCase());
+    const idx = mentionIndex(text, candidate);
     if (idx !== -1 && (firstIndex === null || idx < firstIndex)) {
       firstIndex = idx;
     }
@@ -102,8 +120,7 @@ export function estimateMentionPosition(
 
   for (const m of matches) {
     const rank = Number.parseInt(m[1], 10);
-    const lineLower = m[2].toLowerCase();
-    if (candidates.some((c) => lineLower.includes(c))) {
+    if (candidates.some((c) => mentionIndex(m[2], c) !== -1)) {
       // 분모보다 큰 순위는 나올 수 없다(같은 배열에서 뽑았으므로 방어적 clamp).
       return { position: rank, listSize: Math.max(listSize, rank) };
     }

@@ -9,6 +9,9 @@ import { BrandProfileEditor } from "./brand-profile-editor";
 const meta: Meta<typeof BrandProfileEditor> = {
   args: {
     brandId: "brand-1",
+    name: "아모레퍼시픽",
+    industry: "beauty",
+    marketScope: "both",
     onSave: () => Promise.resolve({ ok: true } as const),
     // 실제 사전을 쓴다 — 더미 문구면 키 누락을 눈으로 못 잡는다.
     t: koDict.app.onboarding as Record<string, string>,

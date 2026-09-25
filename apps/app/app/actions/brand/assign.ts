@@ -224,6 +224,15 @@ export const assignBrandOwner = async (
         return { error: "해당 브랜드에 접근할 수 없습니다." };
       }
       const domainChanged = owned.domain !== domain;
+      if (domainChanged) {
+        const duplicate = await database.brand.findFirst({
+          where: { organizationId: orgId, domain, id: { not: owned.id } },
+          select: { id: true },
+        });
+        if (duplicate) {
+          return { error: "이미 등록된 도메인입니다." };
+        }
+      }
       await database.brand.update({
         where: { id: owned.id },
         // organizationId 는 재확인차 현재 org 로 고정(이미 owned 이므로 멱등).

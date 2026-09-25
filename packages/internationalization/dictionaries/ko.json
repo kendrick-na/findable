@@ -189,7 +189,7 @@
       "saving": "저장 중…",
       "saveFailedHint": "설정은 나중에 바꿀 수 있어요.",
       "removeItem": "{item} 제거",
-      "editorSummary": "브랜드 정보 확인·수정 — 업종·시장·별칭·경쟁사",
+      "editorSummary": "브랜드 정보 확인·수정 — 이름·업종·시장·별칭·경쟁사",
       "editorCounts": "별칭 {aliases} · 경쟁사 {competitors}",
       "editorAliasTitle": "우리를 부르는 다른 이름",
       "editorAliasHint": "AI가 한글·영문을 따로 세지 않도록 합칩니다. 예: Amorepacific",

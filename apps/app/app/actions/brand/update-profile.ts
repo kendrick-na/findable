@@ -33,6 +33,20 @@ const MAX_LEN = 60;
 /** DB `MarketScope` enum. 유효값이 아니면 저장하지 않는다(= 자동 추정 유지). */
 const MARKET_SCOPE_VALUES = ["korea", "global", "both"] as const;
 type MarketScopeValue = (typeof MARKET_SCOPE_VALUES)[number];
+const INDUSTRY_VALUES = [
+  "beauty",
+  "fashion",
+  "food",
+  "b2b_saas",
+  "content_ip",
+  "retail",
+  "finance",
+  "healthcare",
+  "education",
+  "manufacturing",
+  "other",
+] as const;
+type IndustryValue = (typeof INDUSTRY_VALUES)[number];
 
 const toMarketScope = (value?: string): MarketScopeValue | null => {
   const v = value?.trim().toLowerCase();
@@ -49,6 +63,7 @@ export interface UpdateBrandProfileInput {
   completeOnboarding?: boolean;
   /** 내 브랜드 표기 변형. 예: ["아모레", "Amorepacific"]. 안 보내면 무변경. */
   entityVariants?: string[];
+  industry?: string;
   /**
    * 👤 고객이 확정한 타깃 시장. 안 보내면 무변경(= 자동 추정 유지).
    *
@@ -60,6 +75,7 @@ export interface UpdateBrandProfileInput {
    *   그 불변식은 `brand-assign-detected-scope.test.ts` 의 「엔진 분모 불변」이 문다.
    */
   marketScope?: string;
+  name?: string;
   /** 다음에 다시 들어왔을 때 복귀할 단계(2~5). */
   onboardingStep?: number;
 }
@@ -94,6 +110,26 @@ const cleanList = (values: string[]): string[] => {
   return out;
 };
 
+function validatedIdentity(
+  input: UpdateBrandProfileInput
+): { error: string } | { name?: string; industry?: IndustryValue } {
+  const identity: { name?: string; industry?: IndustryValue } = {};
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (name.length < 2 || name.length > MAX_LEN) {
+      return { error: "브랜드명은 2~60자로 입력해 주세요." };
+    }
+    identity.name = name;
+  }
+  if (input.industry !== undefined) {
+    if (!(INDUSTRY_VALUES as readonly string[]).includes(input.industry)) {
+      return { error: "업종을 선택해 주세요." };
+    }
+    identity.industry = input.industry as IndustryValue;
+  }
+  return identity;
+}
+
 export const updateBrandProfile = async (
   input: UpdateBrandProfileInput
 ): Promise<UpdateBrandProfileResult> => {
@@ -108,7 +144,14 @@ export const updateBrandProfile = async (
     competitors?: string[];
     entityVariants?: string[];
     marketScope?: MarketScopeValue;
+    name?: string;
+    industry?: IndustryValue;
   } = {};
+  const identity = validatedIdentity(input);
+  if ("error" in identity) {
+    return identity;
+  }
+  Object.assign(data, identity);
   if (input.entityVariants) {
     data.entityVariants = cleanList(input.entityVariants);
   }

@@ -13,6 +13,7 @@ import { maskEmail } from "@repo/audit/mask";
 import {
   hasStaleAuditPdf,
   isPublishableAuditResult,
+  publicAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
@@ -202,7 +203,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       language: job.language,
       pdfUrl: pdfOutdated ? null : job.pdfUrl,
       pdfOutdated,
-      result,
+      result: publicAuditResult(result),
       crewStatus: job.crewStatus,
       crewResult: publishable ? job.crewResult : null,
       crewOutdated: !publishable && Boolean(job.crewResult),

@@ -70,6 +70,28 @@ export function isPublishableAuditResult(result: unknown): boolean {
   );
 }
 
+/** Public API must not expose provisional scores or prescriptions as facts. */
+export function publicAuditResult<T>(result: T): T {
+  if (isPublishableAuditResult(result) || !isRecord(result)) {
+    return result;
+  }
+  const metrics = isRecord(result.metrics) ? result.metrics : {};
+  return {
+    ...result,
+    metrics: {
+      ...metrics,
+      sov: null,
+      averageMentionPosition: null,
+      enginesWithMention: [],
+      sentimentDistribution: null,
+      topCitedDomains: [],
+    },
+    geoActions: [],
+    topRecommendations: [],
+    regions: undefined,
+  } as T;
+}
+
 /**
  * Rebuild displayed metrics from the immutable engine rows in saved jobs.
  * Old snapshots counted sentiment for unrelated answers and could carry a

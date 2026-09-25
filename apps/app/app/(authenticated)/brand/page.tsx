@@ -214,6 +214,9 @@ const BrandPage = async () => {
                         자체를 건너뛴다. 여기가 없으면 별칭·경쟁사를 **영영 못 넣는다**. */}
                     <BrandProfileEditorServer
                       brandId={brand.id}
+                      name={brand.name}
+                      industry={brand.industry}
+                      marketScope={brand.marketScope}
                       competitors={brand.competitors}
                       entityVariants={brand.entityVariants}
                     />
