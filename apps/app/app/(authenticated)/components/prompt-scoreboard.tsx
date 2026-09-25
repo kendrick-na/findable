@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 import type { PromptScore } from "../lib/dashboard-data";
 
@@ -94,9 +95,18 @@ export const PromptScoreboard = ({ scores }: PromptScoreboardProps) => {
               className="flex min-w-0 flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-4"
               key={score.text}
             >
-              <p className="min-w-0 flex-1 text-[color:var(--findable-ink-muted,#d0d6e0)] text-sm">
-                {score.text}
-              </p>
+              {score.promptId ? (
+                <Link
+                  className="min-w-0 flex-1 text-[color:var(--findable-ink-muted,#d0d6e0)] text-sm underline-offset-4 hover:text-[color:var(--findable-primary,#ff7a4d)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
+                  href={`/prompts/${score.promptId}`}
+                >
+                  {score.text} <span aria-hidden="true">↗</span>
+                </Link>
+              ) : (
+                <p className="min-w-0 flex-1 text-[color:var(--findable-ink-muted,#d0d6e0)] text-sm">
+                  {score.text}
+                </p>
+              )}
 
               <div className="flex shrink-0 items-center gap-3">
                 {/* 등장률 막대 — 숫자만으로는 질문 간 비교가 눈에 안 들어온다. */}

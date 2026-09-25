@@ -563,7 +563,11 @@ function performanceTasks(report: SiteReadinessReport): SiteReadinessTask[] {
       evidence:
         item.metric.value == null
           ? "측정값 없음"
-          : `${item.metric.value}${item.id === "cls" ? "" : "ms"}`,
+          : item.id === "cls"
+            ? item.metric.value.toFixed(3)
+            : item.id === "lcp"
+              ? `${(item.metric.value / 1000).toFixed(1)}초`
+              : `${Math.round(item.metric.value)}ms`,
       id: `performance:${item.id}`,
       location: `${originOf(report)}의 모바일 렌더링 경로`,
       sampleUrls: [report.finalUrl],

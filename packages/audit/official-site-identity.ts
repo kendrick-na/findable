@@ -1,7 +1,7 @@
 import { log } from "@repo/observability/log";
 import { assertPublicUrl, normalizePublicUrl } from "./public-url-security";
 
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 20_000;
 const MAX_REDIRECTS = 3;
 const MAX_RESPONSE_BYTES = 1_000_000;
 const USER_AGENT =
@@ -68,11 +68,8 @@ function metaContent(html: string, key: string): string | null {
   return null;
 }
 
-async function readLimitedText(response: Response): Promise<string> {
-  const declaredLength = Number(response.headers.get("content-length") ?? 0);
-  if (declaredLength > MAX_RESPONSE_BYTES) {
-    throw new Error("RESPONSE_TOO_LARGE");
-  }
+/** Read only enough of a potentially large homepage to identify its brand. */
+export async function readIdentityHtml(response: Response): Promise<string> {
   if (!response.body) {
     return "";
   }
@@ -85,12 +82,23 @@ async function readLimitedText(response: Response): Promise<string> {
     if (done) {
       break;
     }
-    bytes += value.byteLength;
-    if (bytes > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
+    const remaining = MAX_RESPONSE_BYTES - bytes;
+    const chunk = value.subarray(0, remaining);
+    bytes += chunk.byteLength;
+    text += decoder.decode(chunk, { stream: true });
+    // The title and metadata live in <head>; large storefront bodies need not
+    // be downloaded just to validate a customer's registered brand.
+    if (/<\/head\s*>/i.test(text) && extractOfficialSiteIdentity(text, "")) {
+      await reader.cancel().catch(() => undefined);
+      return text + decoder.decode();
+    }
+    if (bytes >= MAX_RESPONSE_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      if (extractOfficialSiteIdentity(text, "")) {
+        return text + decoder.decode();
+      }
       throw new Error("RESPONSE_TOO_LARGE");
     }
-    text += decoder.decode(value, { stream: true });
   }
   return text + decoder.decode();
 }
@@ -112,32 +120,37 @@ async function fetchHomepage(initialUrl: URL): Promise<{ html: string; finalUrl:
         redirect: "manual",
         signal: controller.signal,
       });
+    } catch (error) {
+      clearTimeout(timeout);
+      throw error;
+    }
+    try {
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location || redirect === MAX_REDIRECTS) {
+          throw new Error("REDIRECT_FAILED");
+        }
+        current = new URL(location, current);
+        continue;
+      }
+      if (!(response.status >= 200 && response.status < 300)) {
+        throw new Error(`HTTP_${response.status}`);
+      }
+      const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+      if (!contentType.includes("text/html")) {
+        throw new Error("NOT_HTML");
+      }
+      return { html: await readIdentityHtml(response), finalUrl: current };
     } finally {
       clearTimeout(timeout);
     }
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location || redirect === MAX_REDIRECTS) {
-        throw new Error("REDIRECT_FAILED");
-      }
-      current = new URL(location, current);
-      continue;
-    }
-    if (!(response.status >= 200 && response.status < 300)) {
-      throw new Error(`HTTP_${response.status}`);
-    }
-    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-    if (!contentType.includes("text/html")) {
-      throw new Error("NOT_HTML");
-    }
-    return { html: await readLimitedText(response), finalUrl: current };
   }
   throw new Error("REDIRECT_FAILED");
 }
 
 /**
  * 언급 판정용 공식 엔티티 단서를 홈페이지에서 한 번만 확보한다.
- * 실패해도 측정은 계속하되, 로그와 result의 null 값으로 근거 부족을 드러낸다.
+ * 실패 시 null을 반환한다. 호출자는 식별 근거 없이는 측정을 중단한다.
  */
 export async function resolveOfficialSiteIdentity(
   domain: string

@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 const REDEEM = join(process.cwd(), "app/actions/invite/redeem.ts");
 const CRON = join(
   process.cwd(),
-  "../web/app/api/cron/auto-refresh-tracking/route.ts"
+  "app/api/cron/auto-refresh-tracking/route.ts"
 );
 const SCHEMA = join(
   process.cwd(),
@@ -73,6 +73,12 @@ describe("초대 코드 — 권한을 여는 경로의 안전장치", () => {
 
   it("코드를 대문자로 정규화한다 (메일·PDF 에서 옮겨 적는다)", () => {
     expect(NORMALIZES_CODE.test(redeemSource)).toBe(true);
+  });
+
+  it("사용 한도는 트랜잭션 안에서 조건부 갱신해 동시 입력을 제한한다", () => {
+    expect(redeemSource).toContain("tx.inviteCode.updateMany");
+    expect(redeemSource).toContain("redeemedCount: { lt: invite.maxRedemptions }");
+    expect(redeemSource).toContain("updated.count !== 1");
   });
 });
 

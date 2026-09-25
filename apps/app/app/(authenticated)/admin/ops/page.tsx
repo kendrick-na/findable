@@ -3,6 +3,7 @@ import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "../../components/header";
+import { startOfKoreanDay } from "./kst-day";
 
 export const metadata: Metadata = {
   title: "운영 현황",
@@ -61,11 +62,7 @@ const AdminOpsPage = async () => {
   }
 
   const now = new Date();
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  );
+  const startOfToday = startOfKoreanDay(now);
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const staleBefore = new Date(now.getTime() - STALE_AFTER_MS);
 
@@ -311,21 +308,19 @@ const AdminOpsPage = async () => {
           </CardGrid>
         </Section>
 
-        {/* Brand / Tracking — runner 미적재라 정직하게 표기 */}
+        {/* Brand / Tracking — 실제 저장 건수를 그대로 보여준다. 0도 0건이다. */}
         <Section
-          note="아직 runner 가 적재하지 않았습니다. 0 이면 미적재로 읽으세요."
-          title="Brand · Tracking (미적재)"
+          note="현재 저장된 브랜드와 엔진 응답의 전체 건수입니다."
+          title="브랜드 · 엔진 응답"
         >
           <CardGrid>
             <StatCard
-              label="Brand"
-              muted
-              value={brandCount === 0 ? "미적재" : fmt(brandCount)}
+              label="브랜드"
+              value={fmt(brandCount)}
             />
             <StatCard
-              label="Tracking"
-              muted
-              value={trackingCount === 0 ? "미적재" : fmt(trackingCount)}
+              label="엔진 응답"
+              value={fmt(trackingCount)}
             />
           </CardGrid>
         </Section>
