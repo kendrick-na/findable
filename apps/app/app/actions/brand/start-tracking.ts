@@ -10,9 +10,9 @@ import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { after } from "next/server";
+import { getAuditRuntimeReadiness } from "@/lib/audit/runtime-readiness";
 import { requireOrg } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
-import { getAuditRuntimeReadiness } from "@/lib/audit/runtime-readiness";
 
 /**
  * "측정 시작" 서버 액션 — 로그인 org 사용자가 브랜드의 AI 인용 audit을 트리거 (20번, P2).
