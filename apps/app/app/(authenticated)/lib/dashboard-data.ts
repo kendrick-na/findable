@@ -305,7 +305,14 @@ function measuredAt(job: AuditJob): Date {
 // jobs 는 page.tsx 에서 createdAt desc 로 조회된다는 전제.
 // completed 측정만으로 KPI·추세를 구성한다.
 export function buildDashboardData(jobs: AuditJob[]): DashboardData {
-  const completed = jobs.filter(
+  // Keep this boundary safe for every caller, including the Tracking fallback
+  // and future server actions. A dashboard must not consume a raw legacy result
+  // just because its caller forgot the normalizer.
+  const normalizedJobs = jobs.map((job) => ({
+    ...job,
+    result: withRecomputedAuditMetrics(job.result),
+  }));
+  const completed = normalizedJobs.filter(
     (job) => job.status === "completed" && isUsableRun(job.result)
   );
 

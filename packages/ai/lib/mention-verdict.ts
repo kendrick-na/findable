@@ -23,8 +23,11 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
+import { getDomain } from "tldts";
 import { z } from "zod";
 import { describeProviderError } from "./engines/provider-error";
+
+export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
 
 const LETSUR_VERDICT_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
@@ -123,7 +126,12 @@ function mentionsOfficialDomain(text: string, brandDomain?: string): boolean {
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
     .split(/[/?#]/)[0];
-  return domain.length > 0 && text.toLowerCase().includes(domain);
+  return (
+    domain.length > 0 &&
+    [
+      ...text.matchAll(/(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?/gi),
+    ].some(([candidate]) => isOfficialDomain(candidate, domain))
+  );
 }
 
 function normalizedHost(value: string): string {
@@ -200,7 +208,12 @@ function isOfficialDomain(domain: string, brandDomain?: string): boolean {
   return Boolean(
     official &&
       candidate &&
-      (candidate === official || official.endsWith(`.${candidate}`))
+      getDomain(official, { allowPrivateDomains: true }) &&
+      getDomain(official, { allowPrivateDomains: true }) ===
+        getDomain(candidate, { allowPrivateDomains: true }) &&
+      (candidate === official ||
+        official.endsWith(`.${candidate}`) ||
+        candidate.endsWith(`.${official}`))
   );
 }
 
@@ -216,9 +229,19 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
   if (mentionsOfficialDomain(input.text, input.brandDomain)) {
     return true;
   }
-  const hasConflictingDomain = hasConflictingBrandDomain(input);
+  // Mixed-source lists may contain an unused official search candidate. Require
+  // an independent textual anchor to the official owner in that case. This is
+  // only a corroborating check AFTER the semantic verifier, never a verdict.
+  const ownerToken = getDomain(normalizedHost(input.brandDomain ?? ""), {
+    allowPrivateDomains: true,
+  })?.split(".")[0];
+  const hasOwnerAnchor = Boolean(
+    ownerToken &&
+      ownerToken.length >= 4 &&
+      input.text.toLowerCase().includes(ownerToken)
+  );
   if (
-    !hasConflictingDomain &&
+    (!hasConflictingBrandDomain(input) || hasOwnerAnchor) &&
     (input.citedDomains ?? []).some((domain) => {
       return isOfficialDomain(domain, input.brandDomain);
     })
@@ -457,7 +480,13 @@ export async function verifyMention(
     return { counted: false, quality: "unknown_brand", via: "rule" };
   }
 
-  if (hasConflictingBrandDomain(input)) {
+  if (
+    hasConflictingBrandDomain(input) &&
+    !(input.citedDomains ?? []).some((domain) =>
+      isOfficialDomain(domain, input.brandDomain)
+    ) &&
+    !mentionsOfficialDomain(input.text, input.brandDomain)
+  ) {
     return { counted: false, quality: "different_entity", via: "rule" };
   }
 
@@ -473,7 +502,7 @@ export async function verifyMention(
 
   if (quality === "confirmed" && input.officialSite) {
     if (!hasOfficialIdentityEvidence(input)) {
-      return { counted: false, quality: "unknown_brand", via: "llm" };
+      return { counted: false, quality: "unverified", via: "llm" };
     }
   }
 

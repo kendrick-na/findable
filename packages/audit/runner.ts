@@ -17,7 +17,10 @@ import {
   auditCost,
   queryAllEngines,
 } from "@repo/ai/lib/engines";
-import { verifyMentions } from "@repo/ai/lib/mention-verdict";
+import {
+  MENTION_VERDICT_VERSION,
+  verifyMentions,
+} from "@repo/ai/lib/mention-verdict";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -562,6 +565,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     });
 
     const result = {
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
       brandName,
       domain: input.domain,
       measurementContext: {
@@ -571,7 +575,13 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       promptsCount: prompts.length,
       briefingStatus: "not_requested" as const,
       cost: costSummary,
-      engineResponses: flat.map((r) => ({
+      engineResponses: flat.map((r, index) => ({
+        // Excerpts remain a display convenience; revalidation must retain the
+        // complete evidence and the original pre-verifier name-match result.
+        rawResponse: r.rawResponse,
+        stringMatched: rawFlat[index]?.brandMentioned ?? false,
+        promptText: tagged[index]?.promptText,
+        promptLang: tagged[index]?.promptLang,
         engineId: r.engineId,
         brandMentioned: r.brandMentioned,
         mentionPosition: r.mentionPosition,
