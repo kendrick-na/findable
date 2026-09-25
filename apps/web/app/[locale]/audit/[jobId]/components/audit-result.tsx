@@ -1304,6 +1304,128 @@ function MeasurementFailedView({
   );
 }
 
+/** A verifier outage is not evidence that the brand is absent. */
+function VerificationPartialView({
+  isKo,
+  job,
+  result,
+}: {
+  isKo: boolean;
+  job: JobResponse;
+  result: JobResult;
+}) {
+  const coreResponses = result.engineResponses.filter(
+    (response) => response.engineId !== "naver-briefing"
+  );
+  const answerCount = coreResponses.filter(
+    (response) => !response.errorMessage && !response.isStub
+  ).length;
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr";
+
+  return (
+    <div className="space-y-8 pb-24 lg:pb-12">
+      <MeasuredAtNotice isKo={isKo} job={job} />
+      <section className="rounded-2xl border border-amber-400/30 bg-zinc-900/80 p-6 md:p-10">
+        <div className="font-medium text-amber-300 text-xs tracking-[0.16em] uppercase">
+          {isKo
+            ? "판별 미완료 · 잠정 결과"
+            : "Verification incomplete · provisional result"}
+        </div>
+        <h1 className="mt-3 max-w-3xl font-semibold text-2xl text-zinc-50 leading-tight md:text-4xl">
+          {isKo
+            ? `${result.brandName}의 이번 결과는 확정할 수 없습니다.`
+            : `This result for ${result.brandName} is not conclusive.`}
+        </h1>
+        <p className="mt-4 max-w-2xl text-sm text-zinc-300 leading-relaxed">
+          {isKo
+            ? "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
+            : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
+        </p>
+        <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            [isKo ? "측정 시도" : "Attempts", coreResponses.length],
+            [isKo ? "수집된 답변" : "Answers collected", answerCount],
+            [
+              isKo ? "엔진 오류" : "Engine errors",
+              result.metrics.errors.length,
+            ],
+            [
+              isKo ? "브랜드 판별 불가" : "Unverified matches",
+              result.metrics.unverifiedCount ?? 0,
+            ],
+          ].map(([label, value]) => (
+            <div
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
+              key={String(label)}
+            >
+              <div className="text-xs text-zinc-400">{label}</div>
+              <div className="mt-1 font-semibold text-2xl text-zinc-100 tabular-nums">
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+        {job.pdfOutdated && (
+          <p className="mt-5 text-amber-200 text-xs">
+            {isKo
+              ? "이전 PDF는 판별 실패를 반영하지 않아 제공하지 않습니다."
+              : "The previous PDF did not account for verification failures and is unavailable."}
+          </p>
+        )}
+        <a
+          className="mt-6 inline-flex rounded-lg border border-white/15 px-4 py-2 font-medium text-sm text-zinc-100 transition-colors hover:bg-white/10"
+          href={`${appUrl}/history/${encodeURIComponent(job.jobId)}`}
+        >
+          {isKo
+            ? "대시보드에서 이번 회차 보기 →"
+            : "Open this run in the dashboard →"}
+        </a>
+      </section>
+
+      <section aria-label={isKo ? "수집된 답변" : "Collected answers"}>
+        <h2 className="font-semibold text-xl text-zinc-100">
+          {isKo ? "AI가 실제로 준 답변" : "Answers actually returned"}
+        </h2>
+        <p className="mt-2 text-sm text-zinc-400">
+          {isKo
+            ? "아래는 판정 결과가 아닌 저장된 답변 내용입니다. 긴 답변은 저장 길이 제한으로 일부만 보일 수 있습니다."
+            : "These are saved answer excerpts, not verified brand mentions. Long answers may be truncated."}
+        </p>
+        <div className="mt-4 space-y-2">
+          {coreResponses.map((response, index) => (
+            <details
+              className="group rounded-xl border border-white/10 bg-zinc-900/60"
+              key={`${response.engineId}-${index}`}
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm text-zinc-200">
+                <span>
+                  {ENGINE_LABELS[response.engineId] ?? response.engineId} · #
+                  {index + 1}
+                </span>
+                <span className="text-xs text-zinc-400">
+                  {response.errorMessage
+                    ? isKo
+                      ? "응답 오류"
+                      : "Error"
+                    : isKo
+                      ? "답변 수집"
+                      : "Answer collected"}
+                </span>
+              </summary>
+              <div className="border-white/10 border-t px-4 py-4 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                {response.errorMessage ??
+                  (response.excerpt ||
+                    (isKo ? "저장된 답변이 없습니다." : "No saved answer."))}
+              </div>
+            </details>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ProcessingState({
   locale,
   domain,
@@ -1386,6 +1508,10 @@ function CompletedView({
         result={result}
       />
     );
+  }
+
+  if ((result.metrics.unverifiedCount ?? 0) > 0) {
+    return <VerificationPartialView isKo={isKo} job={job} result={result} />;
   }
 
   return (

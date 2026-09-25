@@ -3,6 +3,7 @@ import { database } from "@repo/database";
 import { resend } from "@repo/email";
 import { NewsletterConfirmationEmail } from "@repo/email/templates/newsletter-confirmation";
 import { createRateLimiter, slidingWindow } from "@repo/rate-limit";
+import { isRateLimitConfigured } from "@repo/rate-limit/keys";
 import { z } from "zod";
 
 const inputSchema = z.object({
@@ -14,13 +15,12 @@ const inputSchema = z.object({
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
-const limiter =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? createRateLimiter({
-        limiter: slidingWindow(5, "1 h"),
-        prefix: "newsletter-subscribe",
-      })
-    : null;
+const limiter = isRateLimitConfigured()
+  ? createRateLimiter({
+      limiter: slidingWindow(5, "1 h"),
+      prefix: "newsletter-subscribe",
+    })
+  : null;
 
 export async function POST(request: Request) {
   const parsed = inputSchema.safeParse(await request.json().catch(() => null));
