@@ -1,4 +1,5 @@
 import { aggregateAudit } from "@repo/ai/lib/engines/aggregate";
+import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
 import type {
   CitedSource,
   EngineId,
@@ -26,6 +27,25 @@ function positiveNumber(value: unknown): number | null {
     : null;
 }
 
+function normalizedMentionQuality(
+  row: Record<string, unknown>,
+  requiresRevalidation: boolean
+): EngineResponse["mentionQuality"] {
+  if (requiresRevalidation) {
+    return "unverified";
+  }
+  if (
+    row.mentionQuality === "unverified" ||
+    (row.mentionQuality === "unknown_brand" &&
+      row.verdictVia === "skipped" &&
+      !row.errorMessage &&
+      !row.isStub)
+  ) {
+    return "unverified";
+  }
+  return undefined;
+}
+
 function semanticJson(value: unknown): string | undefined {
   return JSON.stringify(value, (_key, item: unknown) =>
     isRecord(item)
@@ -45,7 +65,7 @@ function semanticJson(value: unknown): string | undefined {
  * Stored raw data and the historical PDF are not mutated.
  */
 export function withRecomputedAuditMetrics<T>(result: T): T {
-  if (!isRecord(result) || !isRecord(result.metrics)) {
+  if (!(isRecord(result) && isRecord(result.metrics))) {
     return result;
   }
   const raw = result.engineResponses;
@@ -59,19 +79,23 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
   if (core.length === 0) {
     return result;
   }
+  // Results written before the current entity-verdict contract have no way to
+  // distinguish a true match from a same-name company. Never let their stored
+  // booleans feed a score or recommendation. The immutable excerpts remain
+  // available for a later explicit revalidation/backfill.
+  const storedResult = result as unknown as Record<string, unknown>;
+  const requiresRevalidation =
+    storedResult.mentionVerdictVersion !== MENTION_VERDICT_VERSION;
   const responses: EngineResponse[] = core.map((row) => ({
     engineId: row.engineId as EngineId,
-    brandMentioned: row.brandMentioned === true,
-    mentionQuality:
-      row.mentionQuality === "unverified" ||
-      (row.mentionQuality === "unknown_brand" &&
-        row.verdictVia === "skipped" &&
-        !row.errorMessage &&
-        !row.isStub)
-        ? "unverified"
-        : undefined,
-    mentionPosition: positiveNumber(row.mentionPosition),
-    mentionListSize: positiveNumber(row.mentionListSize),
+    brandMentioned: requiresRevalidation ? false : row.brandMentioned === true,
+    mentionQuality: normalizedMentionQuality(row, requiresRevalidation),
+    mentionPosition: requiresRevalidation
+      ? null
+      : positiveNumber(row.mentionPosition),
+    mentionListSize: requiresRevalidation
+      ? null
+      : positiveNumber(row.mentionListSize),
     sentiment:
       row.sentiment === "positive" ||
       row.sentiment === "neutral" ||
@@ -96,6 +120,13 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
   const corrected = {
     ...result,
     metrics: { ...result.metrics, ...aggregateAudit(responses) },
+    ...(requiresRevalidation
+      ? {
+          verificationState: "revalidation_required",
+          geoActions: [],
+          topRecommendations: [],
+        }
+      : {}),
   };
   // Historical region scores were also built with the old aggregator, but the
   // saved rows have no prompt-language tag to recompute them reliably.

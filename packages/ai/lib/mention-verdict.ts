@@ -26,6 +26,8 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { describeProviderError } from "./engines/provider-error";
 
+export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
+
 const LETSUR_VERDICT_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
 

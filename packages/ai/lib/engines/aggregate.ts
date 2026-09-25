@@ -25,7 +25,11 @@ export interface AuditMetrics {
 export function aggregateAudit(responses: EngineResponse[]): AuditMetrics {
   const enginesCovered = responses.map((r) => r.engineId);
   const confirmedResponses = responses.filter(
-    (r) => r.brandMentioned && !r.errorMessage && !r.isStub
+    (r) =>
+      r.brandMentioned &&
+      r.mentionQuality !== "unverified" &&
+      !r.errorMessage &&
+      !r.isStub
   );
   const enginesWithMention = confirmedResponses.map((r) => r.engineId);
   const positions = confirmedResponses

@@ -30,4 +30,15 @@ describe("unverified brand matches", () => {
     expect(metrics.verifiedCount).toBe(2);
     expect(metrics.unverifiedCount).toBe(1);
   });
+
+  it("also excludes an unverified row from the appearance numerator", () => {
+    const metrics = aggregateAudit([
+      response({ brandMentioned: true, mentionQuality: "unverified" }),
+      response({ brandMentioned: true, engineId: "gemini" }),
+      response({ engineId: "naver" }),
+    ]);
+
+    expect(metrics.sov).toBe(50);
+    expect(metrics.enginesWithMention).toEqual(["gemini"]);
+  });
 });

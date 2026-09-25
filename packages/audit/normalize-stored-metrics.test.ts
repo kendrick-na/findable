@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MENTION_VERDICT_VERSION } from "../ai/lib/mention-verdict-version";
 import { countMeasurementCoverage } from "./measurement-coverage";
 import {
   hasStaleAuditPdf,
@@ -20,6 +21,7 @@ describe("saved audit metric normalization", () => {
         },
         { engineId: "gemini", brandMentioned: false },
       ],
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
     });
     expect(normalized).toMatchObject({
       metrics: { sov: 0, verifiedCount: 1, unverifiedCount: 1 },
@@ -33,6 +35,7 @@ describe("saved audit metric normalization", () => {
         sov: 50,
         sentimentDistribution: { positive: 0, neutral: 3, negative: 0 },
       },
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
       regions: [{ region: "korea", score: 99 }],
       engineResponses: [
         {
@@ -68,9 +71,7 @@ describe("saved audit metric normalization", () => {
     expect(normalized.metrics).toMatchObject({
       averageMentionPosition: 2,
       sentimentDistribution: { positive: 1, neutral: 0, negative: 0 },
-      topCitedDomains: [
-        { domain: "official.example", count: 1 },
-      ],
+      topCitedDomains: [{ domain: "official.example", count: 1 }],
       enginesCovered: ["chatgpt", "gemini"],
     });
     expect(normalized).toMatchObject({ regionScoresOutdated: true });
@@ -100,6 +101,7 @@ describe("saved audit metric normalization", () => {
         sov: 78,
         sentimentDistribution: { positive: 0, neutral: 21, negative: 0 },
       },
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
       engineResponses: [
         ...core,
         { engineId: "naver-briefing", brandMentioned: false, sentiment: null },
@@ -130,6 +132,7 @@ describe("saved audit metric normalization", () => {
         stubCount: 0,
         averageMentionPosition: null,
       },
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
       regions: [{ region: "korea", score: 0 }],
       engineResponses: [{ engineId: "chatgpt", brandMentioned: false }],
     };
@@ -137,5 +140,42 @@ describe("saved audit metric normalization", () => {
     expect(hasStaleAuditPdf(original, corrected)).toBe(false);
     expect(corrected.regions).toEqual(original.regions);
     expect(corrected).not.toHaveProperty("regionScoresOutdated");
+  });
+
+  it("quarantines legacy verdicts instead of exposing their stale scores or actions", () => {
+    const normalized = withRecomputedAuditMetrics({
+      brandName: "TechDD",
+      metrics: { sov: 23 },
+      geoActions: [{ title: "방어를 강화하세요" }],
+      topRecommendations: ["이미 1순위이니 방어"],
+      engineResponses: [
+        {
+          engineId: "chatgpt",
+          brandMentioned: true,
+          mentionQuality: "confirmed",
+          verdictVia: "llm",
+          errorMessage: null,
+          isStub: false,
+          excerpt: "TechDD는 다른 회사입니다.",
+        },
+        {
+          engineId: "perplexity",
+          brandMentioned: true,
+          mentionQuality: "confirmed",
+          verdictVia: "llm",
+          errorMessage: null,
+          isStub: false,
+          excerpt: "TechDD offers an unrelated UK service.",
+        },
+      ],
+    });
+
+    expect(normalized).toMatchObject({
+      verificationState: "revalidation_required",
+      geoActions: [],
+      topRecommendations: [],
+      metrics: { sov: 0, verifiedCount: 0, unverifiedCount: 2 },
+    });
+    expect(hasStaleAuditPdf({ metrics: { sov: 23 } }, normalized)).toBe(true);
   });
 });
