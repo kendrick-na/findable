@@ -2107,8 +2107,8 @@ function MarketRegionCards({
               </div>
               <div className="mt-1 text-xs text-zinc-400">
                 {isKo
-                  ? `AI ${r.enginesMeasured}개 중 언급 ${r.mentionRate}%`
-                  : `${r.mentionRate}% mention across ${r.enginesMeasured} engines`}
+                  ? `응답 기준 등장률 ${r.mentionRate}% · AI 엔진 ${r.enginesMeasured}개 측정`
+                  : `${r.mentionRate}% of responses mention the brand · ${r.enginesMeasured} AI engines measured`}
               </div>
             </div>
           );

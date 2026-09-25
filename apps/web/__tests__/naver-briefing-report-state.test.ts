@@ -17,4 +17,9 @@ describe("Naver AI Briefing report", () => {
     expect(report).toContain("이번 회차의 네이버 AI 브리핑 측정은 실패했습니다.");
     expect(report).not.toContain("로그인 후 브랜드 측정에서는 자동으로 확인하고");
   });
+
+  it("labels the market mention percentage as response-based", () => {
+    expect(report).toContain("응답 기준 등장률 ${r.mentionRate}%");
+    expect(report).not.toContain("AI ${r.enginesMeasured}개 중 언급");
+  });
 });
