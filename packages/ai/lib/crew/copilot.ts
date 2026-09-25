@@ -47,8 +47,7 @@ export function isCopilotConfigured(): boolean {
   return (
     Boolean(process.env.LETSUR_API_KEY) ||
     Boolean(process.env.AI_GATEWAY_API_KEY) ||
-    Boolean(process.env.VERCEL_OIDC_TOKEN) ||
-    process.env.FINDABLE_FORCE_LIVE === "1"
+    Boolean(process.env.VERCEL_OIDC_TOKEN)
   );
 }
 

@@ -278,11 +278,9 @@ function isGatewayConfigured(): boolean {
   // 인증 우선순위 (AI SDK v6 기본 동작):
   //   1. AI_GATEWAY_API_KEY — Vercel Dashboard에서 발급한 정적 키. production 권장.
   //   2. VERCEL_OIDC_TOKEN — 로컬 개발용. `vercel env pull` 자동 프로비저닝.
-  //   3. FINDABLE_FORCE_LIVE=1 — 강제 라이브 모드.
   return (
     Boolean(process.env.AI_GATEWAY_API_KEY) ||
-    Boolean(process.env.VERCEL_OIDC_TOKEN) ||
-    process.env.FINDABLE_FORCE_LIVE === "1"
+    Boolean(process.env.VERCEL_OIDC_TOKEN)
   );
 }
 

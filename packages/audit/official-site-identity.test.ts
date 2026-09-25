@@ -5,6 +5,14 @@ import {
 } from "./official-site-identity";
 
 describe("official site identity response", () => {
+  it("does not treat a script template as visible identity evidence", () => {
+    const html =
+      '<head><title>Example</title></head><body><script>const card = "<p>Fake marketing service from a script.</p>";</script><p>Actual customer-facing consulting service.</p></body>';
+    expect(
+      extractOfficialSiteIdentity(html, "https://example.com")?.description
+    ).toBe("Actual customer-facing consulting service.");
+  });
+
   it("uses a visible service statement when a generic head has no description", async () => {
     const html =
       "<html><head><title>Indigochild</title></head><body><h1>We Create the Future</h1><p>Providing comprehensive marketing consulting and social media branding services.</p></body></html>";

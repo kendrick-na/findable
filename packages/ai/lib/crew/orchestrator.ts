@@ -40,6 +40,9 @@ import {
 } from "./agents";
 import { critiqueStrategist } from "./critique";
 
+const JSON_FENCE_OPEN_RE = /^```(?:json)?\s*/i;
+const JSON_FENCE_CLOSE_RE = /\s*```$/;
+
 export interface CrewInput {
   brandName: string;
   brandVariants?: string[];
@@ -126,11 +129,10 @@ export interface CrewReport {
  * AI Gateway 인증 가능 여부.
  */
 function isGatewayConfigured(): boolean {
-  // 인증 우선순위: AI_GATEWAY_API_KEY (production 권장) → VERCEL_OIDC_TOKEN (로컬) → FINDABLE_FORCE_LIVE
+  // 인증 우선순위: AI_GATEWAY_API_KEY (production 권장) → VERCEL_OIDC_TOKEN (로컬).
   return (
     Boolean(process.env.AI_GATEWAY_API_KEY) ||
-    Boolean(process.env.VERCEL_OIDC_TOKEN) ||
-    process.env.FINDABLE_FORCE_LIVE === "1"
+    Boolean(process.env.VERCEL_OIDC_TOKEN)
   );
 }
 
@@ -302,8 +304,8 @@ function parseAnalystOutput(
   // 일부 호환 제공자는 JSON을 markdown fence 안에 넣어 반환한다.
   const json = text
     .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "");
+    .replace(JSON_FENCE_OPEN_RE, "")
+    .replace(JSON_FENCE_CLOSE_RE, "");
   try {
     const fromText = analystOutputSchema.safeParse(JSON.parse(json));
     return fromText.success ? fromText.data : null;

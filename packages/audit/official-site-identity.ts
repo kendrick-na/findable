@@ -12,6 +12,8 @@ const META_NAME_RE = /(?:name|property)\s*=\s*["']([^"']+)["']/i;
 const META_CONTENT_RE = /content\s*=\s*["']([^"']*)["']/i;
 const HEAD_CLOSED_RE = /<\/head\s*>/i;
 const SENTENCE_END_RE = /[.!?。！？]/;
+const NON_VISIBLE_BLOCK_RE =
+  /<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
 
 export interface OfficialSiteIdentity {
   description: string | null;
@@ -45,7 +47,8 @@ export function extractOfficialSiteIdentity(
 
 /** A short visible service statement is better evidence than a generic title. */
 function bodyDescription(html: string): string | null {
-  for (const match of html.matchAll(BODY_PARAGRAPH_RE)) {
+  const visibleHtml = html.replace(NON_VISIBLE_BLOCK_RE, "");
+  for (const match of visibleHtml.matchAll(BODY_PARAGRAPH_RE)) {
     const value = plainText(match[1]);
     // Ignore navigation labels and slogan fragments; require a sentence.
     if (
