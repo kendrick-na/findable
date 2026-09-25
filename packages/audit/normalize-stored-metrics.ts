@@ -66,7 +66,12 @@ export function isPublishableAuditResult(result: unknown): boolean {
   return (
     result.mentionVerdictVersion === MENTION_VERDICT_VERSION &&
     result.verificationState !== "revalidation_required" &&
-    result.metrics.unverifiedCount === 0
+    result.metrics.unverifiedCount === 0 &&
+    // A brand mention in the answer does not establish that every external
+    // citation supports that brand. A zero presence score would wrongly turn
+    // unknown attribution into measured absence, so withhold derivatives.
+    (result.metrics.citationAttribution === "none_observed" ||
+      result.metrics.citationAttribution === "owned_only")
   );
 }
 
@@ -155,7 +160,15 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
   }));
   const corrected = {
     ...result,
-    metrics: { ...result.metrics, ...aggregateAudit(responses) },
+    metrics: {
+      ...result.metrics,
+      ...aggregateAudit(
+        responses,
+        typeof storedResult.domain === "string"
+          ? storedResult.domain
+          : undefined
+      ),
+    },
     ...(requiresRevalidation
       ? {
           verificationState: "revalidation_required",

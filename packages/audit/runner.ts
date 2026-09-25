@@ -15,6 +15,7 @@ import { resolveBrandIdentity } from "@repo/ai/lib/brand-identity";
 import {
   aggregateAudit,
   auditCost,
+  partitionCitedSources,
   queryAllEngines,
 } from "@repo/ai/lib/engines";
 import {
@@ -317,7 +318,8 @@ export interface RegionScore {
  *   버그의 원인이었다. `docs/_적용/시장축_언어재설계_2026-08-21.md` 참조.
  */
 function buildRegionBreakdown(
-  responses: AggregatableResponse[]
+  responses: AggregatableResponse[],
+  brandDomain: string
 ): RegionScore[] {
   const out: RegionScore[] = [];
 
@@ -327,7 +329,7 @@ function buildRegionBreakdown(
     if (usable.length === 0) {
       continue;
     }
-    const regionMetrics = aggregateAudit(rows);
+    const regionMetrics = aggregateAudit(rows, brandDomain);
     out.push({
       region,
       label: REGION_LABEL[region],
@@ -502,7 +504,13 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       ...r,
       promptLang: tagged[i]?.promptLang ?? "ko",
     }));
-    const metrics = aggregateAudit(flat);
+    const metrics = aggregateAudit(flat, input.domain);
+    // The answer-level entity verdict cannot attribute unrelated links in a
+    // mixed answer. Preserve all raw citations in engineResponses below, but
+    // do not turn unverified external candidates into source-based advice.
+    const citationEvidence = partitionCitedSources(flat, input.domain);
+    const sourceAdviceIsSupported =
+      citationEvidence.unattributedCitationCount === 0;
 
     // 원가계기(유닛이코노믹스): 진단 1건 실비용을 result 에도 담아 조회 가능하게(운영/대시보드용).
     const cost = auditCost(flat);
@@ -561,9 +569,13 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       //   — 여기서 따로 추정하면 화면 안에서 시장 판정이 둘로 갈린다.
       marketScope,
       prompts: promptStats,
-      sourceMix: summarizeSourceMix(flat, input.domain),
+      sourceMix: sourceAdviceIsSupported
+        ? summarizeSourceMix(citationEvidence.attributedResponses, input.domain)
+        : undefined,
       // 실제 인용 도메인 — 처방을 "커뮤니티 50%"가 아니라 "blog.naver.com 47건"으로 말하기 위함.
-      topDomains: topCitedDomains(flat, input.domain),
+      topDomains: sourceAdviceIsSupported
+        ? topCitedDomains(citationEvidence.attributedResponses, input.domain)
+        : undefined,
     });
 
     const result = {
@@ -628,7 +640,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       marketScope,
       marketScopeReason: inferredScope.reason,
       marketScopeConfidence: inferredScope.confidence,
-      regions: buildRegionBreakdown(langTaggedFlat),
+      regions: buildRegionBreakdown(langTaggedFlat, input.domain),
       // 액션 레이어(2026-07-31 세션K-2): 기존 if/else 4분기 휴리스틱을 교체.
       //   근거=Princeton GEO 논문 Table 1~5. 상세=docs/_적용/액션레이어_설계_2026-07-31.md
       //   구 UI·PDF 호환을 위해 문자열 배열도 함께 유지한다.

@@ -72,6 +72,42 @@ describe("saved audit metric normalization", () => {
     expect(isPublishableAuditResult(fresh)).toBe(true);
   });
 
+  it("withholds a score and advice when a confirmed answer mixes official and unverified external citations", () => {
+    const rawSources = [
+      { domain: "indigochild.kr", url: "https://indigochild.kr/about" },
+      {
+        domain: "indigochild.studio",
+        url: "https://indigochild.studio/about",
+      },
+    ];
+    const result = withRecomputedAuditMetrics({
+      domain: "indigochild.kr",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      geoActions: [{ title: "Publish a source" }],
+      engineResponses: [
+        {
+          engineId: "gemini",
+          brandMentioned: true,
+          mentionQuality: "confirmed",
+          citedSources: rawSources,
+        },
+      ],
+    });
+
+    expect(result.metrics).toMatchObject({
+      citationAttribution: "partial",
+      unattributedCitationCount: 1,
+      unverifiedCount: 0,
+      topCitedDomains: [{ domain: "indigochild.kr", count: 1 }],
+    });
+    expect(isPublishableAuditResult(result)).toBe(false);
+    const publicResult = publicAuditResult(result);
+    expect(publicResult.metrics.sov).toBeNull();
+    expect(publicResult.geoActions).toEqual([]);
+    expect(publicResult.engineResponses[0]?.citedSources).toEqual(rawSources);
+  });
+
   it("recovers old skipped-verdict rows as unverified rather than confirmed absences", () => {
     const normalized = withRecomputedAuditMetrics({
       metrics: { sov: 0 },
@@ -96,6 +132,7 @@ describe("saved audit metric normalization", () => {
 
   it("keeps Naver Briefing separate and repairs legacy sentiment", () => {
     const result = {
+      domain: "official.example",
       metrics: {
         sov: 50,
         sentimentDistribution: { positive: 0, neutral: 3, negative: 0 },

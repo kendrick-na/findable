@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { partitionCitedSources } from "./aggregate";
 import { aggregateAudit } from "./index";
 import type { EngineResponse } from "./types";
 
-const response = (
-  brandMentioned: boolean,
-  domain: string
-): EngineResponse => ({
+const response = (brandMentioned: boolean, domain: string): EngineResponse => ({
   brandMentioned,
   citedSources: [{ domain, url: `https://${domain}` }],
   durationMs: 1,
@@ -20,11 +18,85 @@ const response = (
 });
 
 describe("aggregateAudit citation metrics", () => {
-  it("does not present search links from a non-mention response as brand citations", () => {
-    const metrics = aggregateAudit([
-      response(true, "official.example"),
-      response(false, "same-name-company.example"),
+  it("does not credit a same-name site from a mixed confirmed answer as the brand's citation", () => {
+    const metrics = aggregateAudit(
+      [
+        {
+          ...response(true, "indigochild.kr"),
+          citedSources: [
+            { domain: "indigochild.kr", url: "https://indigochild.kr/" },
+            {
+              domain: "indigochild.studio",
+              url: "https://indigochild.studio/",
+            },
+          ],
+        },
+      ],
+      "indigochild.kr"
+    );
+
+    expect(metrics.topCitedDomains).toEqual([
+      { domain: "indigochild.kr", count: 1 },
     ]);
+    expect(metrics.unattributedCitationCount).toBe(1);
+  });
+
+  it("keeps different-entity links out of attribution without calling unknown zero", () => {
+    const raw = [
+      {
+        ...response(false, "indigochild.studio"),
+        mentionQuality: "different_entity" as const,
+      },
+      response(true, "third-party.example"),
+    ];
+    const metrics = aggregateAudit(raw, "indigochild.kr");
+
+    expect(metrics.topCitedDomains).toEqual([]);
+    expect(metrics.unattributedCitationCount).toBe(1);
+    expect(metrics.citationAttribution).toBe("unverified_external");
+    const attribution = partitionCitedSources(raw, "indigochild.kr");
+    expect(
+      attribution.attributedResponses.every(
+        (row) => row.citedSources.length === 0
+      )
+    ).toBe(true);
+    expect(raw[0]?.citedSources).toHaveLength(1);
+  });
+
+  it("trusts the citation URL rather than a spoofed domain field", () => {
+    const metrics = aggregateAudit(
+      [
+        {
+          ...response(true, "indigochild.kr"),
+          citedSources: [
+            {
+              domain: "indigochild.kr",
+              url: "https://indigochild.kr.evil.example/article",
+            },
+            {
+              domain: "another.example",
+              url: "https://WWW.indigochild.kr/about",
+            },
+          ],
+        },
+      ],
+      "indigochild.kr"
+    );
+
+    expect(metrics.topCitedDomains).toEqual([
+      { domain: "indigochild.kr", count: 1 },
+    ]);
+    expect(metrics.unattributedCitationCount).toBe(1);
+  });
+
+  it("does not present search links from a non-mention response as brand citations", () => {
+    const metrics = aggregateAudit(
+      [
+        response(true, "official.example"),
+        response(false, "same-name-company.example"),
+      ],
+      "official.example"
+    );
 
     expect(metrics.topCitedDomains).toEqual([
       { domain: "official.example", count: 1 },
