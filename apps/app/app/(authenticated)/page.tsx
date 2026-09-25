@@ -362,7 +362,10 @@ const App = async ({ searchParams }: AppProperties) => {
       <Header
         page="대시보드"
         pages={["Findable"]}
-        showMetric={currentRunUnverified === 0}
+        showMetric={
+          currentRunUnverified === 0 &&
+          data.latestBrandId === trackingRows[0]?.brandId
+        }
       />
       <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
         {activeJob && hasData && hasUsableResult ? (

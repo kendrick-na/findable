@@ -40,6 +40,14 @@ describe("측정 상태·결과 IA 계약", () => {
       "app/(authenticated)/admin/measure/measure-console.tsx"
     );
     expect(console).toContain('timeZone: "Asia/Seoul"');
+    for (const path of [
+      "app/(authenticated)/components/audit-history-list.tsx",
+      "app/(authenticated)/components/dashboard-run-context.tsx",
+      "app/(authenticated)/components/dashboard-system-status.tsx",
+      "app/(authenticated)/lib/dashboard-data.ts",
+    ]) {
+      expect(read(path)).toContain('timeZone: "Asia/Seoul"');
+    }
   });
 
   it("측정 불가 완료 회차는 무료 플랜의 24시간 재측정을 막지 않는다", () => {

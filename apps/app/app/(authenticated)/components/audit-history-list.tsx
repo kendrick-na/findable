@@ -26,6 +26,7 @@ const STATUS_TONE: Record<AuditJob["status"], string> = {
 const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
   dateStyle: "medium",
   timeStyle: "short",
+  timeZone: "Asia/Seoul",
 });
 
 interface AuditHistoryListProps {

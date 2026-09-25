@@ -243,6 +243,7 @@ const trendDateFormatter = new Intl.DateTimeFormat("ko-KR", {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
+  timeZone: "Asia/Seoul",
 });
 
 // 같은 날 여러 번 측정한 경우에만 쓰는 시각 포맷(24시간, 분 단위).
@@ -250,6 +251,7 @@ const trendTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
+  timeZone: "Asia/Seoul",
 });
 
 // ko-KR 날짜 포맷("2026. 07. 23.")을 "2026.07.23" 형태로 정규화.

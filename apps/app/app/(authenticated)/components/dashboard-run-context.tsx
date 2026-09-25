@@ -19,6 +19,7 @@ export function DashboardRunContext({
   const label = new Intl.DateTimeFormat("ko-KR", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Asia/Seoul",
   }).format(measuredAt);
 
   return (

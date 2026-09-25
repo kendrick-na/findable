@@ -30,6 +30,7 @@ const STATUS_TONE: Record<string, string> = {
 const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
   dateStyle: "short",
   timeStyle: "short",
+  timeZone: "Asia/Seoul",
 });
 
 const AdminAuditsPage = async () => {

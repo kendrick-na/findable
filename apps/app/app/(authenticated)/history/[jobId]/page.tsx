@@ -88,7 +88,11 @@ export default async function AuditHistoryDetail({
 
   return (
     <>
-      <Header page="측정 상세" pages={["Findable", "측정 이력"]} showMetric={!isPartial} />
+      <Header
+        page="측정 상세"
+        pages={["Findable", "측정 이력"]}
+        showMetric={false}
+      />
       <main className="flex flex-1 flex-col gap-5 p-6 pt-2">
         <Link
           className="inline-flex items-center gap-2 text-muted-foreground text-sm hover:text-foreground"
@@ -107,9 +111,10 @@ export default async function AuditHistoryDetail({
           <section className="findable-card border border-amber-500/30 p-5">
             <h2 className="font-semibold text-lg">판별 미완료 · 잠정 결과</h2>
             <p className="mt-2 text-muted-foreground text-sm">
-              AI 답변은 일부 수집했지만 브랜드 판별이 {metrics?.unverifiedCount}건
-              완료되지 않았습니다. 이번 회차의 점수·등장률·개선 처방은
-              확정하지 않습니다. 자세한 응답은 공개 리포트에서 확인할 수 있습니다.
+              AI 답변은 일부 수집했지만 브랜드 판별이 {metrics?.unverifiedCount}
+              건 완료되지 않았습니다. 이번 회차의 점수·등장률·개선 처방은
+              확정하지 않습니다. 자세한 응답은 공개 리포트에서 확인할 수
+              있습니다.
             </p>
             <a
               className="mt-4 inline-flex items-center gap-1 text-sm underline"
@@ -117,7 +122,8 @@ export default async function AuditHistoryDetail({
               rel="noopener noreferrer"
               target="_blank"
             >
-              잠정 리포트 보기 <ExternalLinkIcon aria-hidden className="size-4" />
+              잠정 리포트 보기{" "}
+              <ExternalLinkIcon aria-hidden className="size-4" />
             </a>
           </section>
         ) : status === "failed" || !isUsableRun(result) ? (

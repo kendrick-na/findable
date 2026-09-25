@@ -28,6 +28,7 @@ function formatUpdatedAt(value: Date | null | undefined) {
     hour: "numeric",
     minute: "2-digit",
     month: "numeric",
+    timeZone: "Asia/Seoul",
   }).format(value);
 }
 
