@@ -155,7 +155,7 @@ describe("브랜드 등록 → 자동 측정: 결말을 숨기지 않는다", ()
  *
  * 경쟁사 실측(Profound f005 "회사 이름을 입력하세요" 필수 · Scrunch f009
  * "Confirm your details"로 값을 미리 채워 확인)도 **빈칸에서 타이핑 유도**는
- * 안 한다 — 그래서 여기서도 정적 사전 자동 채움(`suggestBrandName`)을 붙이되
+ * 안 한다 — 그래서 여기서도 정적 사전 자동 채움(`suggestBrandIdentity`)을 붙이되
  * 필수는 유지한다.
  *
  * ⚠️ `/brand`(기존 브랜드 관리)와 `/welcome`(온보딩)이 **같은 폼**을 쓴다 — 둘 다
@@ -164,8 +164,9 @@ describe("브랜드 등록 → 자동 측정: 결말을 숨기지 않는다", ()
 const REJECTS_EMPTY_NAME = /브랜드 이름\(또는 회사명\)을 입력해 주세요/;
 const NAME_NO_LONGER_FALLS_BACK_TO_DOMAIN =
   /input\.name\?\.trim\(\)\s*\|\|\s*domain/;
-const FORM_NAME_REQUIRED =
-  /id="brand-name"[\s\S]{0,300}?required|required[\s\S]{0,300}?id="brand-name"/;
+// onChange 가 확인 상태도 초기화하므로 속성 간 거리가 늘었다. 실제 렌더 계약은
+// assign-brand-form-name-required.test.tsx 가 별도로 검사한다.
+const FORM_NAME_REQUIRED = /id="brand-name"[\s\S]{0,600}?\brequired\b/;
 
 describe("브랜드 이름은 필수 입력이다", () => {
   test("🔴 이름이 비면 서버가 거부한다", () => {

@@ -13,12 +13,13 @@ import {
 } from "@repo/design-system/components/ui/select";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   assignBrandOwner,
   type BrandMeasurementOutcome,
 } from "@/app/actions/brand/assign";
-import { suggestBrandName } from "@/app/actions/brand/suggest-brand-name";
+import { suggestBrandIdentity } from "@/app/actions/brand/suggest-brand-identity";
+import { isValidDomain, normalizeDomain } from "@/lib/domain";
 
 interface FormState {
   error?: string;
@@ -31,11 +32,7 @@ interface FormState {
 
 const initialState: FormState = { status: "idle" };
 
-/**
- * 업종 선택지 — DB Industry enum 과 1:1.
- * "자동 감지"(빈 값)가 기본값이다. 사용자가 고르지 않아도 측정 시 도메인으로 추론하므로
- * 입력 부담을 늘리지 않는다(무료진단 이탈 방지 원칙과 동일).
- */
+/** 업종 선택지 — DB Industry enum 과 1:1. 불확실한 업종은 추측하지 않는다. */
 /**
  * 타깃 시장 선택지.
  *
@@ -47,7 +44,7 @@ const initialState: FormState = { status: "idle" };
  *   — 사용자가 "국내 엔진만 본다"로 오해하지 않게. 상세=`docs/_적용/시장축_언어재설계_2026-08-21.md`.
  */
 const MARKET_SCOPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "both", label: "국내·해외 함께 (기본)" },
+  { value: "both", label: "국내·해외 함께" },
   { value: "korea", label: "국내 중심 (한국어 질문 기준)" },
   { value: "global", label: "해외 중심 (영어 질문 기준)" },
 ];
@@ -59,7 +56,6 @@ const MARKET_SCOPE_LABELS: Record<string, string> = {
 };
 
 const INDUSTRY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "auto", label: "자동 감지 (권장)" },
   { value: "manufacturing", label: "제조·산업재 (반도체·부품·소재)" },
   { value: "b2b_saas", label: "B2B SaaS·소프트웨어" },
   { value: "beauty", label: "뷰티·화장품" },
@@ -72,6 +68,33 @@ const INDUSTRY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "content_ip", label: "콘텐츠·IP" },
   { value: "other", label: "기타" },
 ];
+
+const isBrandIdentityReady = ({
+  domain,
+  name,
+  marketScope,
+  industry,
+  confirmed,
+  pending,
+}: {
+  domain: string;
+  name: string;
+  marketScope: string;
+  industry: string;
+  confirmed: boolean;
+  pending: boolean;
+}) =>
+  isValidDomain(normalizeDomain(domain)) &&
+  Boolean(name.trim() && marketScope && industry && confirmed) &&
+  !pending;
+
+const nameHelp = (name: string, nameTouched: boolean) =>
+  name && !nameTouched
+    ? "도메인으로 자동으로 채웠어요. 다르면 고쳐주세요."
+    : "AI에게 물어볼 때 쓰는 이름이에요. 회사명과 브랜드명이 다르면 실제로 더 많이 불리는 쪽을 적어주세요.";
+
+const submitLabel = (pending: boolean) =>
+  pending ? "측정을 시작하는 중…" : "확인하고 측정 시작";
 
 // ⚠️ 타깃 시장 선택지는 제거했다(2026-08-03). 기존 정의가 "국내 중심 = 한국 AI만"이라
 // 한국인이 가장 많이 쓰는 ChatGPT 를 제외하는 잘못된 축이었다. 언어축으로 재설계 후 복원.
@@ -92,7 +115,7 @@ const INDUSTRY_OPTIONS: Array<{ value: string; label: string }> = [
 interface AssignBrandFormProps {
   /** 무료 진단에서 이어온 도메인. 사용자가 다시 입력하지 않게 한다. */
   initialDomain?: string;
-  /** 온보딩에서는 선택 입력을 뒤 단계로 넘기고 도메인→이름 확인만 보여준다. */
+  /** 온보딩에서도 측정에 쓰이는 세 값은 먼저 확인한다. */
   mode?: "management" | "onboarding";
   nextHref?: string;
 }
@@ -105,52 +128,56 @@ export const AssignBrandForm = ({
   const isOnboarding = mode === "onboarding";
   // Radix Select 는 네이티브 form 에 값을 싣지 않으므로 상태로 들고 액션에 직접 넘긴다
   // (audit-form.tsx 의 측정 언어 Select 와 동일 패턴).
-  const [industry, setIndustry] = useState("auto");
+  const [industry, setIndustry] = useState("");
   // 감지 패널(아래)이 도메인에 반응해야 해서 상태로 든다. `name="domain"` 은 그대로 두어
   //   서버 액션이 읽는 경로(FormData)는 바꾸지 않는다 — 제출 경로 무변경.
   const [domain, setDomain] = useState(initialDomain);
+  const domainRef = useRef(initialDomain);
   // 🔴 2026-08-21(10번) — 이름 칸도 상태로 든다(이전엔 비제어 input, 필수화하며
   //   자동 채움이 필요해져 제어로 전환). `name="name"` 은 그대로라 제출 경로 무변경.
   const [name, setName] = useState("");
   // 사용자가 이름 칸을 직접 건드렸으면 자동 채움이 그 값을 덮지 않는다.
   const [nameTouched, setNameTouched] = useState(false);
+  const nameTouchedRef = useRef(false);
+  const industryTouchedRef = useRef(false);
+  const [identityConfirmed, setIdentityConfirmed] = useState(false);
+  const [suggestionDomain, setSuggestionDomain] = useState(
+    initialDomain.trim()
+  );
   // 첫 화면은 도메인 하나로 시작하고, 입력을 마치면 이름 확인을 점진적으로 연다.
   const [showIdentity, setShowIdentity] = useState(
     !isOnboarding || Boolean(initialDomain)
   );
-  /**
-   * 도메인 입력을 마쳤을 때(blur) 정적 사전에서 이름을 자동 채운다
-   * (Scrunch "Confirm your details" 패턴 — 경쟁사 실측 근거는 위 §관련 파일 주석).
-   * ⚠️ 사전 매칭만(원가 0·LLM 없음) — 없으면 채우지 않고 사용자가 직접 입력한다.
-   * ⚠️ 이미 손댄 이름 칸은 덮지 않는다 — 사용자가 고친 값을 되돌리면 신뢰가 깨진다.
-   */
-  const handleDomainBlur = async () => {
+  const handleDomainBlur = () => {
     const trimmed = domain.trim();
     setShowIdentity(Boolean(trimmed));
-    if (!trimmed || nameTouched || name.trim()) {
-      return;
-    }
-    const suggested = await suggestBrandName(trimmed);
-    if (suggested && !nameTouched) {
-      setName(suggested);
-    }
+    setSuggestionDomain(trimmed);
   };
   useEffect(() => {
-    if (!(initialDomain && domain === initialDomain && !nameTouched && !name)) {
+    if (!suggestionDomain) {
       return;
     }
     let cancelled = false;
-    suggestBrandName(initialDomain).then((suggested) => {
-      if (!(cancelled || nameTouched) && suggested) {
-        setName(suggested);
-      }
-    });
+    suggestBrandIdentity(suggestionDomain)
+      .then((suggested) => {
+        if (cancelled || domainRef.current.trim() !== suggestionDomain) {
+          return;
+        }
+        if (!nameTouchedRef.current && suggested.name) {
+          setName(suggested.name);
+        }
+        if (!industryTouchedRef.current && suggested.industry) {
+          setIndustry(suggested.industry);
+        }
+      })
+      .catch(() => {
+        // 제안 실패는 사용자 수동 입력으로 복구한다. 등록·측정은 차단하지 않는다.
+      });
     return () => {
       cancelled = true;
     };
-  }, [domain, initialDomain, name, nameTouched]);
-  // 🔴 2026-08-21 복원 — null(미선택) 이면 아래 자동 감지값(`detected.scope`)을 쓴다.
-  //   사용자가 직접 고르면 그 값이 감지값을 덮는다(선택이 감지보다 우선).
+  }, [suggestionDomain]);
+  // 제안값은 화면에 미리 보여주되 확인 없이는 제출하지 않는다.
   const [marketScopeOverride, setMarketScopeOverride] = useState<string | null>(
     null
   );
@@ -179,9 +206,10 @@ export const AssignBrandForm = ({
     }
     return inferMarketScope({
       domain: trimmed,
-      industry: industry === "auto" ? null : industry,
+      industry: industry || null,
     });
   }, [domain, industry]);
+  const selectedMarketScope = marketScopeOverride ?? detected?.scope ?? "";
 
   const [state, formAction, isPending] = useActionState<FormState, FormData>(
     async (_prev, formData) => {
@@ -189,10 +217,8 @@ export const AssignBrandForm = ({
         // 🔴 2026-08-21(10번) — 필수. 서버도 비면 거부한다(assign.ts 참조).
         name: String(formData.get("name") ?? ""),
         domain: String(formData.get("domain") ?? ""),
-        // "auto" 는 유효 enum 이 아니라 서버에서 null 로 떨어진다 → 자동 추론.
         industry,
-        // 🔴 2026-08-21 복원 — 선택하지 않았으면 자동 감지값(둘 다)을 쓴다.
-        marketScope: marketScopeOverride ?? detected?.scope,
+        marketScope: selectedMarketScope,
         source: isOnboarding ? "onboarding" : "brand_create",
       });
       if ("error" in result) {
@@ -207,6 +233,14 @@ export const AssignBrandForm = ({
     },
     initialState
   );
+  const canSubmit = isBrandIdentityReady({
+    domain,
+    name,
+    marketScope: selectedMarketScope,
+    industry,
+    confirmed: identityConfirmed,
+    pending: isPending,
+  });
 
   // 🔴 §3-b ⑴ — 측정 결말을 **화면에 그대로 전달**한다.
   //   예전엔 결말과 무관하게 "등록했어요. 이제 측정 시작을 눌러…" 하나만 띄웠다.
@@ -258,7 +292,15 @@ export const AssignBrandForm = ({
   ]);
 
   return (
-    <form action={formAction} className="findable-card flex flex-col gap-4 p-6">
+    <form
+      action={formAction}
+      className="findable-card flex flex-col gap-4 p-6"
+      onSubmit={(event) => {
+        if (!canSubmit) {
+          event.preventDefault();
+        }
+      }}
+    >
       {/* 🔴 순서를 바꿨다(2026-08-14 §3-a) — **필수 입력이 맨 위**에 온다.
           도메인 하나만 채우면 등록·측정이 끝나는데 선택 입력이 위에 있으면
           "둘 다 채워야 하나" 로 읽힌다. */}
@@ -269,7 +311,19 @@ export const AssignBrandForm = ({
           id="brand-domain"
           name="domain"
           onBlur={handleDomainBlur}
-          onChange={(e) => setDomain(e.target.value)}
+          onChange={(e) => {
+            domainRef.current = e.target.value;
+            setDomain(e.target.value);
+            setSuggestionDomain("");
+            setIdentityConfirmed(false);
+            setMarketScopeOverride(null);
+            if (!nameTouchedRef.current) {
+              setName("");
+            }
+            if (!industryTouchedRef.current) {
+              setIndustry("");
+            }
+          }}
           onKeyDown={(e) => {
             if (isOnboarding && e.key === "Enter" && !showIdentity) {
               e.preventDefault();
@@ -287,7 +341,7 @@ export const AssignBrandForm = ({
           </p>
         ) : null}
       </div>
-      {detected && !isOnboarding ? (
+      {detected ? (
         <div
           aria-live="polite"
           className="flex flex-col gap-1 rounded-md border border-[color:var(--findable-border,#2a2d31)] bg-[color:var(--findable-surface-2,rgba(255,255,255,0.03))] p-3"
@@ -317,22 +371,18 @@ export const AssignBrandForm = ({
           </p>
         </div>
       ) : null}
-      {isOnboarding ? null : (
+      {showIdentity ? (
         <div className="flex flex-col gap-2">
-          <Label htmlFor="brand-market-scope">
-            타깃 시장{" "}
-            <span className="font-normal text-[color:var(--findable-ink-tertiary,#7e8289)]">
-              (선택)
-            </span>
-          </Label>
-          {/* 🔴 2026-08-21 복원 — 언어축 재설계 완료(위 MARKET_SCOPE_OPTIONS 주석 참조).
-            비워두면(placeholder) 위 감지값을 그대로 쓴다. */}
+          <Label htmlFor="brand-market-scope">타깃 시장</Label>
           <Select
-            onValueChange={setMarketScopeOverride}
-            value={marketScopeOverride ?? undefined}
+            onValueChange={(value) => {
+              setMarketScopeOverride(value);
+              setIdentityConfirmed(false);
+            }}
+            value={selectedMarketScope || undefined}
           >
             <SelectTrigger className="w-full" id="brand-market-scope">
-              <SelectValue placeholder="자동 감지 사용" />
+              <SelectValue placeholder="타깃 시장 선택" />
             </SelectTrigger>
             <SelectContent>
               {MARKET_SCOPE_OPTIONS.map((opt) => (
@@ -343,12 +393,11 @@ export const AssignBrandForm = ({
             </SelectContent>
           </Select>
           <p className="text-muted-foreground text-xs">
-            한국인은 ChatGPT도 한국어로 많이 써요. "국내 중심"을 골라도
-            ChatGPT·Claude 같은 글로벌 AI가 빠지지 않아요 — 어떤 AI인지가 아니라
-            어떤 언어로 물었는지로 나눠요.
+            제안값을 확인하고 필요하면 바꿔 주세요. 국내 중심이어도
+            ChatGPT·Claude는 측정합니다.
           </p>
         </div>
-      )}
+      ) : null}
       {showIdentity ? (
         <div className="flex flex-col gap-2">
           {/* 🔴 2026-08-21(10번) — **선택 → 필수**로 전환(👤 결정). 이름이 비면 도메인
@@ -364,29 +413,36 @@ export const AssignBrandForm = ({
             name="name"
             onChange={(e) => {
               setNameTouched(true);
+              nameTouchedRef.current = true;
               setName(e.target.value);
+              setIdentityConfirmed(false);
             }}
             placeholder="예: 설화수, 무신사 · 브랜드명이 따로 없다면 회사명(예: OO전자)"
             required
             value={name}
           />
           <p className="text-muted-foreground text-xs">
-            {name && !nameTouched
-              ? "도메인으로 자동으로 채웠어요. 다르면 고쳐주세요."
-              : "AI에게 물어볼 때 쓰는 이름이에요. 회사명과 브랜드명이 다르면 실제로 더 많이 불리는 쪽을 적어주세요."}
+            {nameHelp(name, nameTouched)}
           </p>
         </div>
       ) : null}
-      {isOnboarding ? null : (
+      {showIdentity ? (
         <div className="flex flex-col gap-2">
           <Label htmlFor="brand-industry">업종</Label>
           {/* 🔴 S7-c(2026-08-11) — `SelectTrigger` 기본값이 **`w-fit`**(design-system)이라
             위의 브랜드 이름·도메인 입력칸(전폭)과 폭이 어긋났다. 같은 폼의 같은 등급
             입력인데 생김새가 달라 "덜 중요한 칸"으로 읽힌다(NN/g 4 일관성).
             → 전폭으로 맞춘다. */}
-          <Select onValueChange={setIndustry} value={industry}>
+          <Select
+            onValueChange={(value) => {
+              industryTouchedRef.current = true;
+              setIndustry(value);
+              setIdentityConfirmed(false);
+            }}
+            value={industry || undefined}
+          >
             <SelectTrigger className="w-full" id="brand-industry">
-              <SelectValue />
+              <SelectValue placeholder="업종을 선택해 주세요" />
             </SelectTrigger>
             <SelectContent>
               {INDUSTRY_OPTIONS.map((opt) => (
@@ -401,11 +457,25 @@ export const AssignBrandForm = ({
             아직 본 적이 없어 **참조할 대상조차 없다**. 게다가 이 문장만 '~합니다'체라
             화면의 나머지(해요체)와 말투가 어긋났다(진단 §원인④ · NN/g 2·4). */}
           <p className="text-muted-foreground text-xs">
-            업종에 따라 어디를 고쳐야 하는지가 달라져요(네이버 블로그·뉴스·위키
-            등). 자동 감지가 틀렸다면 직접 골라주세요.
+            알려진 도메인은 업종을 제안합니다. 제안이 없거나 맞지 않다면 직접
+            고르세요. 판단하기 어려우면 ‘기타’를 선택할 수 있어요.
           </p>
         </div>
-      )}
+      ) : null}
+      {showIdentity ? (
+        <label className="flex items-start gap-3 rounded-md border border-[color:var(--findable-border,#2a2d31)] p-3 text-sm">
+          <input
+            checked={identityConfirmed}
+            className="mt-0.5 size-4 accent-[color:var(--findable-accent,#79d0b5)]"
+            onChange={(event) => setIdentityConfirmed(event.target.checked)}
+            type="checkbox"
+          />
+          <span>
+            브랜드명·타깃 시장·업종을 확인했어요. 이 정보로 첫 측정을
+            시작합니다.
+          </span>
+        </label>
+      ) : null}
       {state.error ? (
         <p
           // `--findable-danger` 는 **존재하지 않는 토큰**이었다(globals.css 실측·2026-08-07).
@@ -421,10 +491,10 @@ export const AssignBrandForm = ({
         <div className="flex justify-end">
           <Button
             className="findable-btn-primary"
-            disabled={isPending}
+            disabled={!canSubmit}
             type="submit"
           >
-            {isPending ? "등록하고 측정을 시작하는 중…" : "등록하고 측정 시작"}
+            {submitLabel(isPending)}
           </Button>
         </div>
       ) : null}

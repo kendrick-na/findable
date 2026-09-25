@@ -24,8 +24,8 @@ vi.mock("@/app/actions/brand/assign", () => ({
 }));
 
 const suggestBrandNameMock = vi.fn();
-vi.mock("@/app/actions/brand/suggest-brand-name", () => ({
-  suggestBrandName: (domain: string) => suggestBrandNameMock(domain),
+vi.mock("@/app/actions/brand/suggest-brand-identity", () => ({
+  suggestBrandIdentity: (domain: string) => suggestBrandNameMock(domain),
 }));
 
 // `inferMarketScope`는 이 테스트의 관심사가 아니다 — 감지 패널 렌더만 막지 않게 최소 반환.
@@ -52,7 +52,10 @@ describe("브랜드 이름 칸 — 필수화 + 정적 사전 자동 채움", () 
   });
 
   it("도메인 blur 시 정적 사전에 있으면 이름을 자동으로 채운다", async () => {
-    suggestBrandNameMock.mockResolvedValue("설화수");
+    suggestBrandNameMock.mockResolvedValue({
+      name: "설화수",
+      industry: "beauty",
+    });
     const { getByLabelText } = render(<AssignBrandForm />);
     const domainInput = getByLabelText("도메인") as HTMLInputElement;
     const nameInput = getByLabelText("뭐라고 부르나요?") as HTMLInputElement;
@@ -64,7 +67,7 @@ describe("브랜드 이름 칸 — 필수화 + 정적 사전 자동 채움", () 
   });
 
   it("사전에 없으면 채우지 않는다 (롱테일 브랜드는 직접 입력)", async () => {
-    suggestBrandNameMock.mockResolvedValue(null);
+    suggestBrandNameMock.mockResolvedValue({ name: null, industry: null });
     const { getByLabelText } = render(<AssignBrandForm />);
     const domainInput = getByLabelText("도메인") as HTMLInputElement;
     const nameInput = getByLabelText("뭐라고 부르나요?") as HTMLInputElement;
@@ -77,7 +80,10 @@ describe("브랜드 이름 칸 — 필수화 + 정적 사전 자동 채움", () 
   });
 
   it("🔴 사용자가 이미 고친 이름은 자동 채움이 덮지 않는다", async () => {
-    suggestBrandNameMock.mockResolvedValue("설화수");
+    suggestBrandNameMock.mockResolvedValue({
+      name: "설화수",
+      industry: "beauty",
+    });
     const { getByLabelText } = render(<AssignBrandForm />);
     const domainInput = getByLabelText("도메인") as HTMLInputElement;
     const nameInput = getByLabelText("뭐라고 부르나요?") as HTMLInputElement;
