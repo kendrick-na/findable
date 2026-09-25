@@ -1,5 +1,8 @@
 import { isUsableRun } from "@repo/audit/run-quality";
-import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
+import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { hasPlan, isPaid } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
@@ -484,7 +487,7 @@ const App = async ({ searchParams }: AppProperties) => {
               </div>
             ) : null}
 
-            {currentRunUnverified === 0 ? (
+            {isPublishableAuditResult(correctedCurrentResult) ? (
               <DashboardDeepAnalysis
                 crewResult={(currentRunAnalysis?.crewResult as never) ?? null}
                 crewStatus={currentRunAnalysis?.crewStatus ?? "not_requested"}

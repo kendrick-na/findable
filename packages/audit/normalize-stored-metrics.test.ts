@@ -3,10 +3,48 @@ import { MENTION_VERDICT_VERSION } from "../ai/lib/mention-verdict-version";
 import { countMeasurementCoverage } from "./measurement-coverage";
 import {
   hasStaleAuditPdf,
+  isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "./normalize-stored-metrics";
 
 describe("saved audit metric normalization", () => {
+  it("blocks PDFs and AI advice for legacy and unresolved entity verdicts", () => {
+    const responses = [
+      { engineId: "chatgpt", brandMentioned: true, isStub: false },
+      {
+        engineId: "perplexity",
+        brandMentioned: false,
+        mentionQuality: "unverified",
+        isStub: false,
+      },
+    ];
+    const fresh = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 50 },
+      engineResponses: responses,
+    });
+    expect(isPublishableAuditResult(fresh)).toBe(false);
+    expect(hasStaleAuditPdf(fresh, fresh)).toBe(true);
+
+    const legacy = withRecomputedAuditMetrics({
+      metrics: { sov: 50 },
+      engineResponses: responses,
+    });
+    expect(isPublishableAuditResult(legacy)).toBe(false);
+    expect(hasStaleAuditPdf(legacy, legacy)).toBe(true);
+  });
+
+  it("allows a fully verified current result to publish derivatives", () => {
+    const fresh = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      engineResponses: [
+        { engineId: "chatgpt", brandMentioned: true, isStub: false },
+      ],
+    });
+    expect(isPublishableAuditResult(fresh)).toBe(true);
+  });
+
   it("recovers old skipped-verdict rows as unverified rather than confirmed absences", () => {
     const normalized = withRecomputedAuditMetrics({
       metrics: { sov: 0 },

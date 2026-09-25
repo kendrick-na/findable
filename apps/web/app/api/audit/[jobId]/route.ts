@@ -12,6 +12,7 @@ import {
 import { maskEmail } from "@repo/audit/mask";
 import {
   hasStaleAuditPdf,
+  isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
@@ -174,6 +175,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     const result = withRecomputedAuditMetrics(job.result);
+    const publishable = isPublishableAuditResult(result);
     const pdfOutdated = Boolean(
       job.pdfUrl && hasStaleAuditPdf(job.result, result)
     );
@@ -202,7 +204,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       pdfOutdated,
       result,
       crewStatus: job.crewStatus,
-      crewResult: job.crewResult,
+      crewResult: publishable ? job.crewResult : null,
+      crewOutdated: !publishable && Boolean(job.crewResult),
       crewStartedAt: job.crewStartedAt?.toISOString() ?? null,
       crewCompletedAt: job.crewCompletedAt?.toISOString() ?? null,
       errorMessage: job.errorMessage,

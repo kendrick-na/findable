@@ -16,9 +16,10 @@ interface AppLayoutProperties {
 }
 
 const AppLayout = async ({ children }: AppLayoutProperties) => {
-  const user = await currentUser();
-  const { orgId, redirectToSignIn } = await auth();
-  const betaFeature = await showBetaFeature();
+  const [user, { orgId, redirectToSignIn }] = await Promise.all([
+    currentUser(),
+    auth(),
+  ]);
 
   if (!user) {
     return redirectToSignIn();
@@ -31,24 +32,29 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
     return <CreateOrgGate />;
   }
 
-  const plan = await getCurrentPlan();
-  const admin = await isAdmin();
+  // 독립적인 Clerk/DB 조회를 직렬로 기다리면 모든 탭 전환이 느려진다.
+  const [betaFeature, plan, admin, partner, headerMetric] =
+    await Promise.all([
+      showBetaFeature(),
+      getCurrentPlan(),
+      isAdmin(),
+      getMyPartnerStatus(),
+      scopedHeaderMetric(),
+    ]);
+  const t = await getAppDictionary();
   // 파트너 배지 노출 판정(진실=DB status). 승인 파트너만 true.
-  const { status: partnerStatus } = await getMyPartnerStatus();
-  const isPartner = partnerStatus === "approved";
+  const isPartner = partner.status === "approved";
 
   // 🔴 모바일 하단 탭바 판정(v4 P0-5) — **측정 0건이면 탭이 전부 비어 있다.**
   //   ⚠️ 세는 코드를 새로 만들지 않는다 — 헤더 지표가 쓰는 헬퍼가 이미
   //   "측정 있으면 값 / 없으면 null" 을 준다(같은 값을 두 벌로 세면 화면끼리 갈린다).
-  const hasMeasurement = (await scopedHeaderMetric()) !== null;
+  const hasMeasurement = headerMetric !== null;
 
   // 🔴 v4 P0-3 다국어 뼈대(세션N-39) — 사전은 **서버에서만** 읽는다.
   //   사이드바·탭바가 둘 다 `"use client"` 라 `cookies()` 를 못 쓴다 →
   //   여기서 읽어 **필요한 문자열만** 내려보낸다(사전 전체를 넘기면 번들에 실린다).
   //   ⚠️ 이 앱은 아직 대부분 하드코딩이다. 여기가 **새 문자열의 정문**이고,
   //     기존 것은 만지는 김에 점진 이관한다(한 번에 64개는 회귀 위험이 크다).
-  const t = await getAppDictionary();
-
   return (
     <NotificationsProvider userId={user.id}>
       <SidebarProvider>

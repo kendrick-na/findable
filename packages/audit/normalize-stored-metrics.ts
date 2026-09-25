@@ -1,10 +1,10 @@
 import { aggregateAudit } from "@repo/ai/lib/engines/aggregate";
-import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
 import type {
   CitedSource,
   EngineId,
   EngineResponse,
 } from "@repo/ai/lib/engines/types";
+import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
 
 const CORE_ENGINES = new Set<EngineId>([
   "chatgpt",
@@ -55,6 +55,18 @@ function semanticJson(value: unknown): string | undefined {
           )
         )
       : item
+  );
+}
+
+/** Only current, fully adjudicated measurements may feed PDFs or AI advice. */
+export function isPublishableAuditResult(result: unknown): boolean {
+  if (!(isRecord(result) && isRecord(result.metrics))) {
+    return false;
+  }
+  return (
+    result.mentionVerdictVersion === MENTION_VERDICT_VERSION &&
+    result.verificationState !== "revalidation_required" &&
+    result.metrics.unverifiedCount === 0
   );
 }
 
@@ -169,7 +181,7 @@ export function hasStaleAuditPdf(
   if (!(isRecord(original) && isRecord(corrected))) {
     return false;
   }
-  if (corrected.verificationState === "revalidation_required") {
+  if (!isPublishableAuditResult(corrected)) {
     return true;
   }
   const oldMetrics = original.metrics;

@@ -2,6 +2,7 @@ import "server-only";
 
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { database } from "@repo/database";
+import { cache } from "react";
 import {
   type Plan,
   planFromPublicMetadata,
@@ -15,7 +16,7 @@ import {
  * 서버 컴포넌트/라우트에서만 호출(server-only). 클라이언트는 layout 이
  * 내려주는 plan prop 을 받아 배지 표시만.
  */
-export async function getCurrentPlan(): Promise<Plan> {
+export const getCurrentPlan = cache(async (): Promise<Plan> => {
   const [user, { orgId }] = await Promise.all([currentUser(), auth()]);
   if (!user) {
     return "free";
@@ -61,4 +62,4 @@ export async function getCurrentPlan(): Promise<Plan> {
     hasCurrentPaymentGrant,
     isApprovedPartner: partner?.status === "approved",
   });
-}
+});

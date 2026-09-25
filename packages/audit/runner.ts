@@ -48,11 +48,12 @@ import {
   countMeasurementCoverage,
   isMeasurementFailure,
 } from "./measurement-coverage";
+import { isPublishableAuditResult } from "./normalize-stored-metrics";
+import { resolveOfficialSiteIdentity } from "./official-site-identity";
 import { generateAuditPdf } from "./pdf-generator";
 import type { AuditPdfData } from "./pdf-template";
-import { resolveOfficialSiteIdentity } from "./official-site-identity";
-import { pickRotatingPrompts } from "./prompt-rotation";
 import { queryPromptsSequentially } from "./prompt-query-scheduler";
+import { pickRotatingPrompts } from "./prompt-rotation";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
 
 export interface AuditRunInput {
@@ -344,6 +345,7 @@ function buildRegionBreakdown(
 /**
  * 메인 진입점. background에서 호출.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Audit orchestration combines engine, storage, PDF and briefing lifecycle guards.
 export async function runAuditJob(input: AuditRunInput): Promise<void> {
   try {
     await database.auditJob.update({
@@ -708,26 +710,30 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
 
     // PDF 생성 — 핵심 결과와 Tracking을 저장한 뒤 실행하는 best-effort 부가 산출물.
     // 이 단계에서 함수 시간이 끝나도 고객은 측정 결과를 즉시 볼 수 있다.
-    try {
-      const pdfData: AuditPdfData = {
-        ...result,
-        language: input.language,
-        generatedAt: new Date().toISOString().replace("T", " ").slice(0, 16),
-      };
-      const pdf = await generateAuditPdf(input.jobId, pdfData);
-      await database.auditJob.update({
-        where: { id: input.jobId },
-        data: { pdfUrl: pdf.pdfUrl },
-      });
-      log.info("audit.pdf.generated", {
-        jobId: input.jobId,
-        sizeKB: Math.round(pdf.pdfSize / 1024),
-      });
-    } catch (pdfError) {
-      log.error("audit.pdf.failed", {
-        jobId: input.jobId,
-        error: parseError(pdfError),
-      });
+    if (isPublishableAuditResult(result)) {
+      try {
+        const pdfData: AuditPdfData = {
+          ...result,
+          language: input.language,
+          generatedAt: new Date().toISOString().replace("T", " ").slice(0, 16),
+        };
+        const pdf = await generateAuditPdf(input.jobId, pdfData);
+        await database.auditJob.update({
+          where: { id: input.jobId },
+          data: { pdfUrl: pdf.pdfUrl },
+        });
+        log.info("audit.pdf.generated", {
+          jobId: input.jobId,
+          sizeKB: Math.round(pdf.pdfSize / 1024),
+        });
+      } catch (pdfError) {
+        log.error("audit.pdf.failed", {
+          jobId: input.jobId,
+          error: parseError(pdfError),
+        });
+      }
+    } else {
+      log.warn("audit.pdf.skipped_unverified", { jobId: input.jobId });
     }
 
     /**

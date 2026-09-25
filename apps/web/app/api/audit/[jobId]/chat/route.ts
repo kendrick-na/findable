@@ -18,7 +18,10 @@ import {
 } from "@repo/ai/lib/crew";
 // 🔴 분모 단일 진실(세션N-28) — 결과 화면·OG 이미지와 같은 함수를 쓴다.
 import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
-import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
+import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -176,6 +179,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const result = withRecomputedAuditMetrics(
       (job.result as unknown as StoredResult) ?? {}
     );
+    if (!isPublishableAuditResult(result)) {
+      return NextResponse.json(
+        { error: "브랜드 판정 검증 후 코파일럿을 이용할 수 있습니다." },
+        { status: 409 }
+      );
+    }
     if (!(crew.analysts && crew.strategist)) {
       return NextResponse.json(
         { error: "이 진단은 코파일럿을 지원하지 않는 옛 형식입니다." },

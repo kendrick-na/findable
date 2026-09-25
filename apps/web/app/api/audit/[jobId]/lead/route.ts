@@ -6,6 +6,7 @@ import { geoAxisScores, scoreTier, TIER_LABEL_KO } from "@repo/audit/geo-score";
 import { maskEmail } from "@repo/audit/mask";
 import {
   hasStaleAuditPdf,
+  isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { database } from "@repo/database";
@@ -80,6 +81,7 @@ function calcGeoScore(m: AuditMetrics): number {
   }).total;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Email gate must share the validated job state with lead persistence and sending.
 export async function POST(
   request: Request,
   context: { params: Promise<{ jobId: string }> }
@@ -106,12 +108,13 @@ export async function POST(
     select: { result: true, pdfUrl: true, crewResult: true, status: true },
   });
   if (job?.result) {
-    const corrected = withRecomputedAuditMetrics(job.result) as {
-      metrics?: { unverifiedCount?: number };
-    };
-    if ((corrected.metrics?.unverifiedCount ?? 0) > 0) {
+    const corrected = withRecomputedAuditMetrics(job.result);
+    if (!isPublishableAuditResult(corrected)) {
       return NextResponse.json(
-        { error: "이번 측정은 브랜드 판별이 완료되지 않아 점수 리포트를 보낼 수 없습니다." },
+        {
+          error:
+            "이번 측정은 브랜드 판별이 완료되지 않아 점수 리포트를 보낼 수 없습니다.",
+        },
         { status: 409 }
       );
     }

@@ -12,6 +12,10 @@ import { runCrewForAuditJob } from "@repo/audit/crew-runner";
 import { kstDayStart } from "@repo/audit/kst-day";
 import { maskEmail } from "@repo/audit/mask";
 import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
+import {
   canRunDeepAnalysis,
   hasFreeCrewQuotaLeft,
   resolveTier,
@@ -129,6 +133,7 @@ async function checkFreeLeadQuota(
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Endpoint keeps quota, ownership and verdict gates together so no path can start unsafe analysis.
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   // BotID — 심층분석은 Letsur 크레딧을 소모하므로 자동화 요청을 먼저 막는다.
   // (등록 경로 = instrumentation-client.ts `/api/audit/*/crew`)
@@ -238,6 +243,13 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
           currentStatus: job.status,
         },
         { status: 400 }
+      );
+    }
+
+    if (!isPublishableAuditResult(withRecomputedAuditMetrics(job.result))) {
+      return NextResponse.json(
+        { error: "브랜드 판정 검증 후 심층 분석을 이용할 수 있습니다." },
+        { status: 409 }
       );
     }
 

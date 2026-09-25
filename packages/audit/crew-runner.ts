@@ -12,6 +12,10 @@ import { resolveIndustryProfile } from "@repo/ai/lib/industry-profile";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
+import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "./normalize-stored-metrics";
 
 interface CrewRunInput {
   jobId: string;
@@ -77,6 +81,10 @@ export async function runCrewForAuditJob(input: CrewRunInput): Promise<void> {
       throw new Error(
         "AuditJob.result가 비어있습니다. 빠른 모드 Audit이 먼저 완료되어야 합니다."
       );
+    }
+
+    if (!isPublishableAuditResult(withRecomputedAuditMetrics(job.result))) {
+      throw new Error("브랜드 판정이 검증되지 않아 심층 분석을 중단합니다.");
     }
 
     // 빠른 모드 result에서 crew 입력 데이터 추출
