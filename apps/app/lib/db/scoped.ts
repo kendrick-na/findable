@@ -208,6 +208,22 @@ export async function scopedLatestRunTracking(brandId?: string) {
   });
 }
 
+/** Most recent org-owned audit, including runs that never produced Tracking rows. */
+export async function scopedLatestOrgAudit() {
+  const orgId = await requireOrg();
+  return database.auditJob.findFirst({
+    where: { organizationId: orgId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      brandId: true,
+      createdAt: true,
+      result: true,
+      status: true,
+    },
+  });
+}
+
 /** scopedLatestRunTracking 이 반환하는 행 타입(분석 집계 입력). */
 export type ScopedAnalysisRow = Awaited<
   ReturnType<typeof scopedLatestRunTracking>

@@ -159,6 +159,11 @@ export const SourcesBoard = ({ data }: { data: SourcesAnalysis }) => {
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs leading-relaxed">
+        이 화면의 링크는 브랜드가 등장한 AI 답변에 함께 표시된 출처 후보입니다.
+        각 링크가 브랜드 설명의 어느 문장을 뒷받침하는지는 별도로 검증되지
+        않았으므로, 브랜드를 실제로 인용한 횟수로 해석하지 마세요.
+      </p>
       {/* Mention vs Citation — 이 화면의 존재 이유. 두 축을 나란히 세운다. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* 🔴 분모가 0이면 `0%` 를 찍지 않는다 — 못 잰 것을 "0점"이라 부르는 것이다
@@ -178,9 +183,9 @@ export const SourcesBoard = ({ data }: { data: SourcesAnalysis }) => {
           hint={
             ownedCitations.total === 0
               ? "이번 측정에서는 출처 링크를 못 찾았어요"
-              : `전체 인용 ${ownedCitations.total}건 중 내 도메인 ${ownedCitations.owned}건`
+              : `브랜드 등장 답변의 출처 후보 ${ownedCitations.total}건 중 내 도메인 ${ownedCitations.owned}건`
           }
-          label="우리 사이트가 출처로 걸린 비율"
+          label="출처 후보 중 우리 사이트 비율"
           value={ownedCitations.total === 0 ? "—" : `${ownedPct}%`}
         />
         <MetricCard
@@ -429,14 +434,13 @@ const DiagnosisNote = ({
   if (lowOwned && thirdPartyHeavy) {
     return (
       <p className="rounded border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-200/90 text-sm leading-relaxed">
-        브랜드는 답변에 <strong>{mentionPct}%</strong> 등장하지만, 근거로 인용된
-        곳은 대부분{" "}
+        브랜드는 답변에 <strong>{mentionPct}%</strong> 등장했습니다. 함께 표시된
+        출처 후보 중 가장 많은 종류는{" "}
         <strong>
           {SOURCE_KIND_LABEL[topKind]}({topKindShare}%)
         </strong>
-        이고 자사 도메인은 <strong>{ownedPct}%</strong>에 그칩니다. AI가 우리
-        브랜드를 설명할 때 <strong>우리 사이트가 아니라 남의 글</strong>을
-        근거로 삼는다는 뜻이에요.
+        이고 자사 도메인은 <strong>{ownedPct}%</strong>입니다. 개별 링크가
+        브랜드 설명의 근거인지 확인한 결과는 아닙니다.
       </p>
     );
   }
@@ -444,16 +448,18 @@ const DiagnosisNote = ({
   if (lowOwned) {
     return (
       <p className="rounded border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-200/90 text-sm leading-relaxed">
-        우리 사이트가 출처로 걸린 비율이 <strong>{ownedPct}%</strong>로 낮아요.
-        공식 정보 페이지가 AI 답의 근거로 잘 쓰이지 않고 있어요.
+        브랜드 등장 답변에 함께 표시된 출처 후보 중 자사 도메인은{" "}
+        <strong>{ownedPct}%</strong>입니다. 개별 링크가 브랜드 설명의 근거인지
+        확인한 결과는 아닙니다.
       </p>
     );
   }
 
   return (
     <p className="rounded border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-emerald-200/90 text-sm leading-relaxed">
-      우리 사이트가 전체 출처의 <strong>{ownedPct}%</strong>를 차지해요. 공식
-      페이지가 AI 답의 근거로 쓰이고 있어요.
+      브랜드 등장 답변에 함께 표시된 출처 후보 중 자사 도메인은{" "}
+      <strong>{ownedPct}%</strong>입니다. 실제 인용 문장과의 연결은 별도 확인이
+      필요합니다.
     </p>
   );
 };

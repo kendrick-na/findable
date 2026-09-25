@@ -37,6 +37,7 @@ export interface AnalysisRowInput {
   brandMentioned: boolean;
   citedSources: unknown;
   engineId: string;
+  errorMessage?: string | null;
   rawResponse: string | null;
   trackedAt: Date;
 }
@@ -493,8 +494,13 @@ export function buildSourcesAnalysis(
   let ownedCitations = 0;
   let mentionedRows = 0;
   let filteredCitations = 0;
+  let answeredRows = 0;
 
   for (const row of rows) {
+    if (row.errorMessage || !row.rawResponse?.trim()) {
+      continue;
+    }
+    answeredRows += 1;
     if (row.brandMentioned) {
       mentionedRows += 1;
     }
@@ -509,7 +515,11 @@ export function buildSourcesAnalysis(
       engineEntry.mentioned += 1;
     }
 
-    const contributed = absorbRowCitations(row, brandDomain, tokens, domainMap);
+    // A search result attached to an answer about a different entity is not a
+    // citation of this brand, even when its URL/title contains the same token.
+    const contributed = row.brandMentioned
+      ? absorbRowCitations(row, brandDomain, tokens, domainMap)
+      : { citations: 0, filtered: 0, owned: 0 };
     totalCitations += contributed.citations;
     ownedCitations += contributed.owned;
     filteredCitations += contributed.filtered;
@@ -567,7 +577,7 @@ export function buildSourcesAnalysis(
     kinds,
     engines,
     measuredAt: first.trackedAt,
-    mentionRate: { mentioned: mentionedRows, total: rows.length },
+    mentionRate: { mentioned: mentionedRows, total: answeredRows },
     ownedCitations: { owned: ownedCitations, total: totalCitations },
   };
 }

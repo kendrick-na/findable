@@ -3,7 +3,8 @@ import { getCurrentPlan } from "@repo/auth/plan-server";
 import { SwordsIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { env } from "@/env";
-import { scopedLatestRunTracking } from "@/lib/db/scoped";
+import { canShowLatestAnalysis } from "@/lib/content/analysis-publication";
+import { scopedLatestOrgAudit, scopedLatestRunTracking } from "@/lib/db/scoped";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { LockedSurface } from "../components/locked-surface";
@@ -93,21 +94,41 @@ const ComparePage = async () => {
     );
   }
 
-  const rows = await scopedLatestRunTracking();
-  const analysis = buildCompetitorAnalysis(rows);
+  const latest = await scopedLatestOrgAudit();
+  const rows = latest?.brandId
+    ? await scopedLatestRunTracking(latest.brandId)
+    : [];
+  const isReady = latest
+    ? canShowLatestAnalysis({
+        createdAt: latest.createdAt,
+        result: latest.result,
+        status: latest.status,
+        trackedAt: rows[0]?.trackedAt ?? null,
+      })
+    : false;
+  const analysis = isReady ? buildCompetitorAnalysis(rows) : null;
+  let content = (
+    <NeedsMeasurement reason={rows.length === 0 ? "no-run" : "no-ranking"} />
+  );
+  if (analysis) {
+    content = <CompetitorBoard data={analysis} />;
+  }
+  if (latest && !isReady) {
+    content = (
+      <EmptyState
+        ctaHref={`/history/${latest.id}`}
+        ctaLabel="이번 회차 확인하기"
+        description="최신 측정의 브랜드 판별 또는 데이터 반영이 완료되지 않았습니다. 다른 회사의 언급을 우리 브랜드의 경쟁 결과로 확정하지 않습니다."
+        icon={<SwordsIcon className="size-5" />}
+        title="경쟁사 비교는 아직 잠정입니다"
+      />
+    );
+  }
 
   return (
     <>
       <Header page="경쟁사 비교" pages={["Findable"]} />
-      <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
-        {analysis ? (
-          <CompetitorBoard data={analysis} />
-        ) : (
-          <NeedsMeasurement
-            reason={rows.length === 0 ? "no-run" : "no-ranking"}
-          />
-        )}
-      </div>
+      <div className="flex flex-1 flex-col gap-6 p-6 pt-2">{content}</div>
     </>
   );
 };
