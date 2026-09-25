@@ -81,7 +81,17 @@ const AuditResultPage = async ({ params }: AuditResultPageProps) => {
         {/* 🔴 S5 — 크롤러가 읽을 수 있는 **요약부**(서버 렌더). AI 크롤러는 JS 를
             실행하지 않으므로 아래 클라이언트 뷰의 내용을 못 본다. 사람에게도 유효한
             요약이라 숨기지 않는다(구글: 안 보이는 콘텐츠 마크업 금지). */}
-        {summaryJob && <AuditSummarySsr job={summaryJob} locale={locale} />}
+        {summaryJob &&
+          !(
+            typeof summaryJob.result === "object" &&
+            summaryJob.result !== null &&
+            "metrics" in summaryJob.result &&
+            typeof summaryJob.result.metrics === "object" &&
+            summaryJob.result.metrics !== null &&
+            "unverifiedCount" in summaryJob.result.metrics &&
+            typeof summaryJob.result.metrics.unverifiedCount === "number" &&
+            summaryJob.result.metrics.unverifiedCount > 0
+          ) && <AuditSummarySsr job={summaryJob} locale={locale} />}
         <AuditResultView jobId={jobId} locale={locale} />
       </div>
     </div>

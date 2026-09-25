@@ -865,7 +865,9 @@ export function AuditResultView({ jobId, locale }: Props) {
   return (
     <>
       <CompletedView job={job} locale={locale} result={displayResult} />
-      <ViralBar job={job} locale={locale} />
+      {!((displayResult.metrics?.unverifiedCount ?? 0) > 0) && (
+        <ViralBar job={job} locale={locale} />
+      )}
     </>
   );
 }

@@ -100,6 +100,23 @@ export async function POST(
     source: body.source ?? "viral_bar",
   });
 
+  // 판별 미완료 결과에 기존 점수·등급을 담은 메일이 나가지 않도록 먼저 확인한다.
+  const job = await database.auditJob.findUnique({
+    where: { id: jobId },
+    select: { result: true, pdfUrl: true, crewResult: true, status: true },
+  });
+  if (job?.result) {
+    const corrected = withRecomputedAuditMetrics(job.result) as {
+      metrics?: { unverifiedCount?: number };
+    };
+    if ((corrected.metrics?.unverifiedCount ?? 0) > 0) {
+      return NextResponse.json(
+        { error: "이번 측정은 브랜드 판별이 완료되지 않아 점수 리포트를 보낼 수 없습니다." },
+        { status: 409 }
+      );
+    }
+  }
+
   // CRM 리드 적재 (실패해도 이메일 발송은 시도)
   // LeadSource enum: free_audit | contact_form | newsletter | referral | other
   try {
@@ -113,12 +130,6 @@ export async function POST(
   } catch (leadErr) {
     log.warn("lead.db_save_failed", { jobId, error: parseError(leadErr) });
   }
-
-  // Job 데이터 조회
-  const job = await database.auditJob.findUnique({
-    where: { id: jobId },
-    select: { result: true, pdfUrl: true, crewResult: true, status: true },
-  });
 
   // ⚠️ 아래 두 갈래는 리드 저장만 하고 **메일을 보내지 않는다** → `emailSent:false`.
   //   🔴 세션N-26: 예전에는 이 필드를 **아예 넣지 않았다.** 클라이언트가

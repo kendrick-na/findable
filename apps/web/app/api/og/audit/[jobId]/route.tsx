@@ -35,6 +35,7 @@ interface JobShape {
       averageMentionPosition: number | null;
       topCitedDomains: Array<{ domain: string; count: number }>;
       errors?: Array<{ engineId: string; message: string }>;
+      unverifiedCount?: number;
     };
     /** 🔴 분모 계산용(세션N-28). `metrics.enginesCovered` 는 **시도 단위**라
      *  거기서는 "어느 응답이 성공했나"를 알 수 없다 — 실측: perplexity 가 5회 시도 중
@@ -88,6 +89,34 @@ export async function GET(
   // 결함감사(2026-07-30) §OG: 이전엔 SoV를 점수 자리에 그대로 노출해 결과 페이지의
   // GEO 점수(5축 합계)와 다른 숫자가 공유 이미지에 나갔음 → geo-score 단일 진실로 통일.
   const metrics = job?.result?.metrics;
+  if (metrics?.unverifiedCount && metrics.unverifiedCount > 0) {
+    return new ImageResponse(
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          background: "#0a0a0a",
+          color: "#fafafa",
+          padding: 80,
+        }}
+      >
+        <div style={{ color: "#ff7a4d", fontSize: 24 }}>FINDABLE</div>
+        <div style={{ fontSize: 64, fontWeight: 700, marginTop: 48 }}>
+          {brand}
+        </div>
+        <div style={{ color: "#fcd34d", fontSize: 38, marginTop: 32 }}>
+          판별 미완료 · 잠정 결과
+        </div>
+        <div style={{ color: "#a1a1aa", fontSize: 25, marginTop: 24 }}>
+          이번 측정의 점수와 언급 여부는 확정되지 않았습니다.
+        </div>
+      </div>,
+      { width: 1200, height: 630 }
+    );
+  }
   const score = metrics ? geoAxisScores(metrics).total : 0;
   const t = tier(score);
   // P1-g(2026-07-27): metrics 배열은 응답 단위(엔진×프롬프트=중복)라 고유화 필수.
