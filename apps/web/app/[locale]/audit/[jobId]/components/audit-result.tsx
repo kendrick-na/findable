@@ -3044,9 +3044,25 @@ function CrewFailedCard({ jobId, isKo }: { jobId: string; isKo: boolean }) {
 // ──────────────────────────────────────────────────────────────────
 
 /**
- * 공개 리포트에서는 새 작업을 만들지 않는다. 로그인 브랜드 측정은 runner 가 별도
- * 검색 축으로 자동 실행하며, 이 카드는 완료된 결과만 읽기 전용으로 보여준다.
+ * 공개 리포트에서는 새 작업을 만들지 않는다. 로그인 브랜드 측정의 별도 검색 축은
+ * 운영 플래그에 따라 실행될 수도 있다. 저장된 회차 상태만 읽기 전용으로 보여준다.
  */
+function briefingStateMessage(status: BriefingStatus, isKo: boolean): string {
+  if (status === "processing") {
+    return isKo
+      ? "이번 회차의 네이버 AI 브리핑은 아직 측정 중입니다. 완료 후 이 화면을 다시 확인하세요."
+      : "Naver AI Briefing is still being measured for this run. Check back after it finishes.";
+  }
+  if (status === "failed") {
+    return isKo
+      ? "이번 회차의 네이버 AI 브리핑 측정은 실패했습니다. 핵심 7엔진 결과에는 영향을 주지 않습니다."
+      : "Naver AI Briefing failed for this run. The core seven-engine result is unaffected.";
+  }
+  return isKo
+    ? "이번 회차에서는 네이버 AI 브리핑을 측정하지 않았습니다. 아래 핵심 7엔진 점수에 포함되지 않습니다."
+    : "Naver AI Briefing was not measured in this run and is not included in the core seven-engine score.";
+}
+
 function NaverBriefingReadOnlyCard({
   jobId,
   briefingStatus,
@@ -3083,8 +3099,11 @@ function NaverBriefingReadOnlyCard({
       </h2>
       <p className="mt-2 max-w-2xl text-sm text-zinc-400 leading-relaxed">
         {isKo
-          ? "추천·비교 질문을 쓰는 핵심 7엔진과 달리, 네이버 AI 브리핑은 검색 결과의 효과·후기·장단점 질문을 확인합니다. 그래서 같은 분모에 섞지 않습니다. 로그인 후 브랜드 측정에서는 자동으로 확인하고 대시보드에서 회차별로 비교할 수 있어요."
-          : "Unlike the core seven recommendation and comparison engines, Naver AI Briefing checks a search-result query about benefits, reviews, and trade-offs. It stays out of the same denominator. Authenticated brand measurements run it automatically and compare it by run in the dashboard."}
+          ? "네이버 AI 브리핑은 추천·비교 질문을 쓰는 핵심 7엔진과 다른 검색 결과 축이라 같은 점수 분모에 섞지 않습니다."
+          : "Naver AI Briefing is a separate search-result channel, not part of the core seven-engine score."}
+      </p>
+      <p className="mt-2 max-w-2xl text-sm text-zinc-300 leading-relaxed">
+        {briefingStateMessage(briefingStatus, isKo)}
       </p>
       <a
         className="mt-4 inline-flex text-sm text-[var(--brand-2)] hover:underline"
