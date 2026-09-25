@@ -26,7 +26,7 @@ describe("자동 재측정 cron은 운영 앱에 배포된다", () => {
     expect(route).toContain("MAX_TRIGGERS_PER_RUN");
   });
 
-  test("🔴 운영 Vercel 설정이 자동 재측정을 매일 예약한다", () => {
+  test("🔴 유료 운영의 자동 재측정은 30분마다 한 브랜드만 실행한다", () => {
     const config = JSON.parse(readFileSync(DEPLOY_CONFIG, "utf8")) as {
       crons?: Array<{ path: string; schedule: string }>;
       functions?: Record<string, { maxDuration?: number }>;
@@ -34,7 +34,9 @@ describe("자동 재측정 cron은 운영 앱에 배포된다", () => {
     const cron = config.crons?.find(
       (item) => item.path === "/api/cron/auto-refresh-tracking"
     );
-    expect(cron?.schedule).toBe("0 17 * * *");
+    expect(cron?.schedule).toBe("*/30 * * * *");
+    const route = readFileSync(APP_ROUTE, "utf8");
+    expect(route).toMatch(/MAX_TRIGGERS_PER_RUN\s*=\s*1\b/);
     expect(
       config.functions?.["app/api/cron/auto-refresh-tracking/route.ts"]
         ?.maxDuration
@@ -51,6 +53,19 @@ describe("자동 재측정 cron은 운영 앱에 배포된다", () => {
         (item) => item.path === "/api/cron/auto-refresh-tracking"
       )
     ).toBe(false);
+    expect(
+      publicWebConfig.crons?.find(
+        (item) => item.path === "/api/cron/sweep-stuck-jobs"
+      )
+    ).toMatchObject({ schedule: "*/15 * * * *" });
+  });
+
+  test("실패한 브랜드도 재시도 간격을 적용해 다른 브랜드를 굶기지 않는다", () => {
+    const route = readFileSync(APP_ROUTE, "utf8");
+    const collector = route.split("async function collectDueBrands")[1]?.split("type DigestByOrg")[0];
+    expect(collector).toBeDefined();
+    expect(collector).not.toContain('status: "completed"');
+    expect(collector).toContain('orderBy: { createdAt: "desc" }');
   });
 
 });

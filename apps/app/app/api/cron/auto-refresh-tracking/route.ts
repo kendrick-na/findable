@@ -11,13 +11,13 @@
 //      주기가 지났으면 새 AuditJob 생성 + 러너 직접 실행(start-tracking 서버액션의 cron 판).
 //   3) 이미 저장된 마법사 프롬프트가 있으면 러너가 그걸 우선 사용(resolveRunPrompts).
 //
-// ⚠️ 배포 위치 = apps/web(findable, 이미 배포·엔진키 세팅됨). 러너가 web 프로세스에서 돈다.
-//    Hobby cron 하루1회 → schedule "0 17 * * *". 데일리 플랜은 이 하루1회로 24h 주기 충족,
-//    주간(starter)은 168h 경과 체크로 자연히 7일에 1회만 실행된다(같은 cron, 경과기준 분기).
-//    유료 스케일 시 "0 */6 * * *" 등으로 올리면 즉시성↑(경과기준이 과다실행 막음).
+// ⚠️ 배포 위치 = apps/app(findable-app). 이 프로젝트는 Vercel Pro다.
+//    2026-09-24 실측: 한 요청에서 5개 브랜드를 직렬 측정하다 300초 제한에 걸려
+//    마지막 고객 작업이 실패했다. 30분마다 한 브랜드만 측정해 함수 시간 한도를 지킨다.
+//    아래 주기 검사는 실패 회차도 포함해 반복 실패가 나머지 브랜드를 굶기지 않게 한다.
 //
 // 🔴 **cron schedule 은 항상 UTC 다** (Vercel 공식 · 프로젝트 설정으로 바꿀 수 없다).
-//    KST = UTC + 9. 그래서 새벽 2시(KST)로 돌리려면 `0 17 * * *` 이다.
+//    KST = UTC + 9. 현재는 30분 간격이라 특정 한국 시각에 묶이지 않는다.
 //    > 사고 이력(2026-08-11 세션N-18): 예전 값 `0 2 * * *` 를 문서·인계가 모두
 //    > "새벽 2시"로 읽었지만 실제로는 **오전 11시 KST** 에 돌고 있었다. 그래서
 //    > "새벽 2시 크론이 돌면 PDF 가 생성된다"는 확인 과제가 계속 미확인으로 남았다
@@ -25,8 +25,8 @@
 //    ⚠️ Hobby 는 **하루 1회** 만 허용(더 잦은 식은 **배포가 실패**한다) + 정밀도 **±59분**
 //      (17:00 예약이 17:59 에 올 수 있다 — 정시 도착을 전제로 로직을 짜지 말 것).
 //
-// 원가 보호: 한 번의 cron 실행에서 트리거하는 총 측정 수를 MAX_TRIGGERS_PER_RUN 로 제한
-//    (maxDuration·429·크레딧 폭주 방지). 초과분은 다음 실행에서 처리(오래된 것 우선).
+// 원가·시간 보호: 한 번의 cron 실행에서 한 브랜드만 측정한다.
+//    초과분은 다음 30분 실행에서 처리(오래된 것 우선).
 //
 // 인증: `denyIfNotCron` 단일 진실(`CRON_SECRET` Bearer 만 신뢰).
 //   🔴 **여기가 제일 위험했다** — 예전 가드는 `CRON_SECRET` 이 없으면 `x-vercel-cron: 1`
@@ -53,8 +53,8 @@ import { env } from "@/env";
 export const maxDuration = 300;
 
 const HOUR_MS = 60 * 60 * 1000;
-// 한 실행에서 트리거할 최대 측정 수(원가·maxDuration 보호). 러너 1건 ~20~60s.
-const MAX_TRIGGERS_PER_RUN = 5;
+// 5건 직렬 실행은 실제 운영에서 FUNCTION_INVOCATION_TIMEOUT을 일으켰다.
+const MAX_TRIGGERS_PER_RUN = 1;
 
 /**
  * 알림 발송 스위치 (투두 #68, 2026-08-08).
@@ -195,11 +195,12 @@ const stringList = (value: unknown): string[] =>
     : [];
 
 /**
- * 브랜드별 **마지막 측정 시각**을 보고 주기가 지난 것만 모은다.
+ * 브랜드별 **마지막 시도 시각**을 보고 주기가 지난 것만 모은다.
  *
  * ⚠️ plan 별 주기는 `planCapabilities(plan).autoRefreshHours` 가 단일 진실이다
  *   (starter=168h 주간 · growth/scale=24h 데일리 · free=null 제외).
- *   측정 이력이 없으면 `lastMs=0` → 즉시 대상이 된다.
+ *   실패 시도도 간격에 포함하지 않으면 실패 브랜드가 매 실행마다 다시 선정되고
+ *   다른 브랜드의 측정 기회를 빼앗는다. 측정 이력이 없으면 즉시 대상이 된다.
  */
 async function collectDueBrands(
   orgs: readonly OrgWithBrands[],
@@ -217,9 +218,8 @@ async function collectDueBrands(
         where: {
           email: `org:${org.id}`,
           domain: brand.domain,
-          status: "completed",
         },
-        orderBy: { completedAt: "desc" },
+        orderBy: { createdAt: "desc" },
         select: { completedAt: true, createdAt: true },
       });
       const lastMs = (last?.completedAt ?? last?.createdAt)?.getTime() ?? 0;

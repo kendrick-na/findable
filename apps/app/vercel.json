@@ -10,7 +10,7 @@
   "crons": [
     {
       "path": "/api/cron/auto-refresh-tracking",
-      "schedule": "0 17 * * *"
+      "schedule": "*/30 * * * *"
     }
   ]
 }

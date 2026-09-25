@@ -362,8 +362,8 @@ export function ExecutionPlaybook({
           <div className="flex items-center gap-2 font-mono text-xs">
             <span className="rounded-full border border-orange-500/20 bg-orange-500/8 px-3 py-1.5 text-orange-300">
               {isKo
-                ? `진행 중 ${currentTasks.length}`
-                : `${currentTasks.length} active`}
+                ? `전체 실행 작업 ${currentTasks.length}`
+                : `${currentTasks.length} tasks in total`}
             </span>
             {resolvedTasks.length > 0 ? (
               <span className="rounded-full border border-emerald-500/20 bg-emerald-500/8 px-3 py-1.5 text-emerald-300">

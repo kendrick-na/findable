@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/sweep-stuck-jobs",
-      "schedule": "0 16 * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/content-publishing",

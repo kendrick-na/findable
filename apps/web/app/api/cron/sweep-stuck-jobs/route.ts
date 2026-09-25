@@ -9,10 +9,8 @@
 //   2) crew:    crewStatus = processing 이고 crewStartedAt 이 STALE 초과 → crewStatus=failed
 //
 // ⚠️ 배포 위치 = apps/web(findable, 이미 배포·env 세팅됨). apps/api 는 미배포라 web 에 둠.
-//    Hobby 플랜 cron 하루1회 제약 → vercel.json schedule 은 "0 16 * * *"(하루1회).
-//    🔴 **UTC 다** — 16:00 UTC = **새벽 1시 KST**(자세한 함정은 auto-refresh-tracking 상단 참고).
-//    급한 정리는 crew-runner 270s 가 1차. 이 스윕은 함수 급사분을 줍는 보조라 하루1회로 충분.
-//    유료 전환 시 schedule 을 "*/15 * * * *" 로 바꾸면 즉시성 향상.
+//    Pro 플랜 cron 을 15분 간격으로 예약해 함수 급사 후 장시간 방치되는 잡을 정리한다.
+//    1차 안전망은 crew-runner 270s 이며, 이 스윕은 그 안전망이 실행되지 못한 경우를 맡는다.
 //
 // 인증: `denyIfNotCron` 단일 진실(`CRON_SECRET` Bearer 만 신뢰).
 //   🔴 예전엔 `x-vercel-cron` 헤더 폴백이 있었고 그게 **외부에서 스푸핑 가능한 구멍**이었다.
