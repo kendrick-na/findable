@@ -1,4 +1,5 @@
 import { isUsableRun } from "@repo/audit/run-quality";
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import type { AuditJob } from "@repo/database";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { cn } from "@repo/design-system/lib/utils";
@@ -68,10 +69,14 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
   return (
     <ul className="flex flex-col gap-3">
       {jobs.map((job) => {
+        const result = withRecomputedAuditMetrics(job.result);
+        const isPartial =
+          ((result as { metrics?: { unverifiedCount?: number } } | null)
+            ?.metrics?.unverifiedCount ?? 0) > 0;
         const isUnavailable =
-          job.status === "completed" && !isUsableRun(job.result);
-        const sov = isUnavailable ? null : extractSov(job.result);
-        const brandName = extractBrandName(job.result);
+          job.status === "completed" && !isUsableRun(result);
+        const sov = isUnavailable ? null : extractSov(result);
+        const brandName = extractBrandName(result);
         // Each state has a real destination: live progress, failure details, or
         // the completed public report. Never label an unfinished run as a result.
         const isDone = job.status === "completed" && !isUnavailable;
@@ -93,11 +98,11 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
               <Badge
                 className={cn(
                   "border-transparent",
-                  isUnavailable ? STATUS_TONE.failed : STATUS_TONE[job.status]
+                  isPartial ? STATUS_TONE.processing : isUnavailable ? STATUS_TONE.failed : STATUS_TONE[job.status]
                 )}
                 variant="outline"
               >
-                {isUnavailable ? "측정 불가" : STATUS_LABEL[job.status]}
+                {isPartial ? "잠정 결과" : isUnavailable ? "측정 불가" : STATUS_LABEL[job.status]}
               </Badge>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
@@ -110,7 +115,7 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
                 </span>
               )}
               <span className="ml-auto inline-flex items-center gap-1 text-[color:var(--findable-primary,#ff7a4d)]">
-                {actionLabel(job.status, isUnavailable)}
+                {isPartial ? "잠정 결과 보기" : actionLabel(job.status, isUnavailable)}
                 {isDone && (
                   <>
                     <ExternalLinkIcon aria-hidden="true" className="size-3" />

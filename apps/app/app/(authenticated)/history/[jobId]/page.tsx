@@ -1,5 +1,6 @@
 import { geoAxisScores, successfulResponseCount } from "@repo/audit/geo-score";
 import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, metricsOf } from "@repo/audit/run-quality";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { auth, currentUser } from "@repo/auth/server";
@@ -63,8 +64,10 @@ export default async function AuditHistoryDetail({
     redirect(`/brand/measuring?job=${job.id}`);
   }
 
-  const brandName = extractBrandName(job.result) ?? job.domain;
-  const metrics = metricsOf(job.result);
+  const result = withRecomputedAuditMetrics(job.result);
+  const brandName = extractBrandName(result) ?? job.domain;
+  const metrics = metricsOf(result);
+  const isPartial = (metrics?.unverifiedCount ?? 0) > 0;
   const storedResponses = (
     job.result as {
       engineResponses?: Array<{
@@ -100,7 +103,24 @@ export default async function AuditHistoryDetail({
             {job.domain} · {measuredAt}
           </p>
         </div>
-        {status === "failed" || !isUsableRun(job.result) ? (
+        {isPartial ? (
+          <section className="findable-card border border-amber-500/30 p-5">
+            <h2 className="font-semibold text-lg">판별 미완료 · 잠정 결과</h2>
+            <p className="mt-2 text-muted-foreground text-sm">
+              AI 답변은 일부 수집했지만 브랜드 판별이 {metrics?.unverifiedCount}건
+              완료되지 않았습니다. 이번 회차의 점수·등장률·개선 처방은
+              확정하지 않습니다. 자세한 응답은 공개 리포트에서 확인할 수 있습니다.
+            </p>
+            <a
+              className="mt-4 inline-flex items-center gap-1 text-sm underline"
+              href={`${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${job.id}`}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              잠정 리포트 보기 <ExternalLinkIcon aria-hidden className="size-4" />
+            </a>
+          </section>
+        ) : status === "failed" || !isUsableRun(result) ? (
           <section className="findable-card p-5">
             <h2 className="font-semibold text-lg">
               이번 측정은 완료되지 않았습니다

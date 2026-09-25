@@ -17,6 +17,7 @@ import { type GeoScoreMetrics, geoAxisScores } from "./geo-score";
 export type StoredMetrics = GeoScoreMetrics & {
   errors?: Array<{ engineId: string; message: string }>;
   stubCount?: number;
+  unverifiedCount?: number;
 };
 
 export function metricsOf(result: unknown): StoredMetrics | null {
@@ -26,7 +27,9 @@ export function metricsOf(result: unknown): StoredMetrics | null {
 /** `result` JSON 에서 GEO 총점. metrics 가 없으면 null — **지어내지 않는다**. */
 export function scoreOf(result: unknown): number | null {
   const metrics = metricsOf(result);
-  return metrics ? geoAxisScores(metrics).total : null;
+  return metrics && (metrics.unverifiedCount ?? 0) === 0
+    ? geoAxisScores(metrics).total
+    : null;
 }
 
 /**
@@ -43,6 +46,9 @@ export function scoreOf(result: unknown): number | null {
 export function isUsableRun(result: unknown): boolean {
   const metrics = metricsOf(result);
   if (!metrics) {
+    return false;
+  }
+  if ((metrics.unverifiedCount ?? 0) > 0) {
     return false;
   }
   const total = metrics.enginesCovered?.length ?? 0;
