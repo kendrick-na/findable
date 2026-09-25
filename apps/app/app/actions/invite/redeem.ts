@@ -81,10 +81,20 @@ export async function redeemInviteCode(input: {
       await tx.inviteRedemption.create({
         data: { inviteCodeId: invite.id, organizationId: orgId, userId },
       });
-      await tx.inviteCode.update({
-        where: { id: invite.id },
+      // 사용 한도는 읽은 뒤 검사하는 것만으로는 부족하다. 여러 조직이 동시에
+      // 통과하면 한도를 초과하므로 같은 DB 갱신의 조건으로 다시 확인한다.
+      const updated = await tx.inviteCode.updateMany({
+        where: {
+          id: invite.id,
+          ...(invite.maxRedemptions === null
+            ? {}
+            : { redeemedCount: { lt: invite.maxRedemptions } }),
+        },
         data: { redeemedCount: { increment: 1 } },
       });
+      if (updated.count !== 1) {
+        throw new Error("LIMIT_REACHED");
+      }
       await tx.organization.update({
         where: { id: orgId },
         data: { plan: invite.grantPlan, planExpiresAt: expiresAt },
@@ -93,6 +103,9 @@ export async function redeemInviteCode(input: {
   } catch (error) {
     if (error instanceof Error && error.message === "ALREADY_REDEEMED") {
       return { error: "이미 사용한 코드예요." };
+    }
+    if (error instanceof Error && error.message === "LIMIT_REACHED") {
+      return { error: "사용 한도에 도달한 코드예요." };
     }
     log.error("invite.redeem.failed", { code, orgId, error: String(error) });
     return { error: "코드를 적용하지 못했어요. 잠시 후 다시 시도해 주세요." };
