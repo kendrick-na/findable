@@ -268,10 +268,23 @@ const App = async ({ searchParams }: AppProperties) => {
   //    "비교는 2회차 측정부터"와 자기모순).
   //   ⚠️ 원래 혼란은 여전히 유효한 지적이다. 답은 숫자를 부풀리는 게 아니라
   //   **범위가 다르다는 걸 밝히는 것** — 하단 이력 섹션에 그 한 줄을 붙였다.
-  // 2차: **Tracking 이 비어 폴백이 실제로 필요할 때만** 무거운 `result` 를 읽는다.
-  //   여기 오는 경우 = 무료 email 진단만 있는 유저 · dual-write 롤백 시(주석 위 §참조).
+  // 2차: Tracking 이 비어 있거나 최신 AuditJob보다 뒤처진 경우에만 무거운
+  // `result` 를 읽는다. dual-write best-effort 실패 뒤에도 공개 리포트와 대시보드가
+  // 서로 다른 회차를 가리키지 않도록 최신 완료 job을 fallback으로 사용한다.
+  const latestJobForTracking = initialTrackingData?.latestBrandId
+    ? jobsLite.find(
+        (job) =>
+          job.status === "completed" &&
+          job.brandId === initialTrackingData.latestBrandId
+      )
+    : null;
+  const trackingIsStale = Boolean(
+    initialTrackingData?.latestMeasuredAt &&
+      latestJobForTracking?.completedAt &&
+      latestJobForTracking.completedAt > initialTrackingData.latestMeasuredAt
+  );
   const jobsWithResult =
-    trackingData === null && jobsLite.length > 0 && JOB_WHERE
+    (trackingData === null || trackingIsStale) && jobsLite.length > 0 && JOB_WHERE
       ? await database.auditJob.findMany({
           where: JOB_WHERE,
           orderBy: { createdAt: "desc" },
@@ -279,7 +292,7 @@ const App = async ({ searchParams }: AppProperties) => {
         })
       : null;
   const data =
-    trackingData ??
+    (trackingIsStale ? null : trackingData) ??
     buildDashboardData(
       (jobsWithResult ?? []).map((job) => ({
         ...job,
@@ -353,7 +366,11 @@ const App = async ({ searchParams }: AppProperties) => {
   );
   const hasUsableResult =
     trackingData !== null ||
-    Boolean(latestCompletedJob && isUsableRun(latestCompletedJob.result));
+    Boolean(
+      latestCompletedJob &&
+        "result" in latestCompletedJob &&
+        isUsableRun(latestCompletedJob.result)
+    );
 
   // 「진실의 거울」 — 답변 원문은 **최신 1회차만** 읽는다(v4 탭7 · N-37).
   //   ⚠️ 위 `scopedTracking()`(1400행)에 `rawResponse` 를 얹지 않는다 —
