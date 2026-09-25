@@ -311,7 +311,7 @@ const App = async ({ searchParams }: AppProperties) => {
 
   return (
     <>
-      <Header page="대시보드" pages={["Findable"]} />
+      <Header page="대시보드" pages={["Findable"]} showMetric={currentRunUnverified === 0} />
       <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
         {activeJob && hasData && hasUsableResult ? (
           <section

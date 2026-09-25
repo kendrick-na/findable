@@ -88,7 +88,7 @@ export default async function AuditHistoryDetail({
 
   return (
     <>
-      <Header page="측정 상세" pages={["Findable", "측정 이력"]} />
+      <Header page="측정 상세" pages={["Findable", "측정 이력"]} showMetric={!isPartial} />
       <main className="flex flex-1 flex-col gap-5 p-6 pt-2">
         <Link
           className="inline-flex items-center gap-2 text-muted-foreground text-sm hover:text-foreground"

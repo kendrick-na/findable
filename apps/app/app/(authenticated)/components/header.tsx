@@ -15,6 +15,7 @@ interface HeaderProps {
   children?: ReactNode;
   page: string;
   pages: string[];
+  showMetric?: boolean;
 }
 
 // ──────────────────────────────────────────────────
@@ -57,7 +58,7 @@ const HeaderMetric = async () => {
   );
 };
 
-export const Header = ({ pages, page, children }: HeaderProps) => (
+export const Header = ({ pages, page, children, showMetric = true }: HeaderProps) => (
   <header className="flex h-16 shrink-0 items-center justify-between gap-2">
     <div className="flex items-center gap-2 px-4">
       <SidebarTrigger className="-ml-1" />
@@ -87,7 +88,7 @@ export const Header = ({ pages, page, children }: HeaderProps) => (
     <div className="flex items-center gap-2">
       <LocaleSwitcher />
       {/* D11: 브레드크럼 반대쪽 끝. children 이 있는 화면에서도 자리가 겹치지 않는다. */}
-      <HeaderMetric />
+      {showMetric && <HeaderMetric />}
       {children}
     </div>
   </header>
