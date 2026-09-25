@@ -5,13 +5,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/db/scoped";
 import { Header } from "../../components/header";
+import { isPromptId } from "./prompt-id";
 
 export const metadata: Metadata = {
   title: "질문별 AI 답변 · Findable",
 };
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function PromptResponsesPage({
   params,
@@ -19,7 +17,7 @@ export default async function PromptResponsesPage({
   params: Promise<{ promptId: string }>;
 }) {
   const { promptId } = await params;
-  if (!UUID_RE.test(promptId)) {
+  if (!isPromptId(promptId)) {
     notFound();
   }
   const orgId = await requireOrg();
