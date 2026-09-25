@@ -76,7 +76,7 @@ const LITE_QUERY = /const jobsLite =[\s\S]*?take: 20,[\s\S]*?\)\s*:\s*\[\];/;
 const HEAVY_QUERY = /const jobsWithResult =[\s\S]*?:\s*null;/;
 const SELECT_BLOCK = /select:\s*\{[\s\S]*?\}/;
 const GUARDED_BY_TRACKING = /trackingData === null/;
-const FALLBACK_USES_HEAVY = /buildDashboardData\(jobsWithResult/;
+const FALLBACK_USES_HEAVY = /buildDashboardData\(\s*\(jobsWithResult/;
 const HAS_DATA_USES_LITE = /hasData\s*=\s*trackingData !== null \|\| jobsLite/;
 const RESULT_SELECTED = /\bresult:\s*true/;
 const FALLBACK_USES_LITE = /buildDashboardData\(jobsLite/;
@@ -109,6 +109,7 @@ describe("대시보드 — 무거운 result(Json)를 조건부로만 읽는다",
   it("폴백 집계는 result 를 가진 쪽을 입력으로 받는다", () => {
     // 가벼운 쪽을 넘기면 `result` 가 없어 폴백이 **조용히 빈 대시보드**가 된다.
     expect(pageCode).toMatch(FALLBACK_USES_HEAVY);
+    expect(pageCode).toContain("withRecomputedAuditMetrics(job.result)");
     expect(
       pageCode,
       "폴백에 jobsLite 를 넘기면 result 가 없어 집계가 비어버린다"

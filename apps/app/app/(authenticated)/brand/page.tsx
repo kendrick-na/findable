@@ -1,4 +1,6 @@
-import { reconcileStaleAuditJob, isStaleAuditJob } from "@repo/audit/stale-job";
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
+import { isUsableRun, metricsOf } from "@repo/audit/run-quality";
+import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import type { AuditJob } from "@repo/database";
 import { database } from "@repo/database";
 import { Badge } from "@repo/design-system/components/ui/badge";
@@ -36,7 +38,36 @@ const STATUS_TONE: Record<AuditJob["status"], string> = {
 const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
   dateStyle: "medium",
   timeStyle: "short",
+  timeZone: "Asia/Seoul",
 });
+
+function jobView(job: Pick<AuditJob, "status" | "result">) {
+  const result = withRecomputedAuditMetrics(job.result);
+  const isPartial =
+    job.status === "completed" && (metricsOf(result)?.unverifiedCount ?? 0) > 0;
+  if (isPartial) {
+    return {
+      label: "잠정 결과",
+      linkLabel: "잠정 결과 보기",
+      tone: STATUS_TONE.processing,
+      external: true,
+    };
+  }
+  if (job.status === "completed" && !isUsableRun(result)) {
+    return {
+      label: "측정 불가",
+      linkLabel: "측정 불가 원인 보기",
+      tone: STATUS_TONE.failed,
+      external: false,
+    };
+  }
+  return {
+    label: STATUS_LABEL[job.status],
+    linkLabel: "결과 보기",
+    tone: STATUS_TONE[job.status],
+    external: true,
+  };
+}
 
 // requireOrg 만 통과하면 되는 org 멤버 self 화면(admin 게이트 아님).
 // scopedBrands 는 내부에서 requireOrg 를 호출하므로 org 미선택 시 throw → 인증 레이아웃이 처리.
@@ -57,6 +88,7 @@ const BrandPage = async () => {
             domain: true,
             status: true,
             createdAt: true,
+            result: true,
           },
           orderBy: { createdAt: "desc" },
           take: 100,
@@ -102,6 +134,7 @@ const BrandPage = async () => {
             <ul className="flex flex-col gap-2">
               {brands.map((brand) => {
                 const lastJob = latestByDomain.get(brand.domain);
+                const view = lastJob ? jobView(lastJob) : null;
                 return (
                   <li
                     className="flex flex-col gap-3 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] px-4 py-3"
@@ -124,13 +157,10 @@ const BrandPage = async () => {
                               {dateFormatter.format(lastJob.createdAt)}
                             </span>
                             <Badge
-                              className={cn(
-                                "border-transparent",
-                                STATUS_TONE[lastJob.status]
-                              )}
+                              className={cn("border-transparent", view?.tone)}
                               variant="outline"
                             >
-                              {STATUS_LABEL[lastJob.status]}
+                              {view?.label}
                             </Badge>
                             {/* 🔴 S7-2차(2026-08-11) — 이력 목록과 **같은 동작**이어야 한다.
                                 결과는 www 에 있어 누르면 대시보드를 벗어나는데 돌아올 길이
@@ -139,18 +169,30 @@ const BrandPage = async () => {
                             {lastJob.status === "completed" && (
                               <a
                                 className="inline-flex items-center gap-1 text-[color:var(--findable-primary,#ff7a4d)]"
-                                href={`${webUrl}/ko/audit/${lastJob.id}`}
-                                rel="noopener noreferrer"
-                                target="_blank"
+                                href={
+                                  view?.external
+                                    ? `${webUrl}/ko/audit/${lastJob.id}`
+                                    : `/history/${lastJob.id}`
+                                }
+                                rel={
+                                  view?.external
+                                    ? "noopener noreferrer"
+                                    : undefined
+                                }
+                                target={view?.external ? "_blank" : undefined}
                               >
-                                결과 보기
-                                <ExternalLinkIcon
-                                  aria-hidden="true"
-                                  className="size-3"
-                                />
-                                <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-                                  새 탭
-                                </span>
+                                {view?.linkLabel}
+                                {view?.external && (
+                                  <>
+                                    <ExternalLinkIcon
+                                      aria-hidden="true"
+                                      className="size-3"
+                                    />
+                                    <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+                                      새 탭
+                                    </span>
+                                  </>
+                                )}
                               </a>
                             )}
                           </div>

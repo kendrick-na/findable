@@ -17,9 +17,29 @@ describe("측정 상태·결과 IA 계약", () => {
     const history = read(
       "app/(authenticated)/components/audit-history-list.tsx"
     );
-    expect(history).toContain("isUsableRun(job.result)");
+    expect(history).toContain("withRecomputedAuditMetrics(job.result)");
+    expect(history).toContain("!isUsableRun(result)");
+    expect(history).toContain('isPartial ? "잠정 결과"');
     expect(history).toContain('isUnavailable ? "측정 불가"');
     expect(history).toMatch(/const sov = isUnavailable\s*\? null/);
+  });
+
+  it("브랜드 목록과 전역 헤더는 판별 미완료 회차를 확정 결과·0%로 취급하지 않는다", () => {
+    const brand = read("app/(authenticated)/brand/page.tsx");
+    const scoped = read("lib/db/scoped.ts");
+    expect(brand).toContain("withRecomputedAuditMetrics(job.result)");
+    expect(brand).toContain('"잠정 결과"');
+    expect(brand).toContain('"잠정 결과 보기"');
+    expect(scoped).toContain(
+      "!isUsableRun(withRecomputedAuditMetrics(latestJob.result))"
+    );
+  });
+
+  it("운영 측정 콘솔의 날짜는 서버·브라우저에서 같은 시간대로 렌더링한다", () => {
+    const console = read(
+      "app/(authenticated)/admin/measure/measure-console.tsx"
+    );
+    expect(console).toContain('timeZone: "Asia/Seoul"');
   });
 
   it("측정 불가 완료 회차는 무료 플랜의 24시간 재측정을 막지 않는다", () => {

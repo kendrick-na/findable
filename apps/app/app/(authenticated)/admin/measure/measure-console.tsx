@@ -60,6 +60,7 @@ const fmtDate = (d: Date | null) =>
         hour: "2-digit",
         minute: "2-digit",
         month: "short",
+        timeZone: "Asia/Seoul",
       }).format(new Date(d))
     : "측정 없음";
 

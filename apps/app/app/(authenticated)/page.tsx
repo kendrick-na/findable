@@ -40,6 +40,7 @@ import { StartTrackingButton } from "./features/brand/start-tracking-button";
 import {
   buildDashboardData,
   buildTrackingDashboardData,
+  invalidTrackingRunTimes,
 } from "./lib/dashboard-data";
 import { buildTruthMirrorData } from "./lib/truth-mirror-data";
 import { getPrimaryEmail } from "./lib/user";
@@ -210,10 +211,50 @@ const App = async ({ searchParams }: AppProperties) => {
   // D10: `?brand=` 로 볼 브랜드를 고른다. 잘못된 값이면 집계 쪽이 최신으로 되돌린다
   //   (rows 는 scopedTracking 으로 이미 org 필터를 통과했으므로 여기서 못 찾는 id =
   //    내 것이 아님 → 404 대신 안전한 기본값).
-  const trackingData = buildTrackingDashboardData(
+  const initialTrackingData = buildTrackingDashboardData(
     trackingRows,
     selectedBrandId
   );
+  // Tracking rows do not carry entity-verification status. A prior run with
+  // skipped verdicts must not become a 0% baseline or a false trend point.
+  // Read result JSON only for this brand's recent jobs, not all org jobs.
+  const qualityCandidateIds = initialTrackingData?.latestBrandId
+    ? jobsLite
+        .filter(
+          (job) =>
+            job.brandId === initialTrackingData.latestBrandId &&
+            job.status === "completed" &&
+            job.completedAt &&
+            job.completedAt.getTime() !==
+              initialTrackingData.latestMeasuredAt?.getTime()
+        )
+        .map((job) => job.id)
+    : [];
+  const qualityJobs = qualityCandidateIds.length
+    ? await database.auditJob.findMany({
+        where: { ...(JOB_WHERE ?? {}), id: { in: qualityCandidateIds } },
+        select: { id: true, result: true },
+      })
+    : [];
+  const invalidRunTimes = invalidTrackingRunTimes(
+    qualityJobs.map((job) => ({
+      completedAt:
+        jobsLite.find((candidate) => candidate.id === job.id)?.completedAt ??
+        null,
+      result: job.result,
+    }))
+  );
+  const trackingData =
+    initialTrackingData && invalidRunTimes.size > 0
+      ? buildTrackingDashboardData(
+          trackingRows.filter(
+            (row) =>
+              row.brandId !== initialTrackingData.latestBrandId ||
+              !invalidRunTimes.has(row.trackedAt.getTime())
+          ),
+          selectedBrandId
+        )
+      : initialTrackingData;
   // 🔴 D10(2026-08-07): 여기 있던 `Math.max(trackingData.totalCount, jobs.length)` 를 뺐다.
   //   원래 의도는 "이력 리스트(AuditJob)보다 총 횟수가 적게 보이는 혼란 방지"였는데,
   //   totalCount 가 **보고 있는 브랜드의 측정 횟수**로 바뀐 지금은 그 보정이
@@ -232,7 +273,14 @@ const App = async ({ searchParams }: AppProperties) => {
           take: 20,
         })
       : null;
-  const data = trackingData ?? buildDashboardData(jobsWithResult ?? []);
+  const data =
+    trackingData ??
+    buildDashboardData(
+      (jobsWithResult ?? []).map((job) => ({
+        ...job,
+        result: withRecomputedAuditMetrics(job.result),
+      }))
+    );
   // Tracking 한 회차는 runner 가 AuditJob.completedAt 과 동일한 trackedAt 을 기록한다.
   // 이 연결을 화면에도 유지해야 리포트와 대시보드가 서로 다른 회차를 말하지 않는다.
   const currentRunJob =
@@ -311,7 +359,11 @@ const App = async ({ searchParams }: AppProperties) => {
 
   return (
     <>
-      <Header page="대시보드" pages={["Findable"]} showMetric={currentRunUnverified === 0} />
+      <Header
+        page="대시보드"
+        pages={["Findable"]}
+        showMetric={currentRunUnverified === 0}
+      />
       <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
         {activeJob && hasData && hasUsableResult ? (
           <section
@@ -403,7 +455,9 @@ const App = async ({ searchParams }: AppProperties) => {
               </div>
             ) : null}
 
-            {currentRunUnverified === 0 && data.coverage && data.latestSov !== null ? (
+            {currentRunUnverified === 0 &&
+            data.coverage &&
+            data.latestSov !== null ? (
               <DashboardImpactEstimate
                 coverage={data.coverage}
                 sov={data.latestSov}
@@ -435,29 +489,31 @@ const App = async ({ searchParams }: AppProperties) => {
               />
             ) : null}
 
-            {currentRunUnverified === 0 ? <div id="tour-trend">
-              <SovTrendChart
-                annotations={annotations}
-                annotationsSlot={
-                  data.latestBrandId ? (
-                    <TrendAnnotations
-                      annotations={annotations}
-                      brandId={data.latestBrandId}
-                    />
-                  ) : null
-                }
-                brandId={data.latestBrandId}
-                emptyAction={
-                  data.latestBrandDomain && data.latestBrandName ? (
-                    <StartTrackingButton
-                      brandName={data.latestBrandName}
-                      domain={data.latestBrandDomain}
-                    />
-                  ) : null
-                }
-                trend={data.trend}
-              />
-            </div> : null}
+            {currentRunUnverified === 0 ? (
+              <div id="tour-trend">
+                <SovTrendChart
+                  annotations={annotations}
+                  annotationsSlot={
+                    data.latestBrandId ? (
+                      <TrendAnnotations
+                        annotations={annotations}
+                        brandId={data.latestBrandId}
+                      />
+                    ) : null
+                  }
+                  brandId={data.latestBrandId}
+                  emptyAction={
+                    data.latestBrandDomain && data.latestBrandName ? (
+                      <StartTrackingButton
+                        brandName={data.latestBrandName}
+                        domain={data.latestBrandDomain}
+                      />
+                    ) : null
+                  }
+                  trend={data.trend}
+                />
+              </div>
+            ) : null}
 
             {/* "밀리는 질문"(2026-08-07) — 히어로가 말한 평균이 **어디서 왔는지** 쪼갠다.
                 리서치 `01:132` *"업계 1군은 이걸 메인에 둔다"* · 경쟁사 채택률 8/15.

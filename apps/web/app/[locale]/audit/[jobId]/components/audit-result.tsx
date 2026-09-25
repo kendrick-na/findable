@@ -286,6 +286,7 @@ interface GeoActionView {
   title: string;
 }
 interface JobResponse {
+  isWorkspaceAudit?: boolean;
   completedAt: string | null;
   createdAt: string;
   crewCompletedAt: string | null;
@@ -1586,15 +1587,21 @@ function CompletedView({
 
         {/* 장치 C(세션L) — 약점 앵커 CTA. 관심이 가장 뜨거운 순간(내가 어느 엔진에서
             미언급인지 본 직후)에 배치. 격차가 없으면(전 엔진 인지) 렌더하지 않는다. */}
-        <EngineGapCta isKo={isKo} result={result} />
+        {!job.isWorkspaceAudit && <EngineGapCta isKo={isKo} result={result} />}
 
         {result.metrics.topCitedDomains.length > 0 && (
           <CitationSourcesPanel isKo={isKo} result={result} />
         )}
 
-        <ReportToDashboardGuide isKo={isKo} />
+        <ReportToDashboardGuide
+          isKo={isKo}
+          isWorkspaceAudit={Boolean(job.isWorkspaceAudit)}
+          jobId={job.jobId}
+        />
 
-        <UpsellCard isKo={isKo} job={job} locale={locale} result={result} />
+        {!job.isWorkspaceAudit && (
+          <UpsellCard isKo={isKo} job={job} locale={locale} result={result} />
+        )}
       </div>
     </div>
   );
@@ -4632,7 +4639,15 @@ function ActionTeaser({
 // ──────────────────────────────────────────────────────────────────
 
 /** 무료 리포트와 로그인 대시보드의 역할을 한 화면에서 분리한다. */
-function ReportToDashboardGuide({ isKo }: { isKo: boolean }) {
+function ReportToDashboardGuide({
+  isKo,
+  isWorkspaceAudit,
+  jobId,
+}: {
+  isKo: boolean;
+  isWorkspaceAudit: boolean;
+  jobId: string;
+}) {
   return (
     <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5 md:p-6">
       <h2 className="font-semibold text-base text-zinc-100">
@@ -4653,7 +4668,13 @@ function ReportToDashboardGuide({ isKo }: { isKo: boolean }) {
         </div>
         <div className="rounded-lg border border-[var(--brand-2)]/20 bg-[var(--brand-2)]/5 p-4">
           <p className="font-medium text-sm text-zinc-100">
-            {isKo ? "가입 후 대시보드" : "Dashboard after sign-up"}
+            {isKo
+              ? isWorkspaceAudit
+                ? "대시보드에서 이어보기"
+                : "가입 후 대시보드"
+              : isWorkspaceAudit
+                ? "Continue in your dashboard"
+                : "Dashboard after sign-up"}
           </p>
           <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">
             {isKo
@@ -4662,6 +4683,16 @@ function ReportToDashboardGuide({ isKo }: { isKo: boolean }) {
           </p>
         </div>
       </div>
+      {isWorkspaceAudit && (
+        <a
+          className="mt-4 inline-flex text-sm text-[var(--brand-3)] underline"
+          href={`https://app.findable.co.kr/history/${encodeURIComponent(jobId)}`}
+        >
+          {isKo
+            ? "이 회차를 대시보드에서 보기 →"
+            : "Open this run in the dashboard →"}
+        </a>
+      )}
     </section>
   );
 }
@@ -4722,12 +4753,12 @@ function buildUpsellCopy({
           "지금은 기준점이 0이에요. 개선 작업을 한 뒤 다시 측정하면 올라갔는지 알 수 있어요. 무료 계정을 만들면 이 결과가 그 기준점으로 남아요.",
       };
     }
-    const headline = `오늘 ${brandName}의 AI 점유율은 ${sov}%예요 — 문제는 이게 어제보다 나은지 모른다는 거예요`;
+    const headline = `${brandName}의 AI 답변 등장률은 ${sov}%예요`;
     return {
       headline,
       bodyCopy: isFullCoverage
-        ? `지금은 측정한 AI ${measuredCount}곳 모두가 우리를 알아봐요. 관건은 이 상태가 유지되는지, 경쟁사가 치고 올라오는지예요 — 그건 다음 측정과 비교해야 보여요. 무료 계정을 만들면 오늘 결과가 비교 기준점으로 남아요.`
-        : `지금은 AI ${measuredCount}곳 중 ${mentionedCount}곳만 우리를 알아봐요. 이 숫자가 늘고 있는지 줄고 있는지는 다음 측정과 비교해야 보여요. 무료 계정을 만들면 오늘 결과가 대시보드에 남아 다음 측정과 이어져요.`,
+        ? `이번 측정에서 AI ${measuredCount}곳 모두가 우리를 알아봤어요. 이 상태가 유지되는지는 다음 측정과 비교하세요. 무료 계정에서는 회차별 결과를 관리할 수 있어요.`
+        : `이번 측정에서 AI ${measuredCount}곳 중 ${mentionedCount}곳이 우리를 알아봤어요. 무료 계정에서 회차별 변화를 비교할 수 있어요.`,
     };
   }
 
@@ -4739,7 +4770,7 @@ function buildUpsellCopy({
     };
   }
   return {
-    headline: `${brandName}'s AI share is ${sov}% today — the problem is you can't tell if that's better than yesterday`,
+    headline: `${brandName} appeared in ${sov}% of successful AI answers`,
     bodyCopy: isFullCoverage
       ? `All ${measuredCount} measured engines recognize your brand today. The question is whether that holds — and whether competitors are gaining. Only your next run can tell. A free account keeps today as your baseline.`
       : `${mentionedCount} of ${measuredCount} engines recognize your brand today. Whether that number is growing only shows against your next run. A free account keeps this result on your dashboard.`,

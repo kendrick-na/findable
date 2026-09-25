@@ -195,6 +195,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           }
         : {}),
       status: job.status,
+      isWorkspaceAudit: Boolean(job.organizationId),
       domain: job.domain,
       language: job.language,
       pdfUrl: pdfOutdated ? null : job.pdfUrl,

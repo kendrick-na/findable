@@ -1,3 +1,4 @@
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun } from "@repo/audit/run-quality";
 import type { AuditJob } from "@repo/database";
 
@@ -445,6 +446,22 @@ export interface TrackingRowInput {
   promptId?: string;
   sentiment?: string | null;
   trackedAt: Date;
+}
+
+/** Completed audit runs that cannot be used as a trend or delta baseline. */
+export function invalidTrackingRunTimes(
+  jobs: Array<{ completedAt: Date | null; result: unknown }>
+): Set<number> {
+  return new Set(
+    jobs
+      .filter(
+        (job) =>
+          job.completedAt &&
+          !isUsableRun(withRecomputedAuditMetrics(job.result))
+      )
+      .map((job) => job.completedAt?.getTime())
+      .filter((time): time is number => time !== undefined)
+  );
 }
 
 /**

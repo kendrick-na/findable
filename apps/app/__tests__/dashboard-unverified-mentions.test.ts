@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTrackingDashboardData,
+  invalidTrackingRunTimes,
   summarizeSentiment,
   type TrackingRowInput,
 } from "../app/(authenticated)/lib/dashboard-data";
@@ -19,6 +20,29 @@ const base: TrackingRowInput = {
 };
 
 describe("dashboard verified brand metrics", () => {
+  it("excludes a provisional prior run from comparison and trend", () => {
+    const previousAt = new Date("2026-09-24T00:00:00.000Z");
+    const invalid = invalidTrackingRunTimes([
+      {
+        completedAt: previousAt,
+        result: {
+          metrics: { enginesCovered: ["chatgpt"], unverifiedCount: 1 },
+        },
+      },
+    ]);
+    const rows = [
+      { ...base, trackedAt: previousAt, brandMentioned: false },
+      base,
+    ].filter((row) => !invalid.has(row.trackedAt.getTime()));
+
+    expect(invalid.has(previousAt.getTime())).toBe(true);
+    expect(buildTrackingDashboardData(rows)).toMatchObject({
+      latestSov: 100,
+      sovDeltaPoints: null,
+      totalCount: 1,
+    });
+  });
+
   it("does not count unrelated answers as brand rank or sentiment", () => {
     const rows: TrackingRowInput[] = [
       base,

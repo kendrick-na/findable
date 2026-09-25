@@ -1,5 +1,7 @@
 import "server-only";
 
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
+import { isUsableRun } from "@repo/audit/run-quality";
 import { isAdmin } from "@repo/auth/admin";
 import { auth } from "@repo/auth/server";
 import { database, type Prisma } from "@repo/database";
@@ -385,6 +387,21 @@ export async function scopedHeaderMetric(): Promise<{
     },
   });
   if (!latest) {
+    return null;
+  }
+
+  // The latest Tracking rows can belong to a completed-but-unverified audit.
+  // Never advertise its 0% as a verified KPI on every dashboard tab.
+  const latestJob = await database.auditJob.findFirst({
+    where: { organizationId: orgId, brandId: latest.brandId },
+    orderBy: { createdAt: "desc" },
+    select: { status: true, result: true },
+  });
+  if (
+    latestJob &&
+    (latestJob.status !== "completed" ||
+      !isUsableRun(withRecomputedAuditMetrics(latestJob.result)))
+  ) {
     return null;
   }
 
