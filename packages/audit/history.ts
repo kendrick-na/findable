@@ -35,6 +35,12 @@ export function normalizeDomainForHistory(domain: string): string {
     .replace(WWW_PREFIX_RE, "");
 }
 
+/** Filter at the database before loading large result JSON for history. */
+export function historyDomainCandidates(domain: string): string[] {
+  const normalized = normalizeDomainForHistory(domain);
+  return [normalized, `www.${normalized}`];
+}
+
 /** 히스토리 비교에 필요한 최소 형태(테스트·순수함수화를 위해 DB 타입과 분리). */
 export interface HistoryCandidate {
   createdAt: Date;

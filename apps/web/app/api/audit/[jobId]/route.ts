@@ -7,6 +7,7 @@ import {
   type AuditHistoryComparison,
   buildAuditHistory,
   EMPTY_HISTORY,
+  historyDomainCandidates,
 } from "@repo/audit/history";
 import { maskEmail } from "@repo/audit/mask";
 import {
@@ -57,7 +58,14 @@ async function loadHistory(job: {
 }): Promise<AuditHistoryComparison> {
   try {
     const rows = await database.auditJob.findMany({
-      where: { email: job.email, status: "completed" },
+      where: {
+        email: job.email,
+        status: "completed",
+        domain: {
+          in: historyDomainCandidates(job.domain),
+          mode: "insensitive",
+        },
+      },
       select: { id: true, domain: true, createdAt: true, result: true },
       orderBy: { createdAt: "desc" },
       take: HISTORY_TAKE,
