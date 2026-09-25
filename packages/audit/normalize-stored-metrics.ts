@@ -123,8 +123,25 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
     ...(requiresRevalidation
       ? {
           verificationState: "revalidation_required",
+          // Preserve original rows in storage, but never expose old badges as
+          // current verdicts alongside provisional aggregate metrics.
+          engineResponses: raw.map((row) =>
+            isRecord(row)
+              ? {
+                  ...row,
+                  brandMentioned: false,
+                  mentionQuality: "unverified",
+                  verdictVia: "skipped",
+                  mentionPosition: null,
+                  mentionListSize: null,
+                  sov: null,
+                }
+              : row
+          ),
           geoActions: [],
           topRecommendations: [],
+          regions: undefined,
+          regionScoresOutdated: true,
         }
       : {}),
   };
@@ -151,6 +168,9 @@ export function hasStaleAuditPdf(
 ): boolean {
   if (!(isRecord(original) && isRecord(corrected))) {
     return false;
+  }
+  if (corrected.verificationState === "revalidation_required") {
+    return true;
   }
   const oldMetrics = original.metrics;
   const newMetrics = corrected.metrics;

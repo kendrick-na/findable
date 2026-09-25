@@ -75,8 +75,12 @@ describe("Perplexity 인용 파싱 — 원시 body 에서 꺼낸다", () => {
     expect(ADAPTERS_CODE).toContain("makeGatewayAdapter");
   });
 
-  it("search_results 를 CitedSource 로 바꾼다(제목 유지)", () => {
+  it("실제 citations의 제목만 search_results로 보완한다", () => {
     const got = extractPerplexitySources({
+      citations: [
+        "https://www.sulwhasoo.com/kr/ko",
+        "https://www.hankyung.com/article/123",
+      ],
       search_results: [
         { title: "설화수 공식몰", url: "https://www.sulwhasoo.com/kr/ko" },
         { title: "한국경제", url: "https://www.hankyung.com/article/123" },
@@ -101,13 +105,13 @@ describe("Perplexity 인용 파싱 — 원시 body 에서 꺼낸다", () => {
     ]);
   });
 
-  it("search_results 가 citations 보다 우선한다", () => {
+  it("citations에 없는 검색 후보는 인용으로 집계하지 않는다", () => {
     const got = extractPerplexitySources({
       search_results: [{ title: "우선", url: "https://a-priority.co.kr/x" }],
       citations: ["https://b-fallback.co.kr/y"],
     });
     expect(got).toHaveLength(1);
-    expect(got[0]?.domain).toBe("a-priority.co.kr");
+    expect(got[0]?.domain).toBe("b-fallback.co.kr");
   });
 
   it("빈 응답·쓰레기 입력에 터지지 않고 빈 배열", () => {

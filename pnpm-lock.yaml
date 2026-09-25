@@ -592,6 +592,9 @@ importers:
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
+      tldts:
+        specifier: 7.0.29
+        version: 7.0.29
       zod:
         specifier: ^4.3.6
         version: 4.4.1

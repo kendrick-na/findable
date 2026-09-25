@@ -432,7 +432,8 @@ export function extractPerplexitySources(body: unknown): CitedSource[] {
   }
   const root = body as Record<string, unknown>;
 
-  // ⭐ search_results 우선: title 이 있어 화면에서 «무엇을 읽었나»를 말해준다.
+  // Search results are retrieval candidates. Only citations establish that a
+  // source was referenced; matching results may enrich its title, not add URLs.
   const results = root.search_results;
   if (Array.isArray(results)) {
     const mapped = mapProviderSources(
@@ -446,12 +447,19 @@ export function extractPerplexitySources(body: unknown): CitedSource[] {
           title: typeof r.title === "string" ? r.title : undefined,
         }))
     );
-    if (mapped.length > 0) {
-      return mapped;
-    }
+    const citations = Array.isArray(root.citations) ? root.citations : [];
+    return mapProviderSources(
+      citations
+        .filter((url): url is string => typeof url === "string")
+        .map((url) => ({
+          sourceType: "url",
+          url,
+          title: mapped.find((source) => source.url === url)?.title,
+        }))
+    );
   }
 
-  // 폴백: citations 는 URL 문자열 배열이다(제목 없음).
+  // citations without search metadata remain valid sources with no title.
   const citations = root.citations;
   if (Array.isArray(citations)) {
     return mapProviderSources(

@@ -177,5 +177,12 @@ describe("saved audit metric normalization", () => {
       metrics: { sov: 0, verifiedCount: 0, unverifiedCount: 2 },
     });
     expect(hasStaleAuditPdf({ metrics: { sov: 23 } }, normalized)).toBe(true);
+    expect(
+      normalized.engineResponses.every(
+        (row) => !row.brandMentioned && row.mentionQuality === "unverified"
+      )
+    ).toBe(true);
+    expect(withRecomputedAuditMetrics(normalized)).toEqual(normalized);
+    expect(hasStaleAuditPdf(normalized, normalized)).toBe(true);
   });
 });

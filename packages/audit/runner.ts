@@ -575,7 +575,13 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       promptsCount: prompts.length,
       briefingStatus: "not_requested" as const,
       cost: costSummary,
-      engineResponses: flat.map((r) => ({
+      engineResponses: flat.map((r, index) => ({
+        // Excerpts remain a display convenience; revalidation must retain the
+        // complete evidence and the original pre-verifier name-match result.
+        rawResponse: r.rawResponse,
+        stringMatched: rawFlat[index]?.brandMentioned ?? false,
+        promptText: tagged[index]?.promptText,
+        promptLang: tagged[index]?.promptLang,
         engineId: r.engineId,
         brandMentioned: r.brandMentioned,
         mentionPosition: r.mentionPosition,

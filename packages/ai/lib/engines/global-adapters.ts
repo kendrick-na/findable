@@ -172,7 +172,7 @@ interface AnthropicBlock {
  * 출처는 두 자리에 온다 — `web_search_tool_result.content[]` 와 `text.citations[]`.
  * 둘 다 훑어 합치고, 중복은 `mapProviderSources` 가 걸러낸다(같은 정규화를 재사용).
  */
-function parseAnthropicMessages(body: unknown): {
+export function parseAnthropicMessages(body: unknown): {
   sources: Array<{ sourceType: string; title?: string; url?: string }>;
   text: string;
 } {
@@ -195,9 +195,7 @@ function parseAnthropicMessages(body: unknown): {
       parts.push(b.text);
       push(b.citations);
     }
-    if (b?.type === "web_search_tool_result") {
-      push(b.content);
-    }
+    // web_search_tool_result contains candidates, not answer citations.
   }
   return { sources, text: parts.join("\n").trim() };
 }
