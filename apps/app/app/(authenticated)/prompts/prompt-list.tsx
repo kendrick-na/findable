@@ -6,6 +6,7 @@ import { Input } from "@repo/design-system/components/ui/input";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { Spinner } from "@repo/design-system/components/ui/spinner";
 import { CheckIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { DeletePromptResult } from "@/app/actions/brand/delete-prompt";
@@ -304,6 +305,14 @@ export const PromptList = ({
             {prompt.text}
           </span>
           <span className="flex flex-wrap items-center gap-1.5">
+            {prompt.measuredCount > 0 ? (
+              <Link
+                className="font-medium text-[color:var(--findable-primary,#ff7a4d)] text-xs underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
+                href={`/prompts/${prompt.id}`}
+              >
+                답변 원문 보기 ↗
+              </Link>
+            ) : null}
             {prompt.category ? (
               <Badge
                 className="border-transparent bg-[color:var(--findable-surface-2,#17181a)] text-[10px] text-[color:var(--findable-ink-subtle,#8a8f98)]"

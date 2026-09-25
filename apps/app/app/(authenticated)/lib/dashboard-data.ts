@@ -480,6 +480,7 @@ export interface PromptScore {
   hit: number;
   /** 평균 언급 순위. 순위를 못 딴 질문은 null(0으로 깔지 않는다). */
   position: number | null;
+  promptId?: string;
   text: string;
   /** 이 질문을 물어본 엔진 수(= 분모). */
   total: number;
@@ -514,6 +515,7 @@ function foldPromptScores(rows: TrackingRowInput[]): PromptScore[] {
       .filter((p): p is number => typeof p === "number" && p > 0);
     scores.push({
       hit: group.filter((r) => r.brandMentioned).length,
+      promptId: group[0]?.promptId,
       position:
         positions.length === 0
           ? null
