@@ -6,8 +6,9 @@ export const sentryConfig: Parameters<typeof withSentryConfig>[1] = {
   org: keys().SENTRY_ORG,
   project: keys().SENTRY_PROJECT,
 
-  // Only print logs for uploading source maps in CI
-  silent: !process.env.CI,
+  // Vercel CI에서는 업로드 대상 수백 개를 stdout에 출력하다 sentry-cli가
+  // EAGAIN으로 중단되는 것을 운영 빌드에서 확인했다. 오류는 유지하고 상세 목록만 숨긴다.
+  silent: true,
 
   /*
    * For all available options, see:
