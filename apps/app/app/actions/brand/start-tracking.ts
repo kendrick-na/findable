@@ -12,6 +12,7 @@ import { log } from "@repo/observability/log";
 import { after } from "next/server";
 import { requireOrg } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
+import { getAuditRuntimeReadiness } from "@/lib/audit/runtime-readiness";
 
 /**
  * "측정 시작" 서버 액션 — 로그인 org 사용자가 브랜드의 AI 인용 audit을 트리거 (20번, P2).
@@ -149,7 +150,7 @@ export type StartTrackingResult =
   // upgrade=true 면 플랜 업그레이드로 풀리는 제한 → 버튼이 "요금제 보기" 액션을 함께 띄운다.
   | {
       error: string;
-      code?: "unauthorized" | "rate_limited";
+      code?: "unauthorized" | "rate_limited" | "not_configured";
       upgrade?: boolean;
     };
 
@@ -236,7 +237,23 @@ export const startOrgTracking = async (
   const brandName = input.brandName?.trim() || undefined;
 
   try {
-    // 3) 부모 Org 실재 보장(relationMode="prisma" 고아 방지).
+    // 3) 백그라운드 실행 전에 런타임 설정을 검증한다. 설정이 없는데도
+    //    먼저 AuditJob을 만들면 UI에는 성공으로 보이고 뒤에서 stub/실패로
+    //    끝나 재시도 정책까지 오염된다.
+    const readiness = getAuditRuntimeReadiness();
+    if (!readiness.ready) {
+      log.error("audit.org.runtime_not_ready", {
+        orgId,
+        missing: readiness.missing,
+      });
+      return {
+        error:
+          "측정 서버 설정이 준비되지 않았어요. 잠시 후 다시 시도하거나 운영팀에 문의해 주세요.",
+        code: "not_configured",
+      };
+    }
+
+    // 4) 부모 Org 실재 보장(relationMode="prisma" 고아 방지).
     const orgReady = await ensureOrgExists(orgId, userId);
     if (!orgReady) {
       return {
@@ -245,13 +262,13 @@ export const startOrgTracking = async (
       };
     }
 
-    // 4) org 스코프 brand 도출/생성.
+    // 5) org 스코프 brand 도출/생성.
     const brandId = await ensureOrgBrand(orgId, domain, brandName);
     if (!brandId) {
       return { error: "브랜드 준비 중 문제가 발생했습니다." };
     }
 
-    // 5) 재측정 정책 — 차단 사유가 있으면 에러 결과 반환.
+    // 6) 재측정 정책 — 차단 사유가 있으면 에러 결과 반환.
     const blocked = await checkRemeasurePolicy(orgId, domain);
     if (blocked) {
       return blocked;
@@ -265,7 +282,7 @@ export const startOrgTracking = async (
       select: { entityVariants: true, industry: true, marketScope: true },
     });
 
-    // 6) AuditJob 생성. email은 org 트리거 식별자(비로그인 intake와 스코프 구분).
+    // 7) AuditJob 생성. email은 org 트리거 식별자(비로그인 intake와 스코프 구분).
     //    P5 8-b(2026-07-30): nullable FK forward-fill — org 트리거 job 을 그래프에 직접 연결.
     const job = await database.auditJob.create({
       data: {
@@ -286,7 +303,7 @@ export const startOrgTracking = async (
       domain,
     });
 
-    // 7) 백그라운드 실행 — P2 핵심: HTTP fetch 없이 러너를 app 서버에서 직접 호출.
+    // 8) 백그라운드 실행 — P2 핵심: HTTP fetch 없이 러너를 app 서버에서 직접 호출.
     //    org/brandId를 서버 도출값으로 넘긴다(dual-write 게이트 충족).
     after(async () => {
       try {
