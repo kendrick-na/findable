@@ -2,6 +2,10 @@ import type { EngineId, EngineResponse } from "./types";
 
 /** Shared, adapter-free audit aggregation for measurement and saved reports. */
 export interface AuditMetrics {
+  /** Number of successful responses with a conclusive entity verdict. */
+  verifiedCount: number;
+  /** Successful responses excluded because entity verification failed. */
+  unverifiedCount: number;
   averageMentionListSize: number | null;
   averageMentionPosition: number | null;
   averageRelativePosition: number | null;
@@ -67,18 +71,23 @@ export function aggregateAudit(responses: EngineResponse[]): AuditMetrics {
     .filter((r) => r.errorMessage)
     .map((r) => ({ engineId: r.engineId, message: r.errorMessage as string }));
   const stubCount = responses.filter((r) => r.isStub).length;
-  const successCount = responses.filter(
-    (r) => !r.isStub && !r.errorMessage
+  const unverifiedCount = responses.filter(
+    (r) => !r.isStub && !r.errorMessage && r.mentionQuality === "unverified"
+  ).length;
+  const verifiedCount = responses.filter(
+    (r) => !r.isStub && !r.errorMessage && r.mentionQuality !== "unverified"
   ).length;
   const sov =
-    successCount === 0
+    verifiedCount === 0
       ? 0
-      : Math.round((enginesWithMention.length / successCount) * 100);
+      : Math.round((enginesWithMention.length / verifiedCount) * 100);
 
   return {
     enginesCovered,
     enginesWithMention,
     sov,
+    verifiedCount,
+    unverifiedCount,
     averageMentionPosition:
       positions.length === 0
         ? null

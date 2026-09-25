@@ -19,10 +19,12 @@
 // ⚠️ 이 모듈은 "언급을 더 엄격하게" 만든다. 즉 SoV·GEO 점수가 전반적으로 내려간다.
 //    그게 의도다 — 기존 점수가 부풀려져 있었다.
 
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { describeProviderError } from "./engines/provider-error";
 
 const LETSUR_VERDICT_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
@@ -49,12 +51,14 @@ async function verdictModel() {
  *   different_entity — 같은 이름의 다른 대상(동명이인·부분 문자열)
  *   unknown_brand — AI가 브랜드를 모름. 일반명사 해석·되물음·"모른다" 응답
  *   absent — 브랜드 문자열 자체가 없음
+ *   unverified — 답변에는 이름이 있으나 판정 서비스 장애로 확인하지 못함
  */
 export type MentionQuality =
   | "confirmed"
   | "different_entity"
   | "unknown_brand"
-  | "absent";
+  | "absent"
+  | "unverified";
 
 export interface MentionVerdict {
   /** 점수·SoV에 실제로 반영할 최종 판정. confirmed 만 true. */
@@ -171,7 +175,8 @@ const IDENTITY_TOKEN_STOPWORDS = new Set([
   "보안",
   "운영",
 ]);
-const KOREAN_PARTICLE_SUFFIX_RE = /(?:에서|으로|에게|부터|까지|처럼|보다|은|는|이|가|을|를|과|와|도|로|의)$/;
+const KOREAN_PARTICLE_SUFFIX_RE =
+  /(?:에서|으로|에게|부터|까지|처럼|보다|은|는|이|가|을|를|과|와|도|로|의)$/;
 
 function identityTokens(value: string): string[] {
   return value
@@ -328,14 +333,8 @@ interface VerifyInput {
 }
 
 async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
-  const {
-    brandName,
-    brandDomain,
-    citedDomains,
-    industry,
-    officialSite,
-    text,
-  } = input;
+  const { brandName, brandDomain, citedDomains, industry, officialSite, text } =
+    input;
   const identity = [
     `브랜드명: ${brandName}`,
     brandDomain ? `공식 도메인: ${brandDomain}` : null,
@@ -359,11 +358,7 @@ async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
     .filter(Boolean)
     .join("\n");
 
-  try {
-    const { object } = await generateObject({
-      model: await verdictModel(),
-      schema: VerdictSchema,
-      prompt: `AI 답변에 "${brandName}"라는 표현이 등장합니다.
+  const prompt = `AI 답변에 "${brandName}"라는 표현이 등장합니다.
 그 표현이 **아래 대상 브랜드를 가리키는지**, 그리고 AI가 그 브랜드를 알고 있는지 판정하세요.
 
 [대상 브랜드]
@@ -390,14 +385,41 @@ ${text.slice(0, VERDICT_TEXT_LIMIT)}
   있다는 전제로 판정을 요청한 것입니다.)
 
 핵심: "이 답변이 브랜드를 소개하는 글인가"가 아니라, "여기 나온 이 이름이 그 브랜드가 맞는가"를
-판정하세요. 언급 방식(주제/비교대상/스쳐지나감)은 상관없습니다.`,
+판정하세요. 언급 방식(주제/비교대상/스쳐지나감)은 상관없습니다.`;
+
+  try {
+    const { object } = await generateObject({
+      model: await verdictModel(),
+      schema: VerdictSchema,
+      prompt,
       temperature: 0,
     });
     return object.quality;
   } catch (error) {
+    const googleKey = process.env.GOOGLE_API_KEY;
+    if (googleKey && describeProviderError(error).statusCode === 429) {
+      try {
+        const google = createGoogleGenerativeAI({ apiKey: googleKey });
+        const { object } = await generateObject({
+          model: google(
+            process.env.FINDABLE_GEMINI_MODEL ?? "gemini-2.5-flash"
+          ),
+          schema: VerdictSchema,
+          prompt,
+          temperature: 0,
+        });
+        log.info("mention.verdict.google_fallback", { brandName });
+        return object.quality;
+      } catch (fallbackError) {
+        log.warn("mention.verdict.google_fallback_failed", {
+          brandName,
+          ...describeProviderError(fallbackError),
+        });
+      }
+    }
     log.warn("mention.verdict.llm_failed", {
       brandName,
-      error: error instanceof Error ? error.message : String(error),
+      ...describeProviderError(error),
     });
     return null;
   }
@@ -446,7 +468,7 @@ export async function verifyMention(
   const quality = await llmVerdict(input);
   if (quality === null) {
     // LLM 실패 → 측정은 완료하되 모호 응답을 성공으로 계산하지 않는다.
-    return { counted: false, quality: "unknown_brand", via: "skipped" };
+    return { counted: false, quality: "unverified", via: "skipped" };
   }
 
   if (quality === "confirmed" && input.officialSite) {
@@ -561,6 +583,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
     different_entity: 0,
     unknown_brand: 0,
     absent: 0,
+    unverified: 0,
   };
   const viaDist = { rule: 0, llm: 0, skipped: 0 };
   for (const r of out) {

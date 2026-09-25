@@ -177,6 +177,9 @@ interface CrewReport {
   totalDurationMs: number;
 }
 interface JobMetrics {
+  /** Missing on reports saved before verification-failure accounting. */
+  unverifiedCount?: number;
+  verifiedCount?: number;
   /** 순위가 나온 목록들의 평균 크기(분모). 세션N-10 이전 job 엔 없음. */
   averageMentionListSize?: number | null;
   averageMentionPosition: number | null;
@@ -1395,23 +1398,31 @@ function CompletedView({
 
         <HeroSection isKo={isKo} job={job} result={result} />
 
-        <RevenueImpactCard
-          attemptedEngines={attempted}
-          // 전수감사 §A-1: 규모 초기값을 측정 신호(인지 엔진 비율·SoV)로 추정.
-          // small 하드코딩이 SK하이닉스에 "₩63만/월"을 보여줬던 결함의 수정.
-          defaultSizeKey={impact.sizeKey}
-          isKo={isKo}
-          // 🔴 **분모를 항상 밝힌다** (2026-08-10 세션N-14).
-          //   이 카드는 `sov` 하나로 손실을 추정하는데, 그 `sov` 가 **몇 개 엔진에서
-          //   나온 값인지**는 말하지 않고 있었다. 28개 중 12개만 성공한 회차도
-          //   28개 전부 성공한 회차와 **똑같은 확신**으로 숫자를 보여준다.
-          //   → 임계값으로 감추거나 경고하지 않고(근거 없는 경계선이 된다),
-          //     **몇 개로 잰 숫자인지 그대로 적는다.** 판단은 고객이 한다.
-          //   (화면이 이미 쓰는 "7개 중 1개 미인용" 패턴과 같은 방식이다.)
-          measuredEngines={measured}
-          readOnly
-          sov={result.metrics.sov}
-        />
+        {(result.metrics.unverifiedCount ?? 0) === 0 ? (
+          <RevenueImpactCard
+            attemptedEngines={attempted}
+            // 전수감사 §A-1: 규모 초기값을 측정 신호(인지 엔진 비율·SoV)로 추정.
+            // small 하드코딩이 SK하이닉스에 "₩63만/월"을 보여줬던 결함의 수정.
+            defaultSizeKey={impact.sizeKey}
+            isKo={isKo}
+            // 🔴 **분모를 항상 밝힌다** (2026-08-10 세션N-14).
+            //   이 카드는 `sov` 하나로 손실을 추정하는데, 그 `sov` 가 **몇 개 엔진에서
+            //   나온 값인지**는 말하지 않고 있었다. 28개 중 12개만 성공한 회차도
+            //   28개 전부 성공한 회차와 **똑같은 확신**으로 숫자를 보여준다.
+            //   → 임계값으로 감추거나 경고하지 않고(근거 없는 경계선이 된다),
+            //     **몇 개로 잰 숫자인지 그대로 적는다.** 판단은 고객이 한다.
+            //   (화면이 이미 쓰는 "7개 중 1개 미인용" 패턴과 같은 방식이다.)
+            measuredEngines={measured}
+            readOnly
+            sov={result.metrics.sov}
+          />
+        ) : (
+          <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-200 text-sm">
+            {isKo
+              ? "브랜드 판별이 완료되지 않은 답변이 있어 이번 회차의 놓치는 유입 추정은 표시하지 않습니다."
+              : "The missed-visit estimate is unavailable because some brand mentions could not be verified in this run."}
+          </p>
+        )}
 
         <CompetitorBenchmark
           brandName={result.brandName}
@@ -1666,7 +1677,21 @@ function HeroSection({
               : ` · ${excludedResponses} excluded (${failedResponses} errors · ${result.metrics.stubCount} unconnected)`}
           </span>
         )}
+        {(result.metrics.unverifiedCount ?? 0) > 0 && (
+          <span className="text-[var(--signal-warn)]">
+            {isKo
+              ? ` · 브랜드 판별 불가 ${result.metrics.unverifiedCount}회(등장률 계산 제외)`
+              : ` · ${result.metrics.unverifiedCount} brand-verification failures (excluded from appearance rate)`}
+          </span>
+        )}
       </p>
+      {(result.metrics.unverifiedCount ?? 0) > 0 && (
+        <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-amber-200 text-sm">
+          {isKo
+            ? `일부 답변에 브랜드명이 있었지만 실제 같은 브랜드인지 확인하지 못했습니다. 등장률은 판별 완료 ${result.metrics.verifiedCount ?? 0}개 답변만 기준으로 계산했으므로 이번 점수를 전체 AI의 확정 결과로 해석하지 마세요.`
+            : `Some answers contained the brand name, but entity verification did not finish. The appearance rate uses only ${result.metrics.verifiedCount ?? 0} verified answers; do not treat this as a complete AI result.`}
+        </p>
+      )}
 
       <div className="mt-5 grid gap-2 sm:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">

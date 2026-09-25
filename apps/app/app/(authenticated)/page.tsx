@@ -1,4 +1,5 @@
 import { isUsableRun } from "@repo/audit/run-quality";
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { hasPlan, isPaid } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
@@ -248,9 +249,36 @@ const App = async ({ searchParams }: AppProperties) => {
   const currentRunAnalysis = currentRunJob
     ? await database.auditJob.findFirst({
         where: { id: currentRunJob.id, ...(JOB_WHERE ?? {}) },
-        select: { crewResult: true, crewStatus: true },
+        select: { crewResult: true, crewStatus: true, result: true },
       })
     : null;
+  const correctedCurrentResult = currentRunAnalysis?.result
+    ? withRecomputedAuditMetrics(currentRunAnalysis.result)
+    : null;
+  const correctedMetrics =
+    correctedCurrentResult &&
+    typeof correctedCurrentResult === "object" &&
+    !Array.isArray(correctedCurrentResult) &&
+    "metrics" in correctedCurrentResult
+      ? (correctedCurrentResult.metrics as Record<string, unknown>)
+      : null;
+  const currentRunUnverified =
+    typeof correctedMetrics?.unverifiedCount === "number"
+      ? correctedMetrics.unverifiedCount
+      : 0;
+  if (currentRunUnverified > 0 && typeof correctedMetrics?.sov === "number") {
+    // Legacy Tracking rows had no entity-verification status. The immutable
+    // audit rows are authoritative for this run; do not estimate lost visits
+    // or trend deltas from a denominator containing unverified answers.
+    data.latestSov = correctedMetrics.sov;
+    data.coverage = null;
+    data.sovDeltaPoints = null;
+    data.trend = data.trend.map((point) =>
+      point.timestamp === data.latestMeasuredAt?.getTime()
+        ? { ...point, sov: correctedMetrics.sov as number }
+        : point
+    );
+  }
   const latestCompletedJob = jobsWithResult?.find(
     (job) => job.status === "completed"
   );
@@ -350,6 +378,20 @@ const App = async ({ searchParams }: AppProperties) => {
               }
             />
 
+            {currentRunUnverified > 0 && currentRunJob ? (
+              <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+                이번 측정은 브랜드 판별 {currentRunUnverified}회가 완료되지
+                않았습니다. 아래 등장률은 판별된 답변만 기준이며, 놓치는 유입
+                추정과 질문별 성적은 표시하지 않습니다.{" "}
+                <Link
+                  className="underline underline-offset-2"
+                  href={`${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`}
+                >
+                  리포트에서 근거 확인 →
+                </Link>
+              </section>
+            ) : null}
+
             {/* D6: 히어로 카드 → 목적지. paid 는 잠긴 목적지를 **클릭 전에** 알리는 용도
                 (게이팅 판정 자체는 각 목적지 페이지가 서버에서 다시 한다).
                 🔴 2026-08-21(11번) — `id="tour-kpis"` 는 대시보드 첫 진입 가이드
@@ -414,12 +456,16 @@ const App = async ({ searchParams }: AppProperties) => {
             {/* "밀리는 질문"(2026-08-07) — 히어로가 말한 평균이 **어디서 왔는지** 쪼갠다.
                 리서치 `01:132` *"업계 1군은 이걸 메인에 둔다"* · 경쟁사 채택률 8/15.
                 위치: 추세(시간) 다음, 이력(원장) 앞 — 요약 → 추세 → **분해** → 원장 순. */}
-            <PromptScoreboard scores={data.promptScores} />
+            {currentRunUnverified === 0 ? (
+              <PromptScoreboard scores={data.promptScores} />
+            ) : null}
 
             {/* 「진실의 거울」(v4 탭7 · N-37) — 요약 → 추세 → 분해 → **원문** 순.
                 ⭐ 경쟁사 4곳 중 Otterly 만 유사 기능을 갖고 있다(실측). 우리 무기다.
                 점수가 "왜 그런지"에 답하는 자리라 분해(질문별) 바로 다음에 둔다. */}
-            {truthMirror && data.latestBrandName ? (
+            {currentRunUnverified === 0 &&
+            truthMirror &&
+            data.latestBrandName ? (
               <div id="tour-truth-mirror">
                 <TruthMirrorSection
                   brandName={data.latestBrandName}

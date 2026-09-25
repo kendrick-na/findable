@@ -6,6 +6,27 @@ import {
 } from "./normalize-stored-metrics";
 
 describe("saved audit metric normalization", () => {
+  it("recovers old skipped-verdict rows as unverified rather than confirmed absences", () => {
+    const normalized = withRecomputedAuditMetrics({
+      metrics: { sov: 0 },
+      engineResponses: [
+        {
+          engineId: "perplexity",
+          brandMentioned: false,
+          mentionQuality: "unknown_brand",
+          verdictVia: "skipped",
+          errorMessage: null,
+          isStub: false,
+        },
+        { engineId: "gemini", brandMentioned: false },
+      ],
+    });
+    expect(normalized).toMatchObject({
+      metrics: { sov: 0, verifiedCount: 1, unverifiedCount: 1 },
+    });
+    expect(hasStaleAuditPdf({ metrics: { sov: 0 } }, normalized)).toBe(true);
+  });
+
   it("keeps Naver Briefing separate and repairs legacy sentiment", () => {
     const result = {
       metrics: {
@@ -44,16 +65,14 @@ describe("saved audit metric normalization", () => {
     const normalized = withRecomputedAuditMetrics(result);
 
     expect(normalized.metrics.sov).toBe(50);
-    expect(normalized.metrics.averageMentionPosition).toBe(2);
-    expect(normalized.metrics.sentimentDistribution).toEqual({
-      positive: 1,
-      neutral: 0,
-      negative: 0,
+    expect(normalized.metrics).toMatchObject({
+      averageMentionPosition: 2,
+      sentimentDistribution: { positive: 1, neutral: 0, negative: 0 },
+      topCitedDomains: [
+        { domain: "official.example", count: 1 },
+      ],
+      enginesCovered: ["chatgpt", "gemini"],
     });
-    expect(normalized.metrics.topCitedDomains).toEqual([
-      { domain: "official.example", count: 1 },
-    ]);
-    expect(normalized.metrics.enginesCovered).toEqual(["chatgpt", "gemini"]);
     expect(normalized).toMatchObject({ regionScoresOutdated: true });
     expect(normalized.regions).toBeUndefined();
     expect(hasStaleAuditPdf(result, normalized)).toBe(true);

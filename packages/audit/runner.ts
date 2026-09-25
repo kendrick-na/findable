@@ -487,6 +487,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       const row = tagged[i];
       if (row) {
         row.brandMentioned = verified.brandMentioned;
+        row.mentionQuality = verified.mentionQuality;
       }
     }
     // 시장 분해(2026-08-21)용 언어 태깅 — flat·tagged 는 같은 flatMap 순서를

@@ -121,6 +121,13 @@ export interface EngineUsage {
 
 export interface EngineResponse {
   brandMentioned: boolean;
+  /** Entity verification could not finish; never interpret as a confirmed absence. */
+  mentionQuality?:
+    | "confirmed"
+    | "different_entity"
+    | "unknown_brand"
+    | "absent"
+    | "unverified";
   citedSources: CitedSource[];
   durationMs: number;
   engineId: EngineId;

@@ -62,6 +62,14 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
   const responses: EngineResponse[] = core.map((row) => ({
     engineId: row.engineId as EngineId,
     brandMentioned: row.brandMentioned === true,
+    mentionQuality:
+      row.mentionQuality === "unverified" ||
+      (row.mentionQuality === "unknown_brand" &&
+        row.verdictVia === "skipped" &&
+        !row.errorMessage &&
+        !row.isStub)
+        ? "unverified"
+        : undefined,
     mentionPosition: positiveNumber(row.mentionPosition),
     mentionListSize: positiveNumber(row.mentionListSize),
     sentiment:
@@ -117,6 +125,15 @@ export function hasStaleAuditPdf(
   const newMetrics = corrected.metrics;
   if (!(isRecord(oldMetrics) && isRecord(newMetrics))) {
     return false;
+  }
+  // A legacy PDF presented skipped entity checks as negative answers. Its
+  // headline score is not evidence-equivalent to the corrected on-page report.
+  if (
+    typeof newMetrics.unverifiedCount === "number" &&
+    newMetrics.unverifiedCount > 0 &&
+    oldMetrics.unverifiedCount !== newMetrics.unverifiedCount
+  ) {
+    return true;
   }
   const displayed = [
     "sov",

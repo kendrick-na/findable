@@ -20,6 +20,7 @@
 import { costOf, type EngineResponse } from "@repo/ai/lib/engines";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
+import { isTrackableResponse } from "./tracking-eligibility";
 
 /** runner가 flat 이전에 각 응답에 태깅해 넘겨주는 항목. promptText로 promptId를 잇는다. */
 export interface TaggedEngineResponse extends EngineResponse {
@@ -85,12 +86,7 @@ export async function persistAuditTracking(
 
     // D5: 성공 응답만 남긴다. stub(env 미설정)·errorMessage(호출 실패)·미실재 engineId 제외.
     //   또 rawResponse가 비어 있으면(빈 성공) 의미 없으니 제외.
-    const usable = tagged.filter(
-      (r) =>
-        !(r.isStub || r.errorMessage) &&
-        validEngineIds.has(r.engineId) &&
-        r.promptText.trim().length > 0
-    );
+    const usable = tagged.filter((r) => isTrackableResponse(r, validEngineIds));
     if (usable.length === 0) {
       log.warn("audit.tracking.no_usable_rows", {
         organizationId,
