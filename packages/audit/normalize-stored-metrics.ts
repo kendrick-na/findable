@@ -81,7 +81,9 @@ export function publicAuditResult<T>(result: T): T {
     metrics: {
       ...metrics,
       sov: null,
+      averageMentionListSize: null,
       averageMentionPosition: null,
+      averageRelativePosition: null,
       enginesWithMention: [],
       sentimentDistribution: null,
       topCitedDomains: [],

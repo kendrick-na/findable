@@ -1,5 +1,9 @@
 import { runCrewForAuditJob } from "@repo/audit/crew-runner";
 import { kstDayStart } from "@repo/audit/kst-day";
+import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
 import { auth, currentUser } from "@repo/auth/server";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
@@ -26,7 +30,10 @@ export async function POST(
   const { orgId } = await auth();
   const scope = auditJobScope(email, orgId);
   if (!scope) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+    return NextResponse.json(
+      { error: "로그인이 필요합니다." },
+      { status: 401 }
+    );
   }
 
   const job = await database.auditJob.findFirst({
@@ -40,25 +47,53 @@ export async function POST(
     },
   });
   if (!job) {
-    return NextResponse.json({ error: "측정 결과를 찾을 수 없습니다." }, { status: 404 });
+    return NextResponse.json(
+      { error: "측정 결과를 찾을 수 없습니다." },
+      { status: 404 }
+    );
   }
   if (job.status !== "completed" || !job.result) {
-    return NextResponse.json({ error: "완료된 측정에서만 심층 분석할 수 있습니다." }, { status: 400 });
+    return NextResponse.json(
+      { error: "완료된 측정에서만 심층 분석할 수 있습니다." },
+      { status: 400 }
+    );
+  }
+  if (!isPublishableAuditResult(withRecomputedAuditMetrics(job.result))) {
+    return NextResponse.json(
+      { error: "브랜드 판정 검증 후 심층 분석을 이용할 수 있습니다." },
+      { status: 409 }
+    );
   }
   if (job.crewStatus === "completed") {
-    return NextResponse.json({ error: "이미 심층 분석이 완료되었습니다.", crewStatus: "completed" }, { status: 409 });
+    return NextResponse.json(
+      { error: "이미 심층 분석이 완료되었습니다.", crewStatus: "completed" },
+      { status: 409 }
+    );
   }
   const isStale =
-    job.crewStartedAt && Date.now() - job.crewStartedAt.getTime() > STALE_AFTER_MS;
-  if ((job.crewStatus === "queued" || job.crewStatus === "processing") && !isStale) {
-    return NextResponse.json({ error: "심층 분석이 이미 진행 중입니다.", crewStatus: job.crewStatus }, { status: 409 });
+    job.crewStartedAt &&
+    Date.now() - job.crewStartedAt.getTime() > STALE_AFTER_MS;
+  if (
+    (job.crewStatus === "queued" || job.crewStatus === "processing") &&
+    !isStale
+  ) {
+    return NextResponse.json(
+      { error: "심층 분석이 이미 진행 중입니다.", crewStatus: job.crewStatus },
+      { status: 409 }
+    );
   }
 
   const startedToday = await database.auditJob.count({
     where: { crewStartedAt: { gte: kstDayStart(new Date()) } },
   });
   if (startedToday >= DAILY_CREW_CAP) {
-    return NextResponse.json({ error: "오늘 심층 분석 실행 한도에 도달했습니다. 내일 다시 시도해 주세요." }, { status: 429 });
+    return NextResponse.json(
+      {
+        error:
+          "오늘 심층 분석 실행 한도에 도달했습니다. 내일 다시 시도해 주세요.",
+      },
+      { status: 429 }
+    );
   }
 
   await database.auditJob.update({
