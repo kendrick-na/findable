@@ -292,13 +292,18 @@ function hasConflictingBrandDomain(input: {
     return false;
   }
   const brandToken = compactIdentity(input.brandName);
-  if (brandToken.length < 5) {
+  const officialDomain = getDomain(official, { allowPrivateDomains: true });
+  const officialStem = compactIdentity(officialDomain?.split(".")[0] ?? "");
+  const identityTokens = [brandToken, officialStem].filter(
+    (token) => token.length >= 5
+  );
+  if (identityTokens.length === 0) {
     return false;
   }
   return cited.some(
     (domain) =>
       !isOfficialDomain(domain, input.brandDomain) &&
-      compactIdentity(domain).includes(brandToken)
+      identityTokens.some((token) => compactIdentity(domain).includes(token))
   );
 }
 

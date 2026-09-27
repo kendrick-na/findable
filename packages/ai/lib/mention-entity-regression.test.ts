@@ -44,6 +44,23 @@ it("rejects a namesake company supported only by its own domain", async () => {
   expect(generateObject).not.toHaveBeenCalled();
 });
 
+it("rejects a romanized namesake domain for a Hangul brand", async () => {
+  expect(
+    await verifyMention({
+      brandName: "인디고차일드",
+      brandDomain: "indigochild.kr",
+      stringMatched: true,
+      text: "인디고차일드 is an English academy for young children.",
+      citedDomains: ["www.indigochild.education", "www.amazingtalker.co.kr"],
+      officialSite: {
+        title: "Indigochild",
+        description: "사람과 아이디어, 문화와 기술을 연결하는 마케팅 회사",
+      },
+    })
+  ).toMatchObject({ counted: false, quality: "different_entity", via: "rule" });
+  expect(generateObject).not.toHaveBeenCalled();
+});
+
 it("sends mixed official/namesake sources to the verifier instead of vetoing a correct answer", async () => {
   vi.stubEnv("LETSUR_API_KEY", "test-key");
   vi.mocked(generateObject).mockResolvedValue({
