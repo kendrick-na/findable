@@ -444,7 +444,11 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
           //   직접 써넣으면 사전과 갈라질 수 있다(같은 수치 2벌 금지와 같은 규율).
           directionNote={directionHint("rank")}
           hint={positionHint(averageMentionPosition, previousMentionPosition)}
-          href="/compare"
+          href={
+            data.latestBrandId
+              ? `/compare?brand=${data.latestBrandId}`
+              : "/compare"
+          }
           label={METRICS.rank.question}
           locked={!paid}
           lockedNote="경쟁사 비교는 Growth부터 열려요"

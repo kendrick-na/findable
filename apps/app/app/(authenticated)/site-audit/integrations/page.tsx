@@ -245,7 +245,7 @@ export default async function SearchPerformanceIntegrationsPage({
           </div>
           <Link
             className="text-sm text-white/65 hover:text-white"
-            href="/site-audit"
+            href={`/site-audit?brand=${brand.id}`}
           >
             ← 사이트 준비도로 돌아가기
           </Link>

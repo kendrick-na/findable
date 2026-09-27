@@ -106,7 +106,7 @@ export const DashboardSystemStatus = async ({
         <div className="grid gap-3 md:grid-cols-2">
           <StatusCard
             description="사이트의 SEO·GEO 기술 상태를 확인합니다."
-            href="/site-audit"
+            href={`/site-audit?brand=${brandId}`}
             icon={<ScanSearchIcon className="size-4" />}
             label="사이트 준비도"
             meta="Growth 플랜에서 확인"
@@ -128,28 +128,37 @@ export const DashboardSystemStatus = async ({
   const [latestReadinessRun, connections] = await Promise.all([
     database.siteReadinessRun.findFirst({
       orderBy: { createdAt: "desc" },
-      select: { completedAt: true, createdAt: true, report: true, status: true },
+      select: {
+        completedAt: true,
+        createdAt: true,
+        report: true,
+        status: true,
+      },
       where: { brandId, organizationId },
     }),
     database.searchPerformanceConnection.findMany({
       orderBy: { updatedAt: "desc" },
-      select: { lastSyncedAt: true, provider: true, status: true, updatedAt: true },
+      select: {
+        lastSyncedAt: true,
+        provider: true,
+        status: true,
+        updatedAt: true,
+      },
       where: { brandId, organizationId },
     }),
   ]);
-  const readinessReport = latestReadinessRun?.report as
-    | SiteReadinessSummary
-    | null;
+  const readinessReport =
+    latestReadinessRun?.report as SiteReadinessSummary | null;
   const readinessValue =
     latestReadinessRun?.status === "completed" &&
     typeof readinessReport?.score === "number"
       ? `${readinessReport.score}점`
       : latestReadinessRun?.status === "completed"
         ? "점검 완료"
-      : latestReadinessRun?.status === "processing" ||
-          latestReadinessRun?.status === "queued"
-        ? "점검 중"
-        : "진단 전";
+        : latestReadinessRun?.status === "processing" ||
+            latestReadinessRun?.status === "queued"
+          ? "점검 중"
+          : "진단 전";
   const readinessMeta =
     latestReadinessRun?.status === "failed"
       ? "최근 점검을 완료하지 못했습니다 · 다시 실행해 보세요"
@@ -187,7 +196,7 @@ export const DashboardSystemStatus = async ({
               ? "점검을 다시 실행해 원인을 확인하세요."
               : "저장한 도메인의 SEO·GEO 기술 준비도를 확인하세요."
           }
-          href="/site-audit"
+          href={`/site-audit?brand=${brandId}`}
           icon={<ScanSearchIcon className="size-4" />}
           label="사이트 준비도"
           meta={readinessMeta}
