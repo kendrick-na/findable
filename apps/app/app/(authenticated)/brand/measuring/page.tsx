@@ -58,7 +58,7 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
 
   return (
     <>
-      <Header page="측정 중" pages={["Findable"]} />
+      <Header page="측정 중" pages={["Findable"]} showMetric={false} />
       <MeasuringView
         createdAt={job.createdAt.toISOString()}
         domain={job.domain}

@@ -129,7 +129,7 @@ const BrandPage = async () => {
       {/* 🔴 S6-a(2026-08-11) — 이 화면을 부르는 이름이 3개였다(사이드바 "측정 시작" ·
           제목 "브랜드 측정" · 폼 "새 브랜드 등록"). 같은 곳을 세 이름으로 부르면
           사용자는 서로 다른 화면으로 읽는다 → 사이드바·title·h1 을 「브랜드·측정」으로 통일. */}
-      <Header page="브랜드·측정" pages={["Findable"]} />
+      <Header page="브랜드·측정" pages={["Findable"]} showMetric={false} />
       <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
         <section className="flex flex-col gap-2">
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">

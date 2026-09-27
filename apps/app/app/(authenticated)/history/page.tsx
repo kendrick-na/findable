@@ -1,9 +1,5 @@
 import { auth, currentUser } from "@repo/auth/server";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
-import {
-  isPublishableAuditResult,
-  withRecomputedAuditMetrics,
-} from "@repo/audit/normalize-stored-metrics";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { AuditHistoryList } from "../components/audit-history-list";
@@ -59,20 +55,9 @@ const HistoryPage = async () => {
   const pendingCount = jobs.filter(
     (job) => job.status === "queued" || job.status === "processing"
   ).length;
-  const latestCompleted = jobs.find((job) => job.status === "completed");
-  const latestResult = latestCompleted
-    ? withRecomputedAuditMetrics(latestCompleted.result)
-    : null;
-  const latestUnverified =
-    latestCompleted !== undefined && !isPublishableAuditResult(latestResult);
-
   return (
     <>
-      <Header
-        page="측정 이력"
-        pages={["Findable"]}
-        showMetric={!latestUnverified}
-      />
+      <Header page="측정 이력" pages={["Findable"]} showMetric={false} />
       <div className="flex flex-1 flex-col gap-4 p-6 pt-2">
         <h1 className="font-semibold text-2xl">측정 이력</h1>
         {/* 🔴 S7-4차(2026-08-12) — 예전에는 총 건수도, `take: 50` 상한도 화면에
