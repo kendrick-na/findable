@@ -64,6 +64,7 @@ const AdminOpsPage = async () => {
   const now = new Date();
   const startOfToday = startOfKoreanDay(now);
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const staleBefore = new Date(now.getTime() - STALE_AFTER_MS);
 
   const [
@@ -82,6 +83,8 @@ const AdminOpsPage = async () => {
     costAgg,
     costByBasis,
     costMeasured,
+    recentEngineAttempts,
+    recentEngineFailures,
   ] = await Promise.all([
     database.auditJob.count({ where: { createdAt: { gte: startOfToday } } }),
     database.auditJob.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
@@ -114,7 +117,28 @@ const AdminOpsPage = async () => {
       _sum: { costKrw: true },
     }),
     database.tracking.count({ where: { costKrw: { not: null } } }),
+    database.tracking.groupBy({
+      by: ["engineId"],
+      where: { trackedAt: { gte: oneDayAgo } },
+      _count: true,
+    }),
+    database.tracking.groupBy({
+      by: ["engineId"],
+      where: {
+        trackedAt: { gte: oneDayAgo },
+        errorMessage: { not: null },
+      },
+      _count: true,
+    }),
   ]);
+
+  const recentAttemptsByEngine = new Map(
+    recentEngineAttempts.map((row) => [row.engineId, row._count])
+  );
+  const recentFailureCount = recentEngineFailures.reduce(
+    (sum, row) => sum + row._count,
+    0
+  );
 
   // 원가 집계 — 「못 잼」을 0원으로 세지 않는다.
   const totalCostKrw = costAgg._sum.costKrw ?? 0;
@@ -231,6 +255,28 @@ const AdminOpsPage = async () => {
         </Section>
 
         {/* audit status 분포 */}
+        <Section
+          note="작업 자체가 완료되어도 일부 엔진 호출은 실패할 수 있습니다. 최근 24시간 저장된 호출 기준이며, 실패가 없었다는 표시가 전체 고객 플로우의 정상 동작을 보장하지는 않습니다."
+          title="엔진 호출 실패 · 최근 24시간"
+        >
+          <CardGrid>
+            <StatCard
+              label="실패 호출"
+              tone={recentFailureCount > 0 ? "warn" : "ok"}
+              value={fmt(recentFailureCount)}
+            />
+            {recentEngineFailures.map((row) => (
+              <StatCard
+                hint={`${fmt(recentAttemptsByEngine.get(row.engineId) ?? 0)}회 시도 중`}
+                key={row.engineId}
+                label={row.engineId}
+                tone="warn"
+                value={`${fmt(row._count)}회 실패`}
+              />
+            ))}
+          </CardGrid>
+        </Section>
+
         <Section title="Audit status 분포">
           <CardGrid>
             <StatCard label="대기 (queued)" value={fmt(auditStatus.queued)} />
