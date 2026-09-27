@@ -46,8 +46,21 @@ const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
 
 function jobView(job: Pick<AuditJob, "status" | "result">) {
   const result = withRecomputedAuditMetrics(job.result);
+  const responses = (
+    result as {
+      engineResponses?: Array<{
+        errorMessage?: string | null;
+        isStub?: boolean;
+      }>;
+    } | null
+  )?.engineResponses;
+  const hasCollectedAnswer =
+    responses?.some((response) => !response.errorMessage && !response.isStub) ??
+    false;
   const isPartial =
-    job.status === "completed" && !isPublishableAuditResult(result);
+    job.status === "completed" &&
+    hasCollectedAnswer &&
+    !isPublishableAuditResult(result);
   if (isPartial) {
     return {
       label: "잠정 결과",

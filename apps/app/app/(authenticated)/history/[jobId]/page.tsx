@@ -72,7 +72,6 @@ export default async function AuditHistoryDetail({
   const metrics = metricsOf(result);
   const publicationIssue =
     status === "completed" ? auditPublicationIssue(result) : null;
-  const isPartial = publicationIssue !== null;
   const storedResponses = (
     job.result as {
       engineResponses?: Array<{
@@ -85,6 +84,7 @@ export default async function AuditHistoryDetail({
   const coverage = countMeasurementCoverage(
     storedResponses?.filter((value) => value.engineId !== "naver-briefing")
   );
+  const isPartial = publicationIssue !== null && coverage.measured > 0;
   const measuredAt = new Intl.DateTimeFormat("ko-KR", {
     dateStyle: "long",
     timeStyle: "short",
