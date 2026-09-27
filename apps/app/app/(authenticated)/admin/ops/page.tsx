@@ -3,6 +3,7 @@ import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "../../components/header";
+import { summarizeAuditEngineFailures } from "./audit-engine-failures";
 import { startOfKoreanDay } from "./kst-day";
 
 export const metadata: Metadata = {
@@ -85,6 +86,7 @@ const AdminOpsPage = async () => {
     costMeasured,
     recentEngineAttempts,
     recentEngineFailures,
+    recentAuditResults,
   ] = await Promise.all([
     database.auditJob.count({ where: { createdAt: { gte: startOfToday } } }),
     database.auditJob.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
@@ -130,7 +132,19 @@ const AdminOpsPage = async () => {
       },
       _count: true,
     }),
+    database.auditJob.findMany({
+      where: { createdAt: { gte: oneDayAgo } },
+      select: { result: true },
+    }),
   ]);
+
+  const recentAuditEngineFailures = summarizeAuditEngineFailures(
+    recentAuditResults
+  );
+  const recentAuditFailureCount = recentAuditEngineFailures.reduce(
+    (sum, row) => sum + row.failures,
+    0
+  );
 
   const recentAttemptsByEngine = new Map(
     recentEngineAttempts.map((row) => [row.engineId, row._count])
@@ -256,20 +270,34 @@ const AdminOpsPage = async () => {
 
         {/* audit status 분포 */}
         <Section
-          note="작업 자체가 완료되어도 일부 엔진 호출은 실패할 수 있습니다. 최근 24시간 저장된 호출 기준이며, 실패가 없었다는 표시가 전체 고객 플로우의 정상 동작을 보장하지는 않습니다."
+          note="작업 자체가 완료되어도 일부 엔진 호출은 실패할 수 있습니다. 초기 진단 응답과 지속 추적 응답을 별도로 집계합니다. 실패 0건도 전체 고객 플로우 정상 동작을 보장하지는 않습니다."
           title="엔진 호출 실패 · 최근 24시간"
         >
           <CardGrid>
             <StatCard
-              label="실패 호출"
+              label="초기 진단 실패·미연결"
+              tone={recentAuditFailureCount > 0 ? "warn" : "ok"}
+              value={fmt(recentAuditFailureCount)}
+            />
+            {recentAuditEngineFailures.map((row) => (
+              <StatCard
+                hint={`${fmt(row.attempts)}회 시도 중`}
+                key={`audit-${row.engineId}`}
+                label={`초기 진단 · ${row.engineId}`}
+                tone="warn"
+                value={`${fmt(row.failures)}회 실패`}
+              />
+            ))}
+            <StatCard
+              label="지속 추적 실패"
               tone={recentFailureCount > 0 ? "warn" : "ok"}
               value={fmt(recentFailureCount)}
             />
             {recentEngineFailures.map((row) => (
               <StatCard
                 hint={`${fmt(recentAttemptsByEngine.get(row.engineId) ?? 0)}회 시도 중`}
-                key={row.engineId}
-                label={row.engineId}
+                key={`tracking-${row.engineId}`}
+                label={`지속 추적 · ${row.engineId}`}
                 tone="warn"
                 value={`${fmt(row._count)}회 실패`}
               />
