@@ -26,8 +26,10 @@ const UUID_RE =
 
 export default async function AuditHistoryDetail({
   params,
+  searchParams,
 }: {
   params: Promise<{ jobId: string }>;
+  searchParams: Promise<{ brand?: string }>;
 }) {
   const { jobId } = await params;
   if (!UUID_RE.test(jobId)) {
@@ -58,6 +60,12 @@ export default async function AuditHistoryDetail({
   });
   if (!job) {
     notFound();
+  }
+
+  // The sidebar derives its brand context from the URL. A history deep link
+  // without it would send the customer to another brand's default dashboard.
+  if (job.brandId && (await searchParams).brand !== job.brandId) {
+    redirect(`/history/${job.id}?brand=${encodeURIComponent(job.brandId)}`);
   }
 
   const status = isStaleAuditJob(job)
@@ -140,6 +148,19 @@ export default async function AuditHistoryDetail({
               잠정 리포트 보기{" "}
               <ExternalLinkIcon aria-hidden className="size-4" />
             </a>
+            {job.brandId ? (
+              <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                <Link className="underline" href={`/?brand=${job.brandId}`}>
+                  이 브랜드 대시보드
+                </Link>
+                <Link
+                  className="underline"
+                  href={`/actions?brand=${job.brandId}`}
+                >
+                  지금 할 일
+                </Link>
+              </div>
+            ) : null}
           </section>
         ) : status === "failed" || !isUsableRun(result) ? (
           <section className="findable-card p-5">
