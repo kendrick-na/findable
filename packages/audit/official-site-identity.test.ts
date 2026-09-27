@@ -13,6 +13,20 @@ describe("official site identity response", () => {
     ).toBe("Actual customer-facing consulting service.");
   });
 
+  it("ignores script/style markup that only looks like visible site evidence", async () => {
+    const html =
+      '<html><head><title>Indigochild</title><script>const template = "<p>Fake service statement from a template.</p>";</script></head><body><p>Real service statement for customers.</p></body></html>';
+    const response = new Response(html, {
+      headers: { "content-type": "text/html" },
+    });
+    const read = await readIdentityHtml(response);
+    expect(
+      extractOfficialSiteIdentity(read, "https://indigochild.kr/")
+    ).toMatchObject({
+      description: "Real service statement for customers.",
+    });
+  });
+
   it("uses a visible service statement when a generic head has no description", async () => {
     const html =
       "<html><head><title>Indigochild</title></head><body><h1>We Create the Future</h1><p>Providing comprehensive marketing consulting and social media branding services.</p></body></html>";

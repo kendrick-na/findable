@@ -22,6 +22,22 @@ describe("getAuditRuntimeReadiness", () => {
     ).toEqual({ ready: true });
   });
 
+  it("does not treat the force-live switch as provider authentication", () => {
+    expect(
+      getAuditRuntimeReadiness({
+        DATABASE_URL: "postgres://db",
+        FINDABLE_FORCE_LIVE: "1",
+      })
+    ).toEqual({
+      ready: false,
+      missing: [
+        "LETSUR_API_KEY 또는 AI Gateway 인증",
+        "GOOGLE_API_KEY 또는 AI Gateway 인증",
+        "PERPLEXITY_API_KEY 또는 AI Gateway 인증",
+      ],
+    });
+  });
+
   it("reports missing runtime configuration without exposing values", () => {
     expect(getAuditRuntimeReadiness({})).toEqual({
       ready: false,

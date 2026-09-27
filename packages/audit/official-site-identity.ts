@@ -27,15 +27,19 @@ export function extractOfficialSiteIdentity(
   html: string,
   finalUrl: string
 ): OfficialSiteIdentity | null {
+  // A server-rendered template can contain literal HTML-looking strings inside
+  // script/style blocks. They are not visible site evidence and must not be
+  // accepted as the brand's description or heading.
+  const contentHtml = html.replace(NON_VISIBLE_BLOCK_RE, "");
   const identity = {
     finalUrl,
-    title: tagText(html, "title"),
+    title: tagText(contentHtml, "title"),
     description:
-      metaContent(html, "description") ??
-      metaContent(html, "og:description") ??
-      bodyDescription(html),
-    h1: tagText(html, "h1"),
-    siteName: metaContent(html, "og:site_name"),
+      metaContent(contentHtml, "description") ??
+      metaContent(contentHtml, "og:description") ??
+      bodyDescription(contentHtml),
+    h1: tagText(contentHtml, "h1"),
+    siteName: metaContent(contentHtml, "og:site_name"),
   };
   return identity.title ||
     identity.description ||
