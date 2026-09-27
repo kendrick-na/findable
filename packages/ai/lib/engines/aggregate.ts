@@ -46,6 +46,24 @@ function normalizedDomain(value: string): string {
   }
 }
 
+function citationDomain(source: { domain: string; url: string }): string {
+  try {
+    const url = new URL(source.url);
+    if (
+      url.hostname === "vertexaisearch.cloud.google.com" &&
+      url.pathname.startsWith("/grounding-api-redirect/")
+    ) {
+      // Gemini supplies the original source domain in its citation title,
+      // while the URL is only a Google redirect. The adapter stores that
+      // provider-reported domain separately; never trust it for other URLs.
+      return normalizedDomain(source.domain);
+    }
+  } catch {
+    return "";
+  }
+  return normalizedDomain(source.url);
+}
+
 function isConfirmedMention(response: EngineResponse): boolean {
   return (
     response.brandMentioned &&
@@ -73,7 +91,7 @@ export function partitionCitedSources(
     ...response,
     citedSources: isConfirmedMention(response)
       ? response.citedSources.flatMap((source) => {
-          const domain = normalizedDomain(source.url);
+          const domain = citationDomain(source);
           const isOwned = Boolean(
             owned && (domain === owned || domain.endsWith(`.${owned}`))
           );

@@ -89,6 +89,34 @@ describe("aggregateAudit citation metrics", () => {
     expect(metrics.unattributedCitationCount).toBe(1);
   });
 
+  it("uses Gemini's source domain for its exact grounding redirect", () => {
+    const metrics = aggregateAudit(
+      [
+        {
+          ...response(true, "indigochild.kr"),
+          engineId: "gemini",
+          citedSources: [
+            {
+              domain: "indigochild.kr",
+              url: "https://vertexaisearch.cloud.google.com/grounding-api-redirect/token",
+            },
+            {
+              domain: "namu.wiki",
+              url: "https://vertexaisearch.cloud.google.com/grounding-api-redirect/another",
+            },
+          ],
+        },
+      ],
+      "indigochild.kr"
+    );
+
+    expect(metrics.topCitedDomains).toEqual([
+      { domain: "indigochild.kr", count: 1 },
+    ]);
+    expect(metrics.unattributedCitationCount).toBe(1);
+    expect(metrics.citationAttribution).toBe("partial");
+  });
+
   it("does not present search links from a non-mention response as brand citations", () => {
     const metrics = aggregateAudit(
       [
