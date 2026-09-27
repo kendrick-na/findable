@@ -8,6 +8,7 @@ const source = (path: string) =>
   readFileSync(join(process.cwd(), path), "utf8");
 
 const SIDEBAR = source("app/(authenticated)/components/sidebar.tsx");
+const MOBILE_TABS = source("app/(authenticated)/components/mobile-tab-bar.tsx");
 const LAYOUT = source("app/(authenticated)/layout.tsx");
 const ORG_ACTION = source("app/actions/admin/orgs.ts");
 const ORG_TABLE = source("app/(authenticated)/admin/orgs/org-table.tsx");
@@ -22,6 +23,12 @@ describe("운영 릴리스 계약", () => {
     expect(SIDEBAR).toContain('url: "/site-audit"');
     expect(SIDEBAR).toContain("title: t.siteAudit");
     expect(LAYOUT).toContain("siteAudit: t.sidebar.siteAudit");
+  });
+
+  it("사이드바 전체 탭의 사전 로딩으로 DB 세션 풀을 소진하지 않는다", () => {
+    expect(SIDEBAR).toContain('<Link href={href} prefetch={false}>');
+    expect(MOBILE_TABS).toContain("prefetch={false}");
+    expect(MOBILE_TABS).toContain('useSearchParams().get("brand")');
   });
 
   it("조직 목록에서 누적 응답과 실제 최신 GEO 점수를 구분한다", () => {

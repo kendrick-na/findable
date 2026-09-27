@@ -10,7 +10,7 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 /**
  * 모바일 하단 탭 — 2026-08-17 세션N-37 (v4 P0-4 확정안 구현).
@@ -76,6 +76,7 @@ export const MobileTabBar = ({
   onMore: () => void;
 }) => {
   const pathname = usePathname();
+  const selectedBrandId = useSearchParams().get("brand");
 
   return (
     // `md:hidden` — 데스크톱엔 사이드바가 있다. 두 내비를 동시에 띄우지 않는다.
@@ -95,6 +96,10 @@ export const MobileTabBar = ({
           const active =
             tab.url === "/" ? pathname === "/" : pathname.startsWith(tab.url);
           const Icon = tab.icon;
+          const href =
+            selectedBrandId && (tab.url === "/" || tab.url === "/actions")
+              ? `${tab.url}?brand=${encodeURIComponent(selectedBrandId)}`
+              : tab.url;
           return (
             <li key={tab.url}>
               <Link
@@ -106,7 +111,8 @@ export const MobileTabBar = ({
                     ? "text-[color:var(--findable-primary,#ff7a4d)]"
                     : "text-[color:var(--findable-ink-subtle,#8a8f98)]"
                 )}
-                href={tab.url}
+                href={href}
+                prefetch={false}
               >
                 <Icon aria-hidden className="size-5" />
                 {labels[tab.labelKey]}
