@@ -16,8 +16,11 @@ describe("dashboard locale switching", () => {
     expect(ROUTE).toContain('!next.startsWith("//")');
   });
 
-  it("keeps the current dashboard path when switching language", () => {
+  it("keeps the current dashboard path and brand query when switching language", () => {
     expect(SWITCHER).toContain("usePathname");
+    expect(SWITCHER).toContain("useSearchParams");
+    expect(SWITCHER).toContain("searchParams.toString()");
+    expect(SWITCHER).toContain("`${pathname}?${query}`");
     expect(SWITCHER).toContain("locale=ko");
     expect(SWITCHER).toContain("locale=en");
   });

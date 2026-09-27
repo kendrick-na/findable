@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 export const LocaleSwitcher = () => {
   const pathname = usePathname() || "/";
-  const next = encodeURIComponent(pathname);
+  const searchParams = useSearchParams();
+  const query = searchParams.toString();
+  const next = encodeURIComponent(query ? `${pathname}?${query}` : pathname);
 
   return (
     <nav aria-label="Language" className="flex items-center gap-1 text-xs">
