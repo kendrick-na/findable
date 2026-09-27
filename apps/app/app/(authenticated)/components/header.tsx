@@ -19,19 +19,9 @@ interface HeaderProps {
 }
 
 // ──────────────────────────────────────────────────
-// D11 (2026-08-07 세션N-9) — 히어로 숫자를 헤더에 상주시킨다.
-//
-// 📕 리서치 `02:50` Sistrix(1차 출처): 히어로 숫자가 **헤더에 상주** — 개요 페이지뿐
-//   아니라 **모든 화면에서 보임**. 감사 D11 = "히어로가 헤더에 상주 안 함 · 등장률 1개만".
-//
-// 왜 호출부(14곳)를 안 고치나: `Header` 는 이미 **서버 컴포넌트**이고 `children` 슬롯을
-//   쓰는 곳이 0곳이었다 → 스스로 조회하게 하면 호출부 수정이 **0**이다.
-//   props 로 내리려면 11개 파일·14개 지점을 전부 고쳐야 하고, 그 과정에서 한 곳만
-//   빠뜨려도 화면마다 숫자가 달라진다(이 저장소가 실제로 겪은 실패 유형).
-//
-// ⚠️ 조회는 전용 경량 헬퍼(`scopedHeaderMetric`)로. 시계열용 `scopedTracking`(1400행)을
-//   14개 화면에서 돌리면 낭비다 — 최신 1회분(≤56행)만 읽는다.
-// ⚠️ 측정이 없으면 아무것도 그리지 않는다. "0%" 를 띄우면 신규 유저에게 거짓 실패로 읽힌다.
+// The latest organization metric is not a universal page metric in a
+// multi-brand account. Keep this lightweight read only for screens that
+// explicitly opt in after checking that the displayed brand matches.
 // ──────────────────────────────────────────────────
 const HeaderMetric = async () => {
   const metric = await scopedHeaderMetric();
@@ -58,7 +48,15 @@ const HeaderMetric = async () => {
   );
 };
 
-export const Header = ({ pages, page, children, showMetric = true }: HeaderProps) => (
+// Multi-brand organizations can view different brands on each tab. A global
+// "latest" metric would silently attach another brand's 0% to this page.
+// Only pages that establish a matching brand context opt in explicitly.
+export const Header = ({
+  pages,
+  page,
+  children,
+  showMetric = false,
+}: HeaderProps) => (
   <header className="flex h-16 shrink-0 items-center justify-between gap-2">
     <div className="flex items-center gap-2 px-4">
       <SidebarTrigger className="-ml-1" />
