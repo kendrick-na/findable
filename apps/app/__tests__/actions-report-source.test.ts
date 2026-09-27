@@ -18,7 +18,7 @@ const PAGE = readFileSync(
 describe("actions uses the verified report as its source of truth", () => {
   it("reuses stored geoActions before the legacy Tracking fallback", () => {
     const auditLookup = PAGE.indexOf("const latestAudit");
-    const storedActions = PAGE.indexOf("latestResult?.geoActions");
+    const storedActions = PAGE.indexOf("const storedActions = (latestResult");
     const fallback = PAGE.indexOf(": buildGeoActions");
 
     expect(auditLookup).toBeGreaterThan(-1);

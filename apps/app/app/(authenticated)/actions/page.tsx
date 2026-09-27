@@ -353,7 +353,8 @@ async function ActionsPage({
   // 리포트와 대시보드가 서로 다른 처방을 만들면 고객은 어느 쪽을 믿어야 할지
   // 알 수 없다. 확정된 최신 측정은 러너가 순위·시장·실패 엔진 범위까지 반영해
   // 저장한 geoActions를 그대로 사용한다. Tracking 재계산은 구버전 데이터 폴백만 맡긴다.
-  const storedActions = latestResult?.geoActions;
+  const storedActions = (latestResult as { geoActions?: GeoAction[] } | null)
+    ?.geoActions;
 
   // 프롬프트별 언급 여부 — 갭 액션의 핵심 입력. Tracking 행을 프롬프트 단위로 접는다.
   const byPrompt = new Map<string, { hit: number; total: number }>();
