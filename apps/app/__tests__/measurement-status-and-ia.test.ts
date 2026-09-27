@@ -19,8 +19,8 @@ describe("측정 상태·결과 IA 계약", () => {
     );
     expect(history).toContain("withRecomputedAuditMetrics(job.result)");
     expect(history).toContain("!isUsableRun(result)");
-    expect(history).toContain('isPartial ? "잠정 결과"');
-    expect(history).toContain('isUnavailable ? "측정 불가"');
+    expect(history).toMatch(/isPartial\s*\?\s*"잠정 결과"/);
+    expect(history).toMatch(/isUnavailable\s*\?\s*"측정 불가"/);
     expect(history).toMatch(/const sov = isUnavailable\s*\? null/);
   });
 

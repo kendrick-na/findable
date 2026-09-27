@@ -1,5 +1,8 @@
-import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
-import { isUsableRun, metricsOf } from "@repo/audit/run-quality";
+import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
+import { isUsableRun } from "@repo/audit/run-quality";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import type { AuditJob } from "@repo/database";
 import { database } from "@repo/database";
@@ -44,7 +47,7 @@ const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
 function jobView(job: Pick<AuditJob, "status" | "result">) {
   const result = withRecomputedAuditMetrics(job.result);
   const isPartial =
-    job.status === "completed" && (metricsOf(result)?.unverifiedCount ?? 0) > 0;
+    job.status === "completed" && !isPublishableAuditResult(result);
   if (isPartial) {
     return {
       label: "잠정 결과",

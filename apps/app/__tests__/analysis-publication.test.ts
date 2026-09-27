@@ -5,7 +5,7 @@ import { canShowLatestAnalysis } from "@/lib/content/analysis-publication";
 const createdAt = new Date("2026-09-26T00:00:00.000Z");
 const publishableResult = {
   mentionVerdictVersion: MENTION_VERDICT_VERSION,
-  metrics: { unverifiedCount: 0 },
+  metrics: { unverifiedCount: 0, citationAttribution: "none_observed" },
 };
 
 describe("latest analysis publication", () => {
@@ -27,6 +27,24 @@ describe("latest analysis publication", () => {
         result: {
           ...publishableResult,
           metrics: { unverifiedCount: 2 },
+        },
+        status: "completed",
+        trackedAt: new Date("2026-09-26T00:01:00.000Z"),
+      })
+    ).toBe(false);
+  });
+
+  it("rejects a run with external citations whose brand attribution is unverified", () => {
+    expect(
+      canShowLatestAnalysis({
+        createdAt,
+        result: {
+          ...publishableResult,
+          metrics: {
+            unverifiedCount: 0,
+            citationAttribution: "partial",
+            unattributedCitationCount: 1,
+          },
         },
         status: "completed",
         trackedAt: new Date("2026-09-26T00:01:00.000Z"),

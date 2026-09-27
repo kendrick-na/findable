@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { MENTION_VERDICT_VERSION } from "../ai/lib/mention-verdict-version";
 import { isUsableRun, scoreOf } from "./run-quality";
 
 const metrics = {
   averageMentionPosition: null,
   enginesCovered: ["perplexity", "gemini"],
   enginesWithMention: ["gemini"],
+  citationAttribution: "none_observed",
   sov: 50,
 };
 
@@ -16,7 +18,10 @@ describe("run quality", () => {
   });
 
   it("keeps fully verified measurements usable", () => {
-    const result = { metrics: { ...metrics, unverifiedCount: 0 } };
+    const result = {
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { ...metrics, unverifiedCount: 0 },
+    };
     expect(isUsableRun(result)).toBe(true);
     expect(scoreOf(result)).toBeTypeOf("number");
   });
@@ -30,6 +35,12 @@ describe("run quality", () => {
         unattributedCitationCount: 1,
       },
     };
+    expect(isUsableRun(result)).toBe(false);
+    expect(scoreOf(result)).toBeNull();
+  });
+
+  it("does not use legacy runs without current entity verdicts for trends or alerts", () => {
+    const result = { metrics: { ...metrics, unverifiedCount: 0 } };
     expect(isUsableRun(result)).toBe(false);
     expect(scoreOf(result)).toBeNull();
   });

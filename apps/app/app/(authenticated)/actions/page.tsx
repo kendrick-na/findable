@@ -4,7 +4,11 @@ import {
   type GeoAction,
 } from "@repo/audit/actions";
 import { auth, currentUser } from "@repo/auth/server";
-import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
+import {
+  auditPublicationIssue,
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
 import { database } from "@repo/database";
 import { ListChecksIcon } from "lucide-react";
 import type { Metadata } from "next";
@@ -80,7 +84,7 @@ async function findEmailAuditActions(): Promise<{
     geoActions?: GeoAction[];
     metrics?: { sov?: number; unverifiedCount?: number };
   } | null;
-  if (!result?.geoActions?.length || (result.metrics?.unverifiedCount ?? 0) > 0) {
+  if (!isPublishableAuditResult(result) || !result?.geoActions?.length) {
     return null;
   }
   return {
@@ -290,18 +294,18 @@ const ActionsPage = async () => {
         select: { id: true, result: true },
       })
     : null;
-  const latestResult = withRecomputedAuditMetrics(latestAudit?.result) as {
-    metrics?: { unverifiedCount?: number };
-  } | null;
-  if ((latestResult?.metrics?.unverifiedCount ?? 0) > 0) {
+  const latestResult = withRecomputedAuditMetrics(latestAudit?.result);
+  const publicationIssue = auditPublicationIssue(latestResult);
+  if (publicationIssue !== null) {
     return (
       <>
         <Header page="지금 할 일" pages={["Findable"]} showMetric={false} />
         <main className="flex flex-1 flex-col gap-4 p-6 pt-2">
           <h1 className="font-semibold text-xl">지금 할 일 · 잠정 결과</h1>
           <p className="text-muted-foreground text-sm">
-            이번 측정은 브랜드 판별이 완료되지 않아 자동 개선 처방을 확정할 수
-            없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요.
+            {publicationIssue === "citation_attribution"
+              ? "외부 출처가 이 브랜드의 설명을 뒷받침하는지 아직 확인되지 않아 출처 기반 개선 처방을 확정할 수 없습니다."
+              : "이번 측정은 브랜드 판별이 완료되지 않아 자동 개선 처방을 확정할 수 없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요."}
           </p>
           <Link
             className="text-sm underline"

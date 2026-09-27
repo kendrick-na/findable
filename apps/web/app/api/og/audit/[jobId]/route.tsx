@@ -36,6 +36,11 @@ interface JobShape {
       topCitedDomains: Array<{ domain: string; count: number }>;
       errors?: Array<{ engineId: string; message: string }>;
       unverifiedCount?: number;
+      citationAttribution?:
+        | "none_observed"
+        | "owned_only"
+        | "partial"
+        | "unverified_external";
     };
     /** 🔴 분모 계산용(세션N-28). `metrics.enginesCovered` 는 **시도 단위**라
      *  거기서는 "어느 응답이 성공했나"를 알 수 없다 — 실측: perplexity 가 5회 시도 중
@@ -89,7 +94,12 @@ export async function GET(
   // 결함감사(2026-07-30) §OG: 이전엔 SoV를 점수 자리에 그대로 노출해 결과 페이지의
   // GEO 점수(5축 합계)와 다른 숫자가 공유 이미지에 나갔음 → geo-score 단일 진실로 통일.
   const metrics = job?.result?.metrics;
-  if (metrics?.unverifiedCount && metrics.unverifiedCount > 0) {
+  if (
+    !metrics ||
+    (metrics.unverifiedCount ?? 0) > 0 ||
+    (metrics.citationAttribution !== "none_observed" &&
+      metrics.citationAttribution !== "owned_only")
+  ) {
     return new ImageResponse(
       <div
         style={{
@@ -108,7 +118,7 @@ export async function GET(
           {brand}
         </div>
         <div style={{ color: "#fcd34d", fontSize: 38, marginTop: 32 }}>
-          판별 미완료 · 잠정 결과
+          출처·브랜드 확인 미완료 · 잠정 결과
         </div>
         <div style={{ color: "#a1a1aa", fontSize: 25, marginTop: 24 }}>
           이번 측정의 점수와 언급 여부는 확정되지 않았습니다.

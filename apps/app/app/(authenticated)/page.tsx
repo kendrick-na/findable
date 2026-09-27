@@ -1,5 +1,5 @@
 import {
-  isPublishableAuditResult,
+  auditPublicationIssue,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun } from "@repo/audit/run-quality";
@@ -331,7 +331,9 @@ const App = async ({ searchParams }: AppProperties) => {
     typeof correctedMetrics?.unverifiedCount === "number"
       ? correctedMetrics.unverifiedCount
       : 0;
-  if (currentRunUnverified > 0 && typeof correctedMetrics?.sov === "number") {
+  const currentRunIssue = auditPublicationIssue(correctedCurrentResult);
+  const currentRunPublishable = currentRunIssue === null;
+  if (!currentRunPublishable && typeof correctedMetrics?.sov === "number") {
     // Legacy Tracking rows had no entity-verification status. The immutable
     // audit rows are authoritative for this run; do not estimate lost visits
     // or trend deltas from a denominator containing unverified answers.
@@ -380,7 +382,7 @@ const App = async ({ searchParams }: AppProperties) => {
         page="대시보드"
         pages={["Findable"]}
         showMetric={
-          currentRunUnverified === 0 &&
+          currentRunPublishable &&
           data.latestBrandId === trackingRows[0]?.brandId
         }
       />
@@ -468,11 +470,13 @@ const App = async ({ searchParams }: AppProperties) => {
               }
             />
 
-            {currentRunUnverified > 0 && currentRunJob ? (
+            {!currentRunPublishable && currentRunJob ? (
               <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-amber-100 text-sm">
-                이번 측정은 브랜드 판별 {currentRunUnverified}회가 완료되지
-                않았습니다. 이번 회차의 점수·등장률·추세·놓치는 유입 추정·개선
-                처방은 확정하지 않습니다.{" "}
+                {currentRunIssue === "citation_attribution"
+                  ? `이번 측정에서 외부 인용 ${typeof correctedMetrics?.unattributedCitationCount === "number" ? correctedMetrics.unattributedCitationCount : 0}건이 실제 브랜드 근거인지 확인되지 않았습니다.`
+                  : `이번 측정은 브랜드 판별 ${currentRunUnverified}회가 완료되지 않았습니다.`}{" "}
+                이번 회차의 점수·등장률·추세·놓치는 유입 추정·개선 처방은
+                확정하지 않습니다.{" "}
                 <Link
                   className="underline underline-offset-2"
                   href={`${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`}
@@ -487,13 +491,13 @@ const App = async ({ searchParams }: AppProperties) => {
                 🔴 2026-08-21(11번) — `id="tour-kpis"` 는 대시보드 첫 진입 가이드
                 (`OnboardingTour`)의 앵커다. 이 섹션을 옮기거나 지우면 그 단계는
                 자동으로 건너뛴다(대상 없음 → 스킵, 죽지 않음) — 순서는 자유롭게 바꿔도 된다. */}
-            {currentRunUnverified === 0 ? (
+            {currentRunPublishable ? (
               <div id="tour-kpis">
                 <DashboardKpis data={data} paid={isPaid(plan)} />
               </div>
             ) : null}
 
-            {currentRunUnverified === 0 &&
+            {currentRunPublishable &&
             data.coverage &&
             data.latestSov !== null ? (
               <DashboardImpactEstimate
@@ -513,13 +517,13 @@ const App = async ({ searchParams }: AppProperties) => {
             ) : null}
 
             {/* 기획서 §4-1 섹션순서 2번 — 처방을 1급 시민으로(리서치 "진짜 공백=처방"). */}
-            {currentRunUnverified === 0 ? (
+            {currentRunPublishable ? (
               <div id="tour-actions">
                 <NextActionsCard brandName={data.latestBrandName} />
               </div>
             ) : null}
 
-            {isPublishableAuditResult(correctedCurrentResult) ? (
+            {currentRunPublishable ? (
               <DashboardDeepAnalysis
                 crewResult={(currentRunAnalysis?.crewResult as never) ?? null}
                 crewStatus={currentRunAnalysis?.crewStatus ?? "not_requested"}
@@ -527,7 +531,7 @@ const App = async ({ searchParams }: AppProperties) => {
               />
             ) : null}
 
-            {currentRunUnverified === 0 ? (
+            {currentRunPublishable ? (
               <div id="tour-trend">
                 <SovTrendChart
                   annotations={annotations}
@@ -556,16 +560,14 @@ const App = async ({ searchParams }: AppProperties) => {
             {/* "밀리는 질문"(2026-08-07) — 히어로가 말한 평균이 **어디서 왔는지** 쪼갠다.
                 리서치 `01:132` *"업계 1군은 이걸 메인에 둔다"* · 경쟁사 채택률 8/15.
                 위치: 추세(시간) 다음, 이력(원장) 앞 — 요약 → 추세 → **분해** → 원장 순. */}
-            {currentRunUnverified === 0 ? (
+            {currentRunPublishable ? (
               <PromptScoreboard scores={data.promptScores} />
             ) : null}
 
             {/* 「진실의 거울」(v4 탭7 · N-37) — 요약 → 추세 → 분해 → **원문** 순.
                 ⭐ 경쟁사 4곳 중 Otterly 만 유사 기능을 갖고 있다(실측). 우리 무기다.
                 점수가 "왜 그런지"에 답하는 자리라 분해(질문별) 바로 다음에 둔다. */}
-            {currentRunUnverified === 0 &&
-            truthMirror &&
-            data.latestBrandName ? (
+            {currentRunPublishable && truthMirror && data.latestBrandName ? (
               <div id="tour-truth-mirror">
                 <TruthMirrorSection
                   brandName={data.latestBrandName}
@@ -579,7 +581,7 @@ const App = async ({ searchParams }: AppProperties) => {
                 19번 줄) — 단 Findable은 **실제 측정 결과**(`hasData` 분기 안) 위에서만
                 뜬다. 빈 상태(`DashboardEmptyState`)에는 안 뜬다 — 볼 데이터가 없는
                 화면을 투어할 이유가 없다. */}
-            {currentRunUnverified === 0 ? <OnboardingTour /> : null}
+            {currentRunPublishable ? <OnboardingTour /> : null}
 
             {/* 🔴 「최근 측정 이력」 섹션 제거 (세션N-34 · N-33 확정사항 7번 실행).
                 같은 `AuditHistoryList` 가 여기와 `/history` **두 곳에 렌더**되고 있었다.

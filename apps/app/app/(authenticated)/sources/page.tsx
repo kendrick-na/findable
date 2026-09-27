@@ -100,7 +100,7 @@ const SourcesPage = async () => {
       <EmptyState
         ctaHref={`/history/${latest.id}`}
         ctaLabel="이번 회차 확인하기"
-        description="최신 측정의 브랜드 판별 또는 데이터 반영이 완료되지 않았습니다. 답변에 나온 링크를 우리 브랜드의 확정 인용으로 세지 않습니다."
+        description="최신 측정의 브랜드 판별·외부 출처 귀속 또는 데이터 반영이 완료되지 않았습니다. 답변에 나온 링크를 우리 브랜드의 확정 인용으로 세지 않습니다."
         icon={<LinkIcon className="size-5" />}
         title="출처 분석은 아직 잠정입니다"
       />

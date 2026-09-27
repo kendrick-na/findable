@@ -58,21 +58,39 @@ function semanticJson(value: unknown): string | undefined {
   );
 }
 
+export type AuditPublicationIssue =
+  | "missing_data"
+  | "brand_verification"
+  | "citation_attribution";
+
+/** Why a run cannot be presented as an authoritative score or prescription. */
+export function auditPublicationIssue(
+  result: unknown
+): AuditPublicationIssue | null {
+  if (!(isRecord(result) && isRecord(result.metrics))) {
+    return "missing_data";
+  }
+  if (
+    result.mentionVerdictVersion !== MENTION_VERDICT_VERSION ||
+    result.verificationState === "revalidation_required" ||
+    result.metrics.unverifiedCount !== 0
+  ) {
+    return "brand_verification";
+  }
+  // A brand mention in the answer does not establish that every external
+  // citation supports that brand. Unknown attribution is neither zero nor proof.
+  if (
+    result.metrics.citationAttribution !== "none_observed" &&
+    result.metrics.citationAttribution !== "owned_only"
+  ) {
+    return "citation_attribution";
+  }
+  return null;
+}
+
 /** Only current, fully adjudicated measurements may feed PDFs or AI advice. */
 export function isPublishableAuditResult(result: unknown): boolean {
-  if (!(isRecord(result) && isRecord(result.metrics))) {
-    return false;
-  }
-  return (
-    result.mentionVerdictVersion === MENTION_VERDICT_VERSION &&
-    result.verificationState !== "revalidation_required" &&
-    result.metrics.unverifiedCount === 0 &&
-    // A brand mention in the answer does not establish that every external
-    // citation supports that brand. A zero presence score would wrongly turn
-    // unknown attribution into measured absence, so withhold derivatives.
-    (result.metrics.citationAttribution === "none_observed" ||
-      result.metrics.citationAttribution === "owned_only")
-  );
+  return auditPublicationIssue(result) === null;
 }
 
 /** Public API must not expose provisional scores or prescriptions as facts. */

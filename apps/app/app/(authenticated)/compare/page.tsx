@@ -118,7 +118,7 @@ const ComparePage = async () => {
       <EmptyState
         ctaHref={`/history/${latest.id}`}
         ctaLabel="이번 회차 확인하기"
-        description="최신 측정의 브랜드 판별 또는 데이터 반영이 완료되지 않았습니다. 다른 회사의 언급을 우리 브랜드의 경쟁 결과로 확정하지 않습니다."
+        description="최신 측정의 브랜드 판별·외부 출처 귀속 또는 데이터 반영이 완료되지 않았습니다. 다른 회사의 언급을 우리 브랜드의 경쟁 결과로 확정하지 않습니다."
         icon={<SwordsIcon className="size-5" />}
         title="경쟁사 비교는 아직 잠정입니다"
       />

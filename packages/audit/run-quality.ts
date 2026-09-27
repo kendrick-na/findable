@@ -12,7 +12,10 @@
  */
 
 import { type GeoScoreMetrics, geoAxisScores } from "./geo-score";
-import { withRecomputedAuditMetrics } from "./normalize-stored-metrics";
+import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "./normalize-stored-metrics";
 
 /** 러너가 `result.metrics` 에 저장하는 형태(실패·stub 집계 포함). */
 export type StoredMetrics = GeoScoreMetrics & {
@@ -21,17 +24,11 @@ export type StoredMetrics = GeoScoreMetrics & {
     | "owned_only"
     | "partial"
     | "unverified_external";
+  unattributedCitationCount?: number;
   errors?: Array<{ engineId: string; message: string }>;
   stubCount?: number;
   unverifiedCount?: number;
 };
-
-function hasUnattributedCitations(metrics: StoredMetrics): boolean {
-  return (
-    metrics.citationAttribution === "partial" ||
-    metrics.citationAttribution === "unverified_external"
-  );
-}
 
 export function metricsOf(result: unknown): StoredMetrics | null {
   return (result as { metrics?: StoredMetrics } | null)?.metrics ?? null;
@@ -39,10 +36,9 @@ export function metricsOf(result: unknown): StoredMetrics | null {
 
 /** `result` JSON 에서 GEO 총점. metrics 가 없으면 null — **지어내지 않는다**. */
 export function scoreOf(result: unknown): number | null {
-  const metrics = metricsOf(withRecomputedAuditMetrics(result));
-  return metrics &&
-    (metrics.unverifiedCount ?? 0) === 0 &&
-    !hasUnattributedCitations(metrics)
+  const corrected = withRecomputedAuditMetrics(result);
+  const metrics = metricsOf(corrected);
+  return metrics && isPublishableAuditResult(corrected)
     ? geoAxisScores(metrics).total
     : null;
 }
@@ -59,11 +55,12 @@ export function scoreOf(result: unknown): number | null {
  *   사실이 아닌 경보가 된다(신뢰 손상이 미발송보다 크다).
  */
 export function isUsableRun(result: unknown): boolean {
-  const metrics = metricsOf(withRecomputedAuditMetrics(result));
+  const corrected = withRecomputedAuditMetrics(result);
+  const metrics = metricsOf(corrected);
   if (!metrics) {
     return false;
   }
-  if ((metrics.unverifiedCount ?? 0) > 0 || hasUnattributedCitations(metrics)) {
+  if (!isPublishableAuditResult(corrected)) {
     return false;
   }
   const total = metrics.enginesCovered?.length ?? 0;

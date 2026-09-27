@@ -10,6 +10,7 @@
  */
 
 import type { AuditJob } from "@repo/database";
+import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
 import { cleanup, render, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -106,11 +107,22 @@ const jobFixture = (status: string, id: string) =>
       status === "completed"
         ? {
             brandName: "Example",
+            mentionVerdictVersion: MENTION_VERDICT_VERSION,
             metrics: {
+              citationAttribution: "none_observed",
               enginesCovered: ["chatgpt"],
               enginesWithMention: [],
               sov: 0,
+              unverifiedCount: 0,
             },
+            engineResponses: [
+              {
+                engineId: "chatgpt",
+                brandMentioned: false,
+                isStub: false,
+                errorMessage: null,
+              },
+            ],
           }
         : null,
     status,

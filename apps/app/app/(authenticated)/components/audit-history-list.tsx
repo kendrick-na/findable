@@ -1,5 +1,8 @@
 import { isUsableRun } from "@repo/audit/run-quality";
-import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
+import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
 import type { AuditJob } from "@repo/database";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { cn } from "@repo/design-system/lib/utils";
@@ -71,9 +74,22 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
     <ul className="flex flex-col gap-3">
       {jobs.map((job) => {
         const result = withRecomputedAuditMetrics(job.result);
+        const responses = (
+          result as {
+            engineResponses?: Array<{
+              errorMessage?: string | null;
+              isStub?: boolean;
+            }>;
+          } | null
+        )?.engineResponses;
+        const hasCollectedAnswer =
+          responses?.some(
+            (response) => !response.errorMessage && !response.isStub
+          ) ?? false;
         const isPartial =
-          ((result as { metrics?: { unverifiedCount?: number } } | null)
-            ?.metrics?.unverifiedCount ?? 0) > 0;
+          job.status === "completed" &&
+          hasCollectedAnswer &&
+          !isPublishableAuditResult(result);
         const isUnavailable =
           job.status === "completed" && !isUsableRun(result);
         const sov = isUnavailable ? null : extractSov(result);
@@ -99,11 +115,19 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
               <Badge
                 className={cn(
                   "border-transparent",
-                  isPartial ? STATUS_TONE.processing : isUnavailable ? STATUS_TONE.failed : STATUS_TONE[job.status]
+                  isPartial
+                    ? STATUS_TONE.processing
+                    : isUnavailable
+                      ? STATUS_TONE.failed
+                      : STATUS_TONE[job.status]
                 )}
                 variant="outline"
               >
-                {isPartial ? "잠정 결과" : isUnavailable ? "측정 불가" : STATUS_LABEL[job.status]}
+                {isPartial
+                  ? "잠정 결과"
+                  : isUnavailable
+                    ? "측정 불가"
+                    : STATUS_LABEL[job.status]}
               </Badge>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
@@ -116,7 +140,9 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
                 </span>
               )}
               <span className="ml-auto inline-flex items-center gap-1 text-[color:var(--findable-primary,#ff7a4d)]">
-                {isPartial ? "잠정 결과 보기" : actionLabel(job.status, isUnavailable)}
+                {isPartial
+                  ? "잠정 결과 보기"
+                  : actionLabel(job.status, isUnavailable)}
                 {isDone && (
                   <>
                     <ExternalLinkIcon aria-hidden="true" className="size-3" />

@@ -23,6 +23,7 @@ import {
   trackReportViewed,
 } from "@repo/analytics/funnel";
 import { objectParticle } from "@repo/audit/actions";
+import { auditPublicationIssue } from "@repo/audit/normalize-stored-metrics";
 import {
   geoAxisScores,
   type ScoreTier,
@@ -179,6 +180,12 @@ interface CrewReport {
 interface JobMetrics {
   /** Missing on reports saved before verification-failure accounting. */
   unverifiedCount?: number;
+  unattributedCitationCount?: number;
+  citationAttribution?:
+    | "none_observed"
+    | "owned_only"
+    | "partial"
+    | "unverified_external";
   verifiedCount?: number;
   /** 순위가 나온 목록들의 평균 크기(분모). 세션N-10 이전 job 엔 없음. */
   averageMentionListSize?: number | null;
@@ -866,7 +873,7 @@ export function AuditResultView({ jobId, locale }: Props) {
   return (
     <>
       <CompletedView job={job} locale={locale} result={displayResult} />
-      {!((displayResult.metrics?.unverifiedCount ?? 0) > 0) && (
+      {auditPublicationIssue(displayResult) === null && (
         <ViralBar job={job} locale={locale} />
       )}
     </>
@@ -1325,6 +1332,8 @@ function VerificationPartialView({
   ).length;
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr";
+  const publicationIssue = auditPublicationIssue(result);
+  const citationIssue = publicationIssue === "citation_attribution";
 
   return (
     <div className="space-y-8 pb-24 lg:pb-12">
@@ -1332,8 +1341,12 @@ function VerificationPartialView({
       <section className="rounded-2xl border border-amber-400/30 bg-zinc-900/80 p-6 md:p-10">
         <div className="font-medium text-amber-300 text-xs tracking-[0.16em] uppercase">
           {isKo
-            ? "판별 미완료 · 잠정 결과"
-            : "Verification incomplete · provisional result"}
+            ? citationIssue
+              ? "출처 귀속 미확인 · 잠정 결과"
+              : "판별 미완료 · 잠정 결과"
+            : citationIssue
+              ? "Citation attribution incomplete · provisional result"
+              : "Verification incomplete · provisional result"}
         </div>
         <h1 className="mt-3 max-w-3xl font-semibold text-2xl text-zinc-50 leading-tight md:text-4xl">
           {isKo
@@ -1342,8 +1355,12 @@ function VerificationPartialView({
         </h1>
         <p className="mt-4 max-w-2xl text-sm text-zinc-300 leading-relaxed">
           {isKo
-            ? "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
-            : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
+            ? citationIssue
+              ? "답변에 나온 외부 링크가 실제로 이 브랜드를 뒷받침하는지 확인되지 않았습니다. 원문은 보존하지만 점수·인용 성과·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
+              : "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
+            : citationIssue
+              ? "We could not confirm that external links in the answers support this brand. Raw answers remain available, but scores, citation performance, missed-visit estimates, and recommendations are provisional. This is a measurement limitation, not a problem with your site."
+              : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
         </p>
         {result.metrics.errors.length > 0 && (
           <p className="mt-3 max-w-2xl text-sm text-amber-200 leading-relaxed">
@@ -1361,8 +1378,16 @@ function VerificationPartialView({
               result.metrics.errors.length,
             ],
             [
-              isKo ? "브랜드 판별 불가" : "Unverified matches",
-              result.metrics.unverifiedCount ?? 0,
+              citationIssue
+                ? isKo
+                  ? "출처 귀속 미확인"
+                  : "Unattributed citations"
+                : isKo
+                  ? "브랜드 판별 불가"
+                  : "Unverified matches",
+              citationIssue
+                ? (result.metrics.unattributedCitationCount ?? 0)
+                : (result.metrics.unverifiedCount ?? 0),
             ],
           ].map(([label, value]) => (
             <div
@@ -1379,8 +1404,8 @@ function VerificationPartialView({
         {job.pdfOutdated && (
           <p className="mt-5 text-amber-200 text-xs">
             {isKo
-              ? "이전 PDF는 판별 실패를 반영하지 않아 제공하지 않습니다."
-              : "The previous PDF did not account for verification failures and is unavailable."}
+              ? "이전 PDF는 이번 판별·출처 귀속 상태를 반영하지 않아 제공하지 않습니다."
+              : "The previous PDF does not reflect the current verification or citation attribution status and is unavailable."}
           </p>
         )}
         <a
@@ -1520,7 +1545,7 @@ function CompletedView({
     );
   }
 
-  if ((result.metrics.unverifiedCount ?? 0) > 0) {
+  if (auditPublicationIssue(result) !== null) {
     return <VerificationPartialView isKo={isKo} job={job} result={result} />;
   }
 
