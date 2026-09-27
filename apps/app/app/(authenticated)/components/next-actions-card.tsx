@@ -22,13 +22,15 @@ import Link from "next/link";
 // ──────────────────────────────────────────────────
 
 export const NextActionsCard = ({
+  brandId,
   brandName,
 }: {
+  brandId?: string | null;
   brandName: string | null;
 }) => (
   <Link
     className="findable-card flex min-w-0 items-center gap-4 p-5 transition-colors hover:border-[color:var(--findable-primary,#ff7a4d)]"
-    href="/actions"
+    href={brandId ? `/actions?brand=${brandId}` : "/actions"}
   >
     <span
       aria-hidden="true"

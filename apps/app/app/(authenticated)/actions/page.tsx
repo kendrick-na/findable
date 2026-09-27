@@ -14,6 +14,8 @@ import { ListChecksIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { scopedBrands, scopedLatestRunTracking } from "@/lib/db/scoped";
+import { AnalysisBrandPicker } from "../components/analysis-brand-picker";
+import { selectAnalysisBrandId } from "../lib/analysis-brand-selection";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { type ActionItem, ActionList } from "../features/analysis/action-list";
@@ -245,14 +247,39 @@ const AuditActions = ({
   );
 };
 
-const ActionsPage = async () => {
-  const rows = await scopedLatestRunTracking();
+const ActionsPage = async ({
+  searchParams,
+}: {
+  searchParams: Promise<{ brand?: string }>;
+}) => {
+  const brands = await scopedBrands();
+  const requestedBrandId = (await searchParams).brand;
+  const validRequestedBrandId =
+    requestedBrandId && brands.some((brand) => brand.id === requestedBrandId)
+      ? requestedBrandId
+      : undefined;
+  const rows = await scopedLatestRunTracking(validRequestedBrandId);
+  const selectedBrandId = selectAnalysisBrandId(
+    brands.map((brand) => brand.id),
+    validRequestedBrandId,
+    rows[0]?.brandId
+  );
+  const brandPicker =
+    brands.length > 0 ? (
+      <AnalysisBrandPicker
+        brands={brands}
+        path="/actions"
+        selectedBrandId={selectedBrandId}
+      />
+    ) : null;
   const sources = buildSourcesAnalysis(rows);
   const first = rows[0];
 
   if (!(first && sources)) {
     // org 추적이 없으면 → 무료 진단(이메일) 액션 폴백 → 그것도 없으면 빈 상태.
-    const emailAudit = await findEmailAuditActions();
+    const emailAudit = validRequestedBrandId
+      ? null
+      : await findEmailAuditActions();
     // 이 도메인으로 이미 Brand 가 만들어져 있으면(=완료를 누른 적이 있으면) 그 기록을 읽는다.
     // 없으면 빈 Map — 첫 완료 시점에 서버가 Brand 를 만든다.
     const auditCompletions = await findAuditCompletions(
@@ -261,6 +288,7 @@ const ActionsPage = async () => {
     return (
       <>
         <Header page="지금 할 일" pages={["Findable"]} />
+        <div className="px-6 pt-2">{brandPicker}</div>
         {emailAudit ? (
           <AuditActions
             actions={emailAudit.actions}
@@ -301,7 +329,10 @@ const ActionsPage = async () => {
       <>
         <Header page="지금 할 일" pages={["Findable"]} showMetric={false} />
         <main className="flex flex-1 flex-col gap-4 p-6 pt-2">
-          <h1 className="font-semibold text-xl">지금 할 일 · 잠정 결과</h1>
+          {brandPicker}
+          <h1 className="font-semibold text-xl">
+            {first.brand.name || first.brand.domain} · 지금 할 일 · 잠정 결과
+          </h1>
           <p className="text-muted-foreground text-sm">
             {publicationIssue === "citation_attribution"
               ? "외부 출처가 이 브랜드의 설명을 뒷받침하는지 아직 확인되지 않아 출처 기반 개선 처방을 확정할 수 없습니다."
@@ -462,6 +493,7 @@ const ActionsPage = async () => {
     <>
       <Header page="지금 할 일" pages={["Findable"]} />
       <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
+        {brandPicker}
         <div className="flex flex-col gap-1">
           <h1 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-xl">
             {first.brand.name || first.brand.domain} — 지금 할 일

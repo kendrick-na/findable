@@ -298,9 +298,13 @@ const NavRow = ({
   selectedBrandId?: string;
 }) => {
   const locked = item.requiredPlan ? !hasPlan(plan, item.requiredPlan) : false;
-  const brandAwarePath = ["/", "/compare", "/sources", "/site-audit"].includes(
-    item.url
-  );
+  const brandAwarePath = [
+    "/",
+    "/actions",
+    "/compare",
+    "/sources",
+    "/site-audit",
+  ].includes(item.url);
   const href = locked
     ? "/billing"
     : brandAwarePath && selectedBrandId

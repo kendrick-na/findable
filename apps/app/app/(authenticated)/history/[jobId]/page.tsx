@@ -205,7 +205,12 @@ export default async function AuditHistoryDetail({
               >
                 대시보드 요약 보기
               </Link>
-              <Link className="underline" href="/actions">
+              <Link
+                className="underline"
+                href={
+                  job.brandId ? `/actions?brand=${job.brandId}` : "/actions"
+                }
+              >
                 개선 실행 항목 보기
               </Link>
             </div>

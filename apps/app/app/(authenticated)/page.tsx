@@ -501,6 +501,7 @@ const App = async ({ searchParams }: AppProperties) => {
             data.coverage &&
             data.latestSov !== null ? (
               <DashboardImpactEstimate
+                brandId={data.latestBrandId}
                 coverage={data.coverage}
                 sov={data.latestSov}
               />
@@ -519,7 +520,10 @@ const App = async ({ searchParams }: AppProperties) => {
             {/* 기획서 §4-1 섹션순서 2번 — 처방을 1급 시민으로(리서치 "진짜 공백=처방"). */}
             {currentRunPublishable ? (
               <div id="tour-actions">
-                <NextActionsCard brandName={data.latestBrandName} />
+                <NextActionsCard
+                  brandId={data.latestBrandId}
+                  brandName={data.latestBrandName}
+                />
               </div>
             ) : null}
 

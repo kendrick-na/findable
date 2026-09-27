@@ -486,7 +486,11 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
               : undefined
           }
           hint={sentimentHint(sentiment)}
-          href="/actions"
+          href={
+            data.latestBrandId
+              ? `/actions?brand=${data.latestBrandId}`
+              : "/actions"
+          }
           label={METRICS.sentiment.question}
           sparkline={
             <div className="flex flex-col gap-2">

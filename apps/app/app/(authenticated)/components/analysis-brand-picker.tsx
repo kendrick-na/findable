@@ -6,7 +6,7 @@ export const AnalysisBrandPicker = ({
   selectedBrandId,
 }: {
   brands: Array<{ id: string; name: string; domain: string }>;
-  path: "/compare" | "/sources";
+  path: "/actions" | "/compare" | "/sources";
   selectedBrandId: string | null;
 }) => (
   <form

@@ -1,13 +1,13 @@
-import {
-  buildMeasurementImpact,
-} from "@repo/audit/revenue-impact";
+import { buildMeasurementImpact } from "@repo/audit/revenue-impact";
 import { Info, TrendingUp } from "lucide-react";
 import Link from "next/link";
 
 export function DashboardImpactEstimate({
+  brandId,
   coverage,
   sov,
 }: {
+  brandId?: string | null;
   coverage: { mentioned: number; total: number };
   sov: number;
 }) {
@@ -43,9 +43,13 @@ export function DashboardImpactEstimate({
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-[color:var(--findable-hairline,#2d3035)] border-t pt-3">
         <p className="flex max-w-2xl items-start gap-1.5 text-xs text-[color:var(--findable-ink-subtle,#8a8f98)]">
           <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-          AI {coverage.total}곳 중 {coverage.mentioned}곳에서 확인된 등장률과 공개 연구 기반 기본 가정을 사용합니다. 실측 유입·매출이 아닙니다.
+          AI {coverage.total}곳 중 {coverage.mentioned}곳에서 확인된 등장률과
+          공개 연구 기반 기본 가정을 사용합니다. 실측 유입·매출이 아닙니다.
         </p>
-        <Link className="shrink-0 text-sm text-[color:var(--findable-primary,#ff7a4d)] hover:underline" href="/actions">
+        <Link
+          className="shrink-0 text-sm text-[color:var(--findable-primary,#ff7a4d)] hover:underline"
+          href={brandId ? `/actions?brand=${brandId}` : "/actions"}
+        >
           개선 우선순위 보기 →
         </Link>
       </div>
