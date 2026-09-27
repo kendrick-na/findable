@@ -5,6 +5,14 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
 describe("측정 상태·결과 IA 계약", () => {
+  it("검색 연동을 하나도 설정하지 않았을 때 0/0로 오해시키지 않는다", () => {
+    const status = read(
+      "app/(authenticated)/components/dashboard-system-status.tsx"
+    );
+    expect(status).toContain('connections.length === 0');
+    expect(status).toContain('"아직 연결 없음"');
+  });
+
   it("완료된 측정 이력은 정식 공개 리포트로 연결한다", () => {
     const history = read(
       "app/(authenticated)/components/audit-history-list.tsx"

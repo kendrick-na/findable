@@ -208,7 +208,11 @@ export const DashboardSystemStatus = async ({
           icon={<LinkIcon className="size-4" />}
           label="검색 데이터"
           meta={connectionMeta}
-          value={`${connectedCount}/${connections.length}개 연결`}
+          value={
+            connections.length === 0
+              ? "아직 연결 없음"
+              : `${connectedCount}/${connections.length}개 연결`
+          }
         />
       </div>
     </section>
