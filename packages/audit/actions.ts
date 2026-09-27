@@ -112,6 +112,8 @@ export interface ActionInput {
   brandName: string;
   /** 경쟁사 순위(경쟁 지형에서 추출). 내 브랜드 포함. */
   competitors?: Array<{ isMine: boolean; name: string; shareOfVoice: number }>;
+  /** 요청한 고유 엔진 수. 성공 측정 수보다 클 때만 부분 측정을 밝힌다. */
+  enginesAttempted?: number;
   enginesMeasured: number;
   /** 측정 성공 엔진 중 브랜드를 인지한 엔진 수 / 전체. */
   enginesMentioned: number;
@@ -138,6 +140,20 @@ export interface ActionInput {
    * 고객이 바로 가서 확인할 수 있어야 액션이 구체적이 된다.
    */
   topDomains?: Array<{ count: number; domain: string; owned: boolean }>;
+}
+
+/**
+ * 액션 근거에서 "성공 측정"과 "요청"을 절대 섞지 않는다.
+ * 실패한 엔진까지 성공처럼 세면 6/7 표본을 7/7이라고 과장하게 된다.
+ */
+function measurementEvidenceLabel(input: ActionInput): string {
+  if (
+    typeof input.enginesAttempted === "number" &&
+    input.enginesAttempted > input.enginesMeasured
+  ) {
+    return `응답을 받은 AI ${input.enginesMeasured}곳(요청 ${input.enginesAttempted}곳)`;
+  }
+  return `측정한 AI ${input.enginesMeasured}곳`;
 }
 
 // ──────────────────────────────────────────────────
@@ -398,7 +414,7 @@ function contentFixAction(input: ActionInput): GeoAction | null {
       priority: 3,
       title:
         "등록 브랜드로 확인된 답변이 없습니다 — 먼저 '알려진 사실'을 만드세요",
-      evidence: `측정한 AI ${input.enginesMeasured}곳 중 등록한 ${input.brandName}로 확인된 답변은 0개였습니다.`,
+      evidence: `${measurementEvidenceLabel(input)} 중 등록한 ${input.brandName}로 확인된 답변은 0개였습니다.`,
       how:
         "AI는 여러 곳에 반복 등장하는 정보를 학습합니다. ①공식 소개 페이지에 " +
         "'무엇을 하는 회사인지' 한 문단으로 명확히 쓰고 ②위키·업계 디렉터리·보도자료처럼 " +
@@ -422,7 +438,7 @@ function contentFixAction(input: ActionInput): GeoAction | null {
     kind: "content_fix",
     priority: 3,
     title: `인용되는 페이지에 '근거 문장'을 추가하세요 (실험 평균 +${quotation.liftPct}%)`,
-    evidence: `AI ${input.enginesMeasured}곳 중 ${input.enginesMentioned}곳이 ${input.brandName}${objectParticle(input.brandName)} 인지했습니다. 이 측정은 노출 상태를 보여주며, 편집 변경의 효과는 같은 조건으로 다시 측정해야 확인할 수 있습니다.`,
+    evidence: `${measurementEvidenceLabel(input)} 중 ${input.enginesMentioned}곳이 ${input.brandName}${objectParticle(input.brandName)} 인지했습니다. 이 측정은 노출 상태를 보여주며, 편집 변경의 효과는 같은 조건으로 다시 측정해야 확인할 수 있습니다.`,
     how:
       `실험에서 효과가 검증된 순서대로: ①${quotation.label}(전문가·고객 인용문, +${quotation.liftPct}%) ` +
       `②${statistics.label}(구체 수치, +${statistics.liftPct}%) ` +

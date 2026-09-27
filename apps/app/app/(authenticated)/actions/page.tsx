@@ -3,19 +3,18 @@ import {
   buildGeoActions,
   type GeoAction,
 } from "@repo/audit/actions";
-import { auth, currentUser } from "@repo/auth/server";
 import {
   auditPublicationIssue,
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { auth, currentUser } from "@repo/auth/server";
 import { database } from "@repo/database";
 import { ListChecksIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { scopedBrands, scopedLatestRunTracking } from "@/lib/db/scoped";
 import { AnalysisBrandPicker } from "../components/analysis-brand-picker";
-import { selectAnalysisBrandId } from "../lib/analysis-brand-selection";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { type ActionItem, ActionList } from "../features/analysis/action-list";
@@ -24,6 +23,7 @@ import {
   SentimentSection,
 } from "../features/analysis/sentiment-section";
 import { engineLabel } from "../features/analysis/sources-board";
+import { selectAnalysisBrandId } from "../lib/analysis-brand-selection";
 import { buildSourcesAnalysis } from "../lib/analysis-data";
 import { summarizeSentiment } from "../lib/dashboard-data";
 import { getPrimaryEmail } from "../lib/user";
@@ -86,7 +86,7 @@ async function findEmailAuditActions(): Promise<{
     geoActions?: GeoAction[];
     metrics?: { sov?: number; unverifiedCount?: number };
   } | null;
-  if (!isPublishableAuditResult(result) || !result?.geoActions?.length) {
+  if (!(isPublishableAuditResult(result) && result?.geoActions?.length)) {
     return null;
   }
   return {
@@ -247,11 +247,12 @@ const AuditActions = ({
   );
 };
 
-const ActionsPage = async ({
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: this server page keeps authorization, provisional-result gating, legacy fallback, and action rendering in one request-scoped flow.
+async function ActionsPage({
   searchParams,
 }: {
   searchParams: Promise<{ brand?: string }>;
-}) => {
+}) {
   const brands = await scopedBrands();
   const requestedBrandId = (await searchParams).brand;
   const validRequestedBrandId =
@@ -349,6 +350,11 @@ const ActionsPage = async ({
     );
   }
 
+  // 리포트와 대시보드가 서로 다른 처방을 만들면 고객은 어느 쪽을 믿어야 할지
+  // 알 수 없다. 확정된 최신 측정은 러너가 순위·시장·실패 엔진 범위까지 반영해
+  // 저장한 geoActions를 그대로 사용한다. Tracking 재계산은 구버전 데이터 폴백만 맡긴다.
+  const storedActions = latestResult?.geoActions;
+
   // 프롬프트별 언급 여부 — 갭 액션의 핵심 입력. Tracking 행을 프롬프트 단위로 접는다.
   const byPrompt = new Map<string, { hit: number; total: number }>();
   for (const row of rows) {
@@ -392,25 +398,28 @@ const ActionsPage = async ({
     >
   );
 
-  const geoActions = buildGeoActions({
-    brandName: first.brand.name || first.brand.domain,
-    averageMentionPosition: null,
-    enginesMeasured,
-    enginesMentioned,
-    prompts,
-    sourceMix: {
-      owned: mix.owned ?? 0,
-      community: mix.community ?? 0,
-      reference: mix.reference ?? 0,
-      media: mix.media ?? 0,
-      other: mix.other ?? 0,
-    },
-    topDomains: sources.domains.map((d) => ({
-      domain: d.domain,
-      count: d.citations,
-      owned: d.owned,
-    })),
-  });
+  const geoActions =
+    storedActions && storedActions.length > 0
+      ? storedActions
+      : buildGeoActions({
+          brandName: first.brand.name || first.brand.domain,
+          averageMentionPosition: null,
+          enginesMeasured,
+          enginesMentioned,
+          prompts,
+          sourceMix: {
+            owned: mix.owned ?? 0,
+            community: mix.community ?? 0,
+            reference: mix.reference ?? 0,
+            media: mix.media ?? 0,
+            other: mix.other ?? 0,
+          },
+          topDomains: sources.domains.map((d) => ({
+            domain: d.domain,
+            count: d.citations,
+            owned: d.owned,
+          })),
+        });
 
   // ── 감성 분해 (세션N-34 · G-2) ────────────────────────────────
   // 🔴 **쿼리 변경 0.** `rows` 는 이미 `sentiment` 를 들고 있고(`scoped.ts:56`)
@@ -520,6 +529,6 @@ const ActionsPage = async ({
       </div>
     </>
   );
-};
+}
 
 export default ActionsPage;

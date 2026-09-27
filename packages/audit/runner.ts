@@ -563,7 +563,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       brandName,
       averageMentionListSize: metrics.averageMentionListSize,
       averageMentionPosition: metrics.averageMentionPosition,
-      enginesMeasured: new Set(metrics.enginesCovered).size,
+      // 성공 응답 수만 처방 근거에 쓴다. 실패 엔진까지 "측정했다"고 쓰면
+      // 부분 측정을 완전한 표본처럼 보이게 만든다.
+      enginesMeasured: measurementCoverage.measured,
+      enginesAttempted: measurementCoverage.attempted,
       enginesMentioned: new Set(metrics.enginesWithMention).size,
       // 처방의 채널을 타깃 시장에 맞춘다(세션N-24). 점수의 분모를 정하는 값과 **같은 것**을 쓴다
       //   — 여기서 따로 추정하면 화면 안에서 시장 판정이 둘로 갈린다.

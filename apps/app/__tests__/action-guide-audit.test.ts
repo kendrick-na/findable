@@ -50,6 +50,21 @@ describe("액션 가이드 — 상황별로 맞는 처방이 나온다", () => {
     expect(first?.evidence).toContain("7곳");
   });
 
+  it("🔴 일부 엔진 실패는 성공 측정 수와 요청 수를 함께 밝힌다", () => {
+    const actions = buildGeoActions({
+      ...base,
+      enginesAttempted: 7,
+      enginesMeasured: 6,
+      enginesMentioned: 0,
+      averageMentionPosition: null,
+      prompts: [{ hit: 0, text: "설화수 추천해줘", total: 6 }],
+    });
+    const content = actions.find((action) => action.kind === "content_fix");
+    expect(content?.evidence).toContain("6곳");
+    expect(content?.evidence).toContain("요청 7곳");
+    expect(content?.evidence).not.toContain("측정한 AI 7곳");
+  });
+
   it("🔴 **전부 알 때**: 인지 단계가 아니라 **문장 품질**로 넘어간다", () => {
     const actions = buildGeoActions(base);
     const content = actions.find((a) => /근거 문장|인용/.test(a.title));
