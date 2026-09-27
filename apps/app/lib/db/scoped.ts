@@ -209,10 +209,10 @@ export async function scopedLatestRunTracking(brandId?: string) {
 }
 
 /** Most recent org-owned audit, including runs that never produced Tracking rows. */
-export async function scopedLatestOrgAudit() {
+export async function scopedLatestOrgAudit(brandId?: string) {
   const orgId = await requireOrg();
   return database.auditJob.findFirst({
-    where: { organizationId: orgId },
+    where: { organizationId: orgId, ...(brandId ? { brandId } : {}) },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,

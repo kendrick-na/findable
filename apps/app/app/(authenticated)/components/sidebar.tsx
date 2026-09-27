@@ -44,7 +44,7 @@ import {
   TrendingUpIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { env } from "@/env";
 import { ExportDialog, type ExportDialogLabels } from "./export-dialog";
@@ -288,15 +288,22 @@ const NavRow = ({
   plan,
   active,
   lockedHint,
+  selectedBrandId,
 }: {
   item: NavItem;
   plan: Plan;
   active: boolean;
   /** 잠긴 항목 툴팁 — `{plan}` 자리에 해제 플랜 이름이 들어간다. */
   lockedHint: string;
+  selectedBrandId?: string;
 }) => {
   const locked = item.requiredPlan ? !hasPlan(plan, item.requiredPlan) : false;
-  const href = locked ? "/billing" : item.url;
+  const brandAwarePath = ["/", "/compare", "/sources"].includes(item.url);
+  const href = locked
+    ? "/billing"
+    : brandAwarePath && selectedBrandId
+      ? `${item.url}?brand=${encodeURIComponent(selectedBrandId)}`
+      : item.url;
 
   const inner = (
     <>
@@ -356,6 +363,7 @@ export const GlobalSidebar = ({
 }: GlobalSidebarProperties) => {
   const sidebar = useSidebar();
   const pathname = usePathname();
+  const selectedBrandId = useSearchParams().get("brand") ?? undefined;
   const [exportOpen, setExportOpen] = useState(false);
 
   const isActive = (item: NavItem) =>
@@ -400,6 +408,7 @@ export const GlobalSidebar = ({
                     key={item.title}
                     lockedHint={labels.lockedHint}
                     plan={plan}
+                    selectedBrandId={selectedBrandId}
                   />
                 ))}
               </SidebarMenu>
@@ -415,6 +424,7 @@ export const GlobalSidebar = ({
                   key={item.title}
                   lockedHint={labels.lockedHint}
                   plan={plan}
+                  selectedBrandId={selectedBrandId}
                 />
               ))}
             </SidebarMenu>

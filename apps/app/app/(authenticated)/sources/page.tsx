@@ -4,12 +4,18 @@ import { LinkIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { env } from "@/env";
 import { canShowLatestAnalysis } from "@/lib/content/analysis-publication";
-import { scopedLatestOrgAudit, scopedLatestRunTracking } from "@/lib/db/scoped";
+import {
+  scopedBrands,
+  scopedLatestOrgAudit,
+  scopedLatestRunTracking,
+} from "@/lib/db/scoped";
+import { AnalysisBrandPicker } from "../components/analysis-brand-picker";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { LockedSurface } from "../components/locked-surface";
 import { SourcesBoard } from "../features/analysis/sources-board";
 import { buildSourcesAnalysis } from "../lib/analysis-data";
+import { selectAnalysisBrandId } from "../lib/analysis-brand-selection";
 
 export const metadata: Metadata = {
   title: "출처 링크 · Findable",
@@ -47,7 +53,11 @@ const NeedsMeasurement = () => (
   />
 );
 
-const SourcesPage = async () => {
+const SourcesPage = async ({
+  searchParams,
+}: {
+  searchParams: Promise<{ brand?: string }>;
+}) => {
   const plan = await getCurrentPlan();
 
   if (!isPaid(plan)) {
@@ -78,7 +88,17 @@ const SourcesPage = async () => {
     );
   }
 
-  const latest = await scopedLatestOrgAudit();
+  const brands = await scopedBrands();
+  const requestedBrandId = (await searchParams).brand;
+  const mostRecent = requestedBrandId ? null : await scopedLatestOrgAudit();
+  const selectedBrandId = selectAnalysisBrandId(
+    brands.map((brand) => brand.id),
+    requestedBrandId,
+    mostRecent?.brandId
+  );
+  const latest = selectedBrandId
+    ? await scopedLatestOrgAudit(selectedBrandId)
+    : null;
   const rows = latest?.brandId
     ? await scopedLatestRunTracking(latest.brandId)
     : [];
@@ -109,8 +129,15 @@ const SourcesPage = async () => {
 
   return (
     <>
-      <Header page="출처 링크" pages={["Findable"]} />
-      <div className="flex flex-1 flex-col gap-6 p-6 pt-2">{content}</div>
+      <Header page="출처 링크" pages={["Findable"]} showMetric={false} />
+      <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
+        <AnalysisBrandPicker
+          brands={brands}
+          path="/sources"
+          selectedBrandId={selectedBrandId}
+        />
+        {content}
+      </div>
     </>
   );
 };

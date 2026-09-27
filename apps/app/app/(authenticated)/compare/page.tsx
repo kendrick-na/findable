@@ -4,12 +4,18 @@ import { SwordsIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { env } from "@/env";
 import { canShowLatestAnalysis } from "@/lib/content/analysis-publication";
-import { scopedLatestOrgAudit, scopedLatestRunTracking } from "@/lib/db/scoped";
+import {
+  scopedBrands,
+  scopedLatestOrgAudit,
+  scopedLatestRunTracking,
+} from "@/lib/db/scoped";
+import { AnalysisBrandPicker } from "../components/analysis-brand-picker";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { LockedSurface } from "../components/locked-surface";
 import { CompetitorBoard } from "../features/analysis/competitor-board";
 import { buildCompetitorAnalysis } from "../lib/analysis-data";
+import { selectAnalysisBrandId } from "../lib/analysis-brand-selection";
 
 export const metadata: Metadata = {
   title: "경쟁사 비교 · Findable",
@@ -68,7 +74,11 @@ const NeedsMeasurement = ({ reason }: { reason: "no-run" | "no-ranking" }) => (
   />
 );
 
-const ComparePage = async () => {
+const ComparePage = async ({
+  searchParams,
+}: {
+  searchParams: Promise<{ brand?: string }>;
+}) => {
   const plan = await getCurrentPlan();
 
   // 잠금 유저에겐 DB 조회 자체를 하지 않는다(불필요한 쿼리 회피).
@@ -94,7 +104,17 @@ const ComparePage = async () => {
     );
   }
 
-  const latest = await scopedLatestOrgAudit();
+  const brands = await scopedBrands();
+  const requestedBrandId = (await searchParams).brand;
+  const mostRecent = requestedBrandId ? null : await scopedLatestOrgAudit();
+  const selectedBrandId = selectAnalysisBrandId(
+    brands.map((brand) => brand.id),
+    requestedBrandId,
+    mostRecent?.brandId
+  );
+  const latest = selectedBrandId
+    ? await scopedLatestOrgAudit(selectedBrandId)
+    : null;
   const rows = latest?.brandId
     ? await scopedLatestRunTracking(latest.brandId)
     : [];
@@ -127,8 +147,15 @@ const ComparePage = async () => {
 
   return (
     <>
-      <Header page="경쟁사 비교" pages={["Findable"]} />
-      <div className="flex flex-1 flex-col gap-6 p-6 pt-2">{content}</div>
+      <Header page="경쟁사 비교" pages={["Findable"]} showMetric={false} />
+      <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
+        <AnalysisBrandPicker
+          brands={brands}
+          path="/compare"
+          selectedBrandId={selectedBrandId}
+        />
+        {content}
+      </div>
     </>
   );
 };
