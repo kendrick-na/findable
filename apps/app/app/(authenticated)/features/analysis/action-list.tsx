@@ -38,6 +38,8 @@ export interface ActionItem {
   source?: string;
   target: string;
   title: string;
+  where?: string;
+  verification?: string;
 }
 
 const PRIORITY_META: Record<number, { label: string; tone: string }> = {
@@ -170,6 +172,23 @@ const ActionCard = ({
           {action.how}
         </p>
       </div>
+
+      {(action.where || action.verification) && (
+        <div className="grid gap-2 rounded border border-sky-400/10 bg-sky-400/[0.03] p-3 text-sm leading-relaxed">
+          {action.where && (
+            <p className="text-[color:var(--findable-ink-muted,#d0d6e0)]">
+              <span className="font-medium text-sky-300">수정 위치 · </span>
+              {action.where}
+            </p>
+          )}
+          {action.verification && (
+            <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
+              <span className="font-medium text-sky-300">검증 방법 · </span>
+              {action.verification}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         {action.source && (

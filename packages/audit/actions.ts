@@ -22,6 +22,7 @@ import type { MarketScope } from "./market-scope";
 // 받침 유무로 판정하되, 한글이 아니면(영문 브랜드) 기본형을 쓴다.
 const HANGUL_START = 0xac_00;
 const HANGUL_END = 0xd7_a3;
+const HTTP_URL_RE = /^https?:\/\//i;
 
 function hasFinalConsonant(word: string): boolean | null {
   const last = word.trim().at(-1);
@@ -102,6 +103,10 @@ export interface GeoAction {
   source?: string;
   /** 한 줄 제목. 목록에서 이것만 읽어도 뭘 하라는지 알아야 한다. */
   title: string;
+  /** 측정 근거에서 도출한 실제 수정·확인 위치. */
+  where?: string;
+  /** 효과를 추정으로 끝내지 않고 다음 회차에 확인하는 방법. */
+  verification?: string;
 }
 
 /** 액션 생성에 필요한 측정 신호(구조적 타이핑 — 호출부가 무엇이든 이 모양만 맞추면 된다). */
@@ -109,6 +114,8 @@ export interface ActionInput {
   /** 순위가 나온 추천 목록의 평균 항목 수. 2개 중 1위는 "방어"를 권할 만큼 깊은 경쟁이 아니다. */
   averageMentionListSize?: number | null;
   averageMentionPosition: number | null;
+  /** 공식 도메인. 측정 결과를 고객이 실제로 수정할 위치로 연결한다. */
+  brandDomain?: string;
   brandName: string;
   /** 경쟁사 순위(경쟁 지형에서 추출). 내 브랜드 포함. */
   competitors?: Array<{ isMine: boolean; name: string; shareOfVoice: number }>;
@@ -124,6 +131,8 @@ export interface ActionInput {
    *   넓게 두는 쪽이 안전하다(`inferMarketScope` 의 판단과 같은 방향).
    */
   marketScope?: MarketScope;
+  /** 실제로 AI가 인용한 자사 URL. 출처 귀속이 확인된 URL만 넣는다. */
+  ownedCitationUrls?: string[];
   /** 프롬프트별 언급 여부 — 갭 액션의 핵심 신호. */
   prompts?: Array<{ hit: number; text: string; total: number }>;
   /** 인용 출처 유형별 건수(세션J 분류 재사용). */
@@ -140,6 +149,22 @@ export interface ActionInput {
    * 고객이 바로 가서 확인할 수 있어야 액션이 구체적이 된다.
    */
   topDomains?: Array<{ count: number; domain: string; owned: boolean }>;
+}
+
+function primaryOwnedPage(input: ActionInput): string {
+  const measured = input.ownedCitationUrls?.find((url) =>
+    HTTP_URL_RE.test(url)
+  );
+  if (measured) {
+    return measured;
+  }
+  return input.brandDomain
+    ? `https://${input.brandDomain}`
+    : "공식 사이트의 소개·FAQ 페이지";
+}
+
+function promptVerification(prompt: string): string {
+  return `수정 후 다음 측정에서 같은 질문("${prompt}")의 등록 브랜드 확인률과 인용 출처 변화를 비교하세요.`;
 }
 
 /**
@@ -203,6 +228,9 @@ function rankStrategyAction(input: ActionInput): GeoAction | null {
         "(1위 사이트 −30%). 지금은 새 최적화보다 ①경쟁사가 치고 올라오는지 추세 감시 " +
         "②기존에 인용되는 페이지가 사라지거나 낡지 않게 유지하는 쪽이 안전합니다.",
       source: "Princeton GEO 논문(KDD 2024) Table 2 — Rank1 −30.3%",
+      where: primaryOwnedPage(input),
+      verification:
+        "다음 측정에서 평균 언급 위치와 인용된 자사 페이지가 유지되는지 비교하세요.",
     };
   }
 
@@ -216,6 +244,9 @@ function rankStrategyAction(input: ActionInput): GeoAction | null {
         "이 구간은 콘텐츠 최적화만으로 얻는 이득이 작습니다(+3% 내외). " +
         "순위를 더 올리기보다, 아직 언급되지 않는 다른 질문(프롬프트)으로 노출 면적을 넓히는 쪽이 효율적입니다.",
       source: "Princeton GEO 논문 Table 2 — Rank2 +2.5%",
+      where: primaryOwnedPage(input),
+      verification:
+        "다음 측정에서 현재 상위권 질문의 위치와 아직 놓치는 질문의 언급률을 함께 비교하세요.",
     };
   }
 
@@ -232,6 +263,9 @@ function rankStrategyAction(input: ActionInput): GeoAction | null {
       "하위 노출 브랜드일수록 콘텐츠 최적화 효과가 큽니다. 아래 '콘텐츠 보강' 액션부터 실행하세요. " +
       "같은 작업을 1위 브랜드가 하면 오히려 손해라, 지금이 격차를 좁힐 기회입니다.",
     source: `Princeton GEO 논문 Table 2 — 하위 순위 최대 +${band.lift}%`,
+    where: primaryOwnedPage(input),
+    verification:
+      "수정 전후 같은 질문·엔진 구성으로 평균 언급 위치와 확인률을 비교하세요.",
   };
 }
 
@@ -284,6 +318,8 @@ function promptGapActions(input: ActionInput): GeoAction[] {
           : "위와 같은 방식으로 이 질문 전용 섹션을 만들거나, 기존 FAQ에 항목으로 추가하세요. " +
             "질문 문구를 소제목으로 그대로 쓰는 것이 핵심입니다.",
       source: "우리 측정 데이터 — 프롬프트별 언급 여부",
+      where: `${primaryOwnedPage(input)} — 이 질문을 제목 또는 H2로 둔 FAQ·전용 섹션`,
+      verification: promptVerification(p.text),
     };
   });
 }
@@ -370,6 +406,9 @@ function sourcePortfolioAction(input: ActionInput): GeoAction | null {
         "핵심은 우리 도메인 밖에서 브랜드명이 등장하는 문서 수를 늘리는 것입니다.",
       source:
         "Ahrefs 75K 브랜드 분석 — 웹 멘션 상관 0.664(백링크 0.218). ※상관이며 인과 아님",
+      where: `${primaryOwnedPage(input)} 및 브랜드를 설명할 제3자 매체·비교 페이지`,
+      verification:
+        "다음 측정에서 자사·제3자 출처 비중과 브랜드 확인률이 함께 변했는지 비교하세요.",
     };
   }
 
@@ -396,6 +435,11 @@ function sourcePortfolioAction(input: ActionInput): GeoAction | null {
         "③ 그 채널에 우리 콘텐츠를 직접 올리는 것도 유효합니다. " +
         "AI가 이미 그 채널을 신뢰하고 있다는 뜻이니, 그곳에 정확한 정보를 두는 게 빠릅니다.",
       source: "우리 측정 데이터 — 실제 인용된 출처 도메인·건수",
+      where: topExternal
+        ? `${topExternal.domain} 및 ${primaryOwnedPage(input)}`
+        : primaryOwnedPage(input),
+      verification:
+        "다음 측정에서 해당 도메인의 인용 건수, 자사 페이지 인용 건수와 브랜드 확인률을 비교하세요.",
     };
   }
 
@@ -420,6 +464,9 @@ function contentFixAction(input: ActionInput): GeoAction | null {
         "'무엇을 하는 회사인지' 한 문단으로 명확히 쓰고 ②위키·업계 디렉터리·보도자료처럼 " +
         "제3자가 검증 가능한 자리에 같은 사실을 남기세요. 이름만 반복하는 건 효과가 없습니다.",
       source: "우리 측정 데이터 — 등록 브랜드 확인률 0%",
+      where: primaryOwnedPage(input),
+      verification:
+        "다음 측정에서 같은 질문의 등록 브랜드 확인 응답 수가 0건에서 벗어났는지 확인하세요.",
     };
   }
 
@@ -446,6 +493,9 @@ function contentFixAction(input: ActionInput): GeoAction | null {
       "실제 원문에서 확인한 수치와 측정 조건을 함께 적고 원출처를 연결하세요. " +
       "수치가 없다면 임의의 예시를 만들지 말고 확인 가능한 사실만 씁니다.",
     source: "Princeton GEO 논문(KDD 2024) Table 1 — 인용문 추가 시 평균 +41%",
+    where: primaryOwnedPage(input),
+    verification:
+      "수정 후 같은 질문·엔진 구성으로 브랜드 확인률, 평균 언급 위치, 인용 URL 변화를 비교하세요.",
   };
 }
 

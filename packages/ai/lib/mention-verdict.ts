@@ -345,6 +345,8 @@ interface VerifyInput {
   /** 브랜드 도메인 — 어떤 엔티티인지 특정하는 가장 강한 단서. */
   brandDomain?: string;
   brandName: string;
+  /** 고객이 확인한 한글·영문·현지 표기. 탐지와 판별이 같은 사전을 사용해야 한다. */
+  brandVariants?: string[];
   /** 엔진이 실제 근거로 제시한 출처 도메인. 동명·동업종 서비스 분별에 사용. */
   citedDomains?: string[];
   /** 업종(있으면 동명이인 분별에 크게 도움). */
@@ -360,11 +362,30 @@ interface VerifyInput {
   text: string;
 }
 
-async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
+function registeredBrandNames(input: VerifyInput): string[] {
+  return [...new Set([input.brandName, ...(input.brandVariants ?? [])])]
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function matchedBrandNames(input: VerifyInput): string[] {
+  const normalizedText = input.text.toLowerCase();
+  return registeredBrandNames(input).filter((name) =>
+    normalizedText.includes(name.toLowerCase())
+  );
+}
+
+function buildVerdictPrompt(input: VerifyInput): string {
   const { brandName, brandDomain, citedDomains, industry, officialSite, text } =
     input;
+  const names = registeredBrandNames(input);
+  const matchedNames = matchedBrandNames(input);
   const identity = [
-    `브랜드명: ${brandName}`,
+    `대표 브랜드명: ${brandName}`,
+    `등록된 공식 표기: ${names.join(" · ")}`,
+    matchedNames.length > 0
+      ? `답변에서 감지된 표기: ${matchedNames.join(" · ")}`
+      : "답변에서 감지된 표기: 표기 변형 또는 공백 차이로 감지됨",
     brandDomain ? `공식 도메인: ${brandDomain}` : null,
     industry ? `업종: ${industry}` : null,
     officialSite?.siteName
@@ -386,8 +407,8 @@ async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
     .filter(Boolean)
     .join("\n");
 
-  const prompt = `AI 답변에 "${brandName}"라는 표현이 등장합니다.
-그 표현이 **아래 대상 브랜드를 가리키는지**, 그리고 AI가 그 브랜드를 알고 있는지 판정하세요.
+  return `AI 답변에서 등록 브랜드의 표기 중 하나가 감지됐습니다.
+그 표기가 **아래 대상 브랜드를 가리키는지**, 그리고 AI가 그 브랜드를 알고 있는지 판정하세요.
 
 [대상 브랜드]
 ${identity}
@@ -414,6 +435,10 @@ ${text.slice(0, VERDICT_TEXT_LIMIT)}
 
 핵심: "이 답변이 브랜드를 소개하는 글인가"가 아니라, "여기 나온 이 이름이 그 브랜드가 맞는가"를
 판정하세요. 언급 방식(주제/비교대상/스쳐지나감)은 상관없습니다.`;
+}
+
+async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
+  const prompt = buildVerdictPrompt(input);
 
   try {
     const { object } = await generateObject({
@@ -436,17 +461,19 @@ ${text.slice(0, VERDICT_TEXT_LIMIT)}
           prompt,
           temperature: 0,
         });
-        log.info("mention.verdict.google_fallback", { brandName });
+        log.info("mention.verdict.google_fallback", {
+          brandName: input.brandName,
+        });
         return object.quality;
       } catch (fallbackError) {
         log.warn("mention.verdict.google_fallback_failed", {
-          brandName,
+          brandName: input.brandName,
           ...describeProviderError(fallbackError),
         });
       }
     }
     log.warn("mention.verdict.llm_failed", {
-      brandName,
+      brandName: input.brandName,
       ...describeProviderError(error),
     });
     return null;
@@ -526,6 +553,7 @@ export const __internal = {
   hasOfficialIdentityEvidence,
   isOfficialDomain,
   mentionsOfficialDomain,
+  buildVerdictPrompt,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -558,6 +586,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
   responses: T[],
   brand: {
     brandName: string;
+    brandVariants?: string[];
     brandDomain?: string;
     industry?: string;
     officialSite?: VerifyInput["officialSite"];
@@ -581,6 +610,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
         }
         return verifyMention({
           brandName: brand.brandName,
+          brandVariants: brand.brandVariants,
           brandDomain: brand.brandDomain,
           citedDomains: (r.citedSources ?? [])
             .map((source) => source.domain ?? source.url ?? "")

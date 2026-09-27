@@ -478,6 +478,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const rawFlat = sevenEngineResponses.flat();
     const flat = await verifyMentions(rawFlat, {
       brandName,
+      brandVariants,
       brandDomain: input.domain,
       industry: input.industry ?? undefined,
       officialSite: officialSiteIdentity,
@@ -561,6 +562,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
 
     const geoActions = buildGeoActions({
       brandName,
+      brandDomain: input.domain,
       averageMentionListSize: metrics.averageMentionListSize,
       averageMentionPosition: metrics.averageMentionPosition,
       // 성공 응답 수만 처방 근거에 쓴다. 실패 엔진까지 "측정했다"고 쓰면
@@ -578,6 +580,12 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       // 실제 인용 도메인 — 처방을 "커뮤니티 50%"가 아니라 "blog.naver.com 47건"으로 말하기 위함.
       topDomains: sourceAdviceIsSupported
         ? topCitedDomains(citationEvidence.attributedResponses, input.domain)
+        : undefined,
+      ownedCitationUrls: sourceAdviceIsSupported
+        ? topOwnedCitationUrls(
+            citationEvidence.attributedResponses,
+            input.domain
+          )
         : undefined,
     });
 
@@ -817,6 +825,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
 //   apps/app 의 analysis-data.ts 분류와 같은 축(자사/커뮤니티/위키/언론/기타)이지만,
 //   여기는 러너(서버)라 최소 구현만 둔다(도메인 목록 중복은 의도적 — 패키지 경계 유지).
 const WWW_PREFIX_RE = /^www\./;
+const HTTP_URL_RE = /^https?:\/\//i;
 const COMMUNITY_HINT_RE =
   /(blog|cafe|post)\.naver\.com|tistory|brunch|velog|dcinside|fmkorea|clien|ruliweb|theqoo|instiz|etoland|ppomppu|reddit|quora|medium|youtube/i;
 const REFERENCE_HINT_RE =
@@ -870,6 +879,37 @@ function topCitedDomains(
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 8);
+}
+
+/**
+ * AI가 실제로 인용한 자사 URL만 액션의 수정 위치로 쓴다.
+ * 단순히 홈페이지를 추측해 고치라고 하면 측정과 처방이 끊기므로, 귀속이 확인된
+ * 인용 URL이 있을 때만 우선한다. 없으면 액션 생성기가 공식 도메인으로 안전하게 폴백한다.
+ */
+function topOwnedCitationUrls(
+  responses: Array<{
+    citedSources: Array<{ domain: string; url: string }>;
+  }>,
+  brandDomain: string
+): string[] {
+  const owned = brandDomain.toLowerCase().replace(WWW_PREFIX_RE, "");
+  const urls = new Set<string>();
+  for (const response of responses) {
+    for (const source of response.citedSources ?? []) {
+      const domain = (source.domain ?? "")
+        .toLowerCase()
+        .replace(WWW_PREFIX_RE, "");
+      const url = source.url?.trim();
+      if (
+        url &&
+        HTTP_URL_RE.test(url) &&
+        (domain === owned || domain.endsWith(`.${owned}`))
+      ) {
+        urls.add(url);
+      }
+    }
+  }
+  return [...urls].slice(0, 3);
 }
 
 function summarizeSourceMix(

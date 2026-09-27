@@ -291,6 +291,8 @@ interface GeoActionView {
   priority: 1 | 2 | 3;
   source?: string;
   title: string;
+  where?: string;
+  verification?: string;
 }
 interface JobResponse {
   isWorkspaceAudit?: boolean;
@@ -4503,6 +4505,26 @@ function ActionDetails({
         <p className="whitespace-pre-line text-sm text-zinc-300 leading-relaxed">
           {stripMarkdown(action.how)}
         </p>
+        {(action.where || action.verification) && (
+          <div className="mt-4 space-y-2 rounded-lg border border-sky-300/15 bg-sky-300/[0.04] p-3 text-sm leading-relaxed">
+            {action.where && (
+              <p className="text-zinc-300">
+                <span className="font-medium text-sky-300">
+                  {isKo ? "수정 위치 · " : "Where to change · "}
+                </span>
+                {stripMarkdown(action.where)}
+              </p>
+            )}
+            {action.verification && (
+              <p className="text-zinc-400">
+                <span className="font-medium text-sky-300">
+                  {isKo ? "검증 방법 · " : "How to verify · "}
+                </span>
+                {stripMarkdown(action.verification)}
+              </p>
+            )}
+          </div>
+        )}
         {action.evidence && (
           <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3">
             <div className="mb-1.5 font-medium text-[11px] text-zinc-400">
