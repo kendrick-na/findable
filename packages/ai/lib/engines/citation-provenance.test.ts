@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
+import {
+  parseAnthropicMessages,
+  parsePerplexityAgentResponse,
+} from "./global-adapters";
 import { extractPerplexitySources } from "./utils";
-import { parseAnthropicMessages } from "./global-adapters";
 
 it("keeps Claude search results separate from citations attached to answer text", () => {
   expect(
@@ -48,4 +51,38 @@ it("uses citation URLs and only enriches their matching metadata", () => {
       title: "Official",
     },
   ]);
+});
+
+it("parses Perplexity Agent text and its documented search result sources", () => {
+  expect(
+    parsePerplexityAgentResponse({
+      output_text: "Findable is a GEO monitoring service.",
+      citations: ["https://findable.co.kr/"],
+      output: [
+        {
+          type: "search_results",
+          results: [
+            { url: "https://findable.co.kr/", title: "Findable" },
+            { url: "https://unrelated.example/", title: "Unrelated" },
+          ],
+        },
+      ],
+    })
+  ).toEqual({
+    text: "Findable is a GEO monitoring service.",
+    sources: [
+      {
+        url: "https://findable.co.kr/",
+        domain: "findable.co.kr",
+        title: "Findable",
+      },
+      {
+        url: "https://unrelated.example/",
+        domain: "unrelated.example",
+        title: "Unrelated",
+      },
+    ],
+    inputTokens: null,
+    outputTokens: null,
+  });
 });

@@ -89,24 +89,10 @@ function getGoogleProvider(): ReturnType<
   return googleProvider;
 }
 
-// perplexity는 공식 API(PERPLEXITY_API_KEY, 신규 프로모션 크레딧 $10)로 직접 호출해
-// Vercel Gateway 크레딧을 아낀다. OpenAI 호환(api.perplexity.ai). 키 없으면 Vercel 폴백.
-const PERPLEXITY_BASE_URL = "https://api.perplexity.ai";
-const PERPLEXITY_MODEL = process.env.FINDABLE_PERPLEXITY_MODEL ?? "sonar";
-let perplexityProvider: ReturnType<typeof createOpenAI> | null = null;
-function getPerplexityProvider(): ReturnType<typeof createOpenAI> | null {
-  const apiKey = process.env.PERPLEXITY_API_KEY;
-  if (!apiKey) {
-    return null;
-  }
-  if (!perplexityProvider) {
-    perplexityProvider = createOpenAI({
-      baseURL: PERPLEXITY_BASE_URL,
-      apiKey,
-    });
-  }
-  return perplexityProvider;
-}
+// Perplexity는 2026년 Agent API로 이전됐다. Sonar/OpenAI 호환 채팅 경로는 새 프로젝트에서
+// 폐기될 수 있으므로 `POST /v1/agent`를 직접 호출한다. 키가 없을 때만 Gateway로 폴백한다.
+const PERPLEXITY_AGENT_URL = "https://api.perplexity.ai/v1/agent";
+const PERPLEXITY_PRESET = process.env.FINDABLE_PERPLEXITY_PRESET ?? "fast";
 
 /**
  * 🔴🔴 **claude 웹검색 — Letsur Anthropic 네이티브 경로**(N-48 · 2026-08-20 실측).
@@ -305,7 +291,7 @@ interface ResolvedModel {
 // 엔진의 호출 경로를 결정한다.
 //   chatgpt·claude → Letsur 키 있으면 Letsur, 없으면 Vercel Gateway.
 //   gemini → Google 키 있으면 Google 무료, 없으면 Vercel Gateway.
-//   perplexity → 항상 Vercel Gateway.
+//   perplexity → Agent API 키가 있으면 직접 호출(아래 어댑터), 없으면 Vercel Gateway.
 // 어느 경로도 불가면 null(→ stub).
 function resolveModel(engineId: GlobalEngineId): ResolvedModel | null {
   const letsur = LETSUR_ENGINES.has(engineId) ? getLetsurProvider() : null;
@@ -326,33 +312,6 @@ function resolveModel(engineId: GlobalEngineId): ResolvedModel | null {
         ...(isGroundingEnabled()
           ? { tools: { google_search: google.tools.googleSearch({}) } }
           : {}),
-        useDirectProvider: true,
-      };
-    }
-  }
-  if (engineId === "perplexity") {
-    // 🔴 **그라운딩 모드에서는 직접 호출을 쓰지 않는다**(N-47).
-    //   아래 `createOpenAI` 경로는 OpenAI 호환 껍데기라 **Perplexity 의 citation 필드를
-    //   해석하지 못한다** → `sources` 가 항상 비어 프로덕션 47/47 이 출처 0 이었다.
-    //   Gateway 경로(`perplexity/sonar` 문자열)는 Gateway 의 Perplexity provider 를 타서
-    //   sources 를 정상 매핑한다. ⭐ **새 의존성 없이** 고칠 수 있는 이유다.
-    //   ⚠️ 워크스페이스의 `@ai-sdk/perplexity@2.0.30` 은 SDK **v5** 용이라 쓰지 않는다
-    //     (우리는 `@ai-sdk/google@3`·`openai@3` = v6 계열).
-    // 🔴🔴 **되돌렸다 — 라이브 실측이 이 분기를 반증했다**(N-47 · 2026-08-20).
-    //   그라운딩을 켜고 측정하니 perplexity 가 **행 0건**이 됐다(직전 회차는 3건·₩1.5).
-    //   Gateway 경로로 보냈는데 **응답이 아예 안 왔다** — 출처를 얻기는커녕
-    //   **엔진 하나를 통째로 잃었다.** 고치려던 것보다 나쁜 상태다.
-    //   ⭐ 직접 호출(아래)은 **출처는 못 주지만 답변은 준다** — 등장·순위·감성은 계속 잰다.
-    //     출처 하나 얻자고 나머지 지표를 전부 버릴 수는 없다.
-    //   ⚠️ 다시 시도하려면 **Gateway 에서 perplexity 가 실제로 응답하는지 먼저 확인**할 것
-    //     (크레딧·모델 슬러그·권한 중 무엇이 막았는지 미규명).
-    //   📕 이 저장소 규율: *"고치기 전보다 나빠지면 되돌린다."*
-    const perplexity = getPerplexityProvider();
-    if (perplexity) {
-      // .chat()으로 /chat/completions 경로 강제. 기본 provider()는 /responses를
-      // 쓰는데 Perplexity는 그 경로가 없어 404(Not Found). Perplexity는 chat만 지원.
-      return {
-        model: perplexity.chat(PERPLEXITY_MODEL),
         useDirectProvider: true,
       };
     }
@@ -489,15 +448,193 @@ async function tryClaudeWebSearch(
   return await runClaudeWithWebSearch(query, start);
 }
 
+interface PerplexityAgentResult {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  sources: ReturnType<typeof mapProviderSources>;
+  text: string;
+}
+
+function records(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(
+    (item): item is Record<string, unknown> =>
+      !!item && typeof item === "object"
+  );
+}
+
+function agentSearchSources(
+  output: Record<string, unknown>[]
+): ReturnType<typeof mapProviderSources> {
+  const sources = output
+    .filter((item) => item.type === "search_results")
+    .flatMap((item) => records(item.results))
+    .map((result) => ({
+      sourceType: "url",
+      url: typeof result.url === "string" ? result.url : undefined,
+      title: typeof result.title === "string" ? result.title : undefined,
+    }));
+  return mapProviderSources(sources);
+}
+
+function agentMessageText(output: Record<string, unknown>[]): string {
+  return output
+    .filter((item) => item.type === "message")
+    .flatMap((item) => records(item.content))
+    .filter(
+      (content): content is Record<string, string> =>
+        content.type === "output_text" && typeof content.text === "string"
+    )
+    .map((content) => content.text)
+    .join("\n")
+    .trim();
+}
+
+/** Parses the documented Agent API response and its actual search sources. */
+export function parsePerplexityAgentResponse(
+  body: unknown
+): PerplexityAgentResult {
+  if (!body || typeof body !== "object") {
+    return { text: "", sources: [], inputTokens: null, outputTokens: null };
+  }
+  const root = body as Record<string, unknown>;
+  const output = records(root.output);
+  const usage = root.usage as Record<string, unknown> | undefined;
+  return {
+    text:
+      typeof root.output_text === "string"
+        ? root.output_text.trim()
+        : agentMessageText(output),
+    sources: agentSearchSources(output),
+    inputTokens:
+      typeof usage?.input_tokens === "number" ? usage.input_tokens : null,
+    outputTokens:
+      typeof usage?.output_tokens === "number" ? usage.output_tokens : null,
+  };
+}
+
+function makePerplexityFailure(
+  message: string,
+  durationMs: number
+): EngineResponse {
+  return {
+    engineId: "perplexity",
+    rawResponse: "",
+    brandMentioned: false,
+    mentionPosition: null,
+    mentionListSize: null,
+    sentiment: null,
+    citedSources: [],
+    shareOfVoice: null,
+    errorMessage: message,
+    durationMs,
+    isStub: false,
+  };
+}
+
+async function runPerplexityAgent(
+  query: EngineQuery,
+  start: number
+): Promise<EngineResponse | null> {
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(PERPLEXITY_AGENT_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ preset: PERPLEXITY_PRESET, input: query.prompt }),
+    });
+    if (!response.ok) {
+      const detail = (await response.text())
+        .replaceAll(/\s+/g, " ")
+        .slice(0, 500);
+      return makePerplexityFailure(
+        `Perplexity Agent API ${response.status}: ${detail || response.statusText}`,
+        Date.now() - start
+      );
+    }
+
+    const parsed = parsePerplexityAgentResponse(await response.json());
+    if (!parsed.text) {
+      return makePerplexityFailure(
+        "Perplexity Agent API returned no answer text.",
+        Date.now() - start
+      );
+    }
+    const text = sanitizeEngineText(parsed.text);
+    const mention = detectBrandMention(
+      text,
+      query.brandName,
+      query.brandVariants
+    );
+    return {
+      engineId: "perplexity",
+      rawResponse: text,
+      brandMentioned: mention.mentioned,
+      ...mentionPositionFields(text, query.brandName, query.brandVariants),
+      sentiment: estimateSentiment(text, query.brandName),
+      citedSources: parsed.sources,
+      shareOfVoice: estimateShareOfVoice(
+        text,
+        query.brandName,
+        query.brandVariants
+      ),
+      errorMessage: null,
+      durationMs: Date.now() - start,
+      isStub: false,
+      usage: {
+        inputTokens: parsed.inputTokens,
+        outputTokens: parsed.outputTokens,
+        costModel: "token",
+      },
+    };
+  } catch (error) {
+    logProviderFailure("perplexity", true, error);
+    return makePerplexityFailure(
+      error instanceof Error ? error.message : String(error),
+      Date.now() - start
+    );
+  }
+}
+
+async function tryPerplexityAgent(
+  engineId: GlobalEngineId,
+  query: EngineQuery,
+  start: number
+): Promise<EngineResponse | null> {
+  if (engineId !== "perplexity") {
+    return null;
+  }
+  return await runPerplexityAgent(query, start);
+}
+
+async function tryDirectEngine(
+  engineId: GlobalEngineId,
+  query: EngineQuery,
+  start: number
+): Promise<EngineResponse | null> {
+  const claudeResponse = await tryClaudeWebSearch(engineId, query, start);
+  if (claudeResponse) {
+    return claudeResponse;
+  }
+  return await tryPerplexityAgent(engineId, query, start);
+}
+
 function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
   return async (query) => {
     const start = Date.now();
 
-    // 🔴 claude + 플래그 ON → Anthropic 네이티브 경로로 **웹검색**을 태운다.
-    //   실패하면 `null` 이 와서 아래 일반 경로로 내려간다(엔진을 잃지 않는다).
-    const searched = await tryClaudeWebSearch(engineId, query, start);
-    if (searched) {
-      return searched;
+    const directResponse = await tryDirectEngine(engineId, query, start);
+    if (directResponse) {
+      return directResponse;
     }
 
     const resolved = resolveModel(engineId);
