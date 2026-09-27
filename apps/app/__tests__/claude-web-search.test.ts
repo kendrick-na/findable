@@ -88,9 +88,12 @@ describe("claude 웹검색 — 경로와 계약", () => {
       /engineId !== "claude" \|\| !isClaudeWebSearchEnabled\(\)/
     );
     expect(gate).toMatch(/return await runClaudeWithWebSearch\(query, start\)/);
-    const adapter = CODE.slice(CODE.indexOf("function makeGatewayAdapter"));
-    expect(adapter).toMatch(
-      /tryClaudeWebSearch\([\s\S]{0,120}?if\s*\(searched\)/
+    const direct = CODE.slice(
+      CODE.indexOf("async function tryDirectEngine"),
+      CODE.indexOf("function makeGatewayAdapter")
+    );
+    expect(direct).toMatch(
+      /tryClaudeWebSearch\([\s\S]{0,160}?if\s*\(claudeResponse\)/
     );
   });
 

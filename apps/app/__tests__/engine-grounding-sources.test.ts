@@ -170,22 +170,25 @@ describe("② 그라운딩 스위치 — 기본 off 이고, 켜면 실제로 달
     expect(ADAPTERS).toContain("google.tools.googleSearch({})");
   });
 
-  it("🔴 perplexity 는 **직접 호출을 유지한다** (Gateway 전환은 되돌렸다)", () => {
-    // 🔴🔴 **라이브 실측이 내 처방을 반증했다**(N-47 · 2026-08-20).
-    //   Gateway 로 보냈더니 perplexity 가 **행 0건** — 직전 회차는 3건이었다.
-    //   출처를 얻기는커녕 **엔진 하나를 통째로 잃었다**. 고치기 전보다 나쁘다.
-    //   ⭐ 직접 호출은 출처는 못 줘도 **답변은 준다**(등장·순위·감성은 계속 잰다).
-    //   → 이 가드는 "다시 Gateway 로 몰래 바꾸지 마라" 를 지킨다.
-    //     재시도하려면 **Gateway 에서 perplexity 가 응답하는지 먼저 확인**할 것.
-    const block = ADAPTERS.slice(
-      ADAPTERS.indexOf('if (engineId === "perplexity")'),
-      ADAPTERS.indexOf("if (isGatewayConfigured())")
+  it("🔴 perplexity 는 Agent API를 직접 호출한다 (Gateway sonar 회귀 방지)", () => {
+    // Sonar 경로는 2026-09에 Agent API로 이전됐다. Gateway 모델명으로 되돌리면
+    // 실제 측정이 전부 실패하므로, 공식 Agent endpoint·입력 형식을 계약으로 고정한다.
+    expect(ADAPTERS).toContain(
+      'PERPLEXITY_AGENT_URL = "https://api.perplexity.ai/v1/agent"'
     );
-    expect(block).not.toMatch(
-      /isGroundingEnabled\(\)[\s\S]{0,200}MODEL_DEFAULTS\.perplexity/
+    const direct = ADAPTERS.slice(
+      ADAPTERS.indexOf("async function runPerplexityAgent"),
+      ADAPTERS.indexOf("async function tryPerplexityAgent")
     );
-    // 직접 provider 경로는 살아 있어야 한다(이게 사라지면 엔진이 죽는다).
-    expect(block).toContain("getPerplexityProvider()");
+    expect(direct).toContain("fetch(PERPLEXITY_AGENT_URL");
+    expect(direct).toContain("preset: PERPLEXITY_PRESET");
+    expect(direct).toContain("input: query.prompt");
+    const adapter = ADAPTERS.slice(
+      ADAPTERS.indexOf("function makeGatewayAdapter")
+    );
+    expect(adapter).toMatch(
+      /tryDirectEngine\([\s\S]{0,120}?if\s*\(directResponse\)/
+    );
   });
 
   it("🔴 도구가 `generateText` 까지 **실제로 전달된다**", () => {
