@@ -48,15 +48,15 @@ function tile(container: HTMLElement, bucket: string): HTMLElement {
 }
 
 describe("AnswerBucketBoard — 공개 리포트 히어로 4칸", () => {
-  it("노우버스: 제대로 앎 5 · 다른 회사로 앎 8 · 모름 6 · 측정 실패 0 (답변 기준 비율)", () => {
+  it("노우버스: 제대로 앎 5 · 다른 회사로 앎 6 · 모름 6 · 측정 실패 0 (답변 기준 비율)", () => {
     const result = replay(KNOWVERSE);
     const { container } = render(
       <AnswerBucketBoard isKo summary={result.metrics.answerBuckets} />
     );
     expect(within(tile(container, "confirmed")).getByText("5")).toBeTruthy();
-    expect(within(tile(container, "confirmed")).getByText("26%")).toBeTruthy();
+    expect(within(tile(container, "confirmed")).getByText("29%")).toBeTruthy();
     expect(
-      within(tile(container, "different_entity")).getByText("8")
+      within(tile(container, "different_entity")).getByText("6")
     ).toBeTruthy();
     expect(
       within(tile(container, "different_entity")).getByText("다른 회사로 앎")
@@ -103,13 +103,13 @@ describe("QuestionEngineMatrix — 질문 × 엔진", () => {
     const differentRows = container.querySelectorAll(
       'li[data-bucket="different_entity"]'
     );
-    expect(differentRows.length).toBe(8);
+    expect(differentRows.length).toBe(8); // AI 6 + 네이버 검색 노출 2
     // 브리핑은 이 표에 없다(별도 축)
     expect(text).not.toContain("naver-briefing");
     // 사유 한 줄
     expect(text).toContain("같은 이름의 다른 대상을 설명했어요");
-    // 🔴 엔진 이름은 실제로 잰 것을 말한다(네이버 = Findable 재현 · 다음 = 검색 노출)
-    expect(text).toContain("네이버 검색 기반 요약 (Findable 재현)");
+    // 🔴 엔진 이름은 실제로 잰 것을 말한다(네이버·다음 = 검색 노출)
+    expect(text).toContain("네이버 검색 노출");
     expect(text).toContain("다음 검색 노출");
     expect(text).toContain("ChatGPT (웹검색 없음)");
     expect(
@@ -190,11 +190,11 @@ describe("DashboardAnswerBuckets — 대시보드도 같은 숫자", () => {
         .querySelector(`[data-bucket="${bucket}"]`)
         ?.querySelector(".text-2xl")?.textContent;
     expect(count("confirmed")).toBe("5");
-    expect(count("different_entity")).toBe("8");
+    expect(count("different_entity")).toBe("6");
     expect(count("unknown")).toBe("6");
     expect(count("engine_error")).toBe("0");
     expect(container.textContent).toContain(
-      "엔진 기준 · 우리를 제대로 안 AI 2/6곳"
+      "엔진 기준 · 우리를 제대로 안 AI 2/5곳"
     );
   });
 });

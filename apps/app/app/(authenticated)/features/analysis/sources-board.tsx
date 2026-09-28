@@ -45,8 +45,8 @@ const KIND_TONE: Record<SourceKind, string> = {
 
 // 🔴 `export`(세션N-34): 감성 섹션도 같은 이름표를 쓴다. 복제하면 한 화면은
 //   `naver`, 다른 화면은 `네이버` 라고 부르게 된다(이 저장소의 "이름 4개" 사고와 같은 유형).
-//   (2026-09-29) 이름은 `@repo/audit/engine-labels` 한 곳이 정한다 — 네이버 줄은 「네이버 검색 기반
-//   요약(Findable 재현)」, 다음은 「다음 검색 노출」처럼 **실제로 잰 것**을 부른다.
+//   (2026-09-29) 이름은 `@repo/audit/engine-labels` 한 곳이 정한다 — 네이버는 「네이버 검색 노출」,
+//   다음은 「다음 검색 노출」처럼 **실제로 잰 것**을 부른다.
 export function engineLabel(id: string): string {
   return engineDisplayName(id);
 }

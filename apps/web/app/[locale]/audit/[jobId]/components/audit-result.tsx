@@ -35,12 +35,6 @@ import {
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
 import { engineDisplayName } from "@repo/audit/engine-labels";
 import {
-  auditPublicationIssue,
-  auditPublicationStatus,
-  MIN_VERIFIED_ANSWERS,
-  PROVISIONAL_MAX_UNVERIFIED_SHARE,
-} from "@repo/audit/normalize-stored-metrics";
-import {
   geoAxisScores,
   type ScoreTier,
   scoreTier,
@@ -52,6 +46,12 @@ import {
   countMeasurementCoverage,
   isMeasurementFailure,
 } from "@repo/audit/measurement-coverage";
+import {
+  auditPublicationIssue,
+  auditPublicationStatus,
+  MIN_VERIFIED_ANSWERS,
+  PROVISIONAL_MAX_UNVERIFIED_SHARE,
+} from "@repo/audit/normalize-stored-metrics";
 import { detailedRankLabel } from "@repo/audit/rank-label";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { Button } from "@repo/design-system/components/ui/button";
@@ -81,7 +81,6 @@ import {
   RevenueImpactOptIn,
 } from "./answer-buckets";
 import { CompetitorBenchmark } from "./competitor-benchmark";
-import { CopilotChat } from "./copilot-chat";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
 import { TruthMirror } from "./truth-mirror";
 
@@ -204,15 +203,6 @@ interface JobMetrics {
    * 화면은 없으면 `summarizeAnswerBuckets(engineResponses)` 로 같은 값을 만든다.
    */
   answerBuckets?: AnswerBucketSummary;
-  /** Missing on reports saved before verification-failure accounting. */
-  unverifiedCount?: number;
-  unattributedCitationCount?: number;
-  citationAttribution?:
-    | "none_observed"
-    | "owned_only"
-    | "partial"
-    | "unverified_external";
-  verifiedCount?: number;
   /** 순위가 나온 목록들의 평균 크기(분모). 세션N-10 이전 job 엔 없음. */
   averageMentionListSize?: number | null;
   averageMentionPosition: number | null;
@@ -222,6 +212,11 @@ interface JobMetrics {
    * (세션N-8이 잡은 화면↔메일 32점 불일치와 같은 계열의 사고).
    */
   averageRelativePosition?: number | null;
+  citationAttribution?:
+    | "none_observed"
+    | "owned_only"
+    | "partial"
+    | "unverified_external";
   enginesCovered: string[];
   enginesWithMention: string[];
   errors: Array<{ engineId: string; message: string }>;
@@ -233,6 +228,10 @@ interface JobMetrics {
   sov: number;
   stubCount: number;
   topCitedDomains: Array<{ domain: string; count: number }>;
+  unattributedCitationCount?: number;
+  /** Missing on reports saved before verification-failure accounting. */
+  unverifiedCount?: number;
+  verifiedCount?: number;
 }
 interface JobResult {
   brandName: string;
@@ -277,8 +276,8 @@ interface JobResult {
   } | null;
   metrics: JobMetrics;
   promptsCount: number;
-  regions?: RegionScoreView[];
   regionScoresOutdated?: boolean;
+  regions?: RegionScoreView[];
   /**
    * 고객이 등록한 경쟁사 — ⛔ **거르는 목록이 아니라 표기 병합 사전**(👤 승인 ⓐ).
    * 로그인 측정에만 있다(무료 진단은 `brandId` 가 없다) · 구 job 엔 없다 → optional.
@@ -327,11 +326,10 @@ interface GeoActionView {
   priority: 1 | 2 | 3;
   source?: string;
   title: string;
-  where?: string;
   verification?: string;
+  where?: string;
 }
 interface JobResponse {
-  isWorkspaceAudit?: boolean;
   completedAt: string | null;
   createdAt: string;
   crewCompletedAt: string | null;
@@ -356,10 +354,11 @@ interface JobResponse {
     previousScore: number | null;
     totalRuns: number;
   } | null;
+  isWorkspaceAudit?: boolean;
   jobId: string;
   language: string;
-  pdfUrl: string | null;
   pdfOutdated?: boolean;
+  pdfUrl: string | null;
   result: JobResult | null;
   status: "queued" | "processing" | "completed" | "failed";
 }
@@ -1308,7 +1307,7 @@ function VerificationPartialView({
     (response) => response.engineId !== "naver-briefing"
   );
   const answerCount = coreResponses.filter(
-    (response) => !response.errorMessage && !response.isStub
+    (response) => !(response.errorMessage || response.isStub)
   ).length;
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr";
@@ -1319,7 +1318,7 @@ function VerificationPartialView({
     <div className="space-y-8 pb-24 lg:pb-12">
       <MeasuredAtNotice isKo={isKo} job={job} />
       <section className="rounded-2xl border border-amber-400/30 bg-zinc-900/80 p-6 md:p-10">
-        <div className="font-medium text-amber-300 text-xs tracking-[0.16em] uppercase">
+        <div className="font-medium text-amber-300 text-xs uppercase tracking-[0.16em]">
           {isKo
             ? "판별 미완료 · 잠정 결과"
             : "Verification incomplete · provisional result"}
@@ -1335,7 +1334,7 @@ function VerificationPartialView({
             : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
         </p>
         {result.metrics.errors.length > 0 && (
-          <p className="mt-3 max-w-2xl text-sm text-amber-200 leading-relaxed">
+          <p className="mt-3 max-w-2xl text-amber-200 text-sm leading-relaxed">
             {isKo
               ? `별도로 AI 엔진 호출 ${result.metrics.errors.length}건이 실패했습니다. 이는 고객 사이트의 오류가 아니며 Findable 운영팀이 제공업체 연결 상태를 복구해야 합니다.`
               : `Separately, ${result.metrics.errors.length} AI engine calls failed. This is not a problem with your site; Findable must restore the provider connection.`}
@@ -1399,8 +1398,7 @@ function VerificationPartialView({
             >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm text-zinc-200">
                 <span>
-                  {engineDisplayName(response.engineId, isKo)} · #
-                  {index + 1}
+                  {engineDisplayName(response.engineId, isKo)} · #{index + 1}
                 </span>
                 <span className="text-xs text-zinc-400">
                   {response.errorMessage
@@ -1412,7 +1410,7 @@ function VerificationPartialView({
                       : "Answer collected"}
                 </span>
               </summary>
-              <div className="border-white/10 border-t px-4 py-4 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+              <div className="whitespace-pre-wrap border-white/10 border-t px-4 py-4 text-sm text-zinc-300 leading-relaxed">
                 {response.errorMessage ??
                   (response.excerpt ||
                     (isKo ? "저장된 답변이 없습니다." : "No saved answer."))}
@@ -1575,6 +1573,9 @@ function CompletedView({
           jobId={job.jobId}
         />
 
+        {/* 「국내 AI vs 글로벌 AI」 카드는 국내 AI 가 HyperCLOVA X 뿐이었다(2026-09-29 기본 측정 제외 ·
+            네이버는 검색 노출로 전환). 새 측정엔 비교할 국내 AI 가 없어 카드가 스스로 숨는다
+            (koreanResponses 0 → null). 이전 측정은 HyperCLOVA X 행으로 그대로 보인다. */}
         <NaverVsAiGap engineResponses={brandAiResponses} isKo={isKo} />
 
         {/* 엔진마다 첫 답변 1개만 보여주던 탭(dedupeByEngine)을 대신한다(2026-09-29).
@@ -1882,8 +1883,8 @@ function HeroSection({
         </div>
         <p className="mt-1 break-keep text-xs text-zinc-500 leading-relaxed">
           {isKo
-            ? `인지·감정·노출 품질·AI 답변 등장률·경쟁 위치를 가중 합산한 기존 진단값이에요. 지난 측정과 비교할 수 있게 계산 방식은 그대로 두었어요(Daum 포함 · 등장률 ${Math.round(result.metrics.sov)}%).`
-            : `The existing weighted composite of recognition, sentiment, presence, answer appearance and competition. Kept unchanged so runs stay comparable (includes Daum · appearance ${Math.round(result.metrics.sov)}%).`}
+            ? `인지·감정·노출 품질·AI 답변 등장률·경쟁 위치를 가중 합산한 기존 진단값이에요. 지난 측정과 비교할 수 있게 계산 방식은 그대로 두었어요(네이버·다음 검색 노출 포함 · 등장률 ${Math.round(result.metrics.sov)}%).`
+            : `The existing weighted composite of recognition, sentiment, presence, answer appearance and competition. Kept unchanged so runs stay comparable (includes Naver/Daum search · appearance ${Math.round(result.metrics.sov)}%).`}
         </p>
       </div>
 
@@ -3130,7 +3131,7 @@ function NaverBriefingReadOnlyCard({
         {briefingStateMessage(briefingStatus, isKo)}
       </p>
       <a
-        className="mt-4 inline-flex text-sm text-[var(--brand-2)] hover:underline"
+        className="mt-4 inline-flex text-[var(--brand-2)] text-sm hover:underline"
         href="https://app.findable.co.kr/"
       >
         {isKo
@@ -3615,7 +3616,7 @@ function ActionCard({ action, isKo }: { action: ActionItem; isKo: boolean }) {
         {action.rationale}
       </p>
       {expanded && action.steps.length > 0 && (
-        <ol className="mt-4 list-decimal space-y-1.5 border-white/10 border-t pl-5 pt-4 text-sm text-zinc-300 leading-relaxed">
+        <ol className="mt-4 list-decimal space-y-1.5 border-white/10 border-t pt-4 pl-5 text-sm text-zinc-300 leading-relaxed">
           {action.steps.map((step) => (
             <li key={step}>{step}</li>
           ))}
@@ -3769,7 +3770,7 @@ function AnalystAccordion({
           {report.errorMessage && (
             <span className="text-red-400 text-xs">⚠ 오류</span>
           )}
-          {!out && !report.errorMessage && (
+          {!(out || report.errorMessage) && (
             <span className="text-amber-300 text-xs">
               {isKo ? "결과 없음" : "No result"}
             </span>
@@ -4563,7 +4564,7 @@ function ReportToDashboardGuide({
       </div>
       {isWorkspaceAudit && (
         <a
-          className="mt-4 inline-flex text-sm text-[var(--brand-3)] underline"
+          className="mt-4 inline-flex text-[var(--brand-3)] text-sm underline"
           href={`https://app.findable.co.kr/history/${encodeURIComponent(jobId)}`}
         >
           {isKo

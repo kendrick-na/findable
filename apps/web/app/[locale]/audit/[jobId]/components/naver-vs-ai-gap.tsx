@@ -235,8 +235,8 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
         {isKo
           ? // 용어 통일(전수감사 §A-2): 여기서 재는 건 답변 본문 "언급"이다.
             // "인용"은 출처 링크를 뜻해(세션J Mention/Citation 분리) 다른 지표.
-            "한국 채널(네이버 검색 기반 요약 · HyperCLOVA X)과 글로벌 AI가 답변에서 브랜드를 언급한 비율을 비교해, 어느 쪽부터 보강할지 알려주는 카드입니다. 네이버 줄은 네이버 검색 결과를 Findable이 요약해 재현한 답이고, 다음 검색 노출은 AI 답이 아니라서 여기서 뺐어요."
-          : "Compares how often Korean channels (Naver search summary · HyperCLOVA X) vs global AIs mention your brand. The Naver row is Findable's reproduction from Naver search results; Daum search snippets are excluded because they are not AI answers."}
+            "국내 AI(이전 측정의 HyperCLOVA X)와 글로벌 AI가 답변에서 브랜드를 언급한 비율을 비교한 카드입니다. 네이버·다음 검색 노출은 AI 답이 아니라서 여기서 뺐어요."
+          : "Compares Korean AI (HyperCLOVA X, earlier runs only) with global AI. Naver and Daum search exposure are excluded because they are not AI answers."}
       </p>
 
       {/* 한글은 정사각 격자라 음수 자간이 가독성을 깎는다 → 한글일 때만 tracking 제거 */}
@@ -259,9 +259,7 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
               {isKo ? "한국 채널" : "Korean channels"}
             </span>
             <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-[10px] text-emerald-400">
-              {isKo
-                ? "네이버 검색 요약(재현) · HyperCLOVA X"
-                : "Naver search summary · HyperCLOVA X"}
+              {isKo ? "HyperCLOVA X(이전 측정)" : "HyperCLOVA X (earlier runs)"}
             </span>
           </div>
           <div className="flex items-end gap-2">

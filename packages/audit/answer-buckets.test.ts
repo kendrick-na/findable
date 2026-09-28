@@ -35,28 +35,33 @@ function replay(id: string) {
 }
 
 describe("답변 4분류 — 공개 JSON 재생", () => {
-  it("노우버스(b7f319e1): 다른 회사로 앎 8개가 「모름」에 섞이지 않는다", () => {
-    const { ai, search, engines } = replay(
+  // (2026-09-29 대표 결정) 네이버는 AI 답이 아니라 검색 노출 → AI 분모에서 빠진다.
+  //   과거 회차의 HyperCLOVA X 행은 표시 호환을 위해 AI 로 남는다.
+  it("노우버스(b7f319e1): 다른 회사로 앎이 「모름」에 섞이지 않는다", () => {
+    const { ai, search, searchByEngine, engines } = replay(
       "b7f319e1-1d96-4875-a1e1-e7f5e0e814c9"
     ).metrics.answerBuckets;
     expect(ai).toMatchObject({
       confirmed: 5,
-      differentEntity: 8,
+      differentEntity: 6,
       unknown: 6,
       engineError: 0,
       unverified: 1,
-      adjudicated: 19,
-      total: 20,
+      adjudicated: 17,
+      total: 18,
     });
-    // 비율은 판정 끝난 19개 기준 — 5/19 = 26.3 → 26 (floor 여도 26, 8/19=42.1, 6/19=31.6→32)
-    expect(ai.confirmedRate).toBe(26);
-    expect(ai.differentEntityRate).toBe(42);
-    // 6/19 = 31.58 → round 32 / floor 31 : 반올림 규칙이 바뀌면 여기서 문다.
-    expect(ai.unknownRate).toBe(32);
-    // Daum 2건은 AI 가 아니라 검색 노출로 따로 센다.
-    expect(search).toMatchObject({ total: 2, unknown: 2, confirmed: 0 });
-    // 엔진 기준: 판정 가능한 답을 준 AI 6곳(daum 제외) 중 제대로 안 곳 2(gemini·perplexity).
-    expect(engines).toEqual({ measured: 6, confirmed: 2 });
+    // 5/17 = 29.4 → 29 · 6/17 = 35.3 → 35
+    expect(ai.confirmedRate).toBe(29);
+    expect(ai.differentEntityRate).toBe(35);
+    // 네이버 2건(다른 회사) · 다음 2건(모름)은 검색 노출로 따로
+    expect(search).toMatchObject({ total: 4 });
+    expect(searchByEngine.naver).toMatchObject({
+      differentEntity: 2,
+      total: 2,
+    });
+    expect(searchByEngine.daum).toMatchObject({ unknown: 2, total: 2 });
+    // 엔진 기준: 판정 가능한 답을 준 AI 5곳 중 제대로 안 곳 2(gemini·perplexity).
+    expect(engines).toEqual({ measured: 5, confirmed: 2 });
   });
 
   it("인디고차일드(d5dd90b4): Perplexity 한도 초과 4건은 「측정 실패」 — 분모에서 빠진다", () => {
@@ -64,7 +69,9 @@ describe("답변 4분류 — 공개 JSON 재생", () => {
       .answerBuckets;
     expect(ai.engineError).toBe(4);
     expect(ai.adjudicated).toBe(ai.confirmed + ai.differentEntity + ai.unknown);
-    expect(ai).toMatchObject({ confirmed: 2, differentEntity: 7, unknown: 5 });
+    expect(ai).toMatchObject({ confirmed: 2, differentEntity: 6, unknown: 4 });
+    // 2/12 = 16.7 → round 17 / floor 16 : 반올림 규칙이 바뀌면 여기서 문다.
+    expect(ai.confirmedRate).toBe(17);
   });
 
   it("인디고차일드(fcccedb7) 재생 수치", () => {
@@ -73,7 +80,7 @@ describe("답변 4분류 — 공개 JSON 재생", () => {
     expect(ai).toMatchObject({
       confirmed: 4,
       differentEntity: 1,
-      unknown: 8,
+      unknown: 6,
       engineError: 0,
       unverified: 7,
     });
@@ -214,8 +221,8 @@ describe("문구", () => {
     const summary = replay("b7f319e1-1d96-4875-a1e1-e7f5e0e814c9").metrics
       .answerBuckets;
     const text = answerBucketHeadline("노우버스", summary, true);
-    expect(text).toContain("19개 중 5개만 우리를 제대로 알아요");
-    expect(text).toContain("8개는 다른 회사로 알고 있어요");
+    expect(text).toContain("17개 중 5개만 우리를 제대로 알아요");
+    expect(text).toContain("6개는 다른 회사로 알고 있어요");
     expect(text).toContain("6개는 우리를 몰라요");
   });
   it("사유: 한도 초과 · 429 · 공식 근거 없음", () => {

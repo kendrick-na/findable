@@ -1,9 +1,9 @@
 // 무료 Audit 1페이지 PDF의 HTML 템플릿
 // Pretendard CDN 폰트 사용. Puppeteer가 페이지 로드 후 PDF로 변환.
 
+import type { AuditMetrics, EngineId } from "@repo/ai/lib/engines";
 import { ANSWER_BUCKET_COPY_KO, classifyAnswer } from "./answer-buckets";
 import { engineDisplayName } from "./engine-labels";
-import type { AuditMetrics, EngineId } from "@repo/ai/lib/engines";
 
 export interface AuditPdfData {
   brandName: string;
@@ -27,7 +27,6 @@ export interface AuditPdfData {
   promptsCount: number;
   topRecommendations: string[];
 }
-
 
 // F10(2026-08-02): PDF 가 측정 언어를 표기하지 않아, en 전용으로 측정한 리포트에도
 // 푸터가 "한국어·영어"라고 인쇄됐다. 화면과 PDF 가 다른 말을 하면 신뢰를 잃는다.

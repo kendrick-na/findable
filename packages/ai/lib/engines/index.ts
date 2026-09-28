@@ -36,13 +36,14 @@ const ADAPTERS: Record<EngineId, EngineAdapter> = {
   daum: daumAdapter,
 };
 
-// 기본 7 엔진 (PRD §F2). chatgpt-web·naver-briefing은 옵션 (Stagehand 가능 환경에서만).
+// 기본 엔진 (PRD §F2). chatgpt-web·naver-briefing은 옵션 (Stagehand 가능 환경에서만).
+// ⛔ 2026-09-29: hyperclova 제외 — 네이버 클로바X·Cue: 서비스 종료(2026-04-09) · 👤 대표 결정.
+//   어댑터·EngineId 는 과거 측정 표시 호환을 위해 남긴다(신규 측정엔 안 돈다).
 const DEFAULT_ENGINES: EngineId[] = [
   "chatgpt",
   "claude",
   "perplexity",
   "gemini",
-  "hyperclova",
   "naver",
   "daum",
 ];

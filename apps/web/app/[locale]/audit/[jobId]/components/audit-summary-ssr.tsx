@@ -90,8 +90,8 @@ export const AuditSummarySsr = ({ job, locale }: Props) => {
       </h2>
       <p className="mt-2 text-sm text-zinc-300">
         {isKo
-          ? `${brand}(${job.domain})을 ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X와 네이버 검색 기반 요약(Findable 재현)·다음 검색 노출까지 ${engineTotal}곳에서 측정했어요.`
-          : `We measured ${brand} (${job.domain}) across ${engineTotal} sources: ChatGPT, Claude, Perplexity, Gemini, HyperCLOVA X, a Naver search summary reproduced by Findable, and Daum search exposure.`}
+          ? `${brand}(${job.domain})을 ChatGPT·Claude·Perplexity·Gemini와 네이버·다음 검색 노출까지 ${engineTotal}곳에서 측정했어요.`
+          : `We measured ${brand} (${job.domain}) across ${engineTotal} sources: ChatGPT, Claude, Perplexity, Gemini, plus Naver and Daum search exposure.`}
       </p>
       {answers.adjudicated > 0 && (
         <p className="mt-2 text-sm text-zinc-300">

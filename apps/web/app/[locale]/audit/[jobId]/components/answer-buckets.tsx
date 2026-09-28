@@ -183,17 +183,20 @@ export function AnswerBucketBoard({
             </li>
           )
         )}
-        {summary.search && (
+        {Object.entries(summary.searchByEngine ?? {}).length > 0 && (
           <li className="break-keep" data-testid="search-exposure-line">
             <span className="font-medium text-zinc-300">
-              {isKo
-                ? `다음 검색 노출 ${summary.search.confirmed}/${summary.search.adjudicated}`
-                : `Search exposure (Daum) ${summary.search.confirmed}/${summary.search.adjudicated}`}
+              {Object.entries(summary.searchByEngine ?? {})
+                .map(
+                  ([id, g]) =>
+                    `${engineDisplayName(id, isKo)} ${g.confirmed}/${g.adjudicated}`
+                )
+                .join(" · ")}
             </span>{" "}
             —{" "}
             {isKo
-              ? "Daum은 AI 답변이 아니라 검색 결과 조각을 돌려줘서 AI 비율과 따로 셌어요."
-              : "Daum returns search snippets, not AI answers, so it is counted separately."}
+              ? "AI 답변이 아니라 검색 결과에 우리 브랜드·공식 도메인이 나왔는지 본 값이라 AI 비율과 따로 셌어요."
+              : "Whether search results show your brand or official domain — not AI answers, so counted separately."}
           </li>
         )}
       </ul>

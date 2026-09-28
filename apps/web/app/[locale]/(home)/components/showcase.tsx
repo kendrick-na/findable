@@ -28,7 +28,7 @@ export const Showcase = ({ locale = "ko" }: ShowcaseProps) => {
         s1Cta: "무료로 시작하기",
         s2Title: "우리 브랜드 답변 점유율, 한눈에.",
         s2Sub:
-          "7개 AI가 답할 때마다 우리 브랜드와 경쟁 브랜드가 얼마나 인용되는지 시각화합니다.",
+          "AI가 답할 때마다 우리 브랜드와 경쟁 브랜드가 얼마나 인용되는지 시각화합니다.",
         s4Title: "AI는 우리 홈페이지를 잘 안 봅니다.",
         s4Sub:
           "실제로 측정해보면 AI가 브랜드를 말할 때 근거로 삼는 건 대부분 네이버 블로그와 위키입니다. 어디를 고쳐야 하는지가 여기서 갈립니다.",
@@ -37,7 +37,7 @@ export const Showcase = ({ locale = "ko" }: ShowcaseProps) => {
         s1Cta: "Start free",
         s2Title: "Your brand's share of voice, at a glance.",
         s2Sub:
-          "Every time 7 AI engines answer, see how often your brand and competitors get cited.",
+          "Every time AI engines answer, see how often your brand and competitors get cited.",
         s4Title: "AI barely reads your homepage.",
         s4Sub:
           "When we measure it, the sources AI leans on are mostly Naver blogs and wikis. That's where the work actually is.",

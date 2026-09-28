@@ -82,14 +82,14 @@ const ENGINES = [
   { id: "daum", name: "Daum", provider: "kakao", language: "ko", ordering: 9 },
 ] as const;
 
-// 본류 audit이 실제 호출하는 7개(engines/index.ts DEFAULT_ENGINES와 동일).
+// 본류 audit이 실제 호출하는 엔진(engines/index.ts DEFAULT_ENGINES와 동일).
 // 이 목록만 isActive=true. chatgpt-web·naver-briefing은 옵션이라 false.
+// ⛔ 2026-09-29: hyperclova 비활성(서비스 종료). 행은 남긴다 — 과거 Tracking 의 FK.
 const ACTIVE_ENGINE_IDS = new Set<string>([
   "chatgpt",
   "claude",
   "perplexity",
   "gemini",
-  "hyperclova",
   "naver",
   "daum",
 ]);

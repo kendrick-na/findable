@@ -4,21 +4,17 @@ import { describe, expect, it } from "vitest";
 import { engineDisplayName, engineNote } from "./engine-labels";
 
 describe("엔진 표시 이름 — 실제로 잰 것을 부른다", () => {
-  it("🔴 naver 는 네이버의 AI 답이 아니다 — Findable 재현이라고 부른다", () => {
-    expect(engineDisplayName("naver")).toBe(
-      "네이버 검색 기반 요약 (Findable 재현)"
-    );
-    expect(engineDisplayName("naver", false)).toContain(
-      "reproduced by Findable"
-    );
+  it("🔴 naver 는 네이버의 AI 답이 아니다 — 검색 노출이라고 부른다", () => {
+    expect(engineDisplayName("naver")).toBe("네이버 검색 노출");
+    expect(engineDisplayName("naver", false)).toBe("Naver search exposure");
     // 「네이버 AI」라는 말은 브리핑에만 쓴다
     expect(engineDisplayName("naver")).not.toContain("AI");
     expect(engineDisplayName("naver-briefing")).toBe("네이버 AI 브리핑");
   });
-  it("daum 은 검색 노출, chatgpt·hyperclova 는 검색 없음", () => {
+  it("daum 은 검색 노출, chatgpt 는 웹검색 없음, hyperclova 는 이전 측정 표시용", () => {
     expect(engineDisplayName("daum")).toBe("다음 검색 노출");
     expect(engineDisplayName("chatgpt")).toBe("ChatGPT (웹검색 없음)");
-    expect(engineDisplayName("hyperclova")).toBe("HyperCLOVA X (검색 없음)");
+    expect(engineDisplayName("hyperclova")).toBe("HyperCLOVA X (이전 측정)");
     expect(engineNote("chatgpt")).toContain("웹검색 없이");
     expect(engineNote("naver")).toContain("네이버가 직접 한 답이 아니에요");
   });

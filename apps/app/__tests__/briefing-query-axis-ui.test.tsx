@@ -9,9 +9,9 @@
  * 📕 이 저장소 최다 사고 유형(「못 잰 것·다르게 잰 것을 0 이라 부르기」).
  */
 
-import { engineDisplayName } from "@repo/audit/engine-labels";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { engineDisplayName } from "@repo/audit/engine-labels";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(process.cwd(), "../..");
@@ -64,7 +64,9 @@ describe("B-5 질의 축 표기 — 브리핑이 다른 질문임을 화면이 �
       );
     }
     expect(engineDisplayName("naver-briefing")).toBe("네이버 AI 브리핑");
-    expect(engineDisplayName("naver-briefing", false)).toBe("Naver AI Briefing");
+    expect(engineDisplayName("naver-briefing", false)).toBe(
+      "Naver AI Briefing"
+    );
   });
 
   it("🔴 미노출 문구가 **7엔진과 다르다** (같으면 오독된다)", () => {

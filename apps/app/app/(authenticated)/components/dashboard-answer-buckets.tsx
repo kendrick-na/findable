@@ -7,6 +7,7 @@ import {
   summarizeAnswerBuckets,
 } from "@repo/audit/answer-buckets";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
+import { engineDisplayName } from "@repo/audit/engine-labels";
 
 /**
  * 대시보드 헤드라인 4분류 (2026-09-29) — 공개 리포트 히어로와 **같은 함수·같은 문구**.
@@ -140,11 +141,16 @@ export function DashboardAnswerBuckets({ result }: { result: unknown }) {
             추천한 답변 수예요.
           </li>
         ) : null}
-        {summary.search ? (
+        {Object.entries(summary.searchByEngine ?? {}).length > 0 ? (
           <li>
-            다음 검색 노출 {summary.search.confirmed}/
-            {summary.search.adjudicated} — AI 답변이 아니라 검색 결과 조각이라
-            따로 셌어요.
+            {Object.entries(summary.searchByEngine ?? {})
+              .map(
+                ([id, g]) =>
+                  `${engineDisplayName(id)} ${g.confirmed}/${g.adjudicated}`
+              )
+              .join(" · ")}{" "}
+            — AI 답변이 아니라 검색 결과에 우리가 나왔는지 본 값이라 따로
+            셌어요.
           </li>
         ) : null}
         <li>

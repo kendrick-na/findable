@@ -411,17 +411,19 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //     광고주 30초~3분 진단 약속 보호.
     //   - K-GEO-Bench 데이터셋: 별도 admin 스크립트로 4 프롬프트 모두 측정.
 
+    // ⛔ 2026-09-29: hyperclova 제외(클로바X·Cue: 서비스 종료 2026-04-09 · 👤 대표 결정).
+    //   naver·daum 은 AI 답이 아니라 **검색 노출**로 잰다(answer-buckets: search 그룹).
+    //   이름은 옛 호출부 호환으로 DEFAULT_7 을 유지한다(실제 6개).
     const DEFAULT_7 = [
       "chatgpt",
       "claude",
       "perplexity",
       "gemini",
-      "hyperclova",
       "naver",
       "daum",
     ] as const;
 
-    // 영어 질의용 — 한국 검색엔진(naver·daum)과 한국어 전용 LLM(hyperclova)을 뺀다.
+    // 영어 질의용 — 한국 검색엔진(naver·daum)을 뺀다.
     const GLOBAL_4 = ["chatgpt", "claude", "perplexity", "gemini"] as const;
 
     // ⚠️ F5 수정(2026-08-03) — 프롬프트 언어에 맞는 엔진에만 보낸다.

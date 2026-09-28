@@ -18,8 +18,8 @@
  *   셀 수는 보여주되 분모에서 뺀다(못 잰 것을 「모름」으로 세지 않는다).
  *
  * 그룹 규칙:
- *   · Daum 은 AI 답변이 아니라 **검색 결과 조각**을 돌려준다 → 「검색 노출」 그룹.
- *     AI 답변 비율의 분모에 넣지 않는다.
+ *   · Daum·네이버(검색 API)는 AI 답변이 아니라 **검색 결과**다 → 「검색 노출」 그룹.
+ *     AI 답변 비율의 분모에 넣지 않는다. 네이버의 실제 AI 답은 브리핑뿐이다.
  *   · 네이버 AI 브리핑은 자기 질의(효과·후기…)를 쓰는 별도 축 → 여기서 세지 않는다.
  *   · 브랜드 이름 없이 물은 질문(discovery)은 「AI 가 우리를 아나」가 아니라
  *     「이름 없이도 추천하나」를 잰다 → 따로 센다(섞으면 「모름」이 부풀려진다).
@@ -38,8 +38,15 @@ export type AnswerGroup = "ai" | "search" | "briefing";
 
 export type PromptKind = "brand" | "discovery";
 
-/** AI 답변이 아니라 검색 결과 조각을 주는 엔진. */
-export const SEARCH_EXPOSURE_ENGINES: ReadonlySet<string> = new Set(["daum"]);
+/**
+ * AI 답변이 아니라 검색 결과를 주는 엔진.
+ * naver 는 2026-09-29 부터 검색 결과 원문만 저장한다(HyperCLOVA 합성 폐지). 그 전 회차의
+ * naver 행은 Findable 이 합성한 재현 답이라 **역시 네이버의 AI 답이 아니다** → 같은 그룹.
+ */
+export const SEARCH_EXPOSURE_ENGINES: ReadonlySet<string> = new Set([
+  "naver",
+  "daum",
+]);
 /** 자기 질의를 쓰는 별도 축 — 이 분류의 대상이 아니다. */
 export const SEPARATE_CHANNEL_ENGINES: ReadonlySet<string> = new Set([
   "naver-briefing",
@@ -149,6 +156,8 @@ export interface AnswerBucketSummary {
   engines: { confirmed: number; measured: number };
   /** Daum 등 검색 결과 조각 — AI 비율과 섞지 않는다. 해당 엔진이 없으면 null. */
   search: BucketGroupSummary | null;
+  /** 검색 노출을 엔진별로(네이버·다음) — 두 검색은 다른 서비스라 합쳐 말하지 않는다. */
+  searchByEngine: Record<string, BucketGroupSummary>;
   version: 1;
 }
 
@@ -233,6 +242,7 @@ export function summarizeAnswerBuckets(
   const ai = emptyCounts();
   const search = emptyCounts();
   let searchRows = 0;
+  const searchEngines = new Map<string, BucketCounts>();
   const discovery: DiscoveryTally = {
     asked: 0,
     adjudicated: 0,
@@ -253,6 +263,9 @@ export function summarizeAnswerBuckets(
     if (group === "search") {
       searchRows += 1;
       add(search, bucket);
+      const perEngine = searchEngines.get(row.engineId) ?? emptyCounts();
+      add(perEngine, bucket);
+      searchEngines.set(row.engineId, perEngine);
       continue;
     }
     if (isDiscoveryAnswer(row)) {
@@ -277,6 +290,9 @@ export function summarizeAnswerBuckets(
       confirmed: confirmedEngines.size,
     },
     search: searchRows > 0 ? finalize(search) : null,
+    searchByEngine: Object.fromEntries(
+      [...searchEngines.entries()].map(([id, counts]) => [id, finalize(counts)])
+    ),
     discovery: discoveryRows > 0 ? discovery : null,
   };
 }

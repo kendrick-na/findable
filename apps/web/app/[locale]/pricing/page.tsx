@@ -232,7 +232,7 @@ const FAQ_KO = [
   },
   {
     q: "한국어와 영어 답변 둘 다 측정되나요?",
-    a: "네. ChatGPT · Gemini · Claude · Perplexity는 영어와 한국어 모두 측정하고, HyperCLOVA · 네이버 · 다음은 한국어 위주로 측정합니다.",
+    a: "네. ChatGPT · Gemini · Claude · Perplexity는 영어와 한국어 모두 측정하고, 네이버·다음 검색 노출과 네이버 AI 브리핑은 한국어로 측정합니다.",
   },
   {
     q: "v1.5 기능은 언제 나오나요?",
@@ -247,7 +247,7 @@ const FAQ_EN = [
   },
   {
     q: "Do you measure both Korean and English answers?",
-    a: "Yes. ChatGPT · Gemini · Claude · Perplexity are measured in both English and Korean; HyperCLOVA · Naver · Daum are measured primarily in Korean.",
+    a: "Yes. ChatGPT · Gemini · Claude · Perplexity are measured in both English and Korean; Naver/Daum search exposure and Naver AI Briefing are measured in Korean.",
   },
   {
     q: "When do v1.5 features arrive?",

@@ -352,7 +352,7 @@ async function runMinji(input: CrewInput): Promise<AnalystReport> {
   const koreanResponses = filterKoreanEngineResponses(input.engineResponses);
   const prompt = `${buildMetricsSummary(input)}
 
-## 한국 AI 엔진 응답 (HyperCLOVA·Naver·Daum)
+## 한국 채널 결과 (네이버·다음 검색 노출 · 과거 회차는 HyperCLOVA 포함)
 ${buildEngineContext(koreanResponses)}
 
 위 데이터를 분석해 한국 마케팅팀(또는 외국 브랜드 한국 마케팅팀)이 즉시 사용 가능한 인사이트를 JSON 스키마에 맞춰 반환하세요. 마크다운·이모지·테이블 금지.`;
