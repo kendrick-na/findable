@@ -611,7 +611,8 @@ model SearchPerformanceConnection {
   @@index([status])
 }
 
-// 운영자 영업 초안 전용. 고객 조직과 운영자 userId를 함께 묶는다.
+// 운영자 영업 초안 전용(2026-09-29). 발송 기능은 없다 — Gmail 초안함에 넣는 것까지만.
+// 조직과 운영자 userId 를 함께 묶는다.
 model MailboxConnection {
   id                    String       @id @default(uuid())
   organizationId        String
@@ -638,6 +639,10 @@ model OutreachDraft {
   connectionId   String
   connection     MailboxConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   idempotencyKey String
+  /// 영업 스냅샷의 리드 id(공식 도메인). 직접 작성한 초안이면 null.
+  leadId         String?
+  /// 초안 From 에 넣은 회사 주소 별칭(예: contact@findable.co.kr). 개인 주소 발송 사고 방지 기록.
+  sender         String
   recipient      String
   subject        String
   bodyHash       String
@@ -648,6 +653,7 @@ model OutreachDraft {
 
   @@unique([organizationId, userId, idempotencyKey])
   @@index([organizationId, createdAt])
+  @@index([organizationId, leadId])
   @@index([connectionId])
 }
 

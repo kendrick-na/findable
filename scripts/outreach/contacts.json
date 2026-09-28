@@ -1,0 +1,38 @@
+{
+  "www.torriden.com": {
+    "email": "mkt@torriden.com",
+    "role": "공식 국내마케팅 문의",
+    "sourceUrl": "https://www.torriden.com/",
+    "checkedOn": "2026-09-25"
+  },
+  "isntree.com": {
+    "email": "global_marketing@isntree.com",
+    "role": "공식 해외마케팅 제안·제휴",
+    "sourceUrl": "https://isntree.com/",
+    "checkedOn": "2026-09-25"
+  },
+  "numbuzin.com": {
+    "email": "marketing@benow.co.kr",
+    "role": "공식 Marketing & PR 문의",
+    "sourceUrl": "https://us.numbuzin.com/pages/help-faqs",
+    "checkedOn": "2026-09-25"
+  },
+  "purito.com": {
+    "email": "partnerships@purito.co.kr",
+    "role": "공식 협업·파트너십 문의",
+    "sourceUrl": "https://purito.com/ko/help/contact-us/",
+    "checkedOn": "2026-09-25"
+  },
+  "abib.co.kr": {
+    "email": "abib@fourco.co.kr",
+    "role": "공식 대표 이메일 — 마케팅 담당자 확인 필요",
+    "sourceUrl": "https://abib.co.kr/shopinfo/contact.html",
+    "checkedOn": "2026-09-25"
+  },
+  "www.roundlab.co.kr": {
+    "email": "sales@roundlab.co.kr",
+    "role": "공식 영업·제안 문의",
+    "sourceUrl": "https://www.roundlab.co.kr/shopinfo/company.html",
+    "checkedOn": "2026-09-25"
+  }
+}

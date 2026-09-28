@@ -6,7 +6,7 @@ import {
   encryptMailToken,
   exchangeMailCode,
   googleMailAddress,
-  MAIL_SCOPE,
+  MAIL_SCOPES,
   parseMailState,
 } from "@/lib/ax-mail/google";
 
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
       !(
         token.refresh_token &&
         token.access_token &&
-        scopes.includes(MAIL_SCOPE)
+        MAIL_SCOPES.every((scope) => scopes.includes(scope))
       )
     ) {
       return finish(request, "permission");
