@@ -54,7 +54,9 @@ async function verdictModel() {
  *   different_entity — 같은 이름의 다른 대상(동명이인·부분 문자열)
  *   unknown_brand — AI가 브랜드를 모름. 일반명사 해석·되물음·"모른다" 응답
  *   absent — 브랜드 문자열 자체가 없음
- *   unverified — 답변에는 이름이 있으나 판정 서비스 장애로 확인하지 못함
+ *   unverified — 답변에는 이름이 있으나 판정 서비스 장애(시간초과·오류)로 확인하지 못함.
+ *                ⚠️ 「근거가 약함」이 아니라 **판정기 자체가 실패**한 경우에만 쓴다.
+ *                (2026-09-28) 근거 부족까지 여기에 섞이면 잠정 결과가 폭증한다.
  */
 export type MentionQuality =
   | "confirmed"
@@ -69,7 +71,15 @@ export interface MentionVerdict {
   quality: MentionQuality;
   /** 판정 경로(관측용). rule=규칙만으로 확정, llm=모호해서 LLM 판정, skipped=검증 미실행. */
   via: "rule" | "llm" | "skipped";
+  /** 비집계 판정의 사유(관측·재검증용). 없으면 quality 자체가 사유다. */
+  reason?: MentionVerdictReason;
 }
+
+export type MentionVerdictReason =
+  /** LLM이 confirmed라 했지만 공식 사이트 고유 사실·도메인 근거가 답변에 없음. */
+  | "official_evidence_missing"
+  /** 판정기(LLM) 호출이 재시도·폴백까지 모두 실패함. */
+  | "judge_failed";
 
 // ─────────────────────────────────────────────────────────
 // 1단계: 규칙 — 명확한 것은 LLM 없이 끝낸다(원가·지연 보호)
@@ -556,13 +566,30 @@ export async function verifyMention(
   const quality = await llmVerdict(input);
   if (quality === null) {
     // LLM 실패 → 측정은 완료하되 모호 응답을 성공으로 계산하지 않는다.
-    return { counted: false, quality: "unverified", via: "skipped" };
+    // 이 경우만 진짜 「판별 불가」다(분모에서 빼고 따로 센다).
+    return {
+      counted: false,
+      quality: "unverified",
+      via: "skipped",
+      reason: "judge_failed",
+    };
   }
 
-  if (quality === "confirmed" && input.officialSite) {
-    if (!hasOfficialIdentityEvidence(input)) {
-      return { counted: false, quality: "unverified", via: "llm" };
-    }
+  if (
+    quality === "confirmed" &&
+    input.officialSite &&
+    !hasOfficialIdentityEvidence(input)
+  ) {
+    // 판정기는 정상 작동했고, 답변이 공식 사이트의 고유 사실을 하나도 말하지
+    // 못했다 = AI가 **이 브랜드**를 안다는 증거가 없다. 판정 실패(unverified)가
+    // 아니라 판정 결과다. (2026-09-28 이전엔 unverified 로 섞여 한 회차 전체가
+    // 잠정 처리되는 원인이 됐다.)
+    return {
+      counted: false,
+      quality: "unknown_brand",
+      via: "llm",
+      reason: "official_evidence_missing",
+    };
   }
 
   return { counted: quality === "confirmed", quality, via: "llm" };
@@ -618,9 +645,22 @@ export async function verifyMentions<T extends VerifiableResponse>(
     industry?: string;
     officialSite?: VerifyInput["officialSite"];
   }
-): Promise<Array<T & { mentionQuality: MentionQuality; verdictVia: string }>> {
-  const out: Array<T & { mentionQuality: MentionQuality; verdictVia: string }> =
-    new Array(responses.length);
+): Promise<
+  Array<
+    T & {
+      mentionQuality: MentionQuality;
+      verdictReason?: MentionVerdictReason;
+      verdictVia: string;
+    }
+  >
+> {
+  const out: Array<
+    T & {
+      mentionQuality: MentionQuality;
+      verdictReason?: MentionVerdictReason;
+      verdictVia: string;
+    }
+  > = new Array(responses.length);
 
   // 인덱스를 청크로 끊어 동시 실행 상한을 지킨다.
   for (let start = 0; start < responses.length; start += VERDICT_CONCURRENCY) {
@@ -658,6 +698,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
         mentionPosition: verdict.counted ? original.mentionPosition : null,
         mentionQuality: verdict.quality,
         verdictVia: verdict.via,
+        ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
       };
     }
   }

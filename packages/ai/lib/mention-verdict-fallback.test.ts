@@ -60,6 +60,7 @@ describe("mention verification provider failure", () => {
       counted: false,
       quality: "unverified",
       via: "skipped",
+      reason: "judge_failed",
     });
   });
 });

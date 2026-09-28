@@ -79,7 +79,10 @@ it("sends mixed official/namesake sources to the verifier instead of vetoing a c
   expect(generateObject).toHaveBeenCalledOnce();
 });
 
-it("cannot turn absence of identity evidence into a verified negative", async () => {
+// 2026-09-28 — 판정기는 정상 작동했고 답변에 공식 사이트 고유 사실이 없다 = 「이
+//   브랜드를 안다는 증거 없음」이라는 **판정 결과**다. 판정기 장애(unverified)와
+//   섞으면 한 회차 전체가 잠정으로 떨어진다. 집계에서는 여전히 제외된다(counted=false).
+it("treats an LLM 'confirmed' without official identity evidence as not this brand, not as a judge failure", async () => {
   vi.stubEnv("LETSUR_API_KEY", "test-key");
   vi.mocked(generateObject).mockResolvedValue({
     object: { quality: "confirmed" },
@@ -92,7 +95,12 @@ it("cannot turn absence of identity evidence into a verified negative", async ()
       officialSite: { title: "TechDD", description: "정량 기술 실사" },
       text: "TechDD는 클라우드 인프라 구축과 시스템 통합 서비스를 제공합니다.",
     })
-  ).toMatchObject({ counted: false, quality: "unverified" });
+  ).toEqual({
+    counted: false,
+    quality: "unknown_brand",
+    via: "llm",
+    reason: "official_evidence_missing",
+  });
 });
 
 it("does not use an incidental official search candidate to validate a foreign namesake", async () => {
@@ -109,5 +117,9 @@ it("does not use an incidental official search candidate to validate a foreign n
       citedDomains: ["techdd.co.uk", "dd.knowverse.net"],
       text: "TechDD offers independent technology due diligence, board-level advisory and reports in 2–3 weeks.[1]",
     })
-  ).toMatchObject({ counted: false, quality: "unverified" });
+  ).toMatchObject({
+    counted: false,
+    quality: "unknown_brand",
+    reason: "official_evidence_missing",
+  });
 });
