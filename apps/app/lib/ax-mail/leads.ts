@@ -12,7 +12,12 @@
 import snapshotJson from "./data/leads-snapshot.json";
 
 export type LeadTrack = "prospect" | "existing" | "inbound";
-export type LeadIndustry = "beauty" | "b2b" | "existing" | "finance" | "partner";
+export type LeadIndustry =
+  | "beauty"
+  | "b2b"
+  | "existing"
+  | "finance"
+  | "partner";
 
 export interface LeadContact {
   checkedOn: string;
@@ -188,6 +193,13 @@ function observationSentence(lead: Lead, o: Observation): string {
   return `출처 링크가 달린 답변 ${o.answersWithCitations}개 중 공식 사이트(${lead.domain})를 출처로 쓴 답변은 ${o.officialCited}개였습니다.`;
 }
 
+/** 「(주)토리든 토리든」처럼 회사명에 브랜드명이 들어 있으면 한 번만 쓴다. */
+function greetingName(lead: Lead): string {
+  return lead.company.includes(lead.brand)
+    ? lead.company
+    : `${lead.company} ${lead.brand}`;
+}
+
 function formatDate(iso: string): string {
   const [y, mo, d] = iso.split("-").map(Number);
   return `${y}년 ${mo}월 ${d}일`;
@@ -208,7 +220,7 @@ export function composeOutreachDraft(
   }
   const engines = m.engines.join("·");
   const lines = [
-    `안녕하세요, ${lead.company} ${lead.brand} 담당자님.`,
+    `안녕하세요, ${greetingName(lead)} 담당자님.`,
     "AI 검색 답변 속 브랜드 노출을 진단하는 파인더블(Findable)의 나현덕입니다.",
     "",
     `${formatDate(m.measuredOn)}, ${engines}에 ${lead.brand} 관련 질문을 넣고 받은 답변 ${m.answers}개를 확인했습니다.`,
@@ -246,7 +258,7 @@ export function hasAdNotice(subject: string, body: string): boolean {
 
 /** 효과 보장 표현 — 초안에 들어 있으면 저장하지 않는다. */
 const GUARANTEE_RE =
-  /매출(이|을)?\s*(오르|올려|상승|증가)|반드시\s*(오르|노출)|보장합니다|100%\s*(노출|상승)/;
+  /(매출|판매|전환|유입|문의)(이|을|가|률|율)?\s*(오르|오릅|올라|올려|상승|증가|늘어|늘려|늘립|두\s*배)|반드시|보장(합니다|해|됩|드립)|100%\s*(노출|상승|인용)/;
 
 export function hasGuaranteeClaim(text: string): boolean {
   return GUARANTEE_RE.test(text);

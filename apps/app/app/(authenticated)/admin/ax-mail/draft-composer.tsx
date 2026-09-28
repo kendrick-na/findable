@@ -2,35 +2,62 @@
 
 import { useRef, useState } from "react";
 
-interface Labels {
+export interface DraftComposerLabels {
+  blockedToSave: string;
   body: string;
   connectToSave: string;
   draftId: string;
+  editWarning: string;
+  errorAdNotice: string;
+  errorGuarantee: string;
+  errorSender: string;
   failed: string;
   recipient: string;
   saveDraft: string;
   saved: string;
+  savedFrom: string;
   saving: string;
   subject: string;
 }
 
+type Result =
+  | { kind: "saved"; id: string; sender: string }
+  | { kind: "failed"; message: string };
+
+function errorMessage(labels: DraftComposerLabels, code: string | undefined) {
+  switch (code) {
+    case "sender_alias_missing":
+    case "mail_token_expired":
+      return labels.errorSender;
+    case "ad_notice_missing":
+      return labels.errorAdNotice;
+    case "guarantee_claim":
+      return labels.errorGuarantee;
+    default:
+      return labels.failed;
+  }
+}
+
+/**
+ * 초안 편집 + 「Gmail 초안함에 저장」. 발송 버튼은 없다.
+ * canSave = 보낸사람(회사 주소 별칭) 확인 완료. 서버도 같은 검사를 다시 한다.
+ */
 export function DraftComposer({
   labels,
   initialDraft,
-  connected,
+  canSave,
+  leadId,
 }: {
-  labels: Labels;
-  initialDraft?: { recipient: string; subject: string; body: string };
-  connected: boolean;
+  canSave: boolean;
+  initialDraft: { recipient: string; subject: string; body: string };
+  labels: DraftComposerLabels;
+  leadId?: string;
 }) {
-  const [recipient, setRecipient] = useState(initialDraft?.recipient ?? "");
-  const [subject, setSubject] = useState(initialDraft?.subject ?? "");
-  const [body, setBody] = useState(initialDraft?.body ?? "");
+  const [recipient, setRecipient] = useState(initialDraft.recipient);
+  const [subject, setSubject] = useState(initialDraft.subject);
+  const [body, setBody] = useState(initialDraft.body);
   const [pending, setPending] = useState(false);
-  const [result, setResult] = useState<{
-    kind: "saved" | "failed";
-    id?: string;
-  } | null>(null);
+  const [result, setResult] = useState<Result | null>(null);
   const requestKey = useRef<string | null>(null);
 
   const changed = () => {
@@ -40,7 +67,7 @@ export function DraftComposer({
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || !connected) {
+    if (pending || !canSave) {
       return;
     }
     setPending(true);
@@ -54,16 +81,25 @@ export function DraftComposer({
           recipient,
           subject,
           body,
+          leadId,
           idempotencyKey: requestKey.current,
         }),
       });
-      const value = (await response.json()) as { draftId?: string };
-      if (!(response.ok && value.draftId)) {
-        throw new Error("DRAFT_SAVE_FAILED");
+      const value = (await response.json().catch(() => ({}))) as {
+        draftId?: string;
+        error?: string;
+        sender?: string;
+      };
+      if (response.ok && value.draftId && value.sender) {
+        setResult({ kind: "saved", id: value.draftId, sender: value.sender });
+      } else {
+        setResult({
+          kind: "failed",
+          message: errorMessage(labels, value.error),
+        });
       }
-      setResult({ kind: "saved", id: value.draftId });
     } catch {
-      setResult({ kind: "failed" });
+      setResult({ kind: "failed", message: labels.failed });
     } finally {
       setPending(false);
     }
@@ -74,10 +110,10 @@ export function DraftComposer({
 
   return (
     <form
-      className="space-y-5 rounded-xl border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] p-5 md:p-6"
+      className="space-y-4 rounded-xl border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] p-5"
       onSubmit={save}
     >
-      <label className="block space-y-2 font-medium text-sm">
+      <label className="block space-y-1.5 font-medium text-sm">
         <span>{labels.recipient}</span>
         <input
           autoComplete="off"
@@ -92,7 +128,7 @@ export function DraftComposer({
           value={recipient}
         />
       </label>
-      <label className="block space-y-2 font-medium text-sm">
+      <label className="block space-y-1.5 font-medium text-sm">
         <span>{labels.subject}</span>
         <input
           className={fieldClass}
@@ -105,10 +141,10 @@ export function DraftComposer({
           value={subject}
         />
       </label>
-      <label className="block space-y-2 font-medium text-sm">
+      <label className="block space-y-1.5 font-medium text-sm">
         <span>{labels.body}</span>
         <textarea
-          className={`${fieldClass} min-h-56 resize-y leading-6`}
+          className={`${fieldClass} min-h-80 resize-y font-normal leading-6`}
           maxLength={100_000}
           onChange={(event) => {
             setBody(event.target.value);
@@ -118,15 +154,18 @@ export function DraftComposer({
           value={body}
         />
       </label>
+      <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+        {labels.editWarning}
+      </p>
       <div className="flex flex-wrap items-center gap-4">
         <button
           className="min-h-10 rounded-md bg-emerald-400 px-5 font-semibold text-slate-950 text-sm transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!connected || pending || result?.kind === "saved"}
+          disabled={!canSave || pending || result?.kind === "saved"}
           type="submit"
         >
           {pending ? labels.saving : labels.saveDraft}
         </button>
-        {!connected && (
+        {!canSave && (
           <p className="text-amber-300 text-sm">{labels.connectToSave}</p>
         )}
         {result && (
@@ -134,8 +173,8 @@ export function DraftComposer({
             className={`text-sm ${result.kind === "saved" ? "text-emerald-300" : "text-amber-300"}`}
           >
             {result.kind === "saved"
-              ? `${labels.saved} ${labels.draftId}: ${result.id}`
-              : labels.failed}
+              ? `${labels.saved} ${labels.savedFrom}: ${result.sender} · ${labels.draftId}: ${result.id}`
+              : result.message}
           </output>
         )}
       </div>

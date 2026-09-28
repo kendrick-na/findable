@@ -224,8 +224,8 @@
         "measuredOn": "2026-09-29",
         "answers": 32,
         "engines": [
-          "Gemini",
           "ChatGPT",
+          "Gemini",
           "Claude"
         ],
         "productConfirmed": 0,
@@ -255,8 +255,8 @@
         "measuredOn": "2026-09-29",
         "answers": 32,
         "engines": [
-          "Gemini",
           "ChatGPT",
+          "Gemini",
           "Claude"
         ],
         "productConfirmed": 25,
@@ -345,7 +345,7 @@
         "checkedOn": "2026-09-25"
       },
       "measurement": {
-        "measuredOn": null,
+        "measuredOn": "2026-09-29",
         "answers": 32,
         "engines": [
           "ChatGPT",
@@ -379,8 +379,8 @@
         "measuredOn": "2026-09-29",
         "answers": 32,
         "engines": [
-          "Gemini",
           "ChatGPT",
+          "Gemini",
           "Claude"
         ],
         "productConfirmed": 22,
@@ -417,13 +417,7 @@
         "productConfirmed": 7,
         "answersWithCitations": 24,
         "officialCited": 4,
-        "hook": {
-          "label": "자연원료 기반 브랜드",
-          "labelCount": 8,
-          "independentCorrect": 24,
-          "excerpt": "Round Lab is a prominent Korean skincare brand established in 2017, known for its commitment to natural and sustainable ingredients.",
-          "excerptEngine": "Gemini"
-        }
+        "hook": null
       },
       "reportUrl": null
     },
@@ -446,7 +440,7 @@
           "Gemini",
           "Claude"
         ],
-        "productConfirmed": 20,
+        "productConfirmed": 21,
         "answersWithCitations": 23,
         "officialCited": 12,
         "hook": null
@@ -466,13 +460,14 @@
       "contact": null,
       "measurement": {
         "measuredOn": "2026-09-29",
-        "answers": 15,
+        "answers": 32,
         "engines": [
           "ChatGPT",
-          "Gemini"
+          "Gemini",
+          "Claude"
         ],
-        "productConfirmed": 15,
-        "answersWithCitations": 9,
+        "productConfirmed": 31,
+        "answersWithCitations": 24,
         "officialCited": 0,
         "hook": null
       },
@@ -489,7 +484,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 21,
+        "answersWithCitations": 24,
+        "officialCited": 19,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -503,7 +510,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 27,
+        "answersWithCitations": 24,
+        "officialCited": 18,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -517,7 +536,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 20,
+        "answersWithCitations": 24,
+        "officialCited": 9,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -531,7 +562,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 24,
+        "answersWithCitations": 24,
+        "officialCited": 17,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -545,7 +588,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 16,
+        "answersWithCitations": 24,
+        "officialCited": 16,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -559,7 +614,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 18,
+        "answersWithCitations": 24,
+        "officialCited": 13,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -573,7 +640,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 31,
+        "answersWithCitations": 24,
+        "officialCited": 16,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -587,7 +666,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 25,
+        "answersWithCitations": 24,
+        "officialCited": 15,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -601,7 +692,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 6,
+        "answersWithCitations": 24,
+        "officialCited": 7,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -615,7 +718,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 14,
+        "answersWithCitations": 24,
+        "officialCited": 11,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -629,7 +744,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 0,
+        "answersWithCitations": 24,
+        "officialCited": 6,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -643,7 +770,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 28,
+        "answersWithCitations": 24,
+        "officialCited": 12,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -657,7 +796,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 7,
+        "answersWithCitations": 24,
+        "officialCited": 5,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -671,7 +822,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 17,
+        "answersWithCitations": 24,
+        "officialCited": 15,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -685,7 +848,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 5,
+        "answersWithCitations": 24,
+        "officialCited": 6,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -699,7 +874,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 22,
+        "answersWithCitations": 23,
+        "officialCited": 1,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -713,7 +900,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 6,
+        "answersWithCitations": 24,
+        "officialCited": 5,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -727,7 +926,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 21,
+        "answersWithCitations": 24,
+        "officialCited": 16,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -741,7 +952,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 23,
+        "answersWithCitations": 24,
+        "officialCited": 0,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -755,7 +978,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 18,
+        "answersWithCitations": 23,
+        "officialCited": 18,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -769,7 +1004,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 17,
+        "answersWithCitations": 23,
+        "officialCited": 16,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -783,7 +1030,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 7,
+        "answersWithCitations": 24,
+        "officialCited": 7,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -797,7 +1056,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 2,
+        "answersWithCitations": 21,
+        "officialCited": 3,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -811,7 +1082,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 13,
+        "answersWithCitations": 24,
+        "officialCited": 3,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -825,7 +1108,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 20,
+        "answersWithCitations": 24,
+        "officialCited": 20,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -839,7 +1134,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 3,
+        "answersWithCitations": 24,
+        "officialCited": 5,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -853,7 +1160,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 25,
+        "answersWithCitations": 20,
+        "officialCited": 10,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -867,7 +1186,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 2,
+        "answersWithCitations": 24,
+        "officialCited": 2,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -881,7 +1212,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 27,
+        "answersWithCitations": 24,
+        "officialCited": 9,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -895,7 +1238,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 12,
+        "answersWithCitations": 24,
+        "officialCited": 12,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -909,7 +1264,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 24,
+        "answersWithCitations": 24,
+        "officialCited": 14,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -923,7 +1290,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 7,
+        "answersWithCitations": 24,
+        "officialCited": 6,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -937,7 +1316,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 26,
+        "answersWithCitations": 24,
+        "officialCited": 16,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -951,7 +1342,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 19,
+        "answersWithCitations": 24,
+        "officialCited": 18,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -965,7 +1368,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 17,
+        "answersWithCitations": 24,
+        "officialCited": 17,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -979,7 +1394,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 19,
+        "answersWithCitations": 24,
+        "officialCited": 12,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -993,7 +1420,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 18,
+        "answersWithCitations": 24,
+        "officialCited": 14,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -1007,7 +1446,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 13,
+        "answersWithCitations": 24,
+        "officialCited": 9,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -1021,7 +1472,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 32,
+        "answersWithCitations": 24,
+        "officialCited": 0,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -1035,7 +1498,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 15,
+        "answersWithCitations": 24,
+        "officialCited": 13,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -1049,7 +1524,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 14,
+        "answersWithCitations": 24,
+        "officialCited": 11,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -1063,7 +1550,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 7,
+        "answersWithCitations": 23,
+        "officialCited": 7,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -1077,7 +1576,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 12,
+        "answersWithCitations": 21,
+        "officialCited": 8,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -1091,7 +1602,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 18,
+        "answersWithCitations": 24,
+        "officialCited": 15,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -1105,7 +1628,19 @@
       "priority": 2,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 17,
+        "answersWithCitations": 22,
+        "officialCited": 7,
+        "hook": null
+      },
       "reportUrl": null
     },
     {
@@ -1119,7 +1654,19 @@
       "priority": 3,
       "track": "prospect",
       "contact": null,
-      "measurement": null,
+      "measurement": {
+        "measuredOn": "2026-09-29",
+        "answers": 32,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "productConfirmed": 13,
+        "answersWithCitations": 24,
+        "officialCited": 11,
+        "hook": null
+      },
       "reportUrl": null
     }
   ]
