@@ -478,9 +478,28 @@ model Report {
   pdfUrl         String?
   data           Json? // SoV·Sentiment·시계열·경쟁사 비교 등
   generatedAt    DateTime      @default(now())
+  /// 고객 웹 리포트(`/r/<accessToken>`) 공유 링크 토큰 (2026-09-28).
+  /// id(uuid)를 URL 에 그대로 쓰지 않는 이유: 링크를 **폐기·재발급**할 수 있어야 한다
+  /// (null 로 지우면 그 링크만 즉시 404). 256비트 base64url — 추측 불가.
+  accessToken    String?       @unique
+  views          ReportView[]
 
   @@index([brandId])
   @@index([organizationId])
+}
+
+/// 고객 웹 리포트 열람 기록 (2026-09-28). **개인정보를 담지 않는다** —
+/// IP·쿠키·Clerk id 없음. user-agent 는 원문이 아니라 SHA-256 앞 16자만(같은 기기 반복 열람 구분용).
+/// Report.data 에 덧붙이지 않는 이유: data 는 사람이 판별을 확정한 **동결 스냅숏**이라
+/// 열람 때마다 고쳐 쓰면 동시 쓰기에서 판별 데이터가 덮일 수 있다.
+model ReportView {
+  id       String   @id @default(uuid())
+  reportId String
+  report   Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  viewedAt DateTime @default(now())
+  uaHash   String?
+
+  @@index([reportId, viewedAt])
 }
 
 // ──────────────────────────────────────────────────

@@ -37,6 +37,15 @@ const EXPLICIT_LOCALE_PATH_RE = /^\/(?:ko|en)(?:\/|$)/;
 const LOCALE_NEUTRAL_PATHS = new Set(["/ai-instructions"]);
 
 /**
+ * 고객 웹 리포트 `/r/<공유토큰>`(2026-09-28). 로케일 없는 전용 루트 레이아웃(`app/r/`)이라
+ * 접두사를 붙이면 `/ko/r/...` 로 튕겨 404 가 난다. 또 PDF 생성기(headless Chrome)가 이 주소를
+ * 인쇄하므로 봇 판정(Arcjet)에서도 빼야 한다 — 공개 랜딩과 같은 취급(링크 소유자만 아는 주소).
+ */
+const CLIENT_REPORT_PATH_RE = /^\/r\/[A-Za-z0-9_-]+\/?$/;
+const isLocaleNeutralPath = (pathname: string): boolean =>
+  LOCALE_NEUTRAL_PATHS.has(pathname) || CLIENT_REPORT_PATH_RE.test(pathname);
+
+/**
  * Public landing pages are the first unauthenticated entry point. A bot
  * classification false positive must not turn a visitor's first request into
  * a 403. Form/API routes retain their route-level rate limits.
@@ -44,6 +53,7 @@ const LOCALE_NEUTRAL_PATHS = new Set(["/ai-instructions"]);
 const isPublicLandingPath = (pathname: string): boolean =>
   pathname === "/" ||
   EXPLICIT_LOCALE_PATH_RE.test(pathname) ||
+  CLIENT_REPORT_PATH_RE.test(pathname) ||
   LOCALE_NEUTRAL_PATHS.has(pathname);
 
 export const config = {
@@ -76,10 +86,7 @@ const securityHeaders = env.FLAGS_SECRET
  */
 const localeAwareInternationalization = (request: NextRequest) => {
   const { pathname } = request.nextUrl;
-  if (
-    EXPLICIT_LOCALE_PATH_RE.test(pathname) ||
-    LOCALE_NEUTRAL_PATHS.has(pathname)
-  ) {
+  if (EXPLICIT_LOCALE_PATH_RE.test(pathname) || isLocaleNeutralPath(pathname)) {
     return;
   }
   return internationalizationMiddleware(request);
