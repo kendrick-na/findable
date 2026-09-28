@@ -35,6 +35,7 @@ import {
   ListChecksIcon,
   LockIcon,
   type LucideIcon,
+  MailIcon,
   MessageSquareIcon,
   PenLineIcon,
   PlayIcon,
@@ -120,6 +121,7 @@ export interface SidebarLabels {
   adminAudits: string;
   adminContent: string;
   adminEvidence: string;
+  adminMail: string;
   adminMeasure: string;
   adminOps: string;
   adminOrgs: string;
@@ -265,6 +267,7 @@ const accountNav = (t: SidebarLabels): NavItem[] => [
 // 플랫폼 운영자 전용 내비. admin 에게만 렌더.
 const adminNav = (t: SidebarLabels): NavItem[] => [
   { title: t.adminOps, url: "/admin/ops", icon: ActivityIcon },
+  { title: t.adminMail, url: "/admin/ax-mail", icon: MailIcon },
   { title: t.adminContent, url: "/admin/content", icon: PenLineIcon },
   // 🆕 세션N-42: 가입 조직·초대 코드. 오버엣지 참여 기업이 코드로 들어오는데
   //   **누가 가입했는지 앱에서 볼 화면이 0곳**이었다(운영자가 SQL 을 돌려야 했다).

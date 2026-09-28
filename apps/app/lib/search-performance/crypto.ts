@@ -8,21 +8,21 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 
-function key(): Buffer {
-  const value = process.env.SEARCH_PERFORMANCE_ENCRYPTION_KEY;
+function key(keyName = "SEARCH_PERFORMANCE_ENCRYPTION_KEY"): Buffer {
+  const value = process.env[keyName];
   if (!value) {
-    throw new Error("SEARCH_PERFORMANCE_ENCRYPTION_KEY_MISSING");
+    throw new Error(`${keyName}_MISSING`);
   }
   const decoded = Buffer.from(value, "base64");
   if (decoded.length !== 32) {
-    throw new Error("SEARCH_PERFORMANCE_ENCRYPTION_KEY_INVALID");
+    throw new Error(`${keyName}_INVALID`);
   }
   return decoded;
 }
 
-export function encryptRefreshToken(token: string): string {
+export function encryptRefreshToken(token: string, keyName?: string): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key(), iv);
+  const cipher = createCipheriv("aes-256-gcm", key(keyName), iv);
   const encrypted = Buffer.concat([
     cipher.update(token, "utf8"),
     cipher.final(),
@@ -32,14 +32,14 @@ export function encryptRefreshToken(token: string): string {
     .join(".");
 }
 
-export function decryptRefreshToken(value: string): string {
+export function decryptRefreshToken(value: string, keyName?: string): string {
   const [ivValue, tagValue, encryptedValue] = value.split(".");
   if (!(ivValue && tagValue && encryptedValue)) {
     throw new Error("REFRESH_TOKEN_INVALID");
   }
   const decipher = createDecipheriv(
     "aes-256-gcm",
-    key(),
+    key(keyName),
     Buffer.from(ivValue, "base64url")
   );
   decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
@@ -49,20 +49,23 @@ export function decryptRefreshToken(value: string): string {
   ]).toString("utf8");
 }
 
-export function signOAuthState(payload: Record<string, unknown>): string {
+export function signOAuthState(
+  payload: Record<string, unknown>,
+  keyName?: string
+): string {
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = createHmac("sha256", key())
+  const signature = createHmac("sha256", key(keyName))
     .update(encoded)
     .digest("base64url");
   return `${encoded}.${signature}`;
 }
 
-export function verifyOAuthState<T>(state: string): T {
+export function verifyOAuthState<T>(state: string, keyName?: string): T {
   const [encoded, supplied] = state.split(".");
   if (!(encoded && supplied)) {
     throw new Error("OAUTH_STATE_INVALID");
   }
-  const expected = createHmac("sha256", key()).update(encoded).digest();
+  const expected = createHmac("sha256", key(keyName)).update(encoded).digest();
   const actual = Buffer.from(supplied, "base64url");
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
     throw new Error("OAUTH_STATE_INVALID");

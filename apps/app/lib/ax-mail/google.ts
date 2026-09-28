@@ -1,0 +1,180 @@
+import "server-only";
+
+import {
+  decryptRefreshToken,
+  encryptRefreshToken,
+  signOAuthState,
+  verifyOAuthState,
+} from "@/lib/search-performance/crypto";
+
+export const MAIL_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
+const MAIL_KEY = "MAILBOX_ENCRYPTION_KEY";
+const TRAILING_SLASH_RE = /\/$/;
+const HEADER_NEWLINE_RE = /[\r\n]/;
+
+function config() {
+  const clientId = process.env.GOOGLE_MAIL_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_MAIL_CLIENT_SECRET;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (!(clientId && clientSecret && appUrl)) {
+    throw new Error("GOOGLE_MAIL_CONFIG_MISSING");
+  }
+  return {
+    clientId,
+    clientSecret,
+    redirectUri: `${appUrl.replace(TRAILING_SLASH_RE, "")}/api/ax-mail/google/callback`,
+  };
+}
+
+export function mailState(payload: Record<string, unknown>) {
+  return signOAuthState(payload, MAIL_KEY);
+}
+
+export function parseMailState<T>(state: string): T {
+  return verifyOAuthState<T>(state, MAIL_KEY);
+}
+
+export function encryptMailToken(token: string) {
+  return encryptRefreshToken(token, MAIL_KEY);
+}
+
+export function googleMailAuthorizationUrl(state: string): string {
+  const { clientId, redirectUri } = config();
+  const params = new URLSearchParams({
+    access_type: "offline",
+    client_id: clientId,
+    prompt: "consent",
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: MAIL_SCOPE,
+    state,
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+async function responseJson<T>(response: Response, error: string): Promise<T> {
+  if (!response.ok) {
+    throw new Error(`${error}_${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
+export async function exchangeMailCode(code: string) {
+  const { clientId, clientSecret, redirectUri } = config();
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      grant_type: "authorization_code",
+      redirect_uri: redirectUri,
+    }),
+    cache: "no-store",
+  });
+  return responseJson<{
+    access_token: string;
+    refresh_token?: string;
+    scope?: string;
+  }>(response, "MAIL_CODE_EXCHANGE_FAILED");
+}
+
+export async function refreshMailAccessToken(encrypted: string) {
+  const { clientId, clientSecret } = config();
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: decryptRefreshToken(encrypted, MAIL_KEY),
+    }),
+    cache: "no-store",
+  });
+  const result = await responseJson<{ access_token: string }>(
+    response,
+    "MAIL_TOKEN_REFRESH_FAILED"
+  );
+  return result.access_token;
+}
+
+export async function googleMailAddress(accessToken: string) {
+  const response = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    }
+  );
+  const result = await responseJson<{ emailAddress: string }>(
+    response,
+    "MAIL_PROFILE_FAILED"
+  );
+  if (!result.emailAddress?.includes("@")) {
+    throw new Error("MAIL_PROFILE_EMAIL_MISSING");
+  }
+  return result.emailAddress;
+}
+
+function foldedBase64(value: string): string {
+  return (
+    Buffer.from(value, "utf8")
+      .toString("base64")
+      .match(/.{1,76}/g)
+      ?.join("\r\n") ?? ""
+  );
+}
+
+export function buildRawMail(
+  recipient: string,
+  subject: string,
+  body: string
+): string {
+  if (HEADER_NEWLINE_RE.test(recipient) || HEADER_NEWLINE_RE.test(subject)) {
+    throw new Error("MAIL_HEADER_INVALID");
+  }
+  const encodedSubject = `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
+  const mime = [
+    `To: ${recipient}`,
+    `Subject: ${encodedSubject}`,
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    foldedBase64(body),
+  ].join("\r\n");
+  return Buffer.from(mime, "utf8").toString("base64url");
+}
+
+/** 서버에는 발송 경로를 두지 않는다. Gmail 보관함에 초안만 생성한다. */
+export async function createGoogleDraft(
+  accessToken: string,
+  recipient: string,
+  subject: string,
+  body: string
+): Promise<string> {
+  const response = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/drafts",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: { raw: buildRawMail(recipient, subject, body) },
+      }),
+      cache: "no-store",
+    }
+  );
+  const result = await responseJson<{ id?: string }>(
+    response,
+    "MAIL_DRAFT_FAILED"
+  );
+  if (!result.id) {
+    throw new Error("MAIL_DRAFT_ID_MISSING");
+  }
+  return result.id;
+}

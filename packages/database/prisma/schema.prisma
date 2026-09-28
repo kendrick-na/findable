@@ -42,6 +42,8 @@ model Organization {
   auditJobs AuditJob[]
   siteReadinessRuns SiteReadinessRun[]
   searchPerformanceConnections SearchPerformanceConnection[]
+  mailboxConnections MailboxConnection[]
+  outreachDrafts OutreachDraft[]
   indexNowConfigurations IndexNowConfiguration[]
   consultationNotes      ConsultationNote[]
 
@@ -607,6 +609,46 @@ model SearchPerformanceConnection {
   @@unique([brandId, provider])
   @@index([organizationId, updatedAt])
   @@index([status])
+}
+
+// 운영자 영업 초안 전용. 고객 조직과 운영자 userId를 함께 묶는다.
+model MailboxConnection {
+  id                    String       @id @default(uuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId                String
+  provider              String       // google_workspace
+  email                 String
+  encryptedRefreshToken String       @db.Text
+  scopes                String[]     @default([])
+  status                String       @default("connected")
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  drafts                OutreachDraft[]
+
+  @@unique([organizationId, userId, provider])
+  @@index([organizationId, updatedAt])
+}
+
+model OutreachDraft {
+  id             String            @id @default(uuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  connectionId   String
+  connection     MailboxConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  idempotencyKey String
+  recipient      String
+  subject        String
+  bodyHash       String
+  remoteDraftId  String?
+  status         String            @default("pending") // pending | created | failed
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([organizationId, userId, idempotencyKey])
+  @@index([organizationId, createdAt])
+  @@index([connectionId])
 }
 
 model SearchPerformanceDaily {
