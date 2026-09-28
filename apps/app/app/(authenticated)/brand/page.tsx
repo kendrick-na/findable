@@ -151,6 +151,9 @@ const BrandPage = async () => {
               {brands.map((brand) => {
                 const lastJob = latestByDomain.get(brand.domain);
                 const view = lastJob ? jobView(lastJob) : null;
+                const identityReady = Boolean(
+                  brand.name.trim() && brand.industry && brand.marketScope
+                );
                 return (
                   <li
                     className="flex flex-col gap-3 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] px-4 py-3"
@@ -222,8 +225,15 @@ const BrandPage = async () => {
                       <StartTrackingButton
                         brandName={brand.name}
                         domain={brand.domain}
+                        identityReady={identityReady}
                       />
                     </div>
+                    {!identityReady && (
+                      <p className="text-amber-600 text-sm dark:text-amber-400">
+                        정확한 측정을 위해 아래에서 브랜드명·업종·타깃 시장을
+                        확인하고 저장해 주세요.
+                      </p>
+                    )}
                     <PromptWizard brandId={brand.id} />
                     {/* 🔴 N-44 남은일 1-c — 온보딩을 **건너뛴 사람의 유일한 경로**.
                         `/welcome` 2·4단계는 건너뛸 수 있고, 무료 진단 후 가입자는 온보딩

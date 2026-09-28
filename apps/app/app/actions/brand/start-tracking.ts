@@ -150,7 +150,11 @@ export type StartTrackingResult =
   // upgrade=true 면 플랜 업그레이드로 풀리는 제한 → 버튼이 "요금제 보기" 액션을 함께 띄운다.
   | {
       error: string;
-      code?: "unauthorized" | "rate_limited" | "not_configured";
+      code?:
+        | "unauthorized"
+        | "rate_limited"
+        | "not_configured"
+        | "identity_incomplete";
       upgrade?: boolean;
     };
 
@@ -268,13 +272,7 @@ export const startOrgTracking = async (
       return { error: "브랜드 준비 중 문제가 발생했습니다." };
     }
 
-    // 6) 재측정 정책 — 차단 사유가 있으면 에러 결과 반환.
-    const blocked = await checkRemeasurePolicy(orgId, domain);
-    if (blocked) {
-      return blocked;
-    }
-
-    // 브랜드에 저장된 업종을 job 으로 승계한다(2026-08-02).
+    // 6) 브랜드에 저장된 업종을 job 으로 승계한다(2026-08-02).
     //   업종을 모르면 crew 가 소비재 채널을 기본값처럼 처방한다(반도체에 화장품 채널).
     //   비어 있으면 러너가 도메인으로 자동 추론하므로 기존 동작과 동일하다.
     const brandRecord = await database.brand.findUnique({
@@ -282,7 +280,25 @@ export const startOrgTracking = async (
       select: { entityVariants: true, industry: true, marketScope: true },
     });
 
-    // 7) AuditJob 생성. email은 org 트리거 식별자(비로그인 intake와 스코프 구분).
+    // 기존 무료 진단·초기 온보딩에서 만들어진 Brand에는 업종/시장이 비어 있을 수 있다.
+    // 이 상태로 돌리면 도메인 추론에만 기대어 질문·판별 기준이 흐려진다. 새 등록과
+    // 같은 불변식을 서버에서도 강제해, 버튼/직접 호출 어느 쪽도 불완전한 기준으로
+    // "정확한 측정"을 시작하지 못하게 한다.
+    if (!(brandName && brandRecord?.industry && brandRecord.marketScope)) {
+      return {
+        error:
+          "측정 기준을 먼저 확인해 주세요. 브랜드명·업종·타깃 시장을 저장하면 정확한 질문과 판별 기준으로 측정합니다.",
+        code: "identity_incomplete",
+      };
+    }
+
+    // 7) 재측정 정책 — 차단 사유가 있으면 에러 결과 반환.
+    const blocked = await checkRemeasurePolicy(orgId, domain);
+    if (blocked) {
+      return blocked;
+    }
+
+    // 8) AuditJob 생성. email은 org 트리거 식별자(비로그인 intake와 스코프 구분).
     //    P5 8-b(2026-07-30): nullable FK forward-fill — org 트리거 job 을 그래프에 직접 연결.
     const job = await database.auditJob.create({
       data: {
@@ -303,7 +319,7 @@ export const startOrgTracking = async (
       domain,
     });
 
-    // 8) 백그라운드 실행 — P2 핵심: HTTP fetch 없이 러너를 app 서버에서 직접 호출.
+    // 9) 백그라운드 실행 — P2 핵심: HTTP fetch 없이 러너를 app 서버에서 직접 호출.
     //    org/brandId를 서버 도출값으로 넘긴다(dual-write 게이트 충족).
     after(async () => {
       try {

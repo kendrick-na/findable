@@ -35,9 +35,11 @@ const PHASE_LABEL: Record<Phase, string> = {
 export const StartTrackingButton = ({
   domain,
   brandName,
+  identityReady,
 }: {
   domain: string;
   brandName: string;
+  identityReady: boolean;
 }) => {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -130,13 +132,13 @@ export const StartTrackingButton = ({
   return (
     <Button
       className="findable-btn-secondary"
-      disabled={phase !== "idle"}
+      disabled={phase !== "idle" || !identityReady}
       onClick={start}
       size="sm"
       type="button"
       variant="outline"
     >
-      {PHASE_LABEL[phase]}
+      {identityReady ? PHASE_LABEL[phase] : "측정 기준 확인 필요"}
     </Button>
   );
 };
