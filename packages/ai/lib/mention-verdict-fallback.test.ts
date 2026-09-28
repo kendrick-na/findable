@@ -34,6 +34,21 @@ describe("mention verification provider failure", () => {
     expect(generateObject).toHaveBeenCalledTimes(2);
   });
 
+  it("retries one transient primary verifier failure before withholding a result", async () => {
+    vi.stubEnv("LETSUR_API_KEY", "test-key");
+    vi.stubEnv("GOOGLE_API_KEY", "");
+    vi.mocked(generateObject)
+      .mockRejectedValueOnce({ lastError: { statusCode: 503 } })
+      .mockResolvedValueOnce({ object: { quality: "confirmed" } } as never);
+
+    expect(await verifyMention(input)).toEqual({
+      counted: true,
+      quality: "confirmed",
+      via: "llm",
+    });
+    expect(generateObject).toHaveBeenCalledTimes(2);
+  });
+
   it("marks a failed verification as unverified, never as unknown brand", async () => {
     vi.stubEnv("LETSUR_API_KEY", "test-key");
     vi.stubEnv("GOOGLE_API_KEY", "");

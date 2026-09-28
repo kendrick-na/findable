@@ -449,8 +449,35 @@ async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
     });
     return object.quality;
   } catch (error) {
+    const primaryError = describeProviderError(error);
+
+    // 일시적인 5xx/연결 오류 한 번으로 실제 브랜드 판별을 포기하면, 고객은
+    // "잠정 결과"만 보게 된다. 같은 입력을 한 번만 즉시 재시도한다. 429는
+    // 재시도해도 악화될 수 있어 독립 Google 판정기로 바로 넘긴다.
+    if (
+      primaryError.statusCode === null ||
+      primaryError.statusCode === 408 ||
+      primaryError.statusCode >= 500
+    ) {
+      try {
+        const { object } = await generateObject({
+          model: await verdictModel(),
+          schema: VerdictSchema,
+          prompt,
+          temperature: 0,
+        });
+        log.info("mention.verdict.primary_retry_succeeded", {
+          brandName: input.brandName,
+        });
+        return object.quality;
+      } catch (retryError) {
+        error = retryError;
+      }
+    }
+
+    const finalError = describeProviderError(error);
     const googleKey = process.env.GOOGLE_API_KEY;
-    if (googleKey && describeProviderError(error).statusCode === 429) {
+    if (googleKey && finalError.statusCode === 429) {
       try {
         const google = createGoogleGenerativeAI({ apiKey: googleKey });
         const { object } = await generateObject({
