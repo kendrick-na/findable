@@ -16,6 +16,18 @@
 //      커뮤니티를, 해외 브랜드에 네이버를 권하면 둘 다 똑같이 엉뚱하다.
 
 // 타입만 가져온다(런타임 의존 0) — 이 파일은 순수 함수 모듈로 유지한다.
+import {
+  type ActionGuide,
+  awarenessActions,
+  crawlAccessAction,
+  DONT_LIST,
+  type DontItem,
+  entityClarityAction,
+  ownedPageAction,
+  RULE_SOURCES,
+  type RuleSignals,
+  type VerdictEvidence,
+} from "./action-rules";
 import type { MarketScope } from "./market-scope";
 
 // 한국어 조사 자동 선택 — "나이키이(가)" 같은 어색한 표기 방지.
@@ -89,11 +101,25 @@ export type ActionKind =
   | "prompt_gap"
   | "source_portfolio"
   | "content_fix"
-  | "avoid";
+  | "avoid"
+  // 2026-09-28 근거 등급 규칙표(`action-rules.ts`). 브랜드당 최대 1건씩이라 target 은 "".
+  | "entity_clarity"
+  | "naver_blog"
+  | "best_lists"
+  | "bing_webmaster"
+  | "crawl_access"
+  | "web_mentions";
 
 export interface GeoAction {
+  /** `avoid` 카드에만 — 「하지 마세요」 항목별 근거. */
+  donts?: DontItem[];
   /** 왜 이 액션이 나왔는지 — 우리가 측정한 실제 근거(숫자·도메인·프롬프트 원문). */
   evidence: string;
+  /**
+   * 근거 등급 6칸(등급·출처·적용 AI·작업 시간·효과 시차·재측정 지표·실패 조건).
+   * 2026-09-28 이전에 저장된 액션에는 없다 → 화면은 없으면 기존 카드만 그린다.
+   */
+  guide?: ActionGuide;
   /** 실행 방법. 고객이 그대로 따라 할 수 있는 수준. */
   how: string;
   kind: ActionKind;
@@ -103,10 +129,10 @@ export interface GeoAction {
   source?: string;
   /** 한 줄 제목. 목록에서 이것만 읽어도 뭘 하라는지 알아야 한다. */
   title: string;
-  /** 측정 근거에서 도출한 실제 수정·확인 위치. */
-  where?: string;
   /** 효과를 추정으로 끝내지 않고 다음 회차에 확인하는 방법. */
   verification?: string;
+  /** 측정 근거에서 도출한 실제 수정·확인 위치. */
+  where?: string;
 }
 
 /** 액션 생성에 필요한 측정 신호(구조적 타이핑 — 호출부가 무엇이든 이 모양만 맞추면 된다). */
@@ -149,6 +175,12 @@ export interface ActionInput {
    * 고객이 바로 가서 확인할 수 있어야 액션이 구체적이 된다.
    */
   topDomains?: Array<{ count: number; domain: string; owned: boolean }>;
+  /**
+   * 답변 단위 판정 집계(`summarizeVerdicts`) — 확인/동명 오인/모름/엔진 오류.
+   * 있으면 처방이 "22건 중 8건이 다른 회사로 설명"처럼 **관측 건수**를 말한다.
+   * 없으면(구버전 호출부) 엔진 단위 신호로 폴백한다.
+   */
+  verdicts?: VerdictEvidence;
 }
 
 function primaryOwnedPage(input: ActionInput): string {
@@ -447,56 +479,81 @@ function sourcePortfolioAction(input: ActionInput): GeoAction | null {
 }
 
 // ──────────────────────────────────────────────────
-// ⑤ 콘텐츠 보강 — 논문이 검증한 문장 단위 처방
+// ⑤ 공식 페이지 — 근거 등급 규칙표로 대체 (2026-09-28)
+// ──────────────────────────────────────────────────
+//
+// 🔴 **Princeton 「+41%」 고정 카드를 지웠다.** 근거 = GPT-3.5 시절 합성 벤치마크 1편이고
+//   재현이 약하다(근거 등급 weak). 그 숫자를 제목에 박으면 지킬 수 없는 약속이 된다.
+//   대신 `action-rules.ts` 의 「제목·URL 을 질문에 맞추기」(Ahrefs 140만 프롬프트 · medium)
+//   카드를 같은 `content_fix` kind 로 낸다 — `latest-brief.ts` 초안 기능이 이 kind 를 찾는다.
+// 🔴 인지 0 일 때의 「공식 소개 한 문단 + 위키·디렉터리」 고정 문구도 지웠다.
+//   인지가 낮으면 `awarenessActions` 가 채널별(네이버·추천 목록·Bing·외부 언급) 카드를 낸다.
+
+function ruleSignals(input: ActionInput): RuleSignals {
+  const measuredOwned = input.verdicts?.ownedCitationCount;
+  return {
+    brandDomain: input.brandDomain,
+    brandName: input.brandName,
+    enginesMeasured: input.enginesMeasured,
+    enginesMentioned: input.enginesMentioned,
+    marketScope: input.marketScope ?? "both",
+    measuredLabel: measurementEvidenceLabel(input),
+    // 공식 사이트 인용 수: 답변 단위 관측값 > 출처 유형 집계 > 모름(null).
+    ownedCitations:
+      typeof measuredOwned === "number"
+        ? measuredOwned
+        : (input.sourceMix?.owned ?? null),
+    verdicts: input.verdicts,
+  };
+}
+
+// ──────────────────────────────────────────────────
+// 기존 kind 에도 근거 등급을 붙인다 — 카드마다 6칸이 비지 않게
 // ──────────────────────────────────────────────────
 
-function contentFixAction(input: ActionInput): GeoAction | null {
-  // 인지가 아예 없으면 콘텐츠 보강보다 존재 자체를 먼저 만들어야 한다.
-  if (input.enginesMentioned === 0) {
+const PRINCETON_SOURCE = {
+  label: "Princeton GEO 논문(KDD 2024) — GPT-3.5 기반 실험, 재현 부족",
+  url: "https://arxiv.org/abs/2311.09735",
+};
+
+function legacyGuide(action: GeoAction): ActionGuide | undefined {
+  if (action.kind === "prompt_gap") {
     return {
-      kind: "content_fix",
-      priority: 3,
-      title:
-        "등록 브랜드로 확인된 답변이 없습니다 — 먼저 '알려진 사실'을 만드세요",
-      evidence: `${measurementEvidenceLabel(input)} 중 등록한 ${input.brandName}로 확인된 답변은 0개였습니다.`,
-      how:
-        "AI는 여러 곳에 반복 등장하는 정보를 학습합니다. ①공식 소개 페이지에 " +
-        "'무엇을 하는 회사인지' 한 문단으로 명확히 쓰고 ②위키·업계 디렉터리·보도자료처럼 " +
-        "제3자가 검증 가능한 자리에 같은 사실을 남기세요. 이름만 반복하는 건 효과가 없습니다.",
-      source: "우리 측정 데이터 — 등록 브랜드 확인률 0%",
-      where: primaryOwnedPage(input),
-      verification:
-        "다음 측정에서 같은 질문의 등록 브랜드 확인 응답 수가 0건에서 벗어났는지 확인하세요.",
+      evidenceGrade: "medium",
+      sources: [RULE_SOURCES.ahrefsWhyCited],
+      engines: ["chatgpt"],
+      effortHours: { min: 2, max: 4, per: "total" },
+      effectLag: "AI 검색이 새 페이지를 읽어 간 뒤(며칠~몇 주).",
+      remeasureMetric: "이 질문에서 우리를 알아본 답변 수",
+      failCondition:
+        "페이지를 만든 뒤 두 번 재도 이 질문에서 계속 0건이면, 페이지가 색인됐는지와 제목이 질문 문구 그대로인지 확인하세요.",
     };
   }
-
-  // 🔴 감사 6번(2026-08-07 세션N-8): **카드 1개당 숫자 1개.**
-  //   거절 사유: *"'최대 +41%'와 'Princeton +132.4% 사례'가 같은 카드에 —
-  //   하나는 최대, 하나는 사례. 이런 숫자 섞기를 보면 나머지 데이터도 의심한다"*
-  //   이 카드 하나에 **뜻이 다른 숫자가 4종** 있었다:
-  //     ① 제목 "최대 +41%"(Table 1 최댓값) ② 본문 +41/31/27%(방법별 평균)
-  //     ③ 출처 "+132.4%"(Table 4의 **단일 최고 사례**, 다른 표·다른 조건)
-  //   → **Table 1 평균 하나로 통일**한다. +132.4%는 체리피킹이라 제거
-  //     (남기면 고객이 132%를 기대하는데 실제 근거는 41%다 = 지키지 못할 약속).
-  //   본문의 방법별 수치는 "무엇부터 할지" 순서를 정하는 근거라 남긴다 —
-  //   **같은 표·같은 기준(베이스라인 19.3 대비)** 이므로 섞임이 아니다.
-  const { quotation, statistics, citeSources } = GEO_METHOD_LIFT;
-  return {
-    kind: "content_fix",
-    priority: 3,
-    title: `인용되는 페이지에 '근거 문장'을 추가하세요 (실험 평균 +${quotation.liftPct}%)`,
-    evidence: `${measurementEvidenceLabel(input)} 중 ${input.enginesMentioned}곳이 ${input.brandName}${objectParticle(input.brandName)} 인지했습니다. 이 측정은 노출 상태를 보여주며, 편집 변경의 효과는 같은 조건으로 다시 측정해야 확인할 수 있습니다.`,
-    how:
-      `실험에서 효과가 검증된 순서대로: ①${quotation.label}(전문가·고객 인용문, +${quotation.liftPct}%) ` +
-      `②${statistics.label}(구체 수치, +${statistics.liftPct}%) ` +
-      `③${citeSources.label}(출처 표기, +${citeSources.liftPct}%). ` +
-      "실제 원문에서 확인한 수치와 측정 조건을 함께 적고 원출처를 연결하세요. " +
-      "수치가 없다면 임의의 예시를 만들지 말고 확인 가능한 사실만 씁니다.",
-    source: "Princeton GEO 논문(KDD 2024) Table 1 — 인용문 추가 시 평균 +41%",
-    where: primaryOwnedPage(input),
-    verification:
-      "수정 후 같은 질문·엔진 구성으로 브랜드 확인률, 평균 언급 위치, 인용 URL 변화를 비교하세요.",
-  };
+  if (action.kind === "rank_strategy") {
+    return {
+      evidenceGrade: "weak",
+      sources: [PRINCETON_SOURCE],
+      engines: [],
+      effortHours: { min: 1, max: 2, per: "total" },
+      effectLag: "다음 측정부터 순위 변화를 봅니다.",
+      remeasureMetric: "답변 속 평균 언급 순위",
+      failCondition:
+        "다음 두 번의 측정에서 평균 순위가 떨어지면 방향을 다시 보세요.",
+    };
+  }
+  if (action.kind === "source_portfolio") {
+    return {
+      evidenceGrade: "medium",
+      sources: [RULE_SOURCES.ahrefsVisibility],
+      engines: [],
+      effortHours: { min: 4, max: 12, per: "total" },
+      effectLag: "몇 주~몇 달.",
+      remeasureMetric: "인용 출처 중 우리 사이트 밖 출처의 비중",
+      failCondition:
+        "두 번 재도 출처 구성이 그대로면, 외부 글이 우리 이름을 정확히 쓰는지와 검색에 잡히는지 확인하세요.",
+    };
+  }
+  return undefined;
 }
 
 // ──────────────────────────────────────────────────
@@ -509,15 +566,13 @@ function avoidAction(): GeoAction {
     priority: 1,
     title: "이건 하지 마세요 — 효과가 없거나 역효과입니다",
     evidence:
-      "GEO/AI 최적화로 흔히 권해지지만, 실험·대규모 조사에서 효과가 확인되지 않은 방법들입니다.",
-    how:
-      "①키워드 반복 삽입 — 실험에서 아무것도 안 한 것보다 낮았습니다(17.7 vs 19.3). " +
-      "②llms.txt 파일 생성 — 30만 도메인 조사에서 상관 0이고, Google도 " +
-      "'AI용 파일을 새로 만들 필요 없다'는 입장입니다. " +
-      "③구조화 데이터(스키마)만 믿기 — ChatGPT·Perplexity·Claude 직접 인용에는 효과가 확인되지 않았습니다" +
-      "(검색 경유 노출에는 도움이 될 수 있어 완전히 무용하진 않습니다).",
-    source:
-      "Princeton GEO 논문 Table 1 · SE Ranking 30만 도메인 · Google 공식 문서",
+      "AI 최적화로 흔히 권해지지만, 대규모 조사·공식 문서에서 효과가 확인되지 않았거나 규정 위반 위험이 있는 방법들입니다.",
+    how: DONT_LIST.map(
+      (item, index) =>
+        `${"①②③④⑤⑥⑦"[index] ?? "·"}${item.title} — ${item.reason}`
+    ).join("\n"),
+    source: "근거 없음 · Ahrefs 스키마 조사 · Google 검색 센터 · 표시광고법",
+    donts: DONT_LIST,
   };
 }
 
@@ -534,28 +589,28 @@ const MAX_ACTIONS = 5;
  */
 export function buildGeoActions(input: ActionInput): GeoAction[] {
   const actions: GeoAction[] = [];
+  const sig = ruleSignals(input);
 
   const rank = rankStrategyAction(input);
 
   // 🔴🔴 **1순위권에는 「콘텐츠 보강」을 내지 않는다** (N-46 전수조사 · 1,024조합 중 144건).
-  //
-  //   이 두 액션은 **정반대 처방**이다:
-  //     · `rank_strategy`(1순위권) = *"더 밀어붙이지 마라 — 최적화가 노출을 떨어뜨린다"*
-  //     · `contentFix`            = *"근거 문장을 추가하라(+41%)"*
-  //   그런데 `contentFixAction` 은 **순위를 보지 않아서** 둘이 **같은 화면에 함께** 떴다.
-  //   게다가 정렬이 `priority` 만 보므로 content(P3)가 rank(P2)보다 **위에** 온다
-  //   → 1위 브랜드가 **틀린 조언을 먼저 읽는다**. 논문 기준 그대로 하면 **−30.3%**.
-  //
-  //   📕 `reference_geo_competitor_screens_4`: *"상위 노출 브랜드에는 GEO 최적화가 역효과.
-  //   이 사실을 액션에 반영한 경쟁사는 확인된 바 없다(**최대 차별화 지점**)"*
-  //   ⭐ 그 차별화 지점이 자기 화면에서 무너져 있었다.
-  //
-  //   ⚠️ **문구로 덮지 않고 발행 자체를 막는다** — 한 화면에 반대 조언이 공존하면
-  //   단서를 붙여도 고객은 헷갈린다(👤 A안).
+  //   `rank_strategy`(1순위권) = *"더 밀어붙이지 마라"* 와 `content_fix` 는 정반대 처방이라
+  //   한 화면에 공존하면 고객이 헷갈린다(👤 A안) → 발행 자체를 막는다.
   const rankSaysDefend = rank?.title === DEFEND_TITLE;
-  const content = rankSaysDefend ? null : contentFixAction(input);
-  if (content) {
-    actions.push(content);
+
+  // 삽입 순서 = 같은 우선순위 안에서의 표시 순서(정렬은 안정 정렬).
+  //   동명 오인이 제일 먼저다 — 다른 회사로 알려진 상태에서 노출을 늘리면 오해도 같이 는다.
+  const entity = entityClarityAction(sig);
+  if (entity) {
+    actions.push(entity);
+  }
+  const crawl = crawlAccessAction(sig);
+  if (crawl) {
+    actions.push(crawl);
+  }
+  actions.push(...awarenessActions(sig));
+  if (!rankSaysDefend) {
+    actions.push(ownedPageAction(sig, primaryOwnedPage(input)));
   }
   actions.push(...promptGapActions(input));
 
@@ -568,14 +623,12 @@ export function buildGeoActions(input: ActionInput): GeoAction[] {
   }
 
   // 🔴 **「하지 마세요」는 상한에서 제외한다** (N-46 · 1,024조합 중 352건이 상한 도달).
-  //   `avoid` 는 P1(가장 낮음)이라 상한에 걸리면 **항상 먼저 잘렸다.**
-  //   그런데 이 카드는 *"키워드 반복·llms.txt·스키마만 믿기 = 효과 없음"* 을 알리는
-  //   **돈·시간 낭비를 막는 유일한 카드**다. 문제가 많은 고객일수록 액션이 많아
-  //   **이걸 못 보게 되는 역진적 구조**였다.
+  //   돈·시간 낭비를 막는 유일한 카드인데 P1 이라 상한에 걸리면 항상 먼저 잘렸다.
   //   → 상한은 «해야 할 일»에만 적용하고, «하지 말 것»은 항상 맨 아래 붙인다.
   const todo = actions
     .sort((a, b) => b.priority - a.priority)
-    .slice(0, MAX_ACTIONS);
+    .slice(0, MAX_ACTIONS)
+    .map((a) => (a.guide ? a : { ...a, guide: legacyGuide(a) }));
   return [...todo, avoidAction()];
 }
 

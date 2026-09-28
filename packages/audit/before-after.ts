@@ -16,25 +16,48 @@
 
 /** 조치 완료 1건 — `ActionCompletion` 에서 필요한 것만. */
 export interface CompletionRecord {
-  /** 조치를 완료 표시한 시각. 이 시점이 before/after 의 경계다. */
+  /** 완료 **시점의** 정확 설명률(0~1) 스냅샷. 구 기록엔 없다. */
+  accurateRateAtCompletion?: number | null;
+  /** 조치를 완료 표시한 시각. after 의 기준점이다. */
   completedAt: Date;
   kind: string;
+  /** 완료 **시점의** 오인율(0~1) 스냅샷. 구 기록엔 없다. */
+  misidentificationRateAtCompletion?: number | null;
   /** 완료 **시점의** 인지율 스냅샷. 측정이 갱신돼도 고정된다. */
   recognitionAtCompletion: number | null;
   /** 완료 **시점의** SoV 스냅샷. */
   sovAtCompletion: number | null;
+  /**
+   * 조치를 **시작한** 시각(선택). 있으면 오인율·정확 설명률의 before 를
+   * 이 시각 **이전** 측정에서 찾는다 — 조치 도중 측정은 이미 일부 반영됐을 수 있다.
+   * ⚠️ 없으면 기존처럼 완료 시각이 경계다. SoV 경로는 바꾸지 않는다(스냅샷 우선 유지).
+   */
+  startedAt?: Date | null;
   /** 같은 종류 안에서 대상을 구분하는 키(질문 원문·도메인 등). */
   target: string;
 }
 
 /** 측정 1회분 — `Tracking` 집계 결과. */
 export interface MeasurementPoint {
+  /** 0~1. 제대로 알아본 답변 / 판정된 답변(`verdictRates`). 없으면 null. */
+  accurateRate?: number | null;
   measuredAt: Date;
+  /** 0~1. 다른 회사로 착각한 답변 / 판정된 답변(`verdictRates`). 없으면 null. */
+  misidentificationRate?: number | null;
   /** 0~1. 없으면 null(측정 실패·미집계). */
   sov: number | null;
 }
 
+/** 비율 지표 1개의 전후. 둘 중 하나라도 없으면 delta 는 null. */
+export interface RateBeforeAfter {
+  after: number | null;
+  before: number | null;
+  delta: number | null;
+}
+
 export interface BeforeAfterRow {
+  /** 정확 설명률 전후(올라야 좋다). */
+  accurateRate: RateBeforeAfter;
   /** after 측정이 아직 없으면 null — **"아직 모른다"** 를 0 과 구분한다. */
   afterSov: number | null;
   beforeSov: number | null;
@@ -47,6 +70,8 @@ export interface BeforeAfterRow {
   /** afterSov - beforeSov. 둘 중 하나라도 없으면 null. */
   deltaSov: number | null;
   kind: string;
+  /** 오인율 전후(내려야 좋다). */
+  misidentificationRate: RateBeforeAfter;
   target: string;
 }
 
@@ -84,6 +109,31 @@ export function buildBeforeAfterRow(
     ) ?? null;
   const afterSov = after?.sov ?? null;
 
+  // 오인율·정확 설명률 — before 경계는 시작 시각(있으면), 없으면 완료 시각.
+  const baselineMs = (completion.startedAt ?? completion.completedAt).getTime();
+  const rate = (
+    pick: (m: MeasurementPoint) => number | null | undefined,
+    snapshot: number | null | undefined
+  ): RateBeforeAfter => {
+    const fromSeries =
+      sorted
+        .filter((m) => m.measuredAt.getTime() <= baselineMs)
+        .map(pick)
+        .filter((v): v is number => typeof v === "number")
+        .at(-1) ?? null;
+    // 시작 시각이 있으면 그 이전 측정이 진짜 before 다(완료 스냅샷은 조치 도중 값일 수 있다).
+    const before = completion.startedAt
+      ? (fromSeries ?? snapshot ?? null)
+      : (snapshot ?? fromSeries);
+    const afterValue = after ? (pick(after) ?? null) : null;
+    return {
+      after: afterValue,
+      before,
+      delta:
+        before === null || afterValue === null ? null : afterValue - before,
+    };
+  };
+
   const caveats = collectCaveats({
     afterPoint: after,
     afterSov,
@@ -93,6 +143,10 @@ export function buildBeforeAfterRow(
   });
 
   return {
+    accurateRate: rate(
+      (m) => m.accurateRate,
+      completion.accurateRateAtCompletion
+    ),
     afterSov,
     beforeSov,
     caveats,
@@ -100,6 +154,10 @@ export function buildBeforeAfterRow(
     deltaSov:
       beforeSov === null || afterSov === null ? null : afterSov - beforeSov,
     kind: completion.kind,
+    misidentificationRate: rate(
+      (m) => m.misidentificationRate,
+      completion.misidentificationRateAtCompletion
+    ),
     target: completion.target,
   };
 }
