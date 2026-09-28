@@ -24,11 +24,16 @@ import {
 } from "@repo/analytics/funnel";
 import { objectParticle } from "@repo/audit/actions";
 import {
-  auditPublicationIssue,
-  auditPublicationStatus,
-  MIN_VERIFIED_ANSWERS,
-  PROVISIONAL_MAX_UNVERIFIED_SHARE,
-} from "@repo/audit/normalize-stored-metrics";
+  type AnswerBucketSummary,
+  answerBucketHeadline,
+  answerGroup,
+  classifyAnswer,
+  isDiscoveryAnswer,
+  type PromptKind,
+  summarizeAnswerBuckets,
+} from "@repo/audit/answer-buckets";
+import type { BrandNameCheck } from "@repo/audit/brand-name-check";
+import { engineDisplayName } from "@repo/audit/engine-labels";
 import {
   geoAxisScores,
   type ScoreTier,
@@ -41,8 +46,13 @@ import {
   countMeasurementCoverage,
   isMeasurementFailure,
 } from "@repo/audit/measurement-coverage";
+import {
+  auditPublicationIssue,
+  auditPublicationStatus,
+  MIN_VERIFIED_ANSWERS,
+  PROVISIONAL_MAX_UNVERIFIED_SHARE,
+} from "@repo/audit/normalize-stored-metrics";
 import { detailedRankLabel } from "@repo/audit/rank-label";
-import { buildMeasurementImpact } from "@repo/audit/revenue-impact";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { Button } from "@repo/design-system/components/ui/button";
 import {
@@ -63,10 +73,15 @@ import {
 } from "lucide-react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AnswerBucketBoard,
+  AnswerBucketPill,
+  BrandNameMismatchNotice,
+  QuestionEngineMatrix,
+  RevenueImpactOptIn,
+} from "./answer-buckets";
 import { CompetitorBenchmark } from "./competitor-benchmark";
-import { CopilotChat } from "./copilot-chat";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
-import { RevenueImpactCard } from "./revenue-impact-card";
 import { TruthMirror } from "./truth-mirror";
 
 interface Props {
@@ -183,15 +198,11 @@ interface CrewReport {
   totalDurationMs: number;
 }
 interface JobMetrics {
-  /** Missing on reports saved before verification-failure accounting. */
-  unverifiedCount?: number;
-  unattributedCitationCount?: number;
-  citationAttribution?:
-    | "none_observed"
-    | "owned_only"
-    | "partial"
-    | "unverified_external";
-  verifiedCount?: number;
+  /**
+   * 답변 4분류(2026-09-29) — API 가 행에서 다시 세어 싣는다. 구 응답엔 없을 수 있어
+   * 화면은 없으면 `summarizeAnswerBuckets(engineResponses)` 로 같은 값을 만든다.
+   */
+  answerBuckets?: AnswerBucketSummary;
   /** 순위가 나온 목록들의 평균 크기(분모). 세션N-10 이전 job 엔 없음. */
   averageMentionListSize?: number | null;
   averageMentionPosition: number | null;
@@ -201,6 +212,11 @@ interface JobMetrics {
    * (세션N-8이 잡은 화면↔메일 32점 불일치와 같은 계열의 사고).
    */
   averageRelativePosition?: number | null;
+  citationAttribution?:
+    | "none_observed"
+    | "owned_only"
+    | "partial"
+    | "unverified_external";
   enginesCovered: string[];
   enginesWithMention: string[];
   errors: Array<{ engineId: string; message: string }>;
@@ -212,6 +228,10 @@ interface JobMetrics {
   sov: number;
   stubCount: number;
   topCitedDomains: Array<{ domain: string; count: number }>;
+  unattributedCitationCount?: number;
+  /** Missing on reports saved before verification-failure accounting. */
+  unverifiedCount?: number;
+  verifiedCount?: number;
 }
 interface JobResult {
   brandName: string;
@@ -234,6 +254,11 @@ interface JobResult {
     isStub: boolean;
     errorMessage: string | null;
     excerpt: string;
+    /** 판정(2026-09-29 이전 회차엔 없을 수 있다). */
+    mentionQuality?: string | null;
+    promptKind?: PromptKind | null;
+    promptText?: string | null;
+    verdictReason?: string | null;
   }>;
   // 세션K-2 액션 레이어. 러너가 이미 result 에 적재하므로(runner.ts) 여기서
   // 읽어 쓰는 것만으로 추가 AI 호출·원가 0. 구 jobId 엔 없어서 optional.
@@ -244,10 +269,15 @@ interface JobResult {
    */
   marketScope?: "korea" | "global" | "both";
   marketScopeReason?: string;
+  measurementContext?: {
+    brandNameCheck?: BrandNameCheck;
+    /** 러너가 만든 이름 없는 질문 수. 그 기능 이전 회차엔 없다. */
+    discoveryPromptCount?: number;
+  } | null;
   metrics: JobMetrics;
   promptsCount: number;
-  regions?: RegionScoreView[];
   regionScoresOutdated?: boolean;
+  regions?: RegionScoreView[];
   /**
    * 고객이 등록한 경쟁사 — ⛔ **거르는 목록이 아니라 표기 병합 사전**(👤 승인 ⓐ).
    * 로그인 측정에만 있다(무료 진단은 `brandId` 가 없다) · 구 job 엔 없다 → optional.
@@ -296,11 +326,10 @@ interface GeoActionView {
   priority: 1 | 2 | 3;
   source?: string;
   title: string;
-  where?: string;
   verification?: string;
+  where?: string;
 }
 interface JobResponse {
-  isWorkspaceAudit?: boolean;
   completedAt: string | null;
   createdAt: string;
   crewCompletedAt: string | null;
@@ -325,25 +354,15 @@ interface JobResponse {
     previousScore: number | null;
     totalRuns: number;
   } | null;
+  isWorkspaceAudit?: boolean;
   jobId: string;
   language: string;
-  pdfUrl: string | null;
   pdfOutdated?: boolean;
+  pdfUrl: string | null;
   result: JobResult | null;
   status: "queued" | "processing" | "completed" | "failed";
 }
 
-const ENGINE_LABELS: Record<string, string> = {
-  chatgpt: "ChatGPT",
-  "chatgpt-web": "ChatGPT (Web)",
-  claude: "Claude",
-  perplexity: "Perplexity",
-  gemini: "Gemini",
-  hyperclova: "HyperCLOVA X",
-  naver: "Naver",
-  "naver-briefing": "Naver AI 브리핑",
-  daum: "Daum",
-};
 const CHANNEL_LABELS: Record<string, string> = {
   wikipedia: "Wikipedia",
   reddit: "Reddit",
@@ -631,55 +650,8 @@ function totalFiveAxis(view: FiveAxisView): number {
   return view.all.reduce((sum, a) => sum + a.score, 0);
 }
 
-// McKinsey Action Title — 데이터 → 한 문장 결론 (research 14)
-// 2026-07-30 결함감사 §1: 고정 카피("절반 이상에서 누락")가 SoV 85 같은 실데이터와
-// 정면 모순을 냈음 → 실제 수치만 말하는 문장으로 재설계. 오류 엔진은 분모에서 제외.
-function mckinseyHeadline(
-  brandName: string,
-  metrics: JobMetrics,
-  isKo: boolean,
-  /** 🔴 측정 성공 엔진 수 — `countMeasurementCoverage`(단일 진실)에서 받는다.
-   *  세션N-28: 여기서 `− errored` 로 **직접 계산**하던 것이 화면의 다른 숫자와 어긋났다
-   *  (헤드라인 "6곳" vs KPI "7/7" vs 진실거울 "7곳"). 계산을 한 곳으로 모은다. */
-  measuredEngines?: number
-): string {
-  const mentioned = new Set(metrics.enginesWithMention).size;
-  const measured = Math.max(
-    measuredEngines ?? new Set(metrics.enginesCovered).size - metrics.stubCount,
-    1
-  );
-  const missing = Math.max(measured - mentioned, 0);
-  const sov = Math.round(metrics.sov);
-
-  // 🔴 "이번 주 1건 액션으로" 제거 (2026-08-06 세션N-7)
-  //   그 시점에 실제 액션 수를 **모른다**(액션은 crew 분석을 눌러야 생기고, 우측 카드는 비어 있다).
-  //   app 대시보드는 같은 문제를 이미 인정하고 `N건`에서 N을 뺐다(기획서 1-4:
-  //   *"없는 숫자를 지어내지 않고 행동을 말한다"*) → **web에도 같은 규칙 적용**.
-  //   ⚠️ 지키지 못할 약속은 토스 심사 탈락 기준(모호·허위 CTA)이자 다크패턴 자가진단 항목이다.
-  // 문체도 해요체로 통일 — 세션N-5가 따옴표 리터럴만 세서 이 템플릿들을 놓쳤다.
-  if (isKo) {
-    if (sov >= 70 && missing === 0) {
-      return `${brandName}, 측정한 AI ${measured}곳이 모두 우리를 말해요. 이제 어떻게 말하는지, 순위를 지키는 게 관건이에요.`;
-    }
-    if (sov >= 70) {
-      return `${brandName}, AI 답변 등장률은 ${sov}%지만 AI ${measured}곳 중 ${missing}곳은 아직 우리를 인용하지 않아요.`;
-    }
-    if (sov >= 40) {
-      return `${brandName}, 성공한 AI 답변의 ${sov}%에 등장했어요. 아래에서 어떤 답변과 출처를 먼저 개선할지 확인해 보세요.`;
-    }
-    return `${brandName}, AI 검색에서 거의 보이지 않아요. 아래에서 무엇부터 손볼지 알려드려요.`;
-  }
-  if (sov >= 70 && missing === 0) {
-    return `${brandName} is cited by all ${measured} measured AI engines. Now it's about protecting rank and narrative.`;
-  }
-  if (sov >= 70) {
-    return `${brandName} appears in ${sov}% of successful AI answers, yet ${missing} of ${measured} AI engines still don't cite you.`;
-  }
-  if (sov >= 40) {
-    return `${brandName} appears in ${sov}% of successful AI answers. See which answers and sources to improve first.`;
-  }
-  return `${brandName} is nearly invisible in AI search. See below for what to fix first.`;
-}
+// McKinsey Action Title — 2026-09-29 부터 `answerBucketHeadline`(@repo/audit/answer-buckets)
+//   가 대신한다. 예전 함수는 GEO 등장률만으로 말해 「다른 회사로 안다」를 「안 보인다」에 묻었다.
 
 // ──────────────────────────────────────────────────────────────────
 // 메인 진입점
@@ -1335,7 +1307,7 @@ function VerificationPartialView({
     (response) => response.engineId !== "naver-briefing"
   );
   const answerCount = coreResponses.filter(
-    (response) => !response.errorMessage && !response.isStub
+    (response) => !(response.errorMessage || response.isStub)
   ).length;
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr";
@@ -1346,7 +1318,7 @@ function VerificationPartialView({
     <div className="space-y-8 pb-24 lg:pb-12">
       <MeasuredAtNotice isKo={isKo} job={job} />
       <section className="rounded-2xl border border-amber-400/30 bg-zinc-900/80 p-6 md:p-10">
-        <div className="font-medium text-amber-300 text-xs tracking-[0.16em] uppercase">
+        <div className="font-medium text-amber-300 text-xs uppercase tracking-[0.16em]">
           {isKo
             ? "판별 미완료 · 잠정 결과"
             : "Verification incomplete · provisional result"}
@@ -1362,7 +1334,7 @@ function VerificationPartialView({
             : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
         </p>
         {result.metrics.errors.length > 0 && (
-          <p className="mt-3 max-w-2xl text-sm text-amber-200 leading-relaxed">
+          <p className="mt-3 max-w-2xl text-amber-200 text-sm leading-relaxed">
             {isKo
               ? `별도로 AI 엔진 호출 ${result.metrics.errors.length}건이 실패했습니다. 이는 고객 사이트의 오류가 아니며 Findable 운영팀이 제공업체 연결 상태를 복구해야 합니다.`
               : `Separately, ${result.metrics.errors.length} AI engine calls failed. This is not a problem with your site; Findable must restore the provider connection.`}
@@ -1426,8 +1398,7 @@ function VerificationPartialView({
             >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm text-zinc-200">
                 <span>
-                  {ENGINE_LABELS[response.engineId] ?? response.engineId} · #
-                  {index + 1}
+                  {engineDisplayName(response.engineId, isKo)} · #{index + 1}
                 </span>
                 <span className="text-xs text-zinc-400">
                   {response.errorMessage
@@ -1439,7 +1410,7 @@ function VerificationPartialView({
                       : "Answer collected"}
                 </span>
               </summary>
-              <div className="border-white/10 border-t px-4 py-4 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+              <div className="whitespace-pre-wrap border-white/10 border-t px-4 py-4 text-sm text-zinc-300 leading-relaxed">
                 {response.errorMessage ??
                   (response.excerpt ||
                     (isKo ? "저장된 답변이 없습니다." : "No saved answer."))}
@@ -1513,13 +1484,12 @@ function CompletedView({
   // 계산은 `@repo/audit/measurement-coverage` 단일 진실을 쓴다(규칙 복제 금지).
   const coverage = countMeasurementCoverage(coreResponses);
   const { measured, attempted } = coverage;
-  const impact = buildMeasurementImpact({
-    appearanceRate: result.metrics.sov,
-    coverage: {
-      mentioned: new Set(result.metrics.enginesWithMention).size,
-      total: measured,
-    },
-  });
+  // 「우리를 어떻게 설명하나」를 보는 섹션(진실거울·네이버 격차)에는 **브랜드 이름으로 물은
+  //   AI 답변만** 넘긴다(2026-09-29). Daum 은 검색 결과 조각이고, 이름 없는 질문은
+  //   「설명」이 아니라 「추천」을 잰다 — 섞으면 「모른다」가 부풀려진다.
+  const brandAiResponses = coreResponses.filter(
+    (r) => answerGroup(r.engineId) === "ai" && !isDiscoveryAnswer(r)
+  );
 
   // 🔴 **측정 성공 0건이면 결과가 아니라 "측정 실패"를 말한다** (2026-08-10 세션N-14).
   //   못 잰 것을 "0점"으로 부르면 안 된다 — 체온계가 안 켜졌는데 "체온 0도"라고 적는 격이다.
@@ -1554,6 +1524,12 @@ function CompletedView({
             혼란이 되지만, 밝히면 즉시 응답이 오히려 장점으로 읽힌다. */}
         <MeasuredAtNotice isKo={isKo} job={job} />
 
+        {/* 입력 브랜드명이 사이트 표기와 다르면 숫자보다 먼저 말한다(2026-09-29). */}
+        <BrandNameMismatchNotice
+          check={result.measurementContext?.brandNameCheck}
+          isKo={isKo}
+        />
+
         <HeroSection
           isKo={isKo}
           job={job}
@@ -1561,27 +1537,9 @@ function CompletedView({
           result={result}
         />
 
-        {provisional ? (
-          <ProvisionalMaskNotice isKo={isKo} subject="impact" />
-        ) : (
-          <RevenueImpactCard
-            attemptedEngines={attempted}
-            // 전수감사 §A-1: 규모 초기값을 측정 신호(인지 엔진 비율·SoV)로 추정.
-            // small 하드코딩이 SK하이닉스에 "₩63만/월"을 보여줬던 결함의 수정.
-            defaultSizeKey={impact.sizeKey}
-            isKo={isKo}
-            // 🔴 **분모를 항상 밝힌다** (2026-08-10 세션N-14).
-            //   이 카드는 `sov` 하나로 손실을 추정하는데, 그 `sov` 가 **몇 개 엔진에서
-            //   나온 값인지**는 말하지 않고 있었다. 28개 중 12개만 성공한 회차도
-            //   28개 전부 성공한 회차와 **똑같은 확신**으로 숫자를 보여준다.
-            //   → 임계값으로 감추거나 경고하지 않고(근거 없는 경계선이 된다),
-            //     **몇 개로 잰 숫자인지 그대로 적는다.** 판단은 고객이 한다.
-            //   (화면이 이미 쓰는 "7개 중 1개 미인용" 패턴과 같은 방식이다.)
-            measuredEngines={measured}
-            readOnly
-            sov={result.metrics.sov}
-          />
-        )}
+        {/* 🔴 「놓치는 유입(추정)」 카드는 여기(2번째)에 있었다(2026-09-29 이동).
+            고객 숫자 없이 기본 가정만으로 만든 추정을 측정 결과처럼 크게 보여줬다.
+            → 맨 아래 「직접 입력하면 계산」 링크로 접었다(RevenueImpactOptIn). */}
 
         <CompetitorBenchmark
           brandName={result.brandName}
@@ -1594,7 +1552,7 @@ function CompletedView({
 
         <TruthMirror
           brandName={result.brandName}
-          engineResponses={coreResponses}
+          engineResponses={brandAiResponses}
           isKo={isKo}
         />
 
@@ -1615,9 +1573,25 @@ function CompletedView({
           jobId={job.jobId}
         />
 
-        <NaverVsAiGap engineResponses={coreResponses} isKo={isKo} />
+        {/* 국내 쪽 = 네이버 AI 브리핑만(2026-09-29). 종료된 클로바X·검색 노출은 비교하지 않는다.
+            브리핑 답이 없으면 카드가 스스로 숨는다. */}
+        <NaverVsAiGap
+          engineResponses={[
+            ...brandAiResponses,
+            ...result.engineResponses.filter(
+              (r) => r.engineId === "naver-briefing"
+            ),
+          ]}
+          isKo={isKo}
+        />
 
-        <EnginesTabsSection isKo={isKo} result={result} />
+        {/* 엔진마다 첫 답변 1개만 보여주던 탭(dedupeByEngine)을 대신한다(2026-09-29).
+            질문 원문 없이 대표 1개만 보면 「어느 질문에서 틀렸나」를 알 수 없었다. */}
+        <QuestionEngineMatrix
+          brandDomain={result.domain}
+          isKo={isKo}
+          rows={coreResponses}
+        />
 
         {/* 장치 C(세션L) — 약점 앵커 CTA. 관심이 가장 뜨거운 순간(내가 어느 엔진에서
             미언급인지 본 직후)에 배치. 격차가 없으면(전 엔진 인지) 렌더하지 않는다. */}
@@ -1635,6 +1609,15 @@ function CompletedView({
 
         {!job.isWorkspaceAudit && (
           <UpsellCard isKo={isKo} job={job} locale={locale} result={result} />
+        )}
+
+        {provisional ? null : (
+          <RevenueImpactOptIn
+            attemptedEngines={attempted}
+            isKo={isKo}
+            measuredEngines={measured}
+            sov={result.metrics.sov}
+          />
         )}
       </div>
     </div>
@@ -1684,9 +1667,10 @@ function HeroSection({
   const enginesCoveredUnique = Array.from(
     new Set(result.metrics.enginesCovered)
   );
-  const enginesMentionedUnique = Array.from(
-    new Set(result.metrics.enginesWithMention)
-  );
+  // (2026-09-29) 네이버·다음은 AI 답이 아니라 검색 노출 — 「AI 엔진 6개」라고 부르지 않는다.
+  const aiEngineCount = enginesCoveredUnique.filter(
+    (id) => answerGroup(id) === "ai"
+  ).length;
   // stub인 고유 엔진 ID 카운트 (백엔드 stubCount는 응답 단위라 중복됨)
   const stubEngineIds = new Set<string>();
   for (const r of result.engineResponses.filter(
@@ -1710,12 +1694,6 @@ function HeroSection({
     result.metrics.enginesCovered.length - successfulResponses,
     0
   );
-  const dedupMetrics: JobMetrics = {
-    ...result.metrics,
-    enginesCovered: enginesCoveredUnique,
-    enginesWithMention: enginesMentionedUnique,
-    stubCount: stubEnginesCount,
-  };
   // 🔴 채점은 **저장된 원본 metrics(응답 단위)** 로 한다 — dedup 배열을 넘기지 않는다.
   //   (2026-08-07 세션N-8, M1 작업 중 발견. 실측: 완료 job 71건 중 **58건(82%)이 불일치**,
   //    최대 32점 — Olive 화면 66 / 메일·OG 34. 평균 +4.9점 화면이 관대했다.)
@@ -1730,10 +1708,8 @@ function HeroSection({
   //   (한 번만 언급돼도 그 엔진은 만점). 응답 단위는 4%. F11이 *"브랜드를 구분하지 못하는
   //   사실상의 상수"* 라며 없애려던 증상 그 자체다.
   //
-  //   ⚠️ dedupMetrics 를 지우지는 않는다 — **개수 표시**에는 고유 엔진이 맞다.
-  //   "AI 7곳 중 6곳"을 응답 단위로 쓰면 "AI 28곳 중 19곳"이 되어 새 거짓말이 된다.
-  //   (`mckinseyHeadline` 은 내부에서 다시 `new Set()` 하므로 어느 쪽을 넘겨도 동일하나,
-  //    의도를 드러내려고 개수용 metrics 를 계속 넘긴다.)
+  //   (2026-09-29) 개수용 dedupMetrics 는 헤드라인이 4분류로 바뀌며 쓰는 곳이 없어 지웠다.
+  //   엔진 개수는 이제 `buckets.engines`(고유 엔진 · AI 그룹)가 말한다.
   // 감사 8번: 평균 순위가 **몇 건을 평균낸 값인지**. null 제외(세션N-5 교훈 —
   //   `mentionPosition`은 일부 응답에만 있어서 0으로 깔면 순위가 왜곡된다).
   const rankedResponses = result.engineResponses.filter(
@@ -1752,23 +1728,24 @@ function HeroSection({
   const totalScore = totalFiveAxis(axisView);
   const severity = sovSeverity(totalScore);
   const label = scoreTierLabel(totalScore, isKo);
-  // 🔴 측정 성공 엔진 수 = 단일 진실(`countMeasurementCoverage`). 헤드라인·KPI·언급률이
-  //   **같은 값**을 쓰게 하려고 여기서 한 번만 구한다(세션N-28 — 아래 §분모 주석 참고).
-  const coverage = countMeasurementCoverage(
-    result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
-  );
-  const measuredEnginesCoverage = coverage.measured;
+  // (2026-09-29) 헤드라인·엔진 KPI 의 엔진 수는 `buckets.engines` 가 말한다 — 측정 성공이면서
+  //   판정이 끝난 AI 엔진(Daum·이름 없는 질문 제외). 전체 측정 실패 판정은 CompletedView 가
+  //   여전히 `countMeasurementCoverage`(단일 진실)로 한다.
+  // 🔴 헤드라인 = 답변 4분류(2026-09-29). 예전 헤드라인(`mckinseyHeadline`)은 GEO 등장률로
+  //   말해서, 「다른 회사로 안다」 8건이 「안 보인다」 속에 묻혔다. 이제 그 수를 그대로 말한다.
+  //   ⚠️ 계산은 API 가 실어 준 값을 쓰고, 없으면(구 응답) 같은 함수로 행에서 센다.
+  const buckets =
+    result.metrics.answerBuckets ??
+    summarizeAnswerBuckets(result.engineResponses, {
+      brandDomain: result.domain,
+    });
+  const bucketHeadline = answerBucketHeadline(result.brandName, buckets, isKo);
   // 잠정 회차는 아래 처방을 가리므로 「무엇부터 손볼지 알려드려요」류 약속을 하지 않는다.
   const headline = provisional
     ? isKo
-      ? `${result.brandName}, 확정 답변 기준 AI 답변 등장률은 ${Math.round(result.metrics.sov)}%예요. 브랜드 판별이 충분히 끝나지 않아 이번 회차는 잠정 결과예요.`
-      : `${result.brandName} appears in ${Math.round(result.metrics.sov)}% of verified AI answers. Brand verification is incomplete, so this run is provisional.`
-    : mckinseyHeadline(
-        result.brandName,
-        dedupMetrics,
-        isKo,
-        measuredEnginesCoverage
-      );
+      ? `${bucketHeadline} 브랜드 판별이 충분히 끝나지 않아 이번 회차는 잠정 결과예요.`
+      : `${bucketHeadline} Brand verification is incomplete, so this run is provisional.`
+    : bucketHeadline;
 
   // ──────────────────────────────────────────────────
   // 🔴 "AI 몇 곳" 분모 단일화 (2026-08-06 세션N-7)
@@ -1780,7 +1757,7 @@ function HeroSection({
   //   → 고객이 "5냐 6냐 7냐"를 셋 중 뭘 믿을지 알 수 없었다.
   //
   // 기준 = 측정하지 못한 엔진을 "우리를 모른다"로 세면 점수가 부당하게 깎인다.
-  //   ⚠️ 아래 `measuredEnginesCoverage` 를 화면 전체가 공유한다 — 새 지표도 이 값을 쓸 것.
+  //   ⚠️ (2026-09-29) 엔진 개수는 이제 `buckets.engines` 한 곳이 말한다.
   // ──────────────────────────────────────────────────
   // 🔴🔴 세션N-28 실측 버그 — 화면에 **「우리를 아는 AI 7/6」·「117%」** 가 떠 있었다.
   //
@@ -1796,12 +1773,6 @@ function HeroSection({
   //   → 분모를 `countMeasurementCoverage` 로 통일한다. 분자는 건드리지 않는다.
   //   ⚠️ 이 오류는 measure·align·axe **어느 도구도 못 잡았다**(전부 통과).
   //      fullPage 를 눈으로 보고서야 드러났다.
-  const mentionRate =
-    measuredEnginesCoverage === 0
-      ? 0
-      : Math.round(
-          (enginesMentionedUnique.length / measuredEnginesCoverage) * 100
-        );
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/60 p-6 backdrop-blur-sm md:p-10">
@@ -1825,7 +1796,10 @@ function HeroSection({
                     : "bg-[var(--signal-bad)]"
               }`}
             />
-            <span className="text-zinc-300">{label}</span>
+            {/* (2026-09-29) 이 등급은 GEO 참고 점수의 등급이다 — 4칸 헤드라인과 섞여 읽히지 않게 이름을 붙인다. */}
+            <span className="text-zinc-300">
+              {isKo ? `GEO 등급 · ${label}` : `GEO tier · ${label}`}
+            </span>
           </div>
           {provisional && (
             <span className="mt-1 ml-2 inline-flex items-center rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-0.5 font-medium text-amber-200 text-xs">
@@ -1873,8 +1847,8 @@ function HeroSection({
           쓴다. `erroredEnginesCount`(엔진 단위)를 쓰면 ⑥에서 고친 분모 혼재가 되살아난다. */}
       <p className="mt-2 text-sm text-zinc-400">
         {isKo
-          ? `질문 ${result.promptsCount}개 · 대상 AI 엔진 ${enginesCoveredUnique.length}개 · 실제 ${result.metrics.enginesCovered.length}회 시도 · 답변 ${successfulResponses}개`
-          : `${result.promptsCount} prompts · ${enginesCoveredUnique.length} eligible AI engines · ${result.metrics.enginesCovered.length} actual attempts · ${successfulResponses} answers`}
+          ? `질문 ${result.promptsCount}개 · 대상 AI ${aiEngineCount}곳 + 검색 노출 ${enginesCoveredUnique.length - aiEngineCount}곳 · 실제 ${result.metrics.enginesCovered.length}회 시도 · 답변 ${successfulResponses}개`
+          : `${result.promptsCount} prompts · ${aiEngineCount} AI engines + ${enginesCoveredUnique.length - aiEngineCount} search · ${result.metrics.enginesCovered.length} actual attempts · ${successfulResponses} answers`}
         {excludedResponses > 0 && (
           <span className="text-[var(--signal-warn)]">
             {isKo
@@ -1909,43 +1883,30 @@ function HeroSection({
         )
       )}
 
-      <div className="mt-5 grid gap-2 sm:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-          <div className="font-medium text-[11px] text-zinc-500 uppercase tracking-wide">
-            {isKo ? "GEO 종합 점수" : "GEO composite score"}
-          </div>
-          <div className="mt-1 flex items-baseline gap-1">
-            <span className="font-semibold text-xl text-zinc-100 tabular-nums">
-              {Math.round(totalScore)}
-            </span>
-            <span className="text-xs text-zinc-500">/ 100</span>
-          </div>
-          <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
-            {isKo
-              ? "인지·감정·노출 품질·답변 등장·경쟁 위치를 가중 합산한 진단값"
-              : "Weighted composite of recognition, sentiment, presence, appearance, and competition"}
-          </p>
+      {/* 🔴 헤드라인 4칸(2026-09-29) — 점수보다 먼저 「AI 가 우리를 어떻게 아나」를 말한다.
+          예전 이 자리의 「AI 답변 등장률 N%」 카드는 아래 GEO 참고 점수 쪽으로 내렸다 —
+          같은 화면에 「등장률 24%」와 「우리를 말한 AI 29%」가 나란히 떠 서로 다른 말처럼
+          읽혔다. 이제 비율은 **답변 기준**(이 4칸)과 **엔진 기준**(아래 KPI) 둘뿐이고
+          각각 라벨에 기준을 적는다. */}
+      <AnswerBucketBoard
+        discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
+        isKo={isKo}
+        summary={buckets}
+      />
+
+      <div className="mt-10 border-white/10 border-t pt-6">
+        <div className="font-medium text-xs text-zinc-400">
+          {isKo ? "참고 · GEO 종합 점수" : "Reference · GEO composite score"}
         </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-          <div className="font-medium text-[11px] text-zinc-500 uppercase tracking-wide">
-            {isKo ? "AI 답변 등장률" : "AI answer appearance rate"}
-          </div>
-          <div className="mt-1 flex items-baseline gap-1">
-            <span className="font-semibold text-xl text-zinc-100 tabular-nums">
-              {Math.round(result.metrics.sov)}
-            </span>
-            <span className="text-xs text-zinc-500">%</span>
-          </div>
-          <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
-            {isKo
-              ? "성공한 AI 응답 중 브랜드가 한 번 이상 등장한 응답의 비율"
-              : "Share of successful AI responses that mention the brand at least once"}
-          </p>
-        </div>
+        <p className="mt-1 break-keep text-xs text-zinc-500 leading-relaxed">
+          {isKo
+            ? `인지·감정·노출 품질·AI 답변 등장률·경쟁 위치를 가중 합산한 기존 진단값이에요. 지난 측정과 비교할 수 있게 계산 방식은 그대로 두었어요(네이버·다음 검색 노출 포함 · 등장률 ${Math.round(result.metrics.sov)}%).`
+            : `The existing weighted composite of recognition, sentiment, presence, answer appearance and competition. Kept unchanged so runs stay comparable (includes Naver/Daum search · appearance ${Math.round(result.metrics.sov)}%).`}
+        </p>
       </div>
 
       {/* Donut + 5축 분해 (HubSpot 패턴) */}
-      <div className="relative mt-10 flex flex-col items-center gap-10 md:flex-row md:items-start md:gap-12">
+      <div className="relative mt-6 flex flex-col items-center gap-10 md:flex-row md:items-start md:gap-12">
         {/* 점수와 "그래서 좋은 거냐"를 **붙여서** 놓는다 — 티어 알약은 제목 위에 있어
             게이지와 시각적으로 분리돼 있었고, 그래서 73과 연결이 안 보였다. */}
         <div className="flex shrink-0 flex-col items-center gap-3">
@@ -2005,15 +1966,19 @@ function HeroSection({
 
       <MarketRegionCards isKo={isKo} result={result} />
 
-      {/* KPI 보조 strip — 5축 아래 */}
-      <div className="mt-6 grid w-full grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* KPI 보조 strip — 5축 아래.
+          🔴 2026-09-29: 「우리를 말한 AI 비율 %」와 「우리를 아는 AI n/m」은 **같은 엔진 기준
+          지표를 두 번** 보여주고 있었다(게다가 Daum·이름 없는 질문까지 섞여 위 4칸과 어긋났다).
+          → 하나로 합치고 라벨에 **엔진 기준**을 적는다. 값은 4칸과 같은 함수에서 나온다. */}
+      <div className="mt-6 grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
         <KpiCell
-          // 🔴 라벨 구분 필수: 제목의 "점유율 N%"는 `sov`(답변 안에서 우리가 차지한 몫)이고
-          //   이 칸은 `mentionRate`(우리를 언급한 AI 비율)다. **계산식이 다른 별개 지표**인데
-          //   둘 다 "N%"로 표기돼, 값이 우연히 같으면 같은 지표로 읽혔다(실측: 둘 다 86%).
-          label={isKo ? "우리를 말한 AI 비율" : "ENGINE COVERAGE"}
-          unit="%"
-          value={mentionRate}
+          label={
+            isKo
+              ? "엔진 기준 · 우리를 제대로 안 AI"
+              : "Per engine · AIs that know you"
+          }
+          unit={isKo ? "곳" : ""}
+          valueRaw={`${buckets.engines.confirmed}/${buckets.engines.measured}`}
         />
         {/* 🔴 감사 8번 — 평균 순위에 **척도**를 붙인다 (세션N-8 착수 → 세션N-10 완결).
             *"`평균 순위 1위`에 척도가 없다. 3개 중 1위인지 300개 중인지 모른다"*
@@ -2045,14 +2010,6 @@ function HeroSection({
               : "—"
           }
           value={result.metrics.averageMentionPosition ?? 0}
-        />
-        <KpiCell
-          // 분모 = measuredEngines(제목·언급률과 동일). 이전엔 전체 엔진 수를 그대로 써서
-          //   제목이 "7개 중 1개 미인용"(=6측정)인데 여기가 "6/7"로 어긋났다.
-          // 🔴 세션N-28: 분모를 `countMeasurementCoverage`(단일 진실)로 통일한다.
-          //   종전엔 "1번이라도 실패한 엔진"을 통째로 빼서 실제로 「7/6」이 떠 있었다.
-          label={isKo ? "우리를 아는 AI" : "ENGINES"}
-          valueRaw={`${enginesMentionedUnique.length}/${measuredEnginesCoverage}`}
         />
         <KpiCell
           // 🔴 2026-08-11 (세션N-17) — 분모와 표시값이 안 맞았다.
@@ -3140,12 +3097,12 @@ function briefingStateMessage(status: BriefingStatus, isKo: boolean): string {
   }
   if (status === "failed") {
     return isKo
-      ? "이번 회차의 네이버 AI 브리핑 측정은 실패했습니다. 핵심 7엔진 결과에는 영향을 주지 않습니다."
-      : "Naver AI Briefing failed for this run. The core seven-engine result is unaffected.";
+      ? "이번 회차의 네이버 AI 브리핑 측정은 실패했습니다. 핵심 결과에는 영향을 주지 않습니다."
+      : "Naver AI Briefing failed for this run. The core result is unaffected.";
   }
   return isKo
-    ? "이번 회차에서는 네이버 AI 브리핑을 측정하지 않았습니다. 아래 핵심 7엔진 점수에 포함되지 않습니다."
-    : "Naver AI Briefing was not measured in this run and is not included in the core seven-engine score.";
+    ? "이번 회차에서는 네이버 AI 브리핑을 측정하지 않았습니다. 아래 핵심 점수에 포함되지 않습니다."
+    : "Naver AI Briefing was not measured in this run and is not included in the core score.";
 }
 
 function NaverBriefingReadOnlyCard({
@@ -3184,14 +3141,14 @@ function NaverBriefingReadOnlyCard({
       </h2>
       <p className="mt-2 max-w-2xl text-sm text-zinc-400 leading-relaxed">
         {isKo
-          ? "네이버 AI 브리핑은 추천·비교 질문을 쓰는 핵심 7엔진과 다른 검색 결과 축이라 같은 점수 분모에 섞지 않습니다."
-          : "Naver AI Briefing is a separate search-result channel, not part of the core seven-engine score."}
+          ? "네이버 AI 브리핑은 추천·비교 질문을 쓰는 핵심 측정과 다른 검색 결과 축이라 같은 점수 분모에 섞지 않습니다."
+          : "Naver AI Briefing is a separate search-result channel, not part of the core score."}
       </p>
       <p className="mt-2 max-w-2xl text-sm text-zinc-300 leading-relaxed">
         {briefingStateMessage(briefingStatus, isKo)}
       </p>
       <a
-        className="mt-4 inline-flex text-sm text-[var(--brand-2)] hover:underline"
+        className="mt-4 inline-flex text-[var(--brand-2)] text-sm hover:underline"
         href="https://app.findable.co.kr/"
       >
         {isKo
@@ -3482,8 +3439,8 @@ function NaverBriefingCompletedCard({
       <p className="mt-2 text-xs text-zinc-400">{queryNotice}</p>
       <p className="mt-1 text-xs text-zinc-500">
         {isKo
-          ? "이 결과는 기본 7엔진 GEO 점수·등장률과 별도로 보여줍니다."
-          : "This result is separate from the core seven-engine GEO score and appearance rate."}
+          ? "이 결과는 GEO 점수·AI 답변 4분류와 별도로 보여줍니다."
+          : "This result is separate from the GEO score and the four answer categories."}
       </p>
       {!briefing || briefing.errorMessage ? (
         // 🔴 **「미노출」과 「못 쟀다」를 구분한다**(N-45).
@@ -3499,11 +3456,7 @@ function NaverBriefingCompletedCard({
       ) : (
         <>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <MentionBadge
-              isStub={briefing.isStub}
-              mentioned={briefing.brandMentioned}
-              position={briefing.mentionPosition}
-            />
+            <MentionBadge isKo={isKo} row={briefing} />
             <SentimentBadge sentiment={briefing.sentiment} />
           </div>
           <p className="mt-4 whitespace-pre-line text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]">
@@ -3680,7 +3633,7 @@ function ActionCard({ action, isKo }: { action: ActionItem; isKo: boolean }) {
         {action.rationale}
       </p>
       {expanded && action.steps.length > 0 && (
-        <ol className="mt-4 list-decimal space-y-1.5 border-white/10 border-t pl-5 pt-4 text-sm text-zinc-300 leading-relaxed">
+        <ol className="mt-4 list-decimal space-y-1.5 border-white/10 border-t pt-4 pl-5 text-sm text-zinc-300 leading-relaxed">
           {action.steps.map((step) => (
             <li key={step}>{step}</li>
           ))}
@@ -3834,7 +3787,7 @@ function AnalystAccordion({
           {report.errorMessage && (
             <span className="text-red-400 text-xs">⚠ 오류</span>
           )}
-          {!out && !report.errorMessage && (
+          {!(out || report.errorMessage) && (
             <span className="text-amber-300 text-xs">
               {isKo ? "결과 없음" : "No result"}
             </span>
@@ -3924,220 +3877,30 @@ function FindingRow({ finding }: { finding: Finding }) {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Engines — sticky 탭 + layoutId 슬라이드 (Linear)
+// (2026-09-29) 엔진별 대표 답변 탭(EnginesTabsSection)은 「질문 × 엔진」 표
+//   (`./answer-buckets` QuestionEngineMatrix)로 바뀌었다. 탭은 엔진마다 첫 답변 1개만
+//   보여줘 어느 질문에서 틀렸는지 알 수 없었다.
 // ──────────────────────────────────────────────────────────────────
 
-/**
- * AI 응답 원문 — 기본은 접힌 상태(최대 높이 제한 + 하단 페이드), "전체 보기"로 펼친다.
- *
- * 왜 글자수로 안 자르나: `…`로 자르면 문장이 끊겨 **AI가 실제로 뭐라고 했는지**가 왜곡된다.
- *   높이만 제한하면 원문은 온전하고 사용자가 필요할 때 전체를 본다(진행형 공개).
- * ⚠️ 접힘 임계보다 짧은 응답엔 버튼을 달지 않는다 — 누를 게 없는 버튼은 노이즈다.
- */
-const COLLAPSED_MAX_CHARS = 700;
-
-function toggleLabel(expanded: boolean, isKo: boolean): string {
-  if (expanded) {
-    return isKo ? "접기" : "Collapse";
-  }
-  return isKo ? "전체 보기" : "Show full response";
-}
-
-/** 원문이 없는 3가지 경우(오류·미연결·빈 응답)를 각각 다른 문장으로. */
-function ResponseFallback({
-  response,
+/** 답변 배지 — 4분류 라벨(제대로 앎/다른 회사로 앎/모름/측정 실패 + 판정 보류)을 쓴다. */
+function MentionBadge({
+  row,
   isKo,
 }: {
-  response: JobResult["engineResponses"][number];
+  row: JobResult["engineResponses"][number];
   isKo: boolean;
 }) {
-  if (response.errorMessage) {
-    return <span className="text-red-400">⚠ {response.errorMessage}</span>;
-  }
-  if (response.isStub) {
-    return (
-      <span className="text-zinc-400">
-        {isKo
-          ? "이 AI는 아직 연결되지 않았어요. 다음 측정부터 넣어드려요."
-          : "This AI is not connected yet. Will be included next time."}
-      </span>
-    );
-  }
+  const bucket = classifyAnswer(row);
   return (
-    <span className="text-zinc-400">
-      {isKo ? "(응답 없음)" : "(no response)"}
+    <span className="inline-flex items-center gap-1.5">
+      <AnswerBucketPill bucket={bucket} isKo={isKo} />
+      {bucket === "confirmed" && row.mentionPosition ? (
+        <Pill tone="positive">
+          {isKo ? `${row.mentionPosition}번째` : `#${row.mentionPosition}`}
+        </Pill>
+      ) : null}
     </span>
   );
-}
-
-function ResponseBody({
-  content,
-  fallback,
-  isKo,
-}: {
-  content: string | null;
-  fallback: React.ReactNode;
-  isKo: boolean;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  if (!content) {
-    return (
-      <div className="mt-4 whitespace-pre-line text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]">
-        {fallback}
-      </div>
-    );
-  }
-
-  const needsCollapse = content.length > COLLAPSED_MAX_CHARS;
-
-  return (
-    <div className="mt-4">
-      <div
-        className={`relative whitespace-pre-line text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere] ${
-          needsCollapse && !expanded ? "max-h-[15rem] overflow-hidden" : ""
-        }`}
-      >
-        {content}
-        {needsCollapse && !expanded && (
-          // 하단 페이드 — "더 있다"를 색으로 알린다(잘린 게 아니라 접힌 것).
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-zinc-900 to-transparent" />
-        )}
-      </div>
-      {needsCollapse && (
-        <button
-          className="mt-3 text-[var(--brand-2)] text-xs underline underline-offset-2 hover:text-zinc-200"
-          onClick={() => setExpanded((v) => !v)}
-          type="button"
-        >
-          {toggleLabel(expanded, isKo)}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function EnginesTabsSection({
-  result,
-  isKo,
-}: {
-  result: JobResult;
-  isKo: boolean;
-}) {
-  const dedup = dedupeByEngine(result.engineResponses);
-  const [selected, setSelected] = useState<string>(dedup[0]?.engineId ?? "");
-  const current = dedup.find((r) => r.engineId === selected);
-
-  return (
-    <section>
-      <div className="mb-5">
-        <div className="font-medium text-xs text-zinc-400">
-          {isKo
-            ? "측정 원문 · 엔진별 대표 답변"
-            : "Measurement evidence · representative answer by engine"}
-        </div>
-        <p className="mt-1.5 text-xs text-zinc-500 leading-relaxed">
-          {isKo
-            ? `기본 7엔진 ‘진실의 거울’ 판정 근거와 별도 네이버 AI 브리핑 원문입니다. 엔진마다 대표 답변 1개를 보여드리며, ${result.promptsCount}개 질문별 전체 원문·날짜별 변화는 대시보드의 ‘추적 질문’에서 관리할 수 있어요.`
-            : `Representative evidence for the core seven-engine Truth Mirror, plus the separate Naver AI Briefing response. Manage all responses across ${result.promptsCount} prompts and dates in the dashboard after sign-up.`}
-        </p>
-      </div>
-      <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900/60 backdrop-blur-sm">
-        {/* 🔴 세션N-28 ② — 모바일에서 탭이 **가로 스크롤로 잘려 있었다**.
-            실측(390px): 탭 줄 내용 653px vs 칸 340px → **313px 이 화면 밖**.
-            밀려난 것이 하필 **네이버·다음**(= 한국 AI 커버리지, 우리 차별점)이라
-            "스크롤하면 보인다"로 넘길 수 없었다. 손가락으로 밀 생각을 못 하면
-            그 엔진은 **없는 것과 같다**(닐슨 ⑥ 기억보다 인식).
-            → `flex-wrap` 으로 두 줄에 다 보이게 한다. 드롭다운은 쓰지 않는다(1클릭 증가).
-            ⚠️ `shrink-0` 은 유지 — 라벨이 쪼그라들어 글자가 겹치면 안 된다.
-            ⚠️ `layoutId` 밑줄은 줄이 바뀌어도 spring 으로 따라간다(세로 이동만 추가됨). */}
-        <div className="flex flex-wrap gap-1 border-white/10 border-b bg-white/[0.02] px-2">
-          {dedup.map((r) => {
-            const isActive = r.engineId === selected;
-            return (
-              <button
-                className={`relative shrink-0 px-4 py-3 font-medium text-sm transition-colors ${
-                  isActive
-                    ? "text-zinc-50"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                key={r.engineId}
-                onClick={() => setSelected(r.engineId)}
-                type="button"
-              >
-                {ENGINE_LABELS[r.engineId] ?? r.engineId}
-                {r.engineId === "chatgpt-web" && (
-                  <span className="ml-1.5 rounded border border-[var(--brand-2)]/30 bg-[var(--brand-2)]/10 px-1 text-[10px] text-[var(--brand-2)]">
-                    BETA
-                  </span>
-                )}
-                {isActive && (
-                  <motion.div
-                    className="absolute inset-x-2 -bottom-px h-0.5 bg-grad-brand"
-                    layoutId="engine-tab-indicator"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-        {current && (
-          <div className="px-5 py-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <MentionBadge
-                isStub={current.isStub}
-                mentioned={current.brandMentioned}
-                position={current.mentionPosition}
-              />
-              <SentimentBadge sentiment={current.sentiment} />
-              <span className="font-mono text-xs text-zinc-400 tabular-nums">
-                {current.durationMs}ms
-              </span>
-            </div>
-            {/* 🔴 원문 접기 (2026-08-06 세션N-7) — 페이지 최대 분량 구간.
-                실측: excerpt가 최대 **3,908자**(평균 1,245~1,451자)로 잘림 없이 렌더돼
-                이 섹션 하나가 전체 높이의 상당 부분을 먹었다.
-                근거: 리서치 02번 *"진행형 공개가 전 소스에서 가장 반복된 IA 원칙"* ·
-                Apple Deference *"UI는 콘텐츠와 경쟁하지 않는다"*.
-                ⚠️ **삭제·요약이 아니라 접기**다 — 이 원문이 진실거울의 증거이고
-                "AI가 우리를 이렇게 말한다"의 근거라 없애면 제품의 핵심이 사라진다. */}
-            <ResponseBody
-              content={
-                current.errorMessage || current.isStub
-                  ? null
-                  : stripMarkdown(current.excerpt)
-              }
-              fallback={<ResponseFallback isKo={isKo} response={current} />}
-              isKo={isKo}
-              key={current.engineId}
-            />
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function MentionBadge({
-  mentioned,
-  position,
-  isStub,
-}: {
-  mentioned: boolean;
-  position: number | null;
-  isStub: boolean;
-}) {
-  if (isStub) {
-    return <Pill tone="muted">측정 안 됨</Pill>;
-  }
-  if (!mentioned) {
-    return <Pill tone="negative">미언급</Pill>;
-  }
-  if (position) {
-    return <Pill tone="positive">{position}위</Pill>;
-  }
-  return <Pill tone="positive">언급</Pill>;
 }
 
 function SentimentBadge({ sentiment }: { sentiment: string | null }) {
@@ -4457,10 +4220,19 @@ function MeasuredAtNotice({ job, isKo }: { isKo: boolean; job: JobResponse }) {
  *   격차가 0이면(전 엔진 인지) 이 카드는 렌더하지 않는다 — 없는 문제를 팔지 않는다.
  */
 function EngineGapCta({ result, isKo }: { isKo: boolean; result: JobResult }) {
-  const mentioned = new Set(result.metrics.enginesWithMention);
-  // 측정 성공 엔진만 대상(스텁·에러 엔진은 "모른다"고 말할 근거가 없다).
-  const measured = result.engineResponses.filter(
-    (r) => r.engineId !== "naver-briefing" && !(r.isStub || r.errorMessage)
+  // (2026-09-29) 헤드라인 4칸과 같은 모집단 — 브랜드 이름으로 물은 AI 답변 중 판정이 끝난 것.
+  //   Daum(검색 결과)·이름 없는 질문·측정 실패·판정 보류는 「모른다」의 근거가 아니다.
+  const measured = result.engineResponses.filter((r) => {
+    if (answerGroup(r.engineId) !== "ai" || isDiscoveryAnswer(r)) {
+      return false;
+    }
+    const bucket = classifyAnswer(r);
+    return bucket !== "engine_error" && bucket !== "unverified";
+  });
+  const mentioned = new Set(
+    measured
+      .filter((r) => classifyAnswer(r) === "confirmed")
+      .map((r) => r.engineId)
   );
   const missing = dedupeByEngine(measured).filter(
     (r) => !mentioned.has(r.engineId)
@@ -4468,7 +4240,7 @@ function EngineGapCta({ result, isKo }: { isKo: boolean; result: JobResult }) {
   if (missing.length === 0) {
     return null;
   }
-  const names = missing.map((r) => ENGINE_LABELS[r.engineId] ?? r.engineId);
+  const names = missing.map((r) => engineDisplayName(r.engineId, isKo));
   const shown = names.slice(0, 3).join(" · ");
   const extra = names.length > 3 ? names.length - 3 : 0;
   const appUrl =
@@ -4481,8 +4253,8 @@ function EngineGapCta({ result, isKo }: { isKo: boolean; result: JobResult }) {
           <p className="font-semibold text-base text-zinc-50 leading-snug">
             {isKo
               ? // 조사 판정은 packages/audit 의 공용 헬퍼 사용("나이키을" 같은 오표기 방지).
-                `${shown}${extra > 0 ? ` 외 ${extra}개` : ""}가 아직 ${result.brandName}${objectParticle(result.brandName)} 모릅니다`
-              : `${shown}${extra > 0 ? ` +${extra} more` : ""} ${names.length > 1 ? "don't" : "doesn't"} know ${result.brandName} yet`}
+                `${shown}${extra > 0 ? ` 외 ${extra}개` : ""}가 아직 ${result.brandName}${objectParticle(result.brandName)} 제대로 알지 못해요`
+              : `${shown}${extra > 0 ? ` +${extra} more` : ""} ${names.length > 1 ? "don't" : "doesn't"} know ${result.brandName} correctly yet`}
           </p>
           <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
             {isKo
@@ -4809,7 +4581,7 @@ function ReportToDashboardGuide({
       </div>
       {isWorkspaceAudit && (
         <a
-          className="mt-4 inline-flex text-sm text-[var(--brand-3)] underline"
+          className="mt-4 inline-flex text-[var(--brand-3)] text-sm underline"
           href={`https://app.findable.co.kr/history/${encodeURIComponent(jobId)}`}
         >
           {isKo

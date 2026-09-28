@@ -10,9 +10,9 @@ const SECTIONS_KO = [
     stage: "측정",
     en: "Measure",
     title: "도메인만 입력하면 끝.",
-    body: "7개 AI 답변을 동시에 모아서, 3분 안에 결과를 드립니다. 한국어와 영어, 둘 다 추적합니다.",
+    body: "AI 답변 4곳과 네이버·다음 검색 노출을 동시에 모아서, 3분 안에 결과를 드립니다. 한국어와 영어, 둘 다 추적합니다.",
     bullets: [
-      "글로벌 4개 + 한국 3개 = 7개 AI 병렬 호출",
+      "AI 답변 4곳 + 네이버·다음 검색 노출 병렬 수집",
       "Princeton GEO-Bench 산식 기반 점유율 측정",
       "한국어 표기 변형까지 빠짐없이 추적",
     ],
@@ -70,9 +70,9 @@ const SECTIONS_EN = [
     ...SECTIONS_KO[0],
     stage: "Measure",
     title: "Just enter your domain.",
-    body: "We pull 7 AI answers in parallel and return results within 3 minutes, tracking both Korean and English.",
+    body: "We pull answers from 4 AI engines plus Naver and Daum search in parallel and return results within 3 minutes, tracking both Korean and English.",
     bullets: [
-      "4 global + 3 Korean = 7 AI engines called in parallel",
+      "4 AI engines + Naver/Daum search exposure, collected in parallel",
       "Share-of-voice scored on the Princeton GEO-Bench formula",
       "Tracks every Korean spelling variant, no misses",
     ],

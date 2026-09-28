@@ -1,6 +1,7 @@
 "use client";
 
 import { objectParticle } from "@repo/audit/actions";
+import { engineDisplayName } from "@repo/audit/engine-labels";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
@@ -21,18 +22,6 @@ import type { TruthMirrorData } from "../../lib/truth-mirror-data";
  *
  * 🔴 **채널을 지목하지 않는다** — 출처 분석은 `/sources` 담당(중복·날조 방지).
  */
-
-const ENGINE_LABELS: Record<string, string> = {
-  chatgpt: "ChatGPT",
-  "chatgpt-web": "ChatGPT (Web)",
-  claude: "Claude",
-  daum: "다음",
-  gemini: "Gemini",
-  hyperclova: "HyperCLOVA",
-  naver: "네이버",
-  "naver-briefing": "네이버 AI 브리핑",
-  perplexity: "Perplexity",
-};
 
 /**
  * 🔴 **브리핑만 질의 축이 다르다**(N-45 · #4-b B-5).
@@ -111,9 +100,10 @@ export const TruthMirrorSection = ({
         )}
       </h2>
       <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-        공개 리포트의 ‘진실의 거울’ 요약을 뒷받침하는 <strong>대표 원문</strong>이에요.
-        질문별 전체 원문과 날짜별 변화는 ‘추적 질문’에서 관리합니다. 브랜드명·별칭·공식
-        도메인 또는 공식 출처로 검산되는 답변만 확인으로 집계합니다.
+        공개 리포트의 ‘진실의 거울’ 요약을 뒷받침하는 <strong>대표 원문</strong>
+        이에요. 질문별 전체 원문과 날짜별 변화는 ‘추적 질문’에서 관리합니다.
+        브랜드명·별칭·공식 도메인 또는 공식 출처로 검산되는 답변만 확인으로
+        집계합니다.
       </p>
 
       {/* 🔴 오류는 "모른다"가 아니다 — 분모에서 뺐다는 사실을 밝힌다. */}
@@ -137,7 +127,7 @@ export const TruthMirrorSection = ({
           >
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-                {ENGINE_LABELS[engine.engineId] ?? engine.engineId}
+                {engineDisplayName(engine.engineId)}
               </span>
               {renderMentionBadge(engine.engineId, engine.brandMentioned)}
               {engine.brandMentioned && engine.mentionPosition ? (
@@ -156,9 +146,9 @@ export const TruthMirrorSection = ({
             {engine.engineId === BRIEFING_ENGINE_ID ? (
               // 🔴 질의 축이 다름을 **그 자리에서** 밝힌다(기획서 §5-c).
               <p className="mt-1.5 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-                이 줄만 「효과·후기·장단점」으로 물었어요 — 네이버 AI 브리핑이
-                뜨는 질문 유형이라서요. 위 답변들과 <b>질문이 달라</b> 나란히
-                비교하진 마세요.
+                이 줄만 네이버 AI 브리핑이 뜨는 정보형 질문(업종에 따라
+                「효과·후기·장단점」 또는 「서비스·가격·후기」)으로 물었어요. 위
+                답변들과 <b>질문이 달라</b> 나란히 비교하진 마세요.
               </p>
             ) : null}
 
@@ -183,7 +173,6 @@ export const TruthMirrorSection = ({
                 답변 원문이 저장되지 않았어요.
               </p>
             )}
-
           </li>
         ))}
       </ul>

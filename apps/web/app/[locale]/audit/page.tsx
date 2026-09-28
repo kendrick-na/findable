@@ -24,8 +24,8 @@ export const generateMetadata = async ({
       ? "무료 AI 가시성 진단 · Findable"
       : "Free AI Visibility Audit · Findable",
     description: isKo
-      ? "도메인을 입력하면 3분 안에 7개 AI 엔진(ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA·Naver·Daum)에서 우리 브랜드의 위치를 PDF로 받아보세요."
-      : "Drop in your domain. In 3 minutes, get a 1-page PDF showing where your brand stands across 7 AI engines.",
+      ? "도메인을 입력하면 3분 안에 AI 답변 4곳(ChatGPT·Claude·Perplexity·Gemini)과 네이버·다음 검색 노출에서 우리 브랜드의 위치를 PDF로 받아보세요."
+      : "Drop in your domain. In 3 minutes, get a 1-page PDF showing where your brand stands across 4 AI engines plus Naver and Daum search exposure.",
     locale,
     pathname: "/audit",
   });
@@ -73,8 +73,8 @@ const AuditPage = async ({ params }: AuditPageProps) => {
               → 기본값(한국어+영어=7곳)이라는 **조건을 밝힌다**. 선택별 정확한 수는
                 폼의 선택지·안내문이 책임진다(서버 컴포넌트라 선택 상태를 알 수 없다). */}
           {isKo
-            ? "도메인만 입력하면 AI 답변 점유율을 3분 안에 진단해드려요. 한국어와 영어를 함께 측정하면 AI 7곳에서 봅니다."
-            : "Drop in your domain for a 30-second Share-of-Voice diagnosis. Measuring Korean and English together covers 7 AI engines."}
+            ? "도메인만 입력하면 AI 답변 점유율을 3분 안에 진단해드려요. 한국어와 영어를 함께 측정하면 AI 답변 4곳과 네이버·다음 검색 노출까지 봅니다."
+            : "Drop in your domain for a 30-second Share-of-Voice diagnosis. Measuring Korean and English together covers 4 AI engines plus Naver and Daum search."}
         </p>
 
         <div className="mt-10 rounded-xl bg-[var(--findable-surface-1)] p-6 md:p-8">

@@ -200,11 +200,13 @@ export function AuditForm({ locale }: AuditFormProps) {
             <SelectContent>
               <SelectItem value="both">
                 {isKo
-                  ? "한국어 + 영어 (권장) · AI 7곳"
-                  : "Korean + English (recommended) · 7 AI engines"}
+                  ? "한국어 + 영어 (권장) · AI 4곳 + 검색 2곳"
+                  : "Korean + English (recommended) · 4 AI + 2 search"}
               </SelectItem>
               <SelectItem value="ko">
-                {isKo ? "한국어만 · AI 7곳" : "Korean only · 7 AI engines"}
+                {isKo
+                  ? "한국어만 · AI 4곳 + 검색 2곳"
+                  : "Korean only · 4 AI + 2 search"}
               </SelectItem>
               <SelectItem value="en">
                 {isKo ? "영어만 · AI 4곳" : "English only · 4 AI engines"}
@@ -214,8 +216,8 @@ export function AuditForm({ locale }: AuditFormProps) {
           {language === "en" && (
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
               {isKo
-                ? "영어 질문은 글로벌 AI 4곳(ChatGPT·Claude·Perplexity·Gemini)에서만 측정해요. 네이버·다음·HyperCLOVA는 한국어 질문에서 답해요."
-                : "English questions are measured across 4 global engines (ChatGPT, Claude, Perplexity, Gemini). Naver, Daum, and HyperCLOVA answer Korean questions."}
+                ? "영어 질문은 글로벌 AI 4곳(ChatGPT·Claude·Perplexity·Gemini)에서만 측정해요. 네이버·다음 검색 노출은 한국어 질문에서만 재요."
+                : "English questions are measured across 4 global engines (ChatGPT, Claude, Perplexity, Gemini). Naver and Daum search exposure are measured for Korean questions."}
             </p>
           )}
         </div>

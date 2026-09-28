@@ -19,6 +19,11 @@ interface RevenueImpactCardProps {
    *   성공한 회차도 전부 성공한 회차와 똑같은 확신으로 숫자를 보여준다.
    */
   attemptedEngines?: number;
+  /**
+   * 고객이 직접 넣은 값(2026-09-29). 있으면 규모 프리셋을 쓰지 않고 이 값으로 계산한다.
+   * 공개 리포트는 이 값이 있을 때만 이 카드를 그린다(`RevenueImpactOptIn`).
+   */
+  customerInput?: { monthlyAiQueries: number; revenuePerConversion: number };
   /** 측정 신호로 추정한 초기 규모 (전수감사 2026-08-02 §A-1). 없으면 small. */
   defaultSizeKey?: BrandSizeKey;
   isKo: boolean;
@@ -107,6 +112,7 @@ export function RevenueImpactCard({
   isKo,
   defaultSizeKey = "small",
   readOnly = false,
+  customerInput,
 }: RevenueImpactCardProps) {
   const t = T(isKo);
   // 규모 프리셋: AI 답변 노출량과 광고 CPC를 함께 조정.
@@ -116,6 +122,7 @@ export function RevenueImpactCard({
     ...DEFAULT_ASSUMPTIONS,
     monthlyAiQueries: SIZE_PRESETS[defaultSizeKey].monthlyAiQueries,
     cpcKrw: SIZE_PRESETS[defaultSizeKey].cpcKrw,
+    ...(customerInput ?? {}),
   }));
   const [sizeKey, setSizeKey] = useState<BrandSizeKey>(defaultSizeKey);
   const [open, setOpen] = useState(false);
@@ -154,8 +161,11 @@ export function RevenueImpactCard({
         {t.kpiFraming}
       </p>
 
-      {/* 규모 프리셋 — 추정의 첫 변수(노출량·CPC)를 사용자가 고른다 */}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      {/* 규모 프리셋 — 추정의 첫 변수(노출량·CPC)를 사용자가 고른다.
+          고객이 직접 넣은 값이 있으면 프리셋을 보여주지 않는다(그 값이 규모를 대신한다). */}
+      <div
+        className={`mt-4 flex flex-wrap items-center gap-2 ${customerInput ? "hidden" : ""}`}
+      >
         <span className="text-xs text-zinc-400">{t.sizeLabel}</span>
         {(Object.keys(SIZE_PRESETS) as BrandSizeKey[]).map((key) => readOnly ? (
           key === sizeKey ? (

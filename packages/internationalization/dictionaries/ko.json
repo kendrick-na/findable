@@ -23,7 +23,7 @@
     "home": {
       "meta": {
         "title": "파인더블(Findable) | AI 검색 최적화·GEO 브랜드 진단",
-        "description": "파인더블(Findable)은 ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바 AI 검색에서 브랜드 언급·인용·가시성을 진단하고, SEO·GEO·AEO 개선 액션부터 브랜드별 AI 검색 전략 컨설팅까지 제공합니다."
+        "description": "파인더블(Findable)은 ChatGPT·Claude·Perplexity·Gemini와 네이버 AI 브리핑·네이버·다음 검색에서 브랜드 언급·인용·가시성을 진단하고, SEO·GEO·AEO 개선 액션부터 브랜드별 AI 검색 전략 컨설팅까지 제공합니다."
       }
     },
     "blog": {
@@ -106,14 +106,14 @@
       "introLede": "도메인으로 브랜드를 찾고, 실제로 부르는 이름이 맞는지 한 번만 확인해요. 아직 측정은 시작하지 않아요.",
       "introWhyTitle": "왜 도메인만 받나요?",
       "introWhyBody": "가입할 때 열 가지를 묻는 서비스도 있지만, 많이 물을수록 잘못 넣을 여지가 커집니다. 우리는 도메인에서 업종·타깃 시장을 추정하고, 추정한 근거를 화면에 함께 보여드려요. 틀렸으면 그 자리에서 고치면 됩니다.",
-      "introEngines": "측정은 ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바까지 함께 봅니다. 어떤 시장을 고르든 이 엔진들이 빠지지 않아요.",
+      "introEngines": "측정은 ChatGPT·Claude·Perplexity·Gemini 답변과 네이버·다음 검색 노출까지 함께 봅니다. 어떤 시장을 고르든 빠지지 않아요.",
       "scopeTitle": "어느 시장의, 어떤 브랜드인가요?",
       "scopeLede": "시장과 업종은 질문·경쟁사·동명이체 판정을 바꾸어요. 자동 추정값을 확인해 주세요.",
       "scopeLabel": "타깃 시장",
       "scopeDetected": "자동 추정",
       "scopeWhyTitle": "왜 이렇게 잡았나요?",
       "scopeLowConfidence": " 확신이 낮은 편이라, 맞는지 한 번 봐주세요.",
-      "scopeEnginesNote": "어느 쪽을 고르든 측정하는 AI는 같습니다 — ChatGPT·Claude·Perplexity·Gemini와 네이버·다음·하이퍼클로바를 모두 봅니다. 이 선택은 개선 방법을 어느 채널 중심으로 안내할지에만 쓰여요.",
+      "scopeEnginesNote": "어느 쪽을 고르든 측정하는 AI는 같습니다 — ChatGPT·Claude·Perplexity·Gemini 답변과 네이버·다음 검색 노출을 모두 봅니다. 이 선택은 개선 방법을 어느 채널 중심으로 안내할지에만 쓰여요.",
       "scopeKorea": "국내 중심",
       "scopeGlobal": "해외 중심",
       "scopeBoth": "국내·해외 함께",

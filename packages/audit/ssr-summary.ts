@@ -22,6 +22,8 @@
  *   ⛔ `geoScore`·`metrics.recognitionRate` 는 **실측 회차에 없었다**(null) → 쓰지 않는다.
  */
 
+import { summarizeAnswerBuckets } from "./answer-buckets";
+
 /** 요약에 쓰는 필드만 좁힌 타입. 이 외 필드는 일부러 보지 않는다. */
 export interface SsrSummaryInput {
   domain: string;
@@ -32,6 +34,14 @@ export interface SsrSummaryInput {
 export interface SsrSummary {
   /** 처방 제목들. 비어 있을 수 있다. */
   actionTitles: string[];
+  /** 답변 4분류(2026-09-29) — 화면 히어로와 같은 함수·같은 행에서 센다. */
+  answers: {
+    adjudicated: number;
+    confirmed: number;
+    differentEntity: number;
+    engineError: number;
+    unknown: number;
+  };
   brand: string;
   domain: string;
   /** 우리를 언급한 고유 엔진 수. */
@@ -44,6 +54,7 @@ export interface SsrSummary {
 
 interface ResultShape {
   brandName?: unknown;
+  engineResponses?: unknown;
   geoActions?: unknown;
   metrics?: {
     enginesCovered?: unknown;
@@ -111,8 +122,27 @@ export function buildSsrSummary(job: SsrSummaryInput): SsrSummary | null {
         .filter((t) => t.length > 0)
     : [];
 
+  const buckets = summarizeAnswerBuckets(
+    Array.isArray(result.engineResponses)
+      ? result.engineResponses.filter(
+          (row): row is { engineId: string } =>
+            Boolean(row) &&
+            typeof row === "object" &&
+            typeof (row as { engineId?: unknown }).engineId === "string"
+        )
+      : [],
+    { brandDomain: job.domain }
+  ).ai;
+
   return {
     actionTitles,
+    answers: {
+      adjudicated: buckets.adjudicated,
+      confirmed: buckets.confirmed,
+      differentEntity: buckets.differentEntity,
+      unknown: buckets.unknown,
+      engineError: buckets.engineError,
+    },
     brand: brandName || job.domain,
     domain: job.domain,
     engineMentioned: uniqueCount(result.metrics?.enginesWithMention),

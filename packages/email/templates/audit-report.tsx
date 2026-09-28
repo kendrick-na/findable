@@ -155,8 +155,9 @@ export const AuditReportEmail = ({
                   Findable — 한국 최초 Agentic GEO Platform.
                 </Text>
                 <Text className="m-0 mt-1 text-xs text-zinc-400">
-                  ChatGPT · Claude · Perplexity · Gemini · HyperCLOVA · 네이버 ·
-                  카카오 7개 AI 답변에서 우리 브랜드 가시성을 측정·최적화합니다.
+                  ChatGPT · Claude · Perplexity · Gemini 답변과 네이버 AI
+                  브리핑, 네이버·다음 검색 노출에서 우리 브랜드 가시성을
+                  측정·최적화합니다.
                 </Text>
               </Section>
             </Section>

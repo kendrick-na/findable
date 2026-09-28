@@ -105,9 +105,9 @@ const AuthLayout = async ({ children }: AuthLayoutProps) => {
             &ldquo;AI는 지금 우리 브랜드를 추천하고 있을까요?&rdquo;
           </p>
           <p className="mt-4 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-            ChatGPT · HyperCLOVA · Perplexity · 네이버 · Claude · 다음 · Gemini.
-            한국어와 영어 7개 AI 답변에서 우리 브랜드가 어디에 있는지
-            추적합니다.
+            ChatGPT · Claude · Perplexity · Gemini 답변과 네이버 AI 브리핑,
+            네이버·다음 검색 노출까지 — 한국어와 영어로 우리 브랜드가 어디에
+            있는지 추적합니다.
           </p>
           {/* 🔴 2026-08-17(N-37) — 소셜프루프. 경쟁사 4곳은 이 자리에 **고객 로고**를
               두는데(Profound 18개·Scrunch "500개사") 우리는 고객 0명이라

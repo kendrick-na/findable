@@ -23,7 +23,7 @@
     "home": {
       "meta": {
         "title": "AI search and GEO brand visibility audit",
-        "description": "Findable measures brand mentions, cited sources, and competitor position across ChatGPT, Claude, Perplexity, Gemini, Naver, Daum, and HyperCLOVA, then turns the findings into actions."
+        "description": "Findable measures brand mentions, cited sources, and competitor position across ChatGPT, Claude, Perplexity and Gemini, plus Naver AI Briefing and Naver/Daum search, then turns the findings into actions."
       }
     },
     "blog": {
@@ -106,14 +106,14 @@
       "introLede": "We find the brand from its domain, then ask you to confirm the name people actually use. Measurement has not started yet.",
       "introWhyTitle": "Why only the domain?",
       "introWhyBody": "Some tools ask ten questions at signup, but the more you ask, the more there is to get wrong. We infer industry and target market from your domain and show you why we decided that way. If it is wrong, fix it right there.",
-      "introEngines": "We measure ChatGPT, Claude, Perplexity and Gemini alongside Naver, Daum and HyperCLOVA. No matter which market you pick, none of these are dropped.",
+      "introEngines": "We measure ChatGPT, Claude, Perplexity and Gemini alongside Naver and Daum search exposure. No matter which market you pick, none of these are dropped.",
       "scopeTitle": "What market and category are you in?",
       "scopeLede": "Market and industry shape prompts, competitors and entity disambiguation. Confirm the inferred context.",
       "scopeLabel": "Target market",
       "scopeDetected": "Auto-detected",
       "scopeWhyTitle": "Why this one?",
       "scopeLowConfidence": " Confidence is low, so please double-check.",
-      "scopeEnginesNote": "Whichever you pick, the AI engines stay the same — ChatGPT, Claude, Perplexity, Gemini, Naver, Daum and HyperCLOVA. This choice only shapes which channels we recommend.",
+      "scopeEnginesNote": "Whichever you pick, the AI engines stay the same — ChatGPT, Claude, Perplexity and Gemini, plus Naver and Daum search exposure. This choice only shapes which channels we recommend.",
       "scopeKorea": "Korea-focused",
       "scopeGlobal": "Global-focused",
       "scopeBoth": "Korea and global",

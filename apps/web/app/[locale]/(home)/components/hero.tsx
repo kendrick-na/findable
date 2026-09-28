@@ -54,8 +54,8 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
     ? "측정만 하지 않습니다. 네이버까지 진단하고, 직접 고칠 곳까지 알려드립니다."
     : "We don't just measure. We diagnose Naver too, and show you exactly what to fix.";
   const heroTagline = isKo
-    ? "7개 AI 답변 속 우리 브랜드 점유율, 3분이면 진단 끝."
-    : "Your brand's share of voice across 7 AI answers, diagnosed in 3 minutes.";
+    ? "AI 답변 속 우리 브랜드 점유율, 3분이면 진단 끝."
+    : "Your brand's share of voice in AI answers, diagnosed in 3 minutes.";
   const ctaPrimary = isKo ? "무료로 시작하기" : "Start for free";
   // secondary CTA는 primary(진단)와 목적지가 겹치지 않게 요금제로 분리.
   const ctaSecondary = isKo ? "요금제 보기" : "See pricing";

@@ -1,7 +1,8 @@
 // 한국 3 엔진 어댑터 — 직접 fetch (AI Gateway 미지원)
 //
-// 1. HyperCLOVA X (NAVER CLOVA Studio API, HCX-DASH-002)
-// 2. Naver Search API (블로그·뉴스·웹문서·지식인) + HyperCLOVA 합성으로 Cue: 90% 재현 (D-008)
+// 1. HyperCLOVA X (NAVER CLOVA Studio API, HCX-DASH-002) — ⛔ 2026-09-29 기본 측정에서 제외
+//    (클로바X 서비스 종료 · 👤 대표 결정). 어댑터는 과거 데이터 호환·수동 호출용으로만 남긴다.
+// 2. Naver Search API — 검색 노출만(2026-09-29: HyperCLOVA 합성 폐지 · Cue: 서비스 종료)
 // 3. Daum 검색 API (Kakao Developers)
 //
 // 환경변수 미설정 시 stub 응답.
@@ -168,8 +169,8 @@ export const hyperclovaAdapter: EngineAdapter = async (query) => {
 };
 
 // ─────────────────────────────────────────────
-// 2. Naver Search API (블로그·뉴스·웹문서·지식인) + HyperCLOVA 합성
-//    D-008: 공식 검색 API 결과 + HyperCLOVA로 Cue: 답변 재현
+// 2. Naver Search API (블로그·뉴스·웹문서) — 검색 노출(2026-09-29: 합성 폐지)
+//    ⛔ 예전 D-008(검색 결과 + HyperCLOVA 합성으로 Cue: 재현)은 폐지 — 아래 naverAdapter 주석.
 // ─────────────────────────────────────────────
 
 interface NaverSearchItem {
@@ -223,13 +224,26 @@ async function naverSearch(query: string): Promise<NaverSearchResult> {
   };
 }
 
+/**
+ * 🔴 **네이버 검색 노출** — AI 답이 아니다 (2026-09-29 👤 대표 결정).
+ *
+ * 예전엔 네이버 검색 API 결과를 HyperCLOVA 로 **Findable 이 합성**해 「네이버 Cue: 재현」
+ * 답변을 만들었다. 그런데 ① 네이버 Cue:·클로바X 는 2026-04-09 서비스를 종료했고
+ * ② 합성 답은 네이버가 한 말이 아니라 **우리가 만든 말**이라, 화면에서 「네이버가
+ * 우리를 이렇게 말했다」로 읽혔다. → 합성을 없애고 **검색 결과 원문**만 남긴다.
+ *
+ * 무엇을 재나: 질의로 네이버 블로그·뉴스·웹문서를 검색했을 때 **브랜드명·공식 도메인이
+ * 결과에 나오는가**(다음 검색 노출과 같은 방식). 답변 4분류에서는 「검색 노출」 그룹이라
+ * AI 답변 분모에 들어가지 않는다(`@repo/audit/answer-buckets`).
+ * 네이버의 실제 AI 답은 `naver-briefing`(네이버 AI 브리핑)뿐이다.
+ *
+ * ⚠️ CLOVA_STUDIO_API_KEY 는 더 이상 필요 없다(NAVER_CLIENT_ID·SECRET 만).
+ */
 export const naverAdapter: EngineAdapter = async (query) => {
   const start = Date.now();
   const clientId = process.env.NAVER_CLIENT_ID;
-  const clovaKey = process.env.CLOVA_STUDIO_API_KEY;
-
   const clientSecret = process.env.NAVER_CLIENT_SECRET;
-  if (!(clientId && clientSecret && clovaKey)) {
+  if (!(clientId && clientSecret)) {
     return makeStubResponse("naver", query.prompt, Date.now() - start);
   }
 
@@ -246,71 +260,22 @@ export const naverAdapter: EngineAdapter = async (query) => {
       return makeEmptySearchResponse("naver", query.prompt, Date.now() - start);
     }
 
-    // 검색 결과를 HyperCLOVA에 컨텍스트로 주입 → Cue: 답변 합성
-    const context = items
-      .slice(0, 8)
+    // 검색 결과 원문(제목·요약·주소)을 그대로 근거로 쓴다 — 요약·합성하지 않는다.
+    const top = items.slice(0, 10);
+    const text = top
       .map(
         (item, i) =>
-          `[${i + 1}] ${stripHtml(item.title)}\n출처: ${item.link}\n${stripHtml(item.description ?? "")}`
+          `[${i + 1}] ${stripHtml(item.title)}\n${stripHtml(item.description ?? "")}\n출처: ${item.link}`
       )
       .join("\n\n");
-
-    const synthPrompt = `다음 네이버 검색 결과를 참고해 사용자 질의에 답변하세요. 인용한 자료의 [번호]를 답변에 표시하세요.\n\n[검색 결과]\n${context}\n\n[질의] ${query.prompt}`;
-
-    const synthResp = await fetch(
-      `${CLOVA_HOST}/v3/chat-completions/${CLOVA_MODEL}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${clovaKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "system",
-              content:
-                "당신은 네이버 검색 결과를 종합하는 한국어 답변 합성 어시스턴트입니다.",
-            },
-            { role: "user", content: synthPrompt },
-          ],
-          maxTokens: 1024,
-          temperature: 0.4,
-        }),
-      }
-    );
-
-    if (!synthResp.ok) {
-      return makeErrorResponse(
-        "naver",
-        `Naver+HyperCLOVA 합성 실패 HTTP ${synthResp.status}`,
-        Date.now() - start
-      );
-    }
-
-    const synthData = (await synthResp.json()) as {
-      result?: {
-        message?: { content?: string };
-        usage?: { promptTokens?: number; completionTokens?: number };
-      };
-    };
-    const text = synthData.result?.message?.content ?? "";
-
     // 인용 출처는 검색 결과 URL을 그대로 사용 (재배포 금지에 따라 메타데이터만)
-    const citedSources: CitedSource[] = items.slice(0, 8).map((item) => ({
+    const citedSources: CitedSource[] = top.map((item) => ({
       url: item.link,
       domain: safeHostname(item.link),
       title: stripHtml(item.title),
     }));
 
-    return analyzeText(
-      "naver",
-      text,
-      query,
-      Date.now() - start,
-      citedSources,
-      clovaUsage(synthData)
-    );
+    return analyzeText("naver", text, query, Date.now() - start, citedSources);
   } catch (error) {
     return makeErrorResponse(
       "naver",

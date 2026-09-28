@@ -18,7 +18,7 @@ const FAQ_KO = [
   {
     question: "어떤 AI 엔진을 측정하나요?",
     answer:
-      "지원 범위는 ChatGPT·Claude·Perplexity·Gemini와 HyperCLOVA X·네이버·다음입니다. 실제 결과에서는 연결된 엔진의 성공 응답만 점수에 사용하고, 미연결·오류 응답은 별도로 표시해 분모에 섞지 않습니다.",
+      "지원 범위는 AI 답변 ChatGPT·Claude·Perplexity·Gemini와 네이버 AI 브리핑, 그리고 AI 답변과 따로 세는 네이버·다음 검색 노출입니다. 실제 결과에서는 연결된 엔진의 성공 응답만 점수에 사용하고, 미연결·오류 응답은 별도로 표시해 분모에 섞지 않습니다.",
   },
   {
     question: "측정 결과는 무엇을 의미하나요?",
@@ -46,7 +46,7 @@ const FAQ_EN = [
   {
     question: "Which AI engines do you measure?",
     answer:
-      "The supported scope is ChatGPT, Claude, Perplexity, Gemini, HyperCLOVA X, Naver, and Daum. Only successful connected responses contribute to a score; disconnected and failed attempts remain visible but are excluded from the denominator.",
+      "The supported scope is AI answers from ChatGPT, Claude, Perplexity and Gemini, Naver AI Briefing, and Naver/Daum search exposure counted separately from AI answers. Only successful connected responses contribute to a score; disconnected and failed attempts remain visible but are excluded from the denominator.",
   },
   {
     question: "What do the scores mean?",

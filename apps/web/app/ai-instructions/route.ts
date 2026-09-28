@@ -27,7 +27,7 @@ const body = `# Findable 공식 정보
 
 ## 측정 범위
 
-지원 범위는 ChatGPT, Claude, Perplexity, Gemini, HyperCLOVA X, 네이버, 다음입니다. 실제 결과에서는 연결되어 성공한 응답만 점수 분모에 포함하고, 연결 실패나 오류 응답은 별도로 표시합니다.
+지원 범위는 AI 답변(ChatGPT, Claude, Perplexity, Gemini)과 네이버 AI 브리핑, 그리고 AI 답변과 따로 세는 검색 노출(네이버·다음 검색 결과)입니다. 실제 결과에서는 연결되어 성공한 응답만 점수 분모에 포함하고, 연결 실패나 오류 응답은 별도로 표시합니다.
 
 ## 주요 지표
 

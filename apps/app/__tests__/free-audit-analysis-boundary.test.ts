@@ -34,8 +34,20 @@ describe("무료 진단 심층 분석 표기", () => {
     expect(auditResult).toContain("이 리포트와 대시보드는 이렇게 이어집니다");
   });
 
-  it("엔진별 대표 응답을 여러 질문 전체 원문처럼 보이게 하지 않는다", () => {
-    expect(auditResult).toContain("측정 원문 · 엔진별 대표 답변");
-    expect(auditResult).toContain("질문별 전체 원문·날짜별 변화");
+  // (2026-09-29) 계약 변경: 엔진마다 첫 답변 1개만 보여주던 탭을 「질문 × 엔진」 표로
+  //   바꿨다 — 이제 **이번 회차의 전 답변**을 질문별로 보여준다. 날짜별 변화(여러 회차)는
+  //   여전히 대시보드 몫이라는 경계는 유지한다.
+  it("측정 원문은 질문 × 엔진 표로 이번 회차 전부를 보여주고, 날짜별 변화는 대시보드로 보낸다", () => {
+    const matrix = readFileSync(
+      join(
+        process.cwd(),
+        "../web/app/[locale]/audit/[jobId]/components/answer-buckets.tsx"
+      ),
+      "utf8"
+    );
+    expect(auditResult).toContain("<QuestionEngineMatrix");
+    expect(auditResult).not.toContain("<EnginesTabsSection");
+    expect(matrix).toContain("측정 원문 · 질문 × 엔진");
+    expect(matrix).toContain("날짜별 변화는 대시보드");
   });
 });

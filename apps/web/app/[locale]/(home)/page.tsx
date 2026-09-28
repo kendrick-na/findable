@@ -84,7 +84,7 @@ const Home = async ({ params }: HomeProps) => {
             description: "무료 도메인 진단 (3분, 1페이지 PDF 리포트)",
           },
           featureList: [
-            "7개 AI 엔진 동시 추적 (ChatGPT · Claude · Perplexity · Gemini · HyperCLOVA X · 네이버 · 다음)",
+            "AI 답변 4곳 + 네이버 AI 브리핑 + 네이버·다음 검색 노출 동시 추적 (ChatGPT · Claude · Perplexity · Gemini)",
             "Korean Entity Grounding (한글·영문·혼용 표기 통합 추적)",
             "무료 도메인 진단 및 Share of Voice 리포트",
             "4명의 자율 에이전트 기반 GEO 측정·최적화",

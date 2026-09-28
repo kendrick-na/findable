@@ -1,4 +1,6 @@
-import { conjunctionParticle, topicParticle } from "./actions";
+import { conjunctionParticle, objectParticle, topicParticle } from "./actions";
+import type { PromptKind } from "./answer-buckets";
+import { MAX_DISCOVERY_PROMPTS } from "./prompt-limits";
 
 /** 질문 언어별로 넣을 브랜드 표기. en 은 공식 로마자 표기가 없으면 ko 와 같다. */
 export interface PromptBrandNames {
@@ -61,4 +63,197 @@ export function generateAuditPrompts(
     { text: en[0] as string, lang: "en" as const },
     { text: en[2] as string, lang: "en" as const },
   ];
+}
+
+// ──────────────────────────────────────────────────────────────────
+// 이름 없는 질문(discovery) — 2026-09-29
+//
+// 🔴 왜: 기존 질문 4개가 **전부 브랜드 이름을 넣은 질문**이었다
+//   ("노우버스는 어떤 브랜드야?"). 이건 「AI 가 이 이름을 아나」만 잰다.
+//   고객이 실제로 궁금한 건 「내 업종을 물었을 때 AI 가 나를 추천하나」다.
+//
+// 재료 = 공식 사이트가 **스스로 쓴** 제목 조각·설명 문장뿐이다(러너가 이미 읽어 둔
+//   officialSiteIdentity). 번역·요약·추측을 하지 않는다 — 재료가 없으면 질문도 없다.
+//   예) 「Indigochild」 제목 + 「We Create the Future」 H1 → 업종 단서가 없어 0개.
+// 영어 질문은 사이트가 **영어로 쓴** 조각이 있을 때만 만든다(한글 조각을 번역하지 않는다).
+// ──────────────────────────────────────────────────────────────────
+
+export interface RunPrompt {
+  /** 없으면 브랜드 이름 질문(기존 저장 프롬프트·폴백 4개). */
+  kind?: PromptKind;
+  lang: "ko" | "en";
+  text: string;
+}
+
+export interface DiscoverySiteIdentity {
+  description?: string | null;
+  h1?: string | null;
+  siteName?: string | null;
+  title?: string | null;
+}
+
+export { MAX_DISCOVERY_PROMPTS } from "./prompt-limits";
+
+// "/" 는 나누지 않는다 — "AX/DX 컨설팅" 은 한 업종 표기다("AX" 만 떼면 뜻이 없다).
+const SEGMENT_SPLIT_RE = /\s*[|·•—–:,]\s*|\s+-\s+/;
+const PAREN_RE = /\([^)]*\)/g;
+const NON_IDENTITY_CHAR_RE = /[^a-z0-9가-힣]/g;
+const HANGUL_RE = /[가-힣]/;
+const LATIN_TERM_RE = /^[A-Za-z][A-Za-z0-9 &+.'-]*$/;
+const MIN_TERM_LENGTH = 2;
+const MAX_TERM_LENGTH = 40;
+// "…으로 {문제}를 지원합니다" 처럼 **사이트가 스스로 쓴** 문제 문장만 집는다.
+const KO_PROBLEM_RE =
+  /(?:으로|로|통해|하여)\s+([^.!?。]{4,40}?)[을를]\s*(?:지원|돕|도와|해결|개선|혁신|자동화|관리|높여|줄여)/;
+const EN_PROBLEM_RE =
+  /\b(?:helps?|enables?|lets?)\s+(?:you\s+|teams\s+|businesses\s+|companies\s+|brands\s+)?([a-z][^.!?;]{3,60}?)(?:[.!?;]|,\s|$)/i;
+
+function compact(value: string): string {
+  return value.toLowerCase().replace(NON_IDENTITY_CHAR_RE, "");
+}
+
+function containsName(value: string, nameKeys: string[]): boolean {
+  const key = compact(value);
+  return nameKeys.some((name) => name.length >= 2 && key.includes(name));
+}
+
+/**
+ * 제목·H1 에서 업종 키워드를 뽑는다. **이름 조각이 함께 있는 구조**
+ * ("노우버스 | AI 전략 · CTO 구독")일 때만 쓴다 — 이름 없는 제목·H1 은
+ * 슬로건일 가능성이 커서("We Create the Future") 업종 단서로 믿지 않는다.
+ */
+export function siteCategoryTerms(
+  site: DiscoverySiteIdentity | null | undefined,
+  names: readonly string[]
+): string[] {
+  const nameKeys = names.map(compact).filter(Boolean);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const source of [site?.title, site?.h1]) {
+    if (!source) {
+      continue;
+    }
+    const segments = source
+      .replace(PAREN_RE, " ")
+      .split(SEGMENT_SPLIT_RE)
+      .map((v) => v.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    const hasNameSegment = segments.some((seg) => containsName(seg, nameKeys));
+    if (!hasNameSegment || segments.length < 2) {
+      continue;
+    }
+    for (const seg of segments) {
+      if (
+        containsName(seg, nameKeys) ||
+        seg.length < MIN_TERM_LENGTH ||
+        seg.length > MAX_TERM_LENGTH
+      ) {
+        continue;
+      }
+      const key = compact(seg);
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        out.push(seg);
+      }
+    }
+  }
+  return out;
+}
+
+/** 설명 문장에서 사이트가 스스로 적은 「해결하는 문제」를 뽑는다. 없으면 null. */
+export function siteProblemPhrase(
+  site: DiscoverySiteIdentity | null | undefined,
+  names: readonly string[],
+  lang: "ko" | "en"
+): string | null {
+  const description = site?.description ?? "";
+  const match = (lang === "ko" ? KO_PROBLEM_RE : EN_PROBLEM_RE).exec(
+    description
+  );
+  const phrase = match?.[1]?.replace(/\s+/g, " ").trim();
+  if (!phrase) {
+    return null;
+  }
+  const nameKeys = names.map(compact).filter(Boolean);
+  if (containsName(phrase, nameKeys)) {
+    return null;
+  }
+  if (lang === "en" && HANGUL_RE.test(phrase)) {
+    return null;
+  }
+  return phrase;
+}
+
+/**
+ * 이름 없이 묻는 질문 — 한국어 최대 2개 · 영어는 영어 재료가 있을 때만.
+ * 반환 개수는 `MAX_DISCOVERY_PROMPTS` 를 넘지 않는다(러너 상한 8 보호).
+ */
+export function generateDiscoveryPrompts(
+  names: PromptBrandNames & { variants?: readonly string[] },
+  site: DiscoverySiteIdentity | null | undefined,
+  language: "ko" | "en" | "both"
+): RunPrompt[] {
+  const nameList = [names.ko, names.en, ...(names.variants ?? [])];
+  if (site?.siteName) {
+    nameList.push(site.siteName);
+  }
+  const terms = siteCategoryTerms(site, nameList);
+  const koTerms = terms.filter(
+    (t) => HANGUL_RE.test(t) || !LATIN_TERM_RE.test(t)
+  );
+  // 영어 조각은 약어 한 토막("AX")이 아니라 뜻이 서는 표기만 — 두 단어 이상이거나 6자 이상.
+  const enTerms = terms.filter(
+    (t) => LATIN_TERM_RE.test(t) && (t.includes(" ") || t.length >= 6)
+  );
+  const ko: RunPrompt[] = [];
+  const en: RunPrompt[] = [];
+
+  const koCategory = (koTerms.length > 0 ? koTerms : terms).slice(0, 2);
+  if (koCategory.length > 0) {
+    ko.push({
+      kind: "discovery",
+      lang: "ko",
+      text: `${koCategory.join(", ")} 서비스를 하는 곳 추천해줘`,
+    });
+  }
+  const koProblem = siteProblemPhrase(site, nameList, "ko");
+  if (koProblem) {
+    ko.push({
+      kind: "discovery",
+      lang: "ko",
+      text: `${koProblem}${objectParticle(koProblem)} 도와주는 서비스 어디 있어?`,
+    });
+  } else if (koTerms.length >= 3) {
+    // 문제 문장이 없으면 남은 업종 키워드로 두 번째 질문을 만든다(여전히 사이트 표기).
+    ko.push({
+      kind: "discovery",
+      lang: "ko",
+      text: `${koTerms.slice(2, 4).join(", ")} 잘하는 회사 어디야?`,
+    });
+  }
+
+  if (enTerms.length > 0) {
+    en.push({
+      kind: "discovery",
+      lang: "en",
+      text: `What are the best ${enTerms.slice(0, 2).join(" and ")} services?`,
+    });
+  }
+  const enProblem = siteProblemPhrase(site, nameList, "en");
+  if (enProblem) {
+    en.push({
+      kind: "discovery",
+      lang: "en",
+      text: `Which service helps ${enProblem}?`,
+    });
+  }
+
+  if (language === "ko") {
+    return ko.slice(0, MAX_DISCOVERY_PROMPTS);
+  }
+  if (language === "en") {
+    return en.slice(0, MAX_DISCOVERY_PROMPTS);
+  }
+  // both: 한국어 우선(무료 진단 고객 대부분이 국내), 모자라면 영어로 채운다.
+  return [...ko, ...en].slice(0, MAX_DISCOVERY_PROMPTS);
 }

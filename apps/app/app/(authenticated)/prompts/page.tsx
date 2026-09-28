@@ -1,4 +1,8 @@
-import { RUNNER_PROMPT_LIMIT } from "@repo/audit/runner";
+import {
+  MAX_DISCOVERY_PROMPTS,
+  RUNNER_PROMPT_LIMIT,
+  SAVED_PROMPTS_MIN_PER_RUN,
+} from "@repo/audit/prompt-limits";
 import { planCapabilities } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { database } from "@repo/database";
@@ -140,9 +144,14 @@ const PromptsPage = async () => {
                     안내하면 "돈 내고 저장했는데 왜 다 안 재나"로 오해할 수 있어,
                     8개 넘게 저장했을 때만 순환 측정 사실을 정직하게 알린다
                     (화면은 의도를, 코드는 사실을 원칙). */}
-                {mine.length > RUNNER_PROMPT_LIMIT && (
+                {/* 🔴 2026-09-29 — 러너가 회차마다 「브랜드 이름 없이 묻는 질문」을 최대
+                    {MAX_DISCOVERY_PROMPTS}개 함께 던지고 합계를 {RUNNER_PROMPT_LIMIT}개로 막는다.
+                    그래서 저장 질문은 회차마다 최소 SAVED_PROMPTS_MIN_PER_RUN 개까지 줄 수 있다. */}
+                {mine.length > SAVED_PROMPTS_MIN_PER_RUN && (
                   <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-                    측정마다 {RUNNER_PROMPT_LIMIT}개씩 돌아가며 측정돼요 ·
+                    측정마다 저장한 질문 중 {SAVED_PROMPTS_MIN_PER_RUN}~
+                    {RUNNER_PROMPT_LIMIT}개씩 돌아가며 측정돼요(남은 자리엔 브랜드
+                    이름 없이 묻는 질문이 최대 {MAX_DISCOVERY_PROMPTS}개 들어가요) ·
                     저장한 질문이 많을수록 한 바퀴 도는 데 며칠 걸릴 수 있어요
                   </p>
                 )}

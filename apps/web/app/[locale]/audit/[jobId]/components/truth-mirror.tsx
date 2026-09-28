@@ -22,6 +22,8 @@
 "use client";
 
 import { objectParticle } from "@repo/audit/actions";
+import { answerBucketCopy, classifyAnswer } from "@repo/audit/answer-buckets";
+import { engineDisplayName } from "@repo/audit/engine-labels";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { ChevronDown, Quote } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -33,6 +35,8 @@ interface EngineResponse {
   excerpt: string;
   isStub: boolean;
   mentionPosition: number | null;
+  /** 판정(2026-09-29) — 「다른 회사로 앎」을 「모름」과 가르는 값. 구 회차엔 없다. */
+  mentionQuality?: string | null;
   sentiment: "positive" | "neutral" | "negative" | null;
 }
 
@@ -43,17 +47,6 @@ interface Props {
 }
 
 // audit-result의 ENGINE_LABELS와 동일 (진실거울은 자체 소유해 결합도 낮춤)
-const ENGINE_LABELS: Record<string, string> = {
-  chatgpt: "ChatGPT",
-  "chatgpt-web": "ChatGPT (Web)",
-  claude: "Claude",
-  perplexity: "Perplexity",
-  gemini: "Gemini",
-  hyperclova: "HyperCLOVA X",
-  naver: "Naver",
-  "naver-briefing": "Naver AI 브리핑",
-  daum: "Daum",
-};
 
 /**
  * 🔴 브리핑만 **질의 축이 다르다**(N-45 · #4-b B-5).
@@ -73,18 +66,34 @@ const BRIEFING_ENGINE_ID = "naver-briefing";
 //
 // 정책: 한 엔진이 **어느 질문에서든** 우리를 말했다면 그 엔진은 "우리를 안다".
 //   (미언급 응답만 있는 엔진은 그대로 미언급 카드가 남는다)
+// (2026-09-29) 우선순위를 4분류로 넓혔다: 제대로 앎 > 다른 회사로 앎 > 모름 > 판정 보류 > 측정 실패.
+//   「다른 회사로 앎」은 「모름」보다 **먼저 보여야 할 위험**이고, 첫 행이 측정 실패라고
+//   그 엔진의 다른 성공 답변을 가리면 안 된다.
+const PICK_RANK: Record<string, number> = {
+  confirmed: 0,
+  different_entity: 1,
+  unknown: 2,
+  unverified: 3,
+  engine_error: 4,
+};
+
 function dedupeByEngine<
-  T extends { engineId: string; brandMentioned?: boolean },
+  T extends {
+    engineId: string;
+    brandMentioned?: boolean;
+    errorMessage?: string | null;
+    isStub?: boolean;
+    mentionQuality?: string | null;
+  },
 >(rows: T[]): T[] {
   const picked = new Map<string, T>();
   for (const r of rows) {
     const prev = picked.get(r.engineId);
-    if (!prev) {
-      picked.set(r.engineId, r);
-      continue;
-    }
-    // 이미 담긴 게 미언급이고 지금 것이 언급이면 교체 — 언급 증거가 이긴다.
-    if (!prev.brandMentioned && r.brandMentioned) {
+    if (
+      !prev ||
+      (PICK_RANK[classifyAnswer(r)] ?? 9) <
+        (PICK_RANK[classifyAnswer(prev)] ?? 9)
+    ) {
       picked.set(r.engineId, r);
     }
   }
@@ -120,9 +129,13 @@ export function TruthMirror({ brandName, engineResponses, isKo }: Props) {
   const visible = expanded ? ordered : initial;
   const hiddenCount = ordered.length - initial.length;
 
+  // 엔진 기준(2026-09-29) — 위 히어로 4칸은 답변 기준이다. 둘을 섞어 읽지 않게 기준을 적는다.
+  const confused = measured.filter(
+    (r) => classifyAnswer(r) === "different_entity"
+  ).length;
   const headline = isKo
-    ? `측정한 AI ${measured.length}개 중 ${known.length}개가 ${brand}${objectParticle(brand)} 알고 있습니다`
-    : `${known.length} of ${measured.length} measured AIs know ${brand}`;
+    ? `엔진 기준, 측정한 AI ${measured.length}곳 중 ${known.length}곳이 ${brand}${objectParticle(brand)} 제대로 알아요${confused > 0 ? ` · ${confused}곳은 다른 회사로 알아요` : ""}`
+    : `Per engine: ${known.length} of ${measured.length} measured AIs know ${brand}${confused > 0 ? ` · ${confused} confuse you with another company` : ""}`;
 
   let accuracyTone: Tone = "bad";
   if (accuracy >= 70) {
@@ -350,9 +363,10 @@ function MirrorCard({
   /** 이 회차에서 브랜드를 아는 엔진 수. 「모름」 카드의 ②이유 문장에 쓰인다. */
   knownCount: number;
 }) {
-  const label = ENGINE_LABELS[engine.engineId] ?? engine.engineId;
+  const label = engineDisplayName(engine.engineId, isKo);
   const errored = Boolean(engine.errorMessage);
   const unknown = !(engine.brandMentioned || errored);
+  const confused = classifyAnswer(engine) === "different_entity";
 
   // 3상태: 안다(인용) / 모른다(미언급 = GEO 기회) / 오류
   let cardTone = "border-white/10 bg-white/[0.03]";
@@ -377,8 +391,8 @@ function MirrorCard({
       {engine.engineId === BRIEFING_ENGINE_ID ? (
         <p className="mt-1.5 text-[11px] text-zinc-500 leading-relaxed">
           {isKo
-            ? "이 카드만 「효과·후기·장단점」으로 물었어요 — 네이버 AI 브리핑이 뜨는 질문 유형이라서요."
-            : "This card alone was measured with informational queries (effects · reviews · pros and cons) — the query types that trigger Naver AI Briefing."}
+            ? "이 카드만 네이버 AI 브리핑이 뜨는 정보형 질문(업종에 따라 「효과·후기·장단점」 또는 「서비스·가격·후기」)으로 물었어요."
+            : "This card alone was measured with informational queries that trigger Naver AI Briefing (effects · reviews · pros and cons, or services · pricing · reviews, by category)."}
         </p>
       ) : null}
 
@@ -386,6 +400,7 @@ function MirrorCard({
       <div className="mt-3 flex-1">
         <MirrorBody
           brandName={brandName}
+          confused={confused}
           engine={engine}
           errored={errored}
           isKo={isKo}
@@ -471,6 +486,7 @@ function MirrorBody({
   engine,
   errored,
   unknown,
+  confused,
   isKo,
   brandName,
   knownCount,
@@ -478,6 +494,8 @@ function MirrorBody({
   engine: EngineResponse;
   errored: boolean;
   unknown: boolean;
+  /** 같은 이름의 다른 회사를 설명했다 — 「모름」 문구를 쓰면 처방이 반대가 된다. */
+  confused: boolean;
   isKo: boolean;
   brandName: string;
   knownCount: number;
@@ -488,6 +506,34 @@ function MirrorBody({
         {isKo
           ? "이 AI 응답을 불러오지 못했습니다."
           : "Couldn't load this AI's response."}
+      </p>
+    );
+  }
+  if (confused) {
+    return (
+      <div className="flex flex-col">
+        <p className="font-medium text-sm text-zinc-300">
+          {isKo
+            ? "다른 회사로 알고 있어요"
+            : "Confuses you with another company"}
+        </p>
+        <p className="mt-1 text-sm text-zinc-400 leading-relaxed">
+          {isKo
+            ? "이름은 같지만 다른 대상을 설명했어요. 알리는 것보다 바로잡는 게 먼저예요."
+            : "Same name, different entity. Correcting it comes before promoting."}
+        </p>
+        <ExpandableQuote
+          brandName={brandName}
+          isKo={isKo}
+          text={stripMarkdown(engine.excerpt)}
+        />
+      </div>
+    );
+  }
+  if (unknown && classifyAnswer(engine) === "unverified") {
+    return (
+      <p className="text-xs text-zinc-400 leading-relaxed">
+        {answerBucketCopy("unverified", isKo).explain}
       </p>
     );
   }
@@ -567,9 +613,7 @@ function ExpandableQuote({
 
   return (
     <div>
-      <blockquote
-        className="line-clamp-3 whitespace-pre-line border-[var(--brand-2)]/30 border-l-2 pl-3 text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]"
-      >
+      <blockquote className="line-clamp-3 whitespace-pre-line border-[var(--brand-2)]/30 border-l-2 pl-3 text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]">
         {highlightBrand(body, brandName)}
       </blockquote>
       {clampable && (
@@ -593,7 +637,7 @@ function StatusPill({
   if (engine.errorMessage) {
     return (
       <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">
-        {isKo ? "오류" : "Error"}
+        {answerBucketCopy("engine_error", isKo).label}
       </span>
     );
   }
@@ -608,9 +652,7 @@ function StatusPill({
           ? isKo
             ? "이 질문엔 안 떠요"
             : "Not shown for this query"
-          : isKo
-            ? "당신을 모름"
-            : "Doesn't know you"}
+          : answerBucketCopy(classifyAnswer(engine), isKo).label}
       </span>
     );
   }
