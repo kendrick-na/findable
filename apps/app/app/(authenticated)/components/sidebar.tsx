@@ -353,9 +353,7 @@ const NavRow = ({
         {item.external && !locked ? (
           <a href={href}>{inner}</a>
         ) : (
-          <Link href={href} prefetch={false}>
-            {inner}
-          </Link>
+          <Link href={href} prefetch={false}>{inner}</Link>
         )}
       </SidebarMenuButton>
     </SidebarMenuItem>
