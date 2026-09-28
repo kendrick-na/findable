@@ -54,6 +54,7 @@ export const AuditSummarySsr = ({ job, locale }: Props) => {
   const isKo = locale.startsWith("ko");
   const {
     actionTitles: actions,
+    answers,
     brand,
     engineMentioned,
     engineTotal,
@@ -89,9 +90,16 @@ export const AuditSummarySsr = ({ job, locale }: Props) => {
       </h2>
       <p className="mt-2 text-sm text-zinc-300">
         {isKo
-          ? `${brand}(${job.domain})을 ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X·네이버·다음 등 AI ${engineTotal}곳에서 측정했어요.`
-          : `We measured ${brand} (${job.domain}) across ${engineTotal} AI engines including ChatGPT, Claude, Perplexity, Gemini, HyperCLOVA X, Naver and Daum.`}
+          ? `${brand}(${job.domain})을 ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X와 네이버 검색 기반 요약(Findable 재현)·다음 검색 노출까지 ${engineTotal}곳에서 측정했어요.`
+          : `We measured ${brand} (${job.domain}) across ${engineTotal} sources: ChatGPT, Claude, Perplexity, Gemini, HyperCLOVA X, a Naver search summary reproduced by Findable, and Daum search exposure.`}
       </p>
+      {answers.adjudicated > 0 && (
+        <p className="mt-2 text-sm text-zinc-300">
+          {isKo
+            ? `브랜드 이름으로 물은 AI 답변 ${answers.adjudicated}개 중 제대로 앎 ${answers.confirmed} · 다른 회사로 앎 ${answers.differentEntity} · 모름 ${answers.unknown}${answers.engineError > 0 ? ` (측정 실패 ${answers.engineError}개 제외)` : ""}.`
+            : `Of ${answers.adjudicated} AI answers asked by brand name: knows you ${answers.confirmed} · confuses you ${answers.differentEntity} · doesn't know ${answers.unknown}${answers.engineError > 0 ? ` (${answers.engineError} failed excluded)` : ""}.`}
+        </p>
+      )}
       <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-400">
         {sov !== null && (
           <li>
@@ -102,7 +110,9 @@ export const AuditSummarySsr = ({ job, locale }: Props) => {
           </li>
         )}
         <li>
-          {isKo ? "우리를 아는 AI" : "Engines that know us"}{" "}
+          {isKo
+            ? "엔진 기준 · 우리를 말한 AI"
+            : "Per engine · AIs that mention us"}{" "}
           <span className="font-semibold text-zinc-100 tabular-nums">
             {engineMentioned}/{engineTotal}
           </span>

@@ -9,6 +9,7 @@
  * 📕 이 저장소 최다 사고 유형(「못 잰 것·다르게 잰 것을 0 이라 부르기」).
  */
 
+import { engineDisplayName } from "@repo/audit/engine-labels";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -51,15 +52,19 @@ const PDF = stripComments(
 describe("B-5 질의 축 표기 — 브리핑이 다른 질문임을 화면이 말한다", () => {
   it("🔴 앱·웹 **둘 다** 브리핑에 라벨이 있다 (없으면 raw ID 가 노출된다)", () => {
     // `naver-briefing` 이라는 내부 ID 가 고객 화면에 그대로 찍히면 안 된다.
+    // (2026-09-29) 이름 지도는 `@repo/audit/engine-labels` 한 곳으로 모였다 —
+    //   세 화면은 그 함수를 부르고, 그 함수가 브리핑 이름을 실제로 돌려주는지 본다.
     for (const [name, src] of [
       ["app", APP_MIRROR],
       ["web", WEB_MIRROR],
       ["pdf", PDF],
     ] as const) {
-      expect(src, `${name} 에 브리핑 라벨이 없다`).toMatch(
-        /"naver-briefing":\s*"/
+      expect(src, `${name} 이 공용 이름표를 쓰지 않는다`).toContain(
+        "engineDisplayName("
       );
     }
+    expect(engineDisplayName("naver-briefing")).toBe("네이버 AI 브리핑");
+    expect(engineDisplayName("naver-briefing", false)).toBe("Naver AI Briefing");
   });
 
   it("🔴 미노출 문구가 **7엔진과 다르다** (같으면 오독된다)", () => {

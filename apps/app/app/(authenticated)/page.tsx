@@ -21,6 +21,7 @@ import {
 } from "@/lib/db/scoped";
 import { hasCompletedSetup } from "@/lib/onboarding";
 import { BrandSwitcher } from "./components/brand-switcher";
+import { DashboardAnswerBuckets } from "./components/dashboard-answer-buckets";
 import { DashboardDeepAnalysis } from "./components/dashboard-deep-analysis";
 import { DashboardEmptyState } from "./components/dashboard-empty-state-server";
 import { DashboardImpactEstimate } from "./components/dashboard-impact-estimate";
@@ -470,6 +471,12 @@ const App = async ({ searchParams }: AppProperties) => {
                   : null
               }
             />
+
+            {/* 헤드라인 4분류(2026-09-29) — 공개 리포트 히어로와 같은 함수·같은 문구.
+                잠정 회차에도 보인다: 판정이 끝난 답변 수는 사실이고, 비율의 분모를 밝힌다. */}
+            {correctedCurrentResult ? (
+              <DashboardAnswerBuckets result={correctedCurrentResult} />
+            ) : null}
 
             {!currentRunPublishable && currentRunJob ? (
               <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-amber-100 text-sm">

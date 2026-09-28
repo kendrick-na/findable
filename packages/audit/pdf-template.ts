@@ -1,6 +1,8 @@
 // 무료 Audit 1페이지 PDF의 HTML 템플릿
 // Pretendard CDN 폰트 사용. Puppeteer가 페이지 로드 후 PDF로 변환.
 
+import { ANSWER_BUCKET_COPY_KO, classifyAnswer } from "./answer-buckets";
+import { engineDisplayName } from "./engine-labels";
 import type { AuditMetrics, EngineId } from "@repo/ai/lib/engines";
 
 export interface AuditPdfData {
@@ -16,6 +18,8 @@ export interface AuditPdfData {
     isStub: boolean;
     errorMessage: string | null;
     excerpt: string;
+    /** 판정(2026-09-29) — 배지를 4분류로 그린다. 구 회차엔 없다. */
+    mentionQuality?: string | null;
   }>;
   generatedAt: string;
   language: "ko" | "en" | "both";
@@ -24,19 +28,6 @@ export interface AuditPdfData {
   topRecommendations: string[];
 }
 
-const ENGINE_LABELS: Record<string, string> = {
-  chatgpt: "ChatGPT",
-  "chatgpt-web": "ChatGPT (Web)",
-  claude: "Claude",
-  perplexity: "Perplexity",
-  gemini: "Gemini",
-  hyperclova: "HyperCLOVA X",
-  naver: "Naver",
-  daum: "Daum",
-  // 🆕 N-45(#4-b): 본류 편입으로 이 엔진이 PDF 에도 등장한다.
-  //   ⚠️ 라벨이 없으면 `naver-briefing` 이라는 **raw ID 가 그대로 인쇄**된다.
-  "naver-briefing": "Naver AI Briefing",
-};
 
 // F10(2026-08-02): PDF 가 측정 언어를 표기하지 않아, en 전용으로 측정한 리포트에도
 // 푸터가 "한국어·영어"라고 인쇄됐다. 화면과 PDF 가 다른 말을 하면 신뢰를 잃는다.
@@ -68,21 +59,17 @@ function sentimentBadge(sentiment: string | null): string {
   return `<span class="badge badge-muted">N/A</span>`;
 }
 
-function mentionBadge(
-  mentioned: boolean,
-  position: number | null,
-  isStub: boolean
-): string {
-  if (isStub) {
-    return `<span class="badge badge-muted">미설정</span>`;
+/** 답변 배지 — 화면과 같은 4분류 라벨(「미언급」 한 단어로 뭉개지 않는다 · 2026-09-29). */
+function mentionBadge(row: AuditPdfData["engineResponses"][number]): string {
+  const bucket = classifyAnswer(row);
+  const label = ANSWER_BUCKET_COPY_KO[bucket].label;
+  if (bucket === "confirmed") {
+    return `<span class="badge badge-positive">${row.mentionPosition ? `${row.mentionPosition}위` : label}</span>`;
   }
-  if (!mentioned) {
-    return `<span class="badge badge-negative">미언급</span>`;
+  if (bucket === "engine_error" || bucket === "unverified") {
+    return `<span class="badge badge-muted">${label}</span>`;
   }
-  if (position) {
-    return `<span class="badge badge-positive">${position}위</span>`;
-  }
-  return `<span class="badge badge-positive">언급</span>`;
+  return `<span class="badge badge-negative">${label}</span>`;
 }
 
 export function renderAuditPdfHtml(data: AuditPdfData): string {
@@ -217,8 +204,8 @@ ${
         .map(
           (r) => `
         <tr>
-          <td class="engine">${escapeHtml(ENGINE_LABELS[r.engineId] ?? r.engineId)}</td>
-          <td class="center">${mentionBadge(r.brandMentioned, r.mentionPosition, r.isStub)}</td>
+          <td class="engine">${escapeHtml(engineDisplayName(r.engineId))}</td>
+          <td class="center">${mentionBadge(r)}</td>
           <td class="center">${sentimentBadge(r.sentiment)}</td>
           <td class="center">${r.sov !== null ? `${Math.round(r.sov * 100)}%` : "—"}</td>
           <td class="excerpt">${escapeHtml(truncate(r.excerpt, 120))}</td>

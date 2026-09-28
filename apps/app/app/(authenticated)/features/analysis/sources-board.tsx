@@ -4,6 +4,7 @@
 // 🔴 이름은 지표 사전에서 온다 — 이 화면은 같은 숫자를 카드에선 `언급률`,
 //   아래 설명문(`:307`)에선 `등장률` 이라 부르고 있었다(한 화면 두 이름).
 //   사전이 화면에 이미 있던 말 중 널리 쓰이는 쪽을 골랐으므로 설명문과 맞춰진다.
+import { engineDisplayName } from "@repo/audit/engine-labels";
 import {
   engineRegion,
   engineSourceState,
@@ -41,22 +42,13 @@ const KIND_TONE: Record<SourceKind, string> = {
 // ⚠️ `@repo/ai` 의 `ENGINES[].name` 은 `Naver`·`Daum` 이라 **여기와 다르다**(영문).
 //   화면은 한국어 표기를 쓰기로 이미 정해져 있으므로(위 두 줄) 그쪽으로 갈아타지 않는다 —
 //   갈아타면 사용자가 보던 이름이 조용히 영문으로 바뀐다. 대신 **누락만** 메운다.
-const ENGINE_LABEL: Record<string, string> = {
-  chatgpt: "ChatGPT",
-  "chatgpt-web": "ChatGPT (웹)",
-  claude: "Claude",
-  perplexity: "Perplexity",
-  gemini: "Gemini",
-  hyperclova: "HyperCLOVA X",
-  naver: "네이버",
-  "naver-briefing": "네이버 AI 브리핑",
-  daum: "다음",
-};
 
 // 🔴 `export`(세션N-34): 감성 섹션도 같은 이름표를 쓴다. 복제하면 한 화면은
 //   `naver`, 다른 화면은 `네이버` 라고 부르게 된다(이 저장소의 "이름 4개" 사고와 같은 유형).
+//   (2026-09-29) 이름은 `@repo/audit/engine-labels` 한 곳이 정한다 — 네이버 줄은 「네이버 검색 기반
+//   요약(Findable 재현)」, 다음은 「다음 검색 노출」처럼 **실제로 잰 것**을 부른다.
 export function engineLabel(id: string): string {
-  return ENGINE_LABEL[id] ?? id;
+  return engineDisplayName(id);
 }
 
 function percent(part: number, total: number): number {

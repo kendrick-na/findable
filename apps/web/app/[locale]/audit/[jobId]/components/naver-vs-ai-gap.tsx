@@ -16,6 +16,7 @@
 
 "use client";
 
+import { engineDisplayName } from "@repo/audit/engine-labels";
 import { filterByRegion } from "@repo/audit/market-scope";
 import { shortRankLabel } from "@repo/audit/rank-label";
 
@@ -89,25 +90,14 @@ function calcAvgListSize(responses: EngineResponse[]) {
   return Math.round(sizes.reduce((a, b) => a + b, 0) / sizes.length);
 }
 
-// 각주용 라벨 (오류로 제외된 엔진 고지)
-const GAP_ENGINE_LABELS: Record<string, string> = {
-  chatgpt: "ChatGPT",
-  "chatgpt-web": "ChatGPT (Web)",
-  claude: "Claude",
-  perplexity: "Perplexity",
-  gemini: "Gemini",
-  hyperclova: "HyperCLOVA X",
-  naver: "Naver",
-  "naver-briefing": "Naver AI 브리핑",
-  daum: "Daum",
-};
+// 각주·엔진별 라벨은 `@repo/audit/engine-labels` 한 곳에서 받는다(2026-09-29).
 
 /**
  * 엔진별 언급 성적 (전수감사 2026-08-02 §A-2).
  * "네이버 채널 50%"라는 합계만 보여주니 사용자가 "왜 50%인지" 물었다 —
  * 근거(어느 엔진이 몇 번 놓쳤는지)는 데이터에 이미 있으므로 그대로 보여준다.
  */
-function perEngineBreakdown(responses: EngineResponse[]) {
+function perEngineBreakdown(responses: EngineResponse[], isKo: boolean) {
   const byEngine = new Map<string, { hit: number; total: number }>();
   for (const r of responses) {
     if (r.isStub || r.errorMessage) {
@@ -123,7 +113,7 @@ function perEngineBreakdown(responses: EngineResponse[]) {
   return [...byEngine.entries()]
     .map(([engineId, s]) => ({
       engineId,
-      label: GAP_ENGINE_LABELS[engineId] ?? engineId,
+      label: engineDisplayName(engineId, isKo),
       ...s,
     }))
     .sort((a, b) => a.hit / a.total - b.hit / b.total); // 약한 엔진 먼저
@@ -138,7 +128,7 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
     ...new Set(
       engineResponses
         .filter((r) => r.errorMessage && !r.isStub)
-        .map((r) => GAP_ENGINE_LABELS[r.engineId] ?? r.engineId)
+        .map((r) => engineDisplayName(r.engineId, isKo))
     ),
   ];
 
@@ -168,8 +158,8 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
     },
     isKo
   );
-  const koreanBreakdown = perEngineBreakdown(koreanResponses);
-  const globalBreakdown = perEngineBreakdown(globalResponses);
+  const koreanBreakdown = perEngineBreakdown(koreanResponses, isKo);
+  const globalBreakdown = perEngineBreakdown(globalResponses, isKo);
   // 처방을 일반론이 아니라 "가장 많이 놓친 엔진 이름"으로 말한다(전수감사 §A-2).
   const weakestKorean = koreanBreakdown.find((e) => e.hit < e.total);
 
@@ -245,8 +235,8 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
         {isKo
           ? // 용어 통일(전수감사 §A-2): 여기서 재는 건 답변 본문 "언급"이다.
             // "인용"은 출처 링크를 뜻해(세션J Mention/Citation 분리) 다른 지표.
-            "한국 사용자가 쓰는 AI(네이버·하이퍼클로바·다음)와 글로벌 AI가 답변에서 브랜드를 언급한 비율을 비교해, 어느 채널의 GEO부터 보강할지 알려주는 카드입니다."
-          : "Compares how often Korean AIs (Naver · HyperCLOVA · Daum) vs global AIs mention your brand — so you know which channel to strengthen first."}
+            "한국 채널(네이버 검색 기반 요약 · HyperCLOVA X)과 글로벌 AI가 답변에서 브랜드를 언급한 비율을 비교해, 어느 쪽부터 보강할지 알려주는 카드입니다. 네이버 줄은 네이버 검색 결과를 Findable이 요약해 재현한 답이고, 다음 검색 노출은 AI 답이 아니라서 여기서 뺐어요."
+          : "Compares how often Korean channels (Naver search summary · HyperCLOVA X) vs global AIs mention your brand. The Naver row is Findable's reproduction from Naver search results; Daum search snippets are excluded because they are not AI answers."}
       </p>
 
       {/* 한글은 정사각 격자라 음수 자간이 가독성을 깎는다 → 한글일 때만 tracking 제거 */}
@@ -270,8 +260,8 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
             </span>
             <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-[10px] text-emerald-400">
               {isKo
-                ? "네이버 · 하이퍼클로바 · 다음"
-                : "Naver · HyperCLOVA · Daum"}
+                ? "네이버 검색 요약(재현) · HyperCLOVA X"
+                : "Naver search summary · HyperCLOVA X"}
             </span>
           </div>
           <div className="flex items-end gap-2">

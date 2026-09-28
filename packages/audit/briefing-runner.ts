@@ -20,6 +20,7 @@ import { verifyMentions } from "@repo/ai/lib/mention-verdict";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
+import { briefingCandidatePrompts } from "./briefing-query";
 import { keys } from "./keys";
 import { persistAuditTracking } from "./tracking";
 
@@ -245,10 +246,12 @@ export async function runBriefingForAuditJob(
     // 본 러너(runner.ts)와 동일한 해석 체인으로 변형을 복원한다.
     const identity = await resolveBrandIdentity(resultProcessing.domain, brand);
     const brandVariants = [...new Set([brand, ...identity.brandVariants])];
-    const candidatePrompts =
-      language === "en"
-        ? [`${brand} review`, `${brand} pros and cons`, `Is ${brand} good`]
-        : [`${brand} 효과`, `${brand} 후기`, `${brand} 장단점`];
+    // 🔴 업종별 질의(2026-09-29) — B2B·서비스 회사에 「효과」를 묻지 않는다.
+    //   고정 질의는 `briefing-query.ts` 로 옮겼다(뷰티·건강·단서 없음 = 기존 그대로).
+    const candidatePrompts = briefingCandidatePrompts(brand, language, {
+      industry: jobBefore.industry,
+      site: resultProcessing.measurementContext?.officialSiteIdentity ?? null,
+    });
 
     // 채택된 질의를 결과에 기록한다(전수감사 2026-08-02 §A-5).
     //   "SK하이닉스 후기" 답변이 왜 나왔는지 화면이 설명 못 해 사용자가

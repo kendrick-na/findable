@@ -5,6 +5,13 @@ import type {
   EngineResponse,
 } from "@repo/ai/lib/engines/types";
 import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
+import {
+  answerShareOfVoice,
+  type BucketableAnswer,
+  isDiscoveryAnswer,
+  summarizeAnswerBuckets,
+} from "./answer-buckets";
+import { checkBrandNameAgainstSite } from "./brand-name-check";
 
 const CORE_ENGINES = new Set<EngineId>([
   "chatgpt",
@@ -223,9 +230,13 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
   if (!Array.isArray(raw) || raw.length === 0) {
     return result;
   }
+  // 이름 없는 질문(discovery)의 응답은 점수 분모에 넣지 않는다 — 러너와 같은 규칙.
+  //   (answer-buckets.ts · runner.ts `brandFlat` 주석)
   const core = raw.filter(
     (row): row is Record<string, unknown> =>
-      isRecord(row) && CORE_ENGINES.has(row.engineId as EngineId)
+      isRecord(row) &&
+      CORE_ENGINES.has(row.engineId as EngineId) &&
+      !isDiscoveryAnswer(row as { promptKind?: string })
   );
   if (core.length === 0) {
     return result;
@@ -270,8 +281,63 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
     errorMessage:
       typeof row.errorMessage === "string" ? row.errorMessage : null,
   }));
+  const displayedRows = requiresRevalidation
+    ? raw.map((row) =>
+        isRecord(row)
+          ? {
+              ...row,
+              brandMentioned: false,
+              mentionQuality: "unverified",
+              verdictVia: "skipped",
+              mentionPosition: null,
+              mentionListSize: null,
+              sov: null,
+            }
+          : row
+      )
+    : raw.map((row) =>
+        isRecord(row)
+          ? {
+              ...row,
+              // 🔴 제대로 안 답변에만 점유율(2026-09-29). 과거 행은 다른 회사·모름 답변에도
+              //   sov 1 이 저장돼 있다 — 원본은 두고 내보내는 값만 바로잡는다.
+              sov: answerShareOfVoice(
+                row as unknown as BucketableAnswer,
+                typeof row.sov === "number" ? row.sov : null
+              ),
+            }
+          : row
+      );
+  const bucketRows = displayedRows.filter(
+    (row): row is Record<string, unknown> & BucketableAnswer =>
+      isRecord(row) && typeof row.engineId === "string"
+  );
+  const measurementContext = isRecord(storedResult.measurementContext)
+    ? storedResult.measurementContext
+    : null;
+  const site = isRecord(measurementContext?.officialSiteIdentity)
+    ? (measurementContext.officialSiteIdentity as Parameters<
+        typeof checkBrandNameAgainstSite
+      >[2])
+    : null;
   const corrected = {
     ...result,
+    engineResponses: displayedRows,
+    // 입력 브랜드명 ↔ 사이트 표기 대조 — 과거 회차도 저장된 사이트 근거로 계산한다.
+    ...(measurementContext &&
+    typeof storedResult.brandName === "string" &&
+    typeof storedResult.domain === "string"
+      ? {
+          measurementContext: {
+            ...measurementContext,
+            brandNameCheck: checkBrandNameAgainstSite(
+              storedResult.brandName,
+              storedResult.domain,
+              site
+            ),
+          },
+        }
+      : {}),
     metrics: {
       ...result.metrics,
       ...aggregateAudit(
@@ -280,25 +346,15 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
           ? storedResult.domain
           : undefined
       ),
+      // 헤드라인 4분류 — 러너가 저장한 값이 아니라 **행에서 다시 센다**(판정이 바뀌면 따라간다).
+      answerBuckets: summarizeAnswerBuckets(bucketRows),
     },
     ...(requiresRevalidation
       ? {
           verificationState: "revalidation_required",
           // Preserve original rows in storage, but never expose old badges as
-          // current verdicts alongside provisional aggregate metrics.
-          engineResponses: raw.map((row) =>
-            isRecord(row)
-              ? {
-                  ...row,
-                  brandMentioned: false,
-                  mentionQuality: "unverified",
-                  verdictVia: "skipped",
-                  mentionPosition: null,
-                  mentionListSize: null,
-                  sov: null,
-                }
-              : row
-          ),
+          // current verdicts alongside provisional aggregate metrics
+          // (displayedRows above already carries the neutralised rows).
           geoActions: [],
           topRecommendations: [],
           regions: undefined,

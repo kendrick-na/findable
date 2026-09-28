@@ -24,6 +24,11 @@ import { isTrackableResponse } from "./tracking-eligibility";
 
 /** runner가 flat 이전에 각 응답에 태깅해 넘겨주는 항목. promptText로 promptId를 잇는다. */
 export interface TaggedEngineResponse extends EngineResponse {
+  /**
+   * 브랜드 이름 질문인지, 이름 없는 질문(discovery)인지(2026-09-29).
+   * 러너는 discovery 행을 이 함수에 넘기지 않는다(시계열 분모 보호).
+   */
+  promptKind?: "brand" | "discovery";
   /** 프롬프트 언어(Prompt.language NOT NULL, enum ko|en — both 없음). */
   promptLang: "ko" | "en";
   /** 이 응답을 만든 프롬프트 원문. flat() 후 소실되므로 runner가 태깅해 보존. */

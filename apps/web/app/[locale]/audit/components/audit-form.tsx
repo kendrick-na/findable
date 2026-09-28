@@ -214,8 +214,8 @@ export function AuditForm({ locale }: AuditFormProps) {
           {language === "en" && (
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
               {isKo
-                ? "영어 질문은 글로벌 AI 4곳(ChatGPT·Claude·Perplexity·Gemini)에서만 측정해요. 네이버·다음·HyperCLOVA는 한국어 질문에서 답해요."
-                : "English questions are measured across 4 global engines (ChatGPT, Claude, Perplexity, Gemini). Naver, Daum, and HyperCLOVA answer Korean questions."}
+                ? "영어 질문은 글로벌 AI 4곳(ChatGPT·Claude·Perplexity·Gemini)에서만 측정해요. HyperCLOVA X·네이버 검색 기반 요약(Findable 재현)·다음 검색 노출은 한국어 질문에서만 재요."
+                : "English questions are measured across 4 global engines (ChatGPT, Claude, Perplexity, Gemini). HyperCLOVA X, the Naver search summary (reproduced by Findable) and Daum search exposure are measured for Korean questions."}
             </p>
           )}
         </div>
