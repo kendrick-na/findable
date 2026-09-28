@@ -35,11 +35,13 @@ const PHASE_LABEL: Record<Phase, string> = {
 export const StartTrackingButton = ({
   domain,
   brandName,
-  identityReady,
+  // 대시보드의 추세 카드처럼 프로필 전체를 읽지 않는 표면은 서버 가드를 최종
+  // 방어선으로 사용한다. 브랜드·측정 화면은 명시값을 넘겨 CTA부터 막는다.
+  identityReady = true,
 }: {
   domain: string;
   brandName: string;
-  identityReady: boolean;
+  identityReady?: boolean;
 }) => {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
