@@ -3,6 +3,7 @@
 // 액션 목록 (2026-07-31 세션K-2) — 우선순위·근거·완료 체크.
 // 클라이언트 컴포넌트인 이유: 완료 토글(서버액션 호출 + 낙관적 표시)이 필요하다.
 
+import type { ActionGuide, DontItem } from "@repo/audit/action-rules";
 import { Button } from "@repo/design-system/components/ui/button";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { cn } from "@repo/design-system/lib/utils";
@@ -12,6 +13,7 @@ import {
   toggleActionCompletion,
   toggleActionCompletionByDomain,
 } from "@/app/actions/brand/complete-action";
+import { ActionEvidenceGuide, DontList } from "./action-evidence";
 
 /**
  * 이 액션이 어디에 붙는가 — 두 경로를 하나의 UI 로 다룬다 (2026-08-10 세션N-13).
@@ -31,15 +33,19 @@ export interface ActionItem {
   completed: boolean;
   /** 완료 시점 SoV — 지금 값과 비교해 변화를 보여준다(루프 닫기). */
   completedSov: number | null;
+  /** 「하지 마세요」 카드에만 — 항목별 근거. 구 데이터엔 없다. */
+  donts?: DontItem[];
   evidence: string;
+  /** 근거 등급 6칸. 2026-09-28 이전 측정엔 없다 → 기존 카드만 그린다. */
+  guide?: ActionGuide;
   how: string;
   kind: string;
   priority: number;
   source?: string;
   target: string;
   title: string;
-  where?: string;
   verification?: string;
+  where?: string;
 }
 
 const PRIORITY_META: Record<number, { label: string; tone: string }> = {
@@ -167,11 +173,17 @@ const ActionCard = ({
         {action.evidence}
       </p>
 
-      <div className="rounded border border-white/6 bg-white/[0.02] p-3">
-        <p className="whitespace-pre-line text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-          {action.how}
-        </p>
-      </div>
+      {action.donts && action.donts.length > 0 ? (
+        <DontList donts={action.donts} />
+      ) : (
+        <div className="rounded border border-white/6 bg-white/[0.02] p-3">
+          <p className="whitespace-pre-line text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
+            {action.how}
+          </p>
+        </div>
+      )}
+
+      {action.guide && <ActionEvidenceGuide guide={action.guide} />}
 
       {(action.where || action.verification) && (
         <div className="grid gap-2 rounded border border-sky-400/10 bg-sky-400/[0.03] p-3 text-sm leading-relaxed">
@@ -191,7 +203,8 @@ const ActionCard = ({
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        {action.source && (
+        {/* 6칸이 있으면 출처는 그 안에 링크로 있다 — 한 줄 요약을 겹쳐 쓰지 않는다. */}
+        {action.source && !action.guide && !action.donts && (
           <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
             근거: {action.source}
           </p>

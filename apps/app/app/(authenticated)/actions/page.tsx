@@ -185,6 +185,8 @@ const AuditActions = ({
       priority: a.priority,
       where: a.where,
       verification: a.verification,
+      guide: a.guide,
+      donts: a.donts,
       completed: Boolean(done),
       completedSov: done?.sovAtCompletion ?? null,
     };
@@ -498,6 +500,8 @@ async function ActionsPage({
       priority: a.priority,
       where: a.where,
       verification: a.verification,
+      guide: a.guide,
+      donts: a.donts,
       completed: Boolean(done),
       completedSov: done?.sovAtCompletion ?? null,
     };

@@ -29,6 +29,7 @@ import {
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
+import { summarizeVerdicts } from "./action-rules";
 import { actionsToStrings, buildGeoActions } from "./actions";
 import { generateAuditPrompts, type PromptBrandNames } from "./audit-prompts";
 import { runBriefingForAuditJob } from "./briefing-runner";
@@ -545,6 +546,11 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             input.domain
           )
         : undefined,
+      // 답변 단위 판정 집계 — 동명 오인·모름을 처방이 건수로 말한다(2026-09-28).
+      verdicts: summarizeVerdicts(flat, {
+        brandName,
+        brandDomain: input.domain,
+      }),
     });
 
     const result = {
