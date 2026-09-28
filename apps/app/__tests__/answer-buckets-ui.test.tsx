@@ -48,20 +48,20 @@ function tile(container: HTMLElement, bucket: string): HTMLElement {
 }
 
 describe("AnswerBucketBoard — 공개 리포트 히어로 4칸", () => {
-  it("노우버스: 제대로 앎 5 · 다른 회사로 앎 6 · 모름 6 · 측정 실패 0 (답변 기준 비율)", () => {
+  it("노우버스: 제대로 앎 5 · 다른 회사로 앎 5 · 모름 5 (AI 4곳 16개) · 측정 실패 0 (답변 기준 비율)", () => {
     const result = replay(KNOWVERSE);
     const { container } = render(
       <AnswerBucketBoard isKo summary={result.metrics.answerBuckets} />
     );
     expect(within(tile(container, "confirmed")).getByText("5")).toBeTruthy();
-    expect(within(tile(container, "confirmed")).getByText("29%")).toBeTruthy();
+    expect(within(tile(container, "confirmed")).getByText("33%")).toBeTruthy();
     expect(
-      within(tile(container, "different_entity")).getByText("6")
+      within(tile(container, "different_entity")).getByText("5")
     ).toBeTruthy();
     expect(
       within(tile(container, "different_entity")).getByText("다른 회사로 앎")
     ).toBeTruthy();
-    expect(within(tile(container, "unknown")).getByText("6")).toBeTruthy();
+    expect(within(tile(container, "unknown")).getByText("5")).toBeTruthy();
     expect(within(tile(container, "engine_error")).getByText("0")).toBeTruthy();
     // 기준이 라벨에 적혀 있다(엔진 기준과 섞이지 않게).
     expect(container.textContent).toContain("답변 기준");
@@ -94,7 +94,11 @@ describe("AnswerBucketBoard — 공개 리포트 히어로 4칸", () => {
 describe("QuestionEngineMatrix — 질문 × 엔진", () => {
   it("질문 원문 4개가 모두 보이고, 배지는 4분류 라벨이다(「미언급」 없음)", () => {
     const { container } = render(
-      <QuestionEngineMatrix isKo rows={replay(KNOWVERSE).engineResponses} />
+      <QuestionEngineMatrix
+        brandDomain="knowverse.net"
+        isKo
+        rows={replay(KNOWVERSE).engineResponses}
+      />
     );
     const text = container.textContent ?? "";
     expect(text).toContain("노우버스는 어떤 브랜드이고 어떤 서비스를 제공해?");
@@ -103,7 +107,28 @@ describe("QuestionEngineMatrix — 질문 × 엔진", () => {
     const differentRows = container.querySelectorAll(
       'li[data-bucket="different_entity"]'
     );
-    expect(differentRows.length).toBe(8); // AI 6 + 네이버 검색 노출 2
+    expect(differentRows.length).toBe(5); // AI 4곳만 — 과거 HyperCLOVA 원문은 「집계 제외」
+    // 과거 네이버 합성 요약은 판정 배지 없이 회색 표기
+    const legacy = container.querySelectorAll('li[data-bucket="legacy_naver"]');
+    expect(legacy.length).toBe(2);
+    for (const li of legacy) {
+      expect(li.textContent).toContain(
+        "이전 측정: Findable이 검색 결과로 만든 요약(현재 미사용)"
+      );
+      expect(li.textContent).toContain("검색 노출: 공식 도메인 없음");
+      expect(li.textContent).not.toContain("다른 회사로 앎");
+      expect(li.textContent).not.toContain("우버");
+    }
+    expect(text).toContain("HyperCLOVA X (서비스 종료 전 이전 측정)");
+    // 질문 머리의 요약 수에는 HyperCLOVA·검색 노출이 섞이지 않는다
+    expect(container.querySelectorAll('li[data-bucket="retired"]').length).toBe(
+      2
+    );
+    expect(text).toContain("집계 제외 · 서비스 종료");
+    // Q1 머리 요약: AI 4곳만(HyperCLOVA 「모름」이 섞이면 「모름 1」이 붙는다)
+    expect(text).toContain(
+      "노우버스는 어떤 브랜드이고 어떤 서비스를 제공해?제대로 앎 1다른 회사로 앎 3ChatGPT"
+    );
     // 브리핑은 이 표에 없다(별도 축)
     expect(text).not.toContain("naver-briefing");
     // 사유 한 줄
@@ -190,11 +215,11 @@ describe("DashboardAnswerBuckets — 대시보드도 같은 숫자", () => {
         .querySelector(`[data-bucket="${bucket}"]`)
         ?.querySelector(".text-2xl")?.textContent;
     expect(count("confirmed")).toBe("5");
-    expect(count("different_entity")).toBe("6");
-    expect(count("unknown")).toBe("6");
+    expect(count("different_entity")).toBe("5");
+    expect(count("unknown")).toBe("5");
     expect(count("engine_error")).toBe("0");
     expect(container.textContent).toContain(
-      "엔진 기준 · 우리를 제대로 안 AI 2/5곳"
+      "엔진 기준 · 우리를 제대로 안 AI 2/4곳"
     );
   });
 });

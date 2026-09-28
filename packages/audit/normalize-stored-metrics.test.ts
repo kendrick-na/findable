@@ -298,7 +298,8 @@ describe("saved audit metric normalization", () => {
     expect(hasStaleAuditPdf(result, normalized)).toBe(true);
   });
 
-  it("matches a 22-response core run even when a separate briefing is saved", () => {
+  // (2026-09-29) HyperCLOVA X 행(4·11·18번)은 서비스 종료로 점수 분모에서 빠진다 → 19행 기준.
+  it("matches a 22-response core run even when a separate briefing is saved (retired HyperCLOVA rows excluded)", () => {
     const core = Array.from({ length: 22 }, (_, index) => ({
       engineId: [
         "chatgpt",
@@ -326,10 +327,11 @@ describe("saved audit metric normalization", () => {
         { engineId: "naver-briefing", brandMentioned: false, sentiment: null },
       ],
     });
-    expect(result.metrics.sov).toBe(82);
+    // 언급 16 / 19 = 84.2 → 84 (HyperCLOVA 포함이면 18/22 = 82)
+    expect(result.metrics.sov).toBe(84);
     expect(result.metrics.sentimentDistribution).toEqual({
       positive: 0,
-      neutral: 17,
+      neutral: 15,
       negative: 0,
     });
     expect(

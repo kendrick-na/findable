@@ -19,7 +19,7 @@ const CORE_ENGINES = new Set<EngineId>([
   "claude",
   "perplexity",
   "gemini",
-  "hyperclova",
+  // (2026-09-29) hyperclova 제외 — 서비스 종료. 과거 행은 원문 표에만 남고 점수 분모에 넣지 않는다.
   "naver",
   "daum",
 ]);
@@ -347,7 +347,10 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
           : undefined
       ),
       // 헤드라인 4분류 — 러너가 저장한 값이 아니라 **행에서 다시 센다**(판정이 바뀌면 따라간다).
-      answerBuckets: summarizeAnswerBuckets(bucketRows),
+      answerBuckets: summarizeAnswerBuckets(bucketRows, {
+        brandDomain:
+          typeof storedResult.domain === "string" ? storedResult.domain : null,
+      }),
     },
     ...(requiresRevalidation
       ? {

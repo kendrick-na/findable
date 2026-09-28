@@ -130,7 +130,8 @@ export function buildSsrSummary(job: SsrSummaryInput): SsrSummary | null {
             typeof row === "object" &&
             typeof (row as { engineId?: unknown }).engineId === "string"
         )
-      : []
+      : [],
+    { brandDomain: job.domain }
   ).ai;
 
   return {

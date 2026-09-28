@@ -20,6 +20,8 @@ import {
   classifyAnswer,
   HEADLINE_BUCKETS,
   isDiscoveryAnswer,
+  isLegacyNaverSynthesis,
+  officialDomainExposed,
   type PromptKind,
 } from "@repo/audit/answer-buckets";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
@@ -237,11 +239,13 @@ export function BrandNameMismatchNotice({
 
 export interface MatrixAnswer {
   brandMentioned: boolean;
+  citedSources?: Array<{ domain?: string | null; url?: string | null }> | null;
   engineId: string;
   errorMessage: string | null;
   excerpt: string;
   isStub: boolean;
   mentionQuality?: string | null;
+  naverSource?: string | null;
   promptKind?: PromptKind | null;
   promptText?: string | null;
   verdictReason?: string | null;
@@ -286,7 +290,108 @@ function preview(excerpt: string): string {
     : text;
 }
 
-function MatrixRow({ row, isKo }: { row: MatrixAnswer; isKo: boolean }) {
+/**
+ * 과거 네이버 행 — Findable 이 검색 결과로 만든 요약이라 판정 배지를 달지 않는다(2026-09-29).
+ * 회색 표기 + 공식 도메인이 검색 결과에 있었는지만 보여준다. 요약 문장은 눌러야 보인다.
+ */
+function LegacyNaverRow({
+  row,
+  isKo,
+  brandDomain,
+}: {
+  row: MatrixAnswer;
+  isKo: boolean;
+  brandDomain?: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const failed = Boolean(row.errorMessage || row.isStub);
+  const exposed = officialDomainExposed(row, brandDomain);
+  let exposure = isKo
+    ? "검색 노출: 공식 도메인 없음"
+    : "Search exposure: official domain absent";
+  if (failed) {
+    exposure = isKo ? "검색 노출: 측정 실패" : "Search exposure: failed";
+  } else if (exposed) {
+    exposure = isKo
+      ? "검색 노출: 공식 도메인 나옴"
+      : "Search exposure: official domain shown";
+  }
+  return (
+    <li
+      className="grid gap-2 border-white/5 border-t px-4 py-3 first:border-t-0 sm:grid-cols-[12rem_1fr] sm:gap-4"
+      data-bucket="legacy_naver"
+    >
+      <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-start">
+        <span className="font-medium text-sm text-zinc-100">
+          {engineDisplayName(row.engineId, isKo)}
+        </span>
+        <span className="inline-flex self-start whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-medium text-xs text-zinc-300">
+          {exposure}
+        </span>
+      </div>
+      <div className="min-w-0">
+        <p className="break-keep text-xs text-zinc-500">
+          {isKo
+            ? "이전 측정: Findable이 검색 결과로 만든 요약(현재 미사용) — 네이버가 한 답이 아니라서 판정하지 않았어요."
+            : "Earlier run: a summary Findable built from search results (no longer used) — not Naver's answer, so not judged."}
+        </p>
+        {row.excerpt && !failed && (
+          <button
+            aria-expanded={open}
+            className="mt-1 text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-300"
+            onClick={() => setOpen((v) => !v)}
+            type="button"
+          >
+            {open
+              ? isKo
+                ? "요약 접기"
+                : "Hide summary"
+              : isKo
+                ? "당시 요약 보기"
+                : "Show that summary"}
+          </button>
+        )}
+        {open && (
+          <p className="mt-1 whitespace-pre-line text-sm text-zinc-500 leading-relaxed [overflow-wrap:anywhere]">
+            {stripMarkdown(row.excerpt)}
+          </p>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function MatrixRow({
+  row,
+  isKo,
+  brandDomain,
+}: {
+  row: MatrixAnswer;
+  isKo: boolean;
+  brandDomain?: string | null;
+}) {
+  if (isLegacyNaverSynthesis(row)) {
+    return <LegacyNaverRow brandDomain={brandDomain} isKo={isKo} row={row} />;
+  }
+  return (
+    <CurrentMatrixRow
+      isKo={isKo}
+      retired={answerGroup(row.engineId) === "retired"}
+      row={row}
+    />
+  );
+}
+
+function CurrentMatrixRow({
+  row,
+  isKo,
+  retired = false,
+}: {
+  row: MatrixAnswer;
+  isKo: boolean;
+  /** 서비스가 끝난 엔진의 과거 원문 — 판정 배지 대신 「집계 제외」만 단다. */
+  retired?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const bucket = classifyAnswer(row);
   const isSearch = answerGroup(row.engineId) === "search";
@@ -296,14 +401,20 @@ function MatrixRow({ row, isKo }: { row: MatrixAnswer; isKo: boolean }) {
   return (
     <li
       className="grid gap-2 border-white/5 border-t px-4 py-3 first:border-t-0 sm:grid-cols-[12rem_1fr] sm:gap-4"
-      data-bucket={bucket}
+      data-bucket={retired ? "retired" : bucket}
     >
       <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-start">
         <span className="font-medium text-sm text-zinc-100">
           {engineDisplayName(row.engineId, isKo)}
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
-          <AnswerBucketPill bucket={bucket} isKo={isKo} />
+          {retired ? (
+            <span className="inline-flex self-start whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-medium text-xs text-zinc-400">
+              {isKo ? "집계 제외 · 서비스 종료" : "Excluded · service ended"}
+            </span>
+          ) : (
+            <AnswerBucketPill bucket={bucket} isKo={isKo} />
+          )}
           {isSearch && (
             <span className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-400">
               {isKo ? "검색 결과" : "Search"}
@@ -360,9 +471,12 @@ function EngineLegend({ rows, isKo }: { rows: MatrixAnswer[]; isKo: boolean }) {
 export function QuestionEngineMatrix({
   rows,
   isKo,
+  brandDomain,
 }: {
   rows: MatrixAnswer[];
   isKo: boolean;
+  /** 과거 네이버 행의 공식 도메인 노출 판정에 쓴다. */
+  brandDomain?: string | null;
 }) {
   const groups = groupByQuestion(rows);
   if (groups.length === 0) {
@@ -428,7 +542,12 @@ export function QuestionEngineMatrix({
             </summary>
             <ul className="border-white/10 border-t">
               {group.rows.map((row) => (
-                <MatrixRow isKo={isKo} key={row.rowKey} row={row} />
+                <MatrixRow
+                  brandDomain={brandDomain}
+                  isKo={isKo}
+                  key={row.rowKey}
+                  row={row}
+                />
               ))}
             </ul>
           </details>

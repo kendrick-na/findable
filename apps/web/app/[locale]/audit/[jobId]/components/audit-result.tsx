@@ -1573,14 +1573,25 @@ function CompletedView({
           jobId={job.jobId}
         />
 
-        {/* 「국내 AI vs 글로벌 AI」 카드는 국내 AI 가 HyperCLOVA X 뿐이었다(2026-09-29 기본 측정 제외 ·
-            네이버는 검색 노출로 전환). 새 측정엔 비교할 국내 AI 가 없어 카드가 스스로 숨는다
-            (koreanResponses 0 → null). 이전 측정은 HyperCLOVA X 행으로 그대로 보인다. */}
-        <NaverVsAiGap engineResponses={brandAiResponses} isKo={isKo} />
+        {/* 국내 쪽 = 네이버 AI 브리핑만(2026-09-29). 종료된 클로바X·검색 노출은 비교하지 않는다.
+            브리핑 답이 없으면 카드가 스스로 숨는다. */}
+        <NaverVsAiGap
+          engineResponses={[
+            ...brandAiResponses,
+            ...result.engineResponses.filter(
+              (r) => r.engineId === "naver-briefing"
+            ),
+          ]}
+          isKo={isKo}
+        />
 
         {/* 엔진마다 첫 답변 1개만 보여주던 탭(dedupeByEngine)을 대신한다(2026-09-29).
             질문 원문 없이 대표 1개만 보면 「어느 질문에서 틀렸나」를 알 수 없었다. */}
-        <QuestionEngineMatrix isKo={isKo} rows={coreResponses} />
+        <QuestionEngineMatrix
+          brandDomain={result.domain}
+          isKo={isKo}
+          rows={coreResponses}
+        />
 
         {/* 장치 C(세션L) — 약점 앵커 CTA. 관심이 가장 뜨거운 순간(내가 어느 엔진에서
             미언급인지 본 직후)에 배치. 격차가 없으면(전 엔진 인지) 렌더하지 않는다. */}
@@ -1656,6 +1667,10 @@ function HeroSection({
   const enginesCoveredUnique = Array.from(
     new Set(result.metrics.enginesCovered)
   );
+  // (2026-09-29) 네이버·다음은 AI 답이 아니라 검색 노출 — 「AI 엔진 6개」라고 부르지 않는다.
+  const aiEngineCount = enginesCoveredUnique.filter(
+    (id) => answerGroup(id) === "ai"
+  ).length;
   // stub인 고유 엔진 ID 카운트 (백엔드 stubCount는 응답 단위라 중복됨)
   const stubEngineIds = new Set<string>();
   for (const r of result.engineResponses.filter(
@@ -1721,7 +1736,9 @@ function HeroSection({
   //   ⚠️ 계산은 API 가 실어 준 값을 쓰고, 없으면(구 응답) 같은 함수로 행에서 센다.
   const buckets =
     result.metrics.answerBuckets ??
-    summarizeAnswerBuckets(result.engineResponses);
+    summarizeAnswerBuckets(result.engineResponses, {
+      brandDomain: result.domain,
+    });
   const bucketHeadline = answerBucketHeadline(result.brandName, buckets, isKo);
   // 잠정 회차는 아래 처방을 가리므로 「무엇부터 손볼지 알려드려요」류 약속을 하지 않는다.
   const headline = provisional
@@ -1830,8 +1847,8 @@ function HeroSection({
           쓴다. `erroredEnginesCount`(엔진 단위)를 쓰면 ⑥에서 고친 분모 혼재가 되살아난다. */}
       <p className="mt-2 text-sm text-zinc-400">
         {isKo
-          ? `질문 ${result.promptsCount}개 · 대상 AI 엔진 ${enginesCoveredUnique.length}개 · 실제 ${result.metrics.enginesCovered.length}회 시도 · 답변 ${successfulResponses}개`
-          : `${result.promptsCount} prompts · ${enginesCoveredUnique.length} eligible AI engines · ${result.metrics.enginesCovered.length} actual attempts · ${successfulResponses} answers`}
+          ? `질문 ${result.promptsCount}개 · 대상 AI ${aiEngineCount}곳 + 검색 노출 ${enginesCoveredUnique.length - aiEngineCount}곳 · 실제 ${result.metrics.enginesCovered.length}회 시도 · 답변 ${successfulResponses}개`
+          : `${result.promptsCount} prompts · ${aiEngineCount} AI engines + ${enginesCoveredUnique.length - aiEngineCount} search · ${result.metrics.enginesCovered.length} actual attempts · ${successfulResponses} answers`}
         {excludedResponses > 0 && (
           <span className="text-[var(--signal-warn)]">
             {isKo
@@ -3080,12 +3097,12 @@ function briefingStateMessage(status: BriefingStatus, isKo: boolean): string {
   }
   if (status === "failed") {
     return isKo
-      ? "이번 회차의 네이버 AI 브리핑 측정은 실패했습니다. 핵심 7엔진 결과에는 영향을 주지 않습니다."
-      : "Naver AI Briefing failed for this run. The core seven-engine result is unaffected.";
+      ? "이번 회차의 네이버 AI 브리핑 측정은 실패했습니다. 핵심 결과에는 영향을 주지 않습니다."
+      : "Naver AI Briefing failed for this run. The core result is unaffected.";
   }
   return isKo
-    ? "이번 회차에서는 네이버 AI 브리핑을 측정하지 않았습니다. 아래 핵심 7엔진 점수에 포함되지 않습니다."
-    : "Naver AI Briefing was not measured in this run and is not included in the core seven-engine score.";
+    ? "이번 회차에서는 네이버 AI 브리핑을 측정하지 않았습니다. 아래 핵심 점수에 포함되지 않습니다."
+    : "Naver AI Briefing was not measured in this run and is not included in the core score.";
 }
 
 function NaverBriefingReadOnlyCard({
@@ -3124,8 +3141,8 @@ function NaverBriefingReadOnlyCard({
       </h2>
       <p className="mt-2 max-w-2xl text-sm text-zinc-400 leading-relaxed">
         {isKo
-          ? "네이버 AI 브리핑은 추천·비교 질문을 쓰는 핵심 7엔진과 다른 검색 결과 축이라 같은 점수 분모에 섞지 않습니다."
-          : "Naver AI Briefing is a separate search-result channel, not part of the core seven-engine score."}
+          ? "네이버 AI 브리핑은 추천·비교 질문을 쓰는 핵심 측정과 다른 검색 결과 축이라 같은 점수 분모에 섞지 않습니다."
+          : "Naver AI Briefing is a separate search-result channel, not part of the core score."}
       </p>
       <p className="mt-2 max-w-2xl text-sm text-zinc-300 leading-relaxed">
         {briefingStateMessage(briefingStatus, isKo)}
@@ -3422,8 +3439,8 @@ function NaverBriefingCompletedCard({
       <p className="mt-2 text-xs text-zinc-400">{queryNotice}</p>
       <p className="mt-1 text-xs text-zinc-500">
         {isKo
-          ? "이 결과는 기본 7엔진 GEO 점수·등장률과 별도로 보여줍니다."
-          : "This result is separate from the core seven-engine GEO score and appearance rate."}
+          ? "이 결과는 GEO 점수·AI 답변 4분류와 별도로 보여줍니다."
+          : "This result is separate from the GEO score and the four answer categories."}
       </p>
       {!briefing || briefing.errorMessage ? (
         // 🔴 **「미노출」과 「못 쟀다」를 구분한다**(N-45).

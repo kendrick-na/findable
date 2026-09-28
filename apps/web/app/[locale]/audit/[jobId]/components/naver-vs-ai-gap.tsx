@@ -6,11 +6,12 @@
 //   "광고주의 AI 시대 가시성 인프라" 메시지 라이브 증거.
 //
 // 데이터 소스:
-//   audit-result의 engineResponses에서 naver/naver-briefing/hyperclova vs
-//   chatgpt/chatgpt-web/claude/perplexity/gemini 그룹 비교.
+//   (2026-09-29 재정의) 국내 쪽 = **네이버 AI 브리핑(naver-briefing)만**. 네이버가 직접 만든
+//   AI 답은 이것뿐이다. 종료된 클로바X 모델과 네이버·다음 검색 API 결과는 비교하지 않는다.
+//   브리핑 측정이 없거나(미요청·미노출·실패) 글로벌 AI 답이 없으면 카드를 그리지 않는다.
 //
 // 시각화:
-//   - 좌: "한국 채널 (네이버·하이퍼클로바·다음)" 평균 인용률
+//   - 좌: "네이버 AI 브리핑" 언급 여부
 //   - 우: "글로벌 AI (ChatGPT·Claude·Perplexity·Gemini)" 평균 인용률
 //   - 가운데: 갭 표시 + 액션 추천
 
@@ -119,9 +120,16 @@ function perEngineBreakdown(responses: EngineResponse[], isKo: boolean) {
     .sort((a, b) => a.hit / a.total - b.hit / b.total); // 약한 엔진 먼저
 }
 
+const BRIEFING_ID = "naver-briefing";
+
 export function NaverVsAiGap({ engineResponses, isKo }: Props) {
-  const koreanResponses = filterByRegion(engineResponses, "korea");
-  const globalResponses = filterByRegion(engineResponses, "global");
+  // 국내 = 네이버 AI 브리핑 중 **실제로 받은 답**만(미노출·실패는 비교할 답이 없다).
+  const koreanResponses = engineResponses.filter(
+    (r) => r.engineId === BRIEFING_ID && !(r.isStub || r.errorMessage)
+  );
+  const globalResponses = filterByRegion(engineResponses, "global").filter(
+    (r) => r.engineId !== BRIEFING_ID
+  );
   // 결함감사(2026-07-30) §11: calcRate가 오류 응답을 조용히 분모에서 빼는데,
   // 화면 위쪽엔 그 엔진들의 오류 카드가 보여 "100%"가 모순처럼 읽혔음 → 명시 고지.
   const excludedLabels = [
@@ -186,35 +194,35 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
   let recommendation = "";
   if (koreanLeads) {
     headline = isKo
-      ? `국내 AI 채널은 ${korean.rate}%인데, 글로벌 AI는 ${global.rate}%입니다.`
-      : `Korean AI channels are at ${korean.rate}%, but global AI is only ${global.rate}%.`;
+      ? `네이버 AI 브리핑은 우리를 말했는데, 글로벌 AI 답변 등장은 ${global.rate}%입니다.`
+      : `Naver AI Briefing mentioned you, but global AI answers only ${global.rate}%.`;
     recommendation = isKo
       ? "한국에서는 잘 발견되지만 글로벌 AI 답변에서는 공백이 큽니다. 영문 콘텐츠·해외 인용 소스 확보가 필요합니다."
       : "You're well discovered in Korea but have a large gap in global AI answers. Securing English content and overseas citation sources is needed.";
   } else if (globalLeads) {
     headline = isKo
-      ? `글로벌 AI는 ${global.rate}%인데, 국내 AI 채널은 ${korean.rate}%입니다.`
-      : `Global AI is at ${global.rate}%, but Korean AI channels are only ${korean.rate}%.`;
+      ? `글로벌 AI 답변에는 ${global.rate}% 등장하는데, 네이버 AI 브리핑은 우리를 말하지 않았어요.`
+      : `Global AI answers mention you ${global.rate}% of the time, but Naver AI Briefing did not.`;
     // "한국 사용자는 못 찾습니다"는 54% 같은 값에 과장 — 실측 엔진명으로 대체.
     if (isKo && weakestKorean) {
       recommendation = `${weakestKorean.label}에서 ${weakestKorean.total}번 중 ${weakestKorean.total - weakestKorean.hit}번 브랜드가 빠졌습니다. 해당 질문에 답하는 공식 설명·콘텐츠를 보강한 뒤 이 채널을 재측정하세요.`;
     } else if (isKo) {
       recommendation =
-        "글로벌 대비 국내 AI 채널의 언급이 약합니다. 빠진 질문에 답하는 공식 설명·콘텐츠를 보강한 뒤 재측정하세요.";
+        "네이버 AI 브리핑이 참고하는 네이버 블로그·지식iN·공식 설명에 우리 정보를 보강한 뒤 재측정하세요.";
     } else {
       recommendation =
-        "Your global position is strong, but Korean channels mention you less. Strengthen content that directly answers the missed queries, then remeasure.";
+        "Naver AI Briefing did not mention you. Strengthen the Naver-side content it draws on, then remeasure.";
     }
   } else if (korean.rate === 0 && global.rate === 0) {
     headline = isKo
       ? "한국·글로벌 AI 모두 이번 측정에서 등록 브랜드를 확인하지 못했습니다."
-      : "Neither Korean nor global AI verified the registered brand in this run.";
+      : "Neither Naver AI Briefing nor global AI verified the registered brand in this run.";
     recommendation = isKo
       ? "먼저 등록 브랜드명·도메인이 실제 서비스와 일치하는지 확인하고, 공식 사이트에 브랜드 설명을 명확히 적은 뒤 재측정하세요."
       : "First check that the registered name and domain match your service, clarify the brand on your official site, then remeasure.";
   } else {
     headline = isKo
-      ? `한국·글로벌 AI 언급률 차이는 크지 않습니다 (${korean.rate}% vs ${global.rate}%).`
+      ? `네이버 AI 브리핑과 글로벌 AI의 차이는 크지 않습니다 (${korean.rate}% vs ${global.rate}%).`
       : `The mention-rate gap is small (${korean.rate}% vs ${global.rate}%).`;
     recommendation = isKo
       ? "두 채널의 격차보다 브랜드가 빠진 질문을 우선 확인하고, 해당 질문에 답하는 콘텐츠를 보강하세요."
@@ -226,7 +234,7 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
       <div className="mb-4 flex items-center gap-2">
         <span className="inline-flex h-1.5 w-1.5 rounded-full bg-indigo-400" />
         <span className="font-medium text-xs text-zinc-400">
-          Korean × Global AI · Visibility Gap
+          Naver AI Briefing × Global AI · Visibility Gap
         </span>
       </div>
 
@@ -235,8 +243,8 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
         {isKo
           ? // 용어 통일(전수감사 §A-2): 여기서 재는 건 답변 본문 "언급"이다.
             // "인용"은 출처 링크를 뜻해(세션J Mention/Citation 분리) 다른 지표.
-            "국내 AI(이전 측정의 HyperCLOVA X)와 글로벌 AI가 답변에서 브랜드를 언급한 비율을 비교한 카드입니다. 네이버·다음 검색 노출은 AI 답이 아니라서 여기서 뺐어요."
-          : "Compares Korean AI (HyperCLOVA X, earlier runs only) with global AI. Naver and Daum search exposure are excluded because they are not AI answers."}
+            "네이버가 직접 만든 AI 답(네이버 AI 브리핑)과 글로벌 AI 답변에서 브랜드가 나왔는지 비교합니다. 브리핑은 정보형 질문 1개로 따로 물은 결과라 참고용이에요. 네이버·다음 검색 노출은 AI 답이 아니라서 뺐어요."
+          : "Compares Naver's own AI answer (Naver AI Briefing) with global AI answers. The briefing uses one separate informational query, so treat it as a reference. Naver/Daum search exposure is excluded because it is not an AI answer."}
       </p>
 
       {/* 한글은 정사각 격자라 음수 자간이 가독성을 깎는다 → 한글일 때만 tracking 제거 */}
@@ -256,10 +264,10 @@ export function NaverVsAiGap({ engineResponses, isKo }: Props) {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
           <div className="mb-3 flex items-center justify-between">
             <span className="font-medium text-xs text-zinc-400">
-              {isKo ? "한국 채널" : "Korean channels"}
+              {isKo ? "네이버 AI 브리핑" : "Naver AI Briefing"}
             </span>
             <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-[10px] text-emerald-400">
-              {isKo ? "HyperCLOVA X(이전 측정)" : "HyperCLOVA X (earlier runs)"}
+              {isKo ? "네이버가 직접 만든 AI 답" : "Naver's own AI answer"}
             </span>
           </div>
           <div className="flex items-end gap-2">

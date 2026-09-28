@@ -640,6 +640,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         promptKind: tagged[index]?.promptKind ?? "brand",
         // 답변 4분류(+판정 보류) — 저장해 두면 화면·API 가 같은 판정을 읽는다.
         answerBucket: classifyAnswer(r),
+        // 네이버 행은 이제 검색 결과 원문이다(2026-09-29). 이 표시가 없는 과거 행은 합성 요약.
+        ...(r.engineId === "naver" ? { naverSource: "search_results" } : {}),
         engineId: r.engineId,
         brandMentioned: r.brandMentioned,
         mentionPosition: r.mentionPosition,
@@ -684,7 +686,14 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         // 헤드라인 4분류(2026-09-29) — 화면·API 가 이 값을 그대로 쓴다.
         //   ⚠️ 저장 후 재계산(`withRecomputedAuditMetrics`)도 같은 함수를 쓴다.
         answerBuckets: summarizeAnswerBuckets(
-          flat.map((r, i) => ({ ...r, promptKind: tagged[i]?.promptKind }))
+          flat.map((r, i) => ({
+            ...r,
+            promptKind: tagged[i]?.promptKind,
+            ...(r.engineId === "naver"
+              ? { naverSource: "search_results" }
+              : {}),
+          })),
+          { brandDomain: input.domain }
         ),
       },
       // 시장 분해(2026-08-02 세션M → 2026-08-21 언어축 재설계) — 통합 점수 하나가

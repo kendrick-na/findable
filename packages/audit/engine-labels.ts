@@ -25,7 +25,7 @@ export const ENGINE_LABELS_KO: Readonly<Record<string, string>> = {
   claude: "Claude",
   perplexity: "Perplexity",
   gemini: "Gemini",
-  hyperclova: "HyperCLOVA X (이전 측정)",
+  hyperclova: "HyperCLOVA X (서비스 종료 전 이전 측정)",
   naver: "네이버 검색 노출",
   "naver-briefing": "네이버 AI 브리핑",
   daum: "다음 검색 노출",
@@ -37,7 +37,7 @@ export const ENGINE_LABELS_EN: Readonly<Record<string, string>> = {
   claude: "Claude",
   perplexity: "Perplexity",
   gemini: "Gemini",
-  hyperclova: "HyperCLOVA X (earlier runs)",
+  hyperclova: "HyperCLOVA X (earlier run, before shutdown)",
   naver: "Naver search exposure",
   "naver-briefing": "Naver AI Briefing",
   daum: "Daum search exposure",
@@ -54,8 +54,8 @@ const ENGINE_NOTES: Readonly<Record<string, readonly [string, string]>> = {
     "ChatGPT answered from model knowledge without web search (0 sources).",
   ],
   hyperclova: [
-    "HyperCLOVA X 줄은 서비스 종료 전 이전 측정에만 있어요(검색 없이 모델 지식으로 답함). 새 측정에서는 재지 않아요.",
-    "HyperCLOVA X rows exist only in earlier runs (answered without search). New runs no longer measure it.",
+    "HyperCLOVA X 줄은 서비스 종료 전 이전 측정의 원문이에요. 헤드라인·4칸·점수 계산에는 넣지 않았어요.",
+    "HyperCLOVA X rows are raw answers from earlier runs before the service ended. They are excluded from the headline, the four boxes and the score.",
   ],
   naver: [
     "‘네이버 검색 노출’은 AI 답이 아니라 네이버 검색 결과에 우리 브랜드·공식 도메인이 나오는지 본 값이에요. 네이버가 직접 한 답이 아니에요 — 네이버의 실제 AI 답은 ‘네이버 AI 브리핑’뿐이에요. (이전 측정의 이 줄은 검색 결과를 Findable이 요약한 재현 답이었어요.)",

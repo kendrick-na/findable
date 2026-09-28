@@ -35,33 +35,77 @@ function replay(id: string) {
 }
 
 describe("답변 4분류 — 공개 JSON 재생", () => {
-  // (2026-09-29 대표 결정) 네이버는 AI 답이 아니라 검색 노출 → AI 분모에서 빠진다.
-  //   과거 회차의 HyperCLOVA X 행은 표시 호환을 위해 AI 로 남는다.
-  it("노우버스(b7f319e1): 다른 회사로 앎이 「모름」에 섞이지 않는다", () => {
-    const { ai, search, searchByEngine, engines } = replay(
-      "b7f319e1-1d96-4875-a1e1-e7f5e0e814c9"
-    ).metrics.answerBuckets;
+  // (2026-09-29 대표 결정) AI 분모 = ChatGPT·Claude·Perplexity·Gemini 4곳뿐.
+  //   네이버·다음 = 검색 노출(따로) · HyperCLOVA X = 서비스 종료(과거 행이라도 전부 제외).
+  it("🔴 노우버스(b7f319e1): 과거 HyperCLOVA 행이 있어도 분모는 AI 4곳 16개", () => {
+    const { metrics } = replay("b7f319e1-1d96-4875-a1e1-e7f5e0e814c9");
+    const raw = load("b7f319e1-1d96-4875-a1e1-e7f5e0e814c9").result
+      .engineResponses;
+    expect(
+      raw.filter((r) => r.engineId === "hyperclova").length,
+      "픽스처 전제: 과거 HyperCLOVA 행 2개"
+    ).toBe(2);
+    const { ai, search, searchByEngine, engines } = metrics.answerBuckets;
     expect(ai).toMatchObject({
       confirmed: 5,
-      differentEntity: 6,
-      unknown: 6,
+      differentEntity: 5,
+      unknown: 5,
       engineError: 0,
       unverified: 1,
-      adjudicated: 17,
-      total: 18,
+      adjudicated: 15,
+      total: 16,
     });
-    // 5/17 = 29.4 → 29 · 6/17 = 35.3 → 35
-    expect(ai.confirmedRate).toBe(29);
-    expect(ai.differentEntityRate).toBe(35);
-    // 네이버 2건(다른 회사) · 다음 2건(모름)은 검색 노출로 따로
-    expect(search).toMatchObject({ total: 4 });
+    expect(ai.confirmedRate).toBe(33);
+    // 엔진 기준: AI 4곳 중 제대로 안 곳 2(gemini·perplexity)
+    expect(engines).toEqual({ measured: 4, confirmed: 2 });
+    // 검색 노출: 과거 네이버 합성 요약은 판정하지 않고 공식 도메인 노출만 — 0/2
     expect(searchByEngine.naver).toMatchObject({
-      differentEntity: 2,
-      total: 2,
+      confirmed: 0,
+      differentEntity: 0,
+      unknown: 2,
     });
     expect(searchByEngine.daum).toMatchObject({ unknown: 2, total: 2 });
-    // 엔진 기준: 판정 가능한 답을 준 AI 5곳 중 제대로 안 곳 2(gemini·perplexity).
-    expect(engines).toEqual({ measured: 5, confirmed: 2 });
+    expect(search?.total).toBe(4);
+    // 점수(SoV) 분모에서도 HyperCLOVA 제외: 브랜드 질문 성공·판정 끝난 답 = AI 15 + 검색 4
+    expect(
+      (metrics as unknown as { verifiedCount: number }).verifiedCount
+    ).toBe(19);
+  });
+
+  it("과거 네이버 합성 행: 공식 도메인이 검색 결과에 있으면 노출됨(합성 문장의 판정은 무시)", () => {
+    const summary = summarizeAnswerBuckets(
+      [
+        {
+          engineId: "naver",
+          brandMentioned: false,
+          mentionQuality: "different_entity",
+          citedSources: [
+            { domain: "www.knowverse.net", url: "https://www.knowverse.net/a" },
+          ],
+        },
+        {
+          engineId: "naver",
+          brandMentioned: true,
+          mentionQuality: "confirmed",
+          citedSources: [
+            { domain: "blog.naver.com", url: "https://blog.naver.com/x" },
+          ],
+        },
+        {
+          engineId: "naver",
+          naverSource: "search_results",
+          brandMentioned: false,
+          mentionQuality: "different_entity",
+        },
+      ],
+      { brandDomain: "knowverse.net" }
+    );
+    // 합성 행 2 → 노출됨 1 · 없음 1 / 새 방식(검색 원문) 행은 판정 그대로
+    expect(summary.searchByEngine.naver).toMatchObject({
+      confirmed: 1,
+      unknown: 1,
+      differentEntity: 1,
+    });
   });
 
   it("인디고차일드(d5dd90b4): Perplexity 한도 초과 4건은 「측정 실패」 — 분모에서 빠진다", () => {
@@ -69,9 +113,12 @@ describe("답변 4분류 — 공개 JSON 재생", () => {
       .answerBuckets;
     expect(ai.engineError).toBe(4);
     expect(ai.adjudicated).toBe(ai.confirmed + ai.differentEntity + ai.unknown);
-    expect(ai).toMatchObject({ confirmed: 2, differentEntity: 6, unknown: 4 });
-    // 2/12 = 16.7 → round 17 / floor 16 : 반올림 규칙이 바뀌면 여기서 문다.
-    expect(ai.confirmedRate).toBe(17);
+    expect(ai).toMatchObject({
+      confirmed: 2,
+      differentEntity: 4,
+      unknown: 4,
+      total: 16,
+    });
   });
 
   it("인디고차일드(fcccedb7) 재생 수치", () => {
@@ -80,9 +127,10 @@ describe("답변 4분류 — 공개 JSON 재생", () => {
     expect(ai).toMatchObject({
       confirmed: 4,
       differentEntity: 1,
-      unknown: 6,
+      unknown: 4,
       engineError: 0,
       unverified: 7,
+      total: 16,
     });
   });
 
@@ -221,9 +269,9 @@ describe("문구", () => {
     const summary = replay("b7f319e1-1d96-4875-a1e1-e7f5e0e814c9").metrics
       .answerBuckets;
     const text = answerBucketHeadline("노우버스", summary, true);
-    expect(text).toContain("17개 중 5개만 우리를 제대로 알아요");
-    expect(text).toContain("6개는 다른 회사로 알고 있어요");
-    expect(text).toContain("6개는 우리를 몰라요");
+    expect(text).toContain("15개 중 5개만 우리를 제대로 알아요");
+    expect(text).toContain("5개는 다른 회사로 알고 있어요");
+    expect(text).toContain("5개는 우리를 몰라요");
   });
   it("사유: 한도 초과 · 429 · 공식 근거 없음", () => {
     expect(

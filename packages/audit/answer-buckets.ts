@@ -34,7 +34,7 @@ export type AnswerBucket =
   | "engine_error"
   | "unverified";
 
-export type AnswerGroup = "ai" | "search" | "briefing";
+export type AnswerGroup = "ai" | "search" | "briefing" | "retired";
 
 export type PromptKind = "brand" | "discovery";
 
@@ -52,17 +52,33 @@ export const SEPARATE_CHANNEL_ENGINES: ReadonlySet<string> = new Set([
   "naver-briefing",
 ]);
 
+/**
+ * 서비스가 끝난 엔진 — 과거 회차에만 행이 있다. 헤드라인·4칸·엔진 기준·점수 분모에서
+ * **전부 뺀다**(없어진 서비스의 답으로 지금의 인지도를 말하지 않는다). 원문 표에만 남는다.
+ * hyperclova: 네이버 클로바X 서비스 종료(2026-04-09) · 👤 대표 결정 2026-09-29.
+ */
+export const RETIRED_ENGINES: ReadonlySet<string> = new Set(["hyperclova"]);
+
 /** 저장된 `engineResponses[]` 와 러너의 `EngineResponse` 가 모두 만족하는 최소 형태. */
 export interface BucketableAnswer {
   brandMentioned?: boolean | null;
+  citedSources?: ReadonlyArray<{
+    domain?: string | null;
+    url?: string | null;
+  }> | null;
   engineId: string;
   errorMessage?: string | null;
   isStub?: boolean | null;
   mentionQuality?: string | null;
+  /** 러너가 네이버 행에 붙이는 수집 방식. "search_results" 가 아니면 과거 합성 답이다. */
+  naverSource?: string | null;
   promptKind?: PromptKind | null;
 }
 
 export function answerGroup(engineId: string): AnswerGroup {
+  if (RETIRED_ENGINES.has(engineId)) {
+    return "retired";
+  }
   if (SEPARATE_CHANNEL_ENGINES.has(engineId)) {
     return "briefing";
   }
@@ -76,6 +92,58 @@ export function isDiscoveryAnswer(row: {
   promptKind?: string | null;
 }): boolean {
   return row.promptKind === "discovery";
+}
+
+/**
+ * 과거(2026-09-29 이전) 네이버 행 = 검색 결과를 Findable 이 HyperCLOVA 로 **합성한 요약**이다.
+ * 그 문장에 판정 배지(다른 회사로 앎 등)를 달면 「네이버가 그렇게 말했다」로 읽힌다.
+ * → 합성 문장은 판정하지 않고, 함께 저장된 검색 결과 주소로 **공식 도메인 노출 여부**만 본다.
+ */
+export function isLegacyNaverSynthesis(row: BucketableAnswer): boolean {
+  return row.engineId === "naver" && row.naverSource !== "search_results";
+}
+
+const WWW_RE = /^www\./;
+
+function hostOf(source: {
+  domain?: string | null;
+  url?: string | null;
+}): string {
+  const raw = (source.domain || source.url || "").trim().toLowerCase();
+  try {
+    const host = raw.includes("://")
+      ? new URL(raw).hostname
+      : raw.split("/")[0];
+    return (host ?? "").replace(WWW_RE, "");
+  } catch {
+    return "";
+  }
+}
+
+/** 검색 결과 주소에 공식 도메인(또는 하위 도메인)이 있는가. */
+export function officialDomainExposed(
+  row: BucketableAnswer,
+  brandDomain: string | null | undefined
+): boolean {
+  const owned = (brandDomain ?? "").trim().toLowerCase().replace(WWW_RE, "");
+  if (!owned) {
+    return false;
+  }
+  return (row.citedSources ?? []).some((source) => {
+    const host = hostOf(source);
+    return host === owned || host.endsWith(`.${owned}`);
+  });
+}
+
+/** 과거 네이버 합성 행의 검색 노출 판정 — 공식 도메인이 검색 결과에 있었나. */
+function legacyNaverBucket(
+  row: BucketableAnswer,
+  brandDomain: string | null | undefined
+): AnswerBucket {
+  if (row.errorMessage || row.isStub) {
+    return "engine_error";
+  }
+  return officialDomainExposed(row, brandDomain) ? "confirmed" : "unknown";
 }
 
 /** 답변 1개의 분류. 순서가 곧 우선순위다(실패가 판정보다 먼저). */
@@ -237,7 +305,8 @@ function isAdjudicated(bucket: AnswerBucket): boolean {
 }
 
 export function summarizeAnswerBuckets(
-  rows: readonly BucketableAnswer[] | null | undefined
+  rows: readonly BucketableAnswer[] | null | undefined,
+  options: { brandDomain?: string | null } = {}
 ): AnswerBucketSummary {
   const ai = emptyCounts();
   const search = emptyCounts();
@@ -256,10 +325,12 @@ export function summarizeAnswerBuckets(
 
   for (const row of rows ?? []) {
     const group = answerGroup(row.engineId);
-    if (group === "briefing") {
+    if (group === "briefing" || group === "retired") {
       continue;
     }
-    const bucket = classifyAnswer(row);
+    const bucket = isLegacyNaverSynthesis(row)
+      ? legacyNaverBucket(row, options.brandDomain)
+      : classifyAnswer(row);
     if (group === "search") {
       searchRows += 1;
       add(search, bucket);

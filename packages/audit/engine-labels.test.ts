@@ -14,7 +14,9 @@ describe("엔진 표시 이름 — 실제로 잰 것을 부른다", () => {
   it("daum 은 검색 노출, chatgpt 는 웹검색 없음, hyperclova 는 이전 측정 표시용", () => {
     expect(engineDisplayName("daum")).toBe("다음 검색 노출");
     expect(engineDisplayName("chatgpt")).toBe("ChatGPT (웹검색 없음)");
-    expect(engineDisplayName("hyperclova")).toBe("HyperCLOVA X (이전 측정)");
+    expect(engineDisplayName("hyperclova")).toBe(
+      "HyperCLOVA X (서비스 종료 전 이전 측정)"
+    );
     expect(engineNote("chatgpt")).toContain("웹검색 없이");
     expect(engineNote("naver")).toContain("네이버가 직접 한 답이 아니에요");
   });
