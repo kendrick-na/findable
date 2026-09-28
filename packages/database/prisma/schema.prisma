@@ -432,6 +432,18 @@ model ActionCompletion {
   sovAtCompletion         Float?
   recognitionAtCompletion Float?
 
+  /**
+   * 2026-09-28 근거 등급 액션 — 완료 시점의 오인율·정확 설명률(0~1) 스냅샷.
+   * 분모 = 판정까지 끝난 답변 수(`summarizeVerdicts`). 구 기록은 null.
+   */
+  misidentificationRateAtCompletion Float?
+  accurateRateAtCompletion          Float?
+
+  /**
+   * 조치를 시작한 시각(선택). before 기준점 — 조치 도중 측정을 before 로 쓰지 않는다.
+   */
+  startedAt DateTime?
+
   completedAt DateTime @default(now())
   completedBy String? // Clerk user_id
 
