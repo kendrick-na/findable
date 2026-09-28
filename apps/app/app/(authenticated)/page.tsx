@@ -1,5 +1,6 @@
 import {
   auditPublicationIssue,
+  MIN_VERIFIED_ANSWERS,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun } from "@repo/audit/run-quality";
@@ -472,8 +473,8 @@ const App = async ({ searchParams }: AppProperties) => {
 
             {!currentRunPublishable && currentRunJob ? (
               <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-amber-100 text-sm">
-                {currentRunIssue === "citation_attribution"
-                  ? `이번 측정에서 외부 인용 ${typeof correctedMetrics?.unattributedCitationCount === "number" ? correctedMetrics.unattributedCitationCount : 0}건이 실제 브랜드 근거인지 확인되지 않았습니다.`
+                {currentRunIssue === "insufficient_sample"
+                  ? `이번 측정은 브랜드 판별이 끝난 답변이 ${typeof correctedMetrics?.verifiedCount === "number" ? correctedMetrics.verifiedCount : 0}건뿐이라 기준(${MIN_VERIFIED_ANSWERS}건)에 못 미칩니다.`
                   : `이번 측정은 브랜드 판별 ${currentRunUnverified}회가 완료되지 않았습니다.`}{" "}
                 이번 회차의 점수·등장률·추세·놓치는 유입 추정·개선 처방은
                 확정하지 않습니다.{" "}

@@ -104,6 +104,7 @@ const SourcesPage = async ({
     : [];
   const isReady = latest
     ? canShowLatestAnalysis({
+        citationBased: true,
         createdAt: latest.createdAt,
         result: latest.result,
         status: latest.status,

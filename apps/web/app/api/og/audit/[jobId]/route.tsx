@@ -14,6 +14,7 @@ import {
 //   종전엔 `measuredEngineCount`(= 고유엔진 − 오류엔진)를 썼는데 그 규칙이 결과 화면의
 //   「7/6·117%」 버그와 **같은 원인**이다(1회라도 실패한 엔진을 통째로 제외).
 import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
+import { auditPublicationIssue } from "@repo/audit/normalize-stored-metrics";
 import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
@@ -36,6 +37,7 @@ interface JobShape {
       topCitedDomains: Array<{ domain: string; count: number }>;
       errors?: Array<{ engineId: string; message: string }>;
       unverifiedCount?: number;
+      verifiedCount?: number;
       citationAttribution?:
         | "none_observed"
         | "owned_only"
@@ -94,12 +96,10 @@ export async function GET(
   // 결함감사(2026-07-30) §OG: 이전엔 SoV를 점수 자리에 그대로 노출해 결과 페이지의
   // GEO 점수(5축 합계)와 다른 숫자가 공유 이미지에 나갔음 → geo-score 단일 진실로 통일.
   const metrics = job?.result?.metrics;
-  if (
-    !metrics ||
-    (metrics.unverifiedCount ?? 0) > 0 ||
-    (metrics.citationAttribution !== "none_observed" &&
-      metrics.citationAttribution !== "owned_only")
-  ) {
+  // 공유 이미지는 **확정된 회차**에만 점수를 싣는다(잠정·보류 회차는 안내 이미지).
+  //   판정은 결과 화면·API 와 같은 단일 게이트를 쓴다(2026-09-28 — 예전엔 판별 불가
+  //   1건·출처 귀속 미확인만으로도 모든 회차의 점수가 빠졌다).
+  if (!metrics || auditPublicationIssue(job?.result) !== null) {
     return new ImageResponse(
       <div
         style={{

@@ -28,6 +28,7 @@ export type StoredMetrics = GeoScoreMetrics & {
   errors?: Array<{ engineId: string; message: string }>;
   stubCount?: number;
   unverifiedCount?: number;
+  verifiedCount?: number;
 };
 
 export function metricsOf(result: unknown): StoredMetrics | null {

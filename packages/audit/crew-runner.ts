@@ -8,11 +8,13 @@
 
 import { runCrewDiagnose } from "@repo/ai/lib/crew";
 import type { CitedSource, EngineResponse } from "@repo/ai/lib/engines";
+import { partitionCitedSources } from "@repo/ai/lib/engines/aggregate";
 import { resolveIndustryProfile } from "@repo/ai/lib/industry-profile";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import {
+  citationPrescriptionsRestricted,
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "./normalize-stored-metrics";
@@ -83,7 +85,8 @@ export async function runCrewForAuditJob(input: CrewRunInput): Promise<void> {
       );
     }
 
-    if (!isPublishableAuditResult(withRecomputedAuditMetrics(job.result))) {
+    const correctedResult = withRecomputedAuditMetrics(job.result);
+    if (!isPublishableAuditResult(correctedResult)) {
       throw new Error("브랜드 판정이 검증되지 않아 심층 분석을 중단합니다.");
     }
 
@@ -141,6 +144,13 @@ export async function runCrewForAuditJob(input: CrewRunInput): Promise<void> {
       })
     );
 
+    // 출처 귀속이 확인되지 않은 외부 링크는 점수를 막지 않지만(2026-09-28),
+    //   출처·채널 처방의 근거가 되어서도 안 된다. 그때는 공식 도메인 인용만 넘긴다.
+    const crewResponses = citationPrescriptionsRestricted(correctedResult)
+      ? partitionCitedSources(engineResponses, fastResult.domain)
+          .attributedResponses
+      : engineResponses;
+
     // 업종 판정(2026-08-02) — 반도체 회사에 화장품 채널 처방이 나가던 사고의 수정.
     //   저장된 industry 가 있으면 그것을, 없으면 도메인으로 추론한다(사전→LLM→미확인).
     //   실패해도 "업종 미확인" 프로파일로 안전하게 동작한다.
@@ -157,7 +167,7 @@ export async function runCrewForAuditJob(input: CrewRunInput): Promise<void> {
         // JSON deserialization loses EngineId branding — cast back. The IDs were
         // produced by our own engine adapters so they are valid by construction.
         metrics: fastResult.metrics as never,
-        engineResponses,
+        engineResponses: crewResponses,
         industryProfile,
         language: job.language,
       }),

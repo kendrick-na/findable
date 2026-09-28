@@ -123,13 +123,13 @@ export default async function AuditHistoryDetail({
         {isPartial ? (
           <section className="findable-card border border-amber-500/30 p-5">
             <h2 className="font-semibold text-lg">
-              {publicationIssue === "citation_attribution"
-                ? "출처 귀속 미확인 · 잠정 결과"
+              {publicationIssue === "insufficient_sample"
+                ? "확정 답변 부족 · 잠정 결과"
                 : "판별 미완료 · 잠정 결과"}
             </h2>
             <p className="mt-2 text-muted-foreground text-sm">
-              {publicationIssue === "citation_attribution"
-                ? `브랜드가 등장한 답변의 외부 출처 ${metrics?.unattributedCitationCount ?? 0}건이 실제로 이 브랜드를 설명하는지 확인되지 않았습니다. 원문은 보존하되 이번 회차의 종합 점수·출처 처방은 확정하지 않습니다.`
+              {publicationIssue === "insufficient_sample"
+                ? `브랜드 판별이 끝난 답변이 ${metrics?.verifiedCount ?? 0}건뿐이라 이번 회차의 점수·등장률·개선 처방은 확정하지 않습니다.`
                 : `AI 답변은 일부 수집했지만 브랜드 판별이 ${metrics?.unverifiedCount ?? 0}건 완료되지 않았습니다. 이번 회차의 점수·등장률·개선 처방은 확정하지 않습니다.`}{" "}
               자세한 응답은 공개 리포트에서 확인할 수 있습니다.
             </p>

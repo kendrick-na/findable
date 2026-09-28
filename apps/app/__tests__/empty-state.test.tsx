@@ -110,19 +110,18 @@ const jobFixture = (status: string, id: string) =>
             mentionVerdictVersion: MENTION_VERDICT_VERSION,
             metrics: {
               citationAttribution: "none_observed",
-              enginesCovered: ["chatgpt"],
+              enginesCovered: Array.from({ length: 10 }, () => "chatgpt"),
               enginesWithMention: [],
               sov: 0,
               unverifiedCount: 0,
             },
-            engineResponses: [
-              {
-                engineId: "chatgpt",
-                brandMentioned: false,
-                isStub: false,
-                errorMessage: null,
-              },
-            ],
+            // 2026-09-28: 확정 답변 10건 미만은 잠정 회차다 — 완료 링크 fixture 는 기준 충족.
+            engineResponses: Array.from({ length: 10 }, () => ({
+              engineId: "chatgpt",
+              brandMentioned: false,
+              isStub: false,
+              errorMessage: null,
+            })),
           }
         : null,
     status,

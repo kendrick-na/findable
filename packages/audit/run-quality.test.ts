@@ -8,6 +8,7 @@ const metrics = {
   enginesWithMention: ["gemini"],
   citationAttribution: "none_observed",
   sov: 50,
+  verifiedCount: 20,
 };
 
 describe("run quality", () => {
@@ -15,6 +16,30 @@ describe("run quality", () => {
     const result = { metrics: { ...metrics, unverifiedCount: 1 } };
     expect(isUsableRun(result)).toBe(false);
     expect(scoreOf(result)).toBeNull();
+  });
+
+  it("keeps a run usable when a few unverified answers are excluded (<= 20%)", () => {
+    const result = {
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { ...metrics, verifiedCount: 21, unverifiedCount: 1 },
+    };
+    expect(isUsableRun(result)).toBe(true);
+    expect(scoreOf(result)).toBeTypeOf("number");
+  });
+
+  it("keeps provisional runs out of trends and alerts", () => {
+    const tooManyUnverified = {
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { ...metrics, verifiedCount: 15, unverifiedCount: 7 },
+    };
+    const tooFewVerified = {
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { ...metrics, verifiedCount: 9, unverifiedCount: 0 },
+    };
+    for (const result of [tooManyUnverified, tooFewVerified]) {
+      expect(isUsableRun(result)).toBe(false);
+      expect(scoreOf(result)).toBeNull();
+    }
   });
 
   it("keeps fully verified measurements usable", () => {
@@ -26,8 +51,9 @@ describe("run quality", () => {
     expect(scoreOf(result)).toBeTypeOf("number");
   });
 
-  it("does not use partially attributed citations for score comparisons or alerts", () => {
+  it("still scores a run whose external citations are only partially attributed", () => {
     const result = {
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
       metrics: {
         ...metrics,
         unverifiedCount: 0,
@@ -35,8 +61,8 @@ describe("run quality", () => {
         unattributedCitationCount: 1,
       },
     };
-    expect(isUsableRun(result)).toBe(false);
-    expect(scoreOf(result)).toBeNull();
+    expect(isUsableRun(result)).toBe(true);
+    expect(scoreOf(result)).toBeTypeOf("number");
   });
 
   it("does not use legacy runs without current entity verdicts for trends or alerts", () => {

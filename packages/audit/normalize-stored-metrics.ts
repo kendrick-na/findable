@@ -58,10 +58,30 @@ function semanticJson(value: unknown): string | undefined {
   );
 }
 
+/**
+ * A run becomes provisional (잠정) only when too little of it was adjudicated.
+ * Unverified answers never zero a run by themselves: they are removed from the
+ * appearance-rate denominator and reported beside the score (approved
+ * 2026-09-28). Changing these numbers changes what customers see as a score.
+ */
+export const PROVISIONAL_MAX_UNVERIFIED_SHARE = 0.2;
+export const MIN_VERIFIED_ANSWERS = 10;
+
 export type AuditPublicationIssue =
+  /** No stored metrics at all. */
   | "missing_data"
+  /** Saved before the current entity-verdict contract; needs revalidation. */
   | "brand_verification"
-  | "citation_attribution";
+  /** More than 20% of successful answers could not be adjudicated. */
+  | "unverified_share"
+  /** Fewer than 10 adjudicated answers — too small a sample to publish. */
+  | "insufficient_sample";
+
+function countOf(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
+}
 
 /** Why a run cannot be presented as an authoritative score or prescription. */
 export function auditPublicationIssue(
@@ -72,31 +92,105 @@ export function auditPublicationIssue(
   }
   if (
     result.mentionVerdictVersion !== MENTION_VERDICT_VERSION ||
-    result.verificationState === "revalidation_required" ||
-    result.metrics.unverifiedCount !== 0
+    result.verificationState === "revalidation_required"
   ) {
     return "brand_verification";
   }
-  // A brand mention in the answer does not establish that every external
-  // citation supports that brand. Unknown attribution is neither zero nor proof.
-  if (
-    result.metrics.citationAttribution !== "none_observed" &&
-    result.metrics.citationAttribution !== "owned_only"
-  ) {
-    return "citation_attribution";
+  const unverified = countOf(result.metrics.unverifiedCount);
+  const verified = countOf(result.metrics.verifiedCount);
+  // Metrics without the counters predate verification accounting: we cannot
+  // tell how many answers were adjudicated, so do not guess (fail closed).
+  if (unverified === null || verified === null) {
+    return "brand_verification";
   }
+  const answers = verified + unverified;
+  if (answers > 0 && unverified / answers > PROVISIONAL_MAX_UNVERIFIED_SHARE) {
+    return "unverified_share";
+  }
+  if (verified < MIN_VERIFIED_ANSWERS) {
+    return "insufficient_sample";
+  }
+  // Citation attribution is deliberately NOT a publication issue: a link whose
+  // relationship to the brand is unknown says nothing about whether the brand
+  // was mentioned. It only restricts citation-based prescriptions (see
+  // `citationPrescriptionsRestricted`).
   return null;
 }
 
-/** Only current, fully adjudicated measurements may feed PDFs or AI advice. */
+/**
+ * published   — authoritative score, prescriptions, PDF, sharing.
+ * provisional — score/metrics computed from adjudicated answers only, shown
+ *               with a warning; derivatives (prescriptions, missed-visit
+ *               estimate, PDF, trends, alerts) are withheld.
+ * withheld    — nothing adjudicated (legacy run or zero verified answers).
+ */
+export type AuditPublicationStatus = "published" | "provisional" | "withheld";
+
+export function auditPublicationStatus(
+  result: unknown
+): AuditPublicationStatus {
+  const issue = auditPublicationIssue(result);
+  if (issue === null) {
+    return "published";
+  }
+  if (
+    (issue === "unverified_share" || issue === "insufficient_sample") &&
+    isRecord(result) &&
+    isRecord(result.metrics) &&
+    (countOf(result.metrics.verifiedCount) ?? 0) > 0
+  ) {
+    return "provisional";
+  }
+  return "withheld";
+}
+
+/** Only current, sufficiently adjudicated measurements may feed PDFs or AI advice. */
 export function isPublishableAuditResult(result: unknown): boolean {
   return auditPublicationIssue(result) === null;
 }
 
-/** Public API must not expose provisional scores or prescriptions as facts. */
-export function publicAuditResult<T>(result: T): T {
-  if (isPublishableAuditResult(result) || !isRecord(result)) {
-    return result;
+/**
+ * External links in confirmed answers whose relation to the brand is unknown
+ * must not become source/channel advice. Score and mention metrics stay valid.
+ */
+export function citationPrescriptionsRestricted(result: unknown): boolean {
+  if (!(isRecord(result) && isRecord(result.metrics))) {
+    return true;
+  }
+  const attribution = result.metrics.citationAttribution;
+  return attribution !== "none_observed" && attribution !== "owned_only";
+}
+
+/** Public API must not expose provisional prescriptions as facts. */
+export function publicAuditResult<T>(input: T): T {
+  if (!isRecord(input)) {
+    return input;
+  }
+  // A revalidated run keeps its pre-revalidation result for audit purposes.
+  // That copy carries superseded verdicts and must never leave the server.
+  const result: Record<string, unknown> = isRecord(input.revalidation)
+    ? {
+        ...input,
+        revalidation: Object.fromEntries(
+          Object.entries(input.revalidation).filter(
+            ([key]) => key !== "original"
+          )
+        ),
+      }
+    : input;
+  const status = auditPublicationStatus(result);
+  if (status === "published") {
+    return result as T;
+  }
+  const withheldDerivatives = {
+    geoActions: [],
+    topRecommendations: [],
+    regions: undefined,
+  };
+  if (status === "provisional") {
+    // Metrics already exclude unverified answers from the denominator. They
+    // are shown labelled 잠정; advice built on them is not.
+    return { ...result, ...withheldDerivatives } as T;
   }
   const metrics = isRecord(result.metrics) ? result.metrics : {};
   return {
@@ -111,9 +205,7 @@ export function publicAuditResult<T>(result: T): T {
       sentimentDistribution: null,
       topCitedDomains: [],
     },
-    geoActions: [],
-    topRecommendations: [],
-    regions: undefined,
+    ...withheldDerivatives,
   } as T;
 }
 
@@ -169,7 +261,9 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
             typeof source.url === "string"
         )
       : [],
-    rawResponse: "",
+    // Aggregation never reads the text; keep it anyway so a recomputed row is
+    // never mistaken for one without source evidence.
+    rawResponse: typeof row.rawResponse === "string" ? row.rawResponse : "",
     shareOfVoice: null,
     durationMs: typeof row.durationMs === "number" ? row.durationMs : 0,
     isStub: row.isStub === true,

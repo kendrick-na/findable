@@ -5,7 +5,11 @@ import { canShowLatestAnalysis } from "@/lib/content/analysis-publication";
 const createdAt = new Date("2026-09-26T00:00:00.000Z");
 const publishableResult = {
   mentionVerdictVersion: MENTION_VERDICT_VERSION,
-  metrics: { unverifiedCount: 0, citationAttribution: "none_observed" },
+  metrics: {
+    unverifiedCount: 0,
+    verifiedCount: 12,
+    citationAttribution: "none_observed",
+  },
 };
 
 describe("latest analysis publication", () => {
@@ -26,7 +30,8 @@ describe("latest analysis publication", () => {
         createdAt,
         result: {
           ...publishableResult,
-          metrics: { unverifiedCount: 2 },
+          // 3/12 = 25% > 20% → provisional.
+          metrics: { unverifiedCount: 3, verifiedCount: 9 },
         },
         status: "completed",
         trackedAt: new Date("2026-09-26T00:01:00.000Z"),
@@ -34,7 +39,7 @@ describe("latest analysis publication", () => {
     ).toBe(false);
   });
 
-  it("rejects a run with external citations whose brand attribution is unverified", () => {
+  it("does not block the latest analysis just because some external citations are unattributed", () => {
     expect(
       canShowLatestAnalysis({
         createdAt,
@@ -42,6 +47,7 @@ describe("latest analysis publication", () => {
           ...publishableResult,
           metrics: {
             unverifiedCount: 0,
+            verifiedCount: 12,
             citationAttribution: "partial",
             unattributedCitationCount: 1,
           },
@@ -49,7 +55,34 @@ describe("latest analysis publication", () => {
         status: "completed",
         trackedAt: new Date("2026-09-26T00:01:00.000Z"),
       })
+    ).toBe(true);
+  });
+
+  it("keeps a citation-based source analysis closed while citations are partially attributed", () => {
+    const partial = {
+      ...publishableResult,
+      metrics: {
+        unverifiedCount: 0,
+        verifiedCount: 12,
+        citationAttribution: "partial",
+        unattributedCitationCount: 1,
+      },
+    };
+    const input = {
+      createdAt,
+      status: "completed",
+      trackedAt: new Date("2026-09-26T00:01:00.000Z"),
+    };
+    expect(
+      canShowLatestAnalysis({ ...input, citationBased: true, result: partial })
     ).toBe(false);
+    expect(
+      canShowLatestAnalysis({
+        ...input,
+        citationBased: true,
+        result: publishableResult,
+      })
+    ).toBe(true);
   });
 
   it("allows only a current, completed, verified run", () => {

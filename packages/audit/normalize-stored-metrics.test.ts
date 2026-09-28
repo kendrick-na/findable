@@ -2,18 +2,46 @@ import { describe, expect, it } from "vitest";
 import { MENTION_VERDICT_VERSION } from "../ai/lib/mention-verdict-version";
 import { countMeasurementCoverage } from "./measurement-coverage";
 import {
+  auditPublicationIssue,
+  auditPublicationStatus,
+  citationPrescriptionsRestricted,
   hasStaleAuditPdf,
   isPublishableAuditResult,
   publicAuditResult,
   withRecomputedAuditMetrics,
 } from "./normalize-stored-metrics";
 
+/** n successful core-engine rows; the first `mentioned` confirm the brand. */
+function rows(
+  n: number,
+  mentioned = 0,
+  extra: Record<string, unknown> = {}
+): Record<string, unknown>[] {
+  return Array.from({ length: n }, (_, index) => ({
+    engineId: ["chatgpt", "claude", "gemini", "perplexity"][index % 4],
+    brandMentioned: index < mentioned,
+    mentionQuality: index < mentioned ? "confirmed" : "absent",
+    isStub: false,
+    errorMessage: null,
+    ...extra,
+  }));
+}
+
+function unverifiedRows(n: number): Record<string, unknown>[] {
+  return rows(n, 0, {
+    mentionQuality: "unverified",
+    verdictVia: "skipped",
+    verdictReason: "judge_failed",
+  });
+}
+
 describe("saved audit metric normalization", () => {
-  it("never exposes provisional scores, cited domains or prescriptions in the public API", () => {
+  it("withholds scores, cited domains and prescriptions when nothing was adjudicated", () => {
     const result = publicAuditResult({
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
       metrics: {
         sov: 27,
+        verifiedCount: 0,
         unverifiedCount: 7,
         enginesWithMention: ["gemini"],
         topCitedDomains: [{ domain: "unrelated.example", count: 8 }],
@@ -61,18 +89,100 @@ describe("saved audit metric normalization", () => {
     expect(hasStaleAuditPdf(legacy, legacy)).toBe(true);
   });
 
-  it("allows a fully verified current result to publish derivatives", () => {
+  it("allows a sufficiently verified current result to publish derivatives", () => {
     const fresh = withRecomputedAuditMetrics({
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
       metrics: { sov: 100 },
-      engineResponses: [
-        { engineId: "chatgpt", brandMentioned: true, isStub: false },
-      ],
+      engineResponses: rows(10, 10),
     });
     expect(isPublishableAuditResult(fresh)).toBe(true);
+    expect(auditPublicationStatus(fresh)).toBe("published");
   });
 
-  it("withholds a score and advice when a confirmed answer mixes official and unverified external citations", () => {
+  it("excludes a few unverified answers from the denominator and still publishes", () => {
+    // 21 verified (5 confirmed) + 1 judge failure = 4.5% unverified.
+    const result = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {},
+      engineResponses: [...rows(21, 5), ...unverifiedRows(1)],
+    });
+    expect(result.metrics).toMatchObject({
+      verifiedCount: 21,
+      unverifiedCount: 1,
+      sov: Math.round((5 / 21) * 100),
+    });
+    expect(auditPublicationIssue(result)).toBeNull();
+    const publicMetrics = publicAuditResult(result).metrics as Record<
+      string,
+      unknown
+    >;
+    expect(publicMetrics.sov).toBe(24);
+  });
+
+  it("marks a run provisional only above 20% unverified (boundary is exclusive)", () => {
+    // 8/40 = exactly 20% → published; 9/41 ≈ 22% → provisional.
+    const atLimit = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {},
+      engineResponses: [...rows(32, 4), ...unverifiedRows(8)],
+    });
+    expect(auditPublicationIssue(atLimit)).toBeNull();
+    const over = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {},
+      engineResponses: [...rows(32, 4), ...unverifiedRows(9)],
+    });
+    expect(auditPublicationIssue(over)).toBe("unverified_share");
+    expect(auditPublicationStatus(over)).toBe("provisional");
+  });
+
+  it("marks a run provisional when fewer than 10 answers were adjudicated", () => {
+    const nine = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {},
+      engineResponses: rows(9, 3),
+    });
+    expect(auditPublicationIssue(nine)).toBe("insufficient_sample");
+    const ten = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {},
+      engineResponses: rows(10, 3),
+    });
+    expect(auditPublicationIssue(ten)).toBeNull();
+  });
+
+  it("shows provisional metrics from verified answers but withholds derived advice", () => {
+    const result = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {},
+      geoActions: [{ title: "Publish pages" }],
+      topRecommendations: ["Publish pages"],
+      regions: [{ region: "korea", score: 38 }],
+      engineResponses: [...rows(15, 4), ...unverifiedRows(7)],
+    });
+    expect(auditPublicationStatus(result)).toBe("provisional");
+    expect(isPublishableAuditResult(result)).toBe(false);
+    const publicResult = publicAuditResult(result);
+    const publicMetrics = publicResult.metrics as Record<string, unknown>;
+    expect(publicMetrics.sov).toBe(Math.round((4 / 15) * 100));
+    expect(publicMetrics.enginesWithMention).toHaveLength(4);
+    expect(publicResult.geoActions).toEqual([]);
+    expect(publicResult.topRecommendations).toEqual([]);
+    expect(publicResult.regions).toBeUndefined();
+  });
+
+  it("never sends a preserved pre-revalidation result to the public", () => {
+    const result = {
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { verifiedCount: 10, unverifiedCount: 0, sov: 10 },
+      revalidation: { recommendRemeasure: true, original: { secret: 1 } },
+    };
+    const publicResult = publicAuditResult(result);
+    expect(publicResult.revalidation).toEqual({ recommendRemeasure: true });
+    expect(result.revalidation.original).toEqual({ secret: 1 });
+  });
+
+  it("publishes the score when a confirmed answer mixes official and unattributed citations, restricting only citation advice", () => {
     const rawSources = [
       { domain: "indigochild.kr", url: "https://indigochild.kr/about" },
       {
@@ -92,6 +202,7 @@ describe("saved audit metric normalization", () => {
           mentionQuality: "confirmed",
           citedSources: rawSources,
         },
+        ...rows(9),
       ],
     });
 
@@ -99,12 +210,18 @@ describe("saved audit metric normalization", () => {
       citationAttribution: "partial",
       unattributedCitationCount: 1,
       unverifiedCount: 0,
+      verifiedCount: 10,
       topCitedDomains: [{ domain: "indigochild.kr", count: 1 }],
     });
-    expect(isPublishableAuditResult(result)).toBe(false);
+    expect(isPublishableAuditResult(result)).toBe(true);
+    expect(citationPrescriptionsRestricted(result)).toBe(true);
     const publicResult = publicAuditResult(result);
-    expect(publicResult.metrics.sov).toBeNull();
-    expect(publicResult.geoActions).toEqual([]);
+    const publicMetrics = publicResult.metrics as Record<string, unknown>;
+    expect(publicMetrics.sov).toBe(10);
+    expect(publicMetrics.topCitedDomains).toEqual([
+      { domain: "indigochild.kr", count: 1 },
+    ]);
+    expect(publicMetrics.citationAttribution).toBe("partial");
     expect(publicResult.engineResponses[0]?.citedSources).toEqual(rawSources);
   });
 
@@ -227,7 +344,7 @@ describe("saved audit metric normalization", () => {
     const original = {
       metrics: {
         sov: 0,
-        enginesCovered: ["chatgpt"],
+        enginesCovered: Array.from({ length: 10 }, () => "chatgpt"),
         enginesWithMention: [],
         sentimentDistribution: { neutral: 0, negative: 0, positive: 0 },
         topCitedDomains: [],
@@ -236,7 +353,10 @@ describe("saved audit metric normalization", () => {
       },
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
       regions: [{ region: "korea", score: 0 }],
-      engineResponses: [{ engineId: "chatgpt", brandMentioned: false }],
+      engineResponses: Array.from({ length: 10 }, () => ({
+        engineId: "chatgpt",
+        brandMentioned: false,
+      })),
     };
     const corrected = withRecomputedAuditMetrics(original);
     expect(hasStaleAuditPdf(original, corrected)).toBe(false);

@@ -337,8 +337,8 @@ async function ActionsPage({
             {first.brand.name || first.brand.domain} · 지금 할 일 · 잠정 결과
           </h1>
           <p className="text-muted-foreground text-sm">
-            {publicationIssue === "citation_attribution"
-              ? "외부 출처가 이 브랜드의 설명을 뒷받침하는지 아직 확인되지 않아 출처 기반 개선 처방을 확정할 수 없습니다."
+            {publicationIssue === "insufficient_sample"
+              ? "이번 측정은 브랜드 판별이 끝난 답변이 너무 적어 자동 개선 처방을 확정할 수 없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요."
               : "이번 측정은 브랜드 판별이 완료되지 않아 자동 개선 처방을 확정할 수 없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요."}
           </p>
           <Link
