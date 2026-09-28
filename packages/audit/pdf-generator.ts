@@ -17,7 +17,8 @@
 import { put } from "@repo/storage";
 import { type AuditPdfData, renderAuditPdfHtml } from "./pdf-template";
 
-async function getBrowser() {
+/** 고객 웹 리포트 PDF(client-report/pdf.ts)도 같은 브라우저 실행 경로를 쓴다. */
+export async function getBrowser() {
   const isProduction = Boolean(
     process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
   );
