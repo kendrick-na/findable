@@ -11,6 +11,10 @@
 //
 // PDF 생성은 v1.0에서 일단 JSON 결과만 보여주고 PDF는 Day 4에 @vercel/og + Puppeteer.
 
+import {
+  englishPromptName,
+  officialSiteAliases,
+} from "@repo/ai/lib/brand-aliases";
 import { resolveBrandIdentity } from "@repo/ai/lib/brand-identity";
 import {
   aggregateAudit,
@@ -25,12 +29,8 @@ import {
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
-import {
-  actionsToStrings,
-  buildGeoActions,
-  conjunctionParticle,
-  topicParticle,
-} from "./actions";
+import { actionsToStrings, buildGeoActions } from "./actions";
+import { generateAuditPrompts, type PromptBrandNames } from "./audit-prompts";
 import { runBriefingForAuditJob } from "./briefing-runner";
 import {
   type KnownCompetitor,
@@ -81,58 +81,6 @@ export interface AuditRunInput {
 
 // 도메인→브랜드명(한/영 변형) 해석은 @repo/ai/lib/brand-identity의
 // resolveBrandIdentity로 이관 (P0-b, 2026-07-27). 폼입력→사전→LLM→영문 폴백 체인.
-
-/**
- * 도메인 + 언어 기반 자동 프롬프트 생성 — 무료 Audit 빠른 모드용 6개.
- * v1.0.5 풀 모드는 30~50개로 확장.
- */
-function generateAuditPrompts(
-  brandName: string,
-  language: "ko" | "en" | "both"
-): Array<{ text: string; lang: "ko" | "en" }> {
-  // 프롬프트는 두 유형을 균형 있게 섞는다 (P0-a, 2026-07-27):
-  //   - 브랜드형: 브랜드 자체를 물어 "AI가 이 브랜드를 아는가/제대로 서술하는가"
-  //     (노출·팩트정합·감성) 측정. ⚠️ 이게 없으면 판정(문자열 매칭)이 구조적으로
-  //     미언급을 유발함 (경쟁사 나열 답변엔 본인이 잘 안 담김).
-  //   - 경쟁사형: 경쟁 대비 순위·SoV 측정 (estimateMentionPosition·경쟁벤치가 의존).
-  // 각 배열은 [브랜드형, 브랜드형, 경쟁사형, 경쟁사형] 순 — both 모드가 slice로
-  // 앞 2개(브랜드형)+뒤로 경쟁사형을 뽑아도 유형이 섞이도록 배치.
-  const ko = [
-    `${brandName}${topicParticle(brandName)} 어떤 브랜드이고 어떤 서비스를 제공해?`,
-    `${brandName}의 주요 강점과 한계는?`,
-    `${brandName}${conjunctionParticle(brandName)} 비슷한 서비스를 제공하는 브랜드 5곳 추천해줘`,
-    `${brandName}의 주요 경쟁사를 비교해줘`,
-  ];
-  // ⚠️ 2026-08-02 F7 — 한/영 프롬프트를 **의미 등가**로 맞춘다.
-  //   기존 en[0] = "What is X? Is it worth buying?" 는 ko[0] "X 추천해줘" 와 질문이 달랐다:
-  //     ko[0] = X 를 **전제**하고 추천 요청 → 언급 판정에 유리
-  //     en[0] = X 가 뭔지 묻는 **개방형** → 모르면 "I'm not familiar with..." → unknown_brand 판정
-  //   그리고 both 모드가 뽑는 게 정확히 [ko[0], ko[2], en[0], en[2]] 라 이 비대칭이
-  //   그대로 점수에 들어갔다. 즉 한/영 언급률 차이의 일부가 **시장 격차가 아니라 프롬프트 설계 차이**였다.
-  //   추가로 "Is it worth buying?" 는 구매 가능한 소비재를 전제해 B2B·병원·반도체엔 무의미하고,
-  //   부정 톤 답변이 감성 점수를 왜곡할 수 있었다(업종 편향과 같은 뿌리).
-  const en = [
-    `What does ${brandName} offer, and who is it for?`,
-    `What are the main strengths and limitations of ${brandName}?`,
-    `Top alternatives to ${brandName} and how they differ`,
-    `Compare the main competitors of ${brandName}`,
-  ];
-
-  if (language === "ko") {
-    return ko.map((text) => ({ text, lang: "ko" as const }));
-  }
-  if (language === "en") {
-    return en.map((text) => ({ text, lang: "en" as const }));
-  }
-  // both 모드: 각 언어에서 브랜드형 1 + 경쟁사형 1 → 총 브랜드형 2 + 경쟁사형 2.
-  // ko[0]=브랜드형, ko[2]=경쟁사형 / en[0]=브랜드형, en[2]=경쟁사형.
-  return [
-    { text: ko[0] as string, lang: "ko" as const },
-    { text: ko[2] as string, lang: "ko" as const },
-    { text: en[0] as string, lang: "en" as const },
-    { text: en[2] as string, lang: "en" as const },
-  ];
-}
 
 // 러너가 한 번에 던지는 프롬프트 상한 — 마법사가 150개를 저장해도 러너는 실행마다
 //   상한까지만 측정한다(엔진 ≤7 × 프롬프트 = 호출 수 → 원가·레이턴시·429 보호).
@@ -191,7 +139,7 @@ async function resolveRegisteredCompetitors(
 
 async function resolveRunPrompts(
   brandId: string | undefined,
-  brandName: string,
+  brandName: PromptBrandNames,
   language: "ko" | "en" | "both"
 ): Promise<Array<{ text: string; lang: "ko" | "en" }>> {
   if (!brandId) {
@@ -361,9 +309,6 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // 저장값이 후자를 덮어쓰고, 후자만 쓰면 고객이 등록한 공식 영문·한글 표기를 잃는다.
     const identity = await resolveBrandIdentity(input.domain, input.brandName);
     const brandName = identity.brandName;
-    const brandVariants = [
-      ...new Set([...identity.brandVariants, ...(input.brandVariants ?? [])]),
-    ];
 
     // 응답 생성 모델에는 주입하지 않는다(실제 AI 인지도를 재야 하므로). 대신 판정기가
     // 동명의 다른 대상을 확정 언급으로 세지 않도록 공식 홈페이지의 제목·설명·H1을
@@ -377,6 +322,19 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         "공식 사이트에서 브랜드 식별 근거(title, description, H1)를 확인하지 못했습니다. 사이트 접근 설정을 확인한 뒤 다시 측정해 주세요."
       );
     }
+    // 공식 사이트가 스스로 쓰는 표기(og:site_name·제목 조각)와 도메인 이름을
+    //   별칭에 더한다(2026-09-28). knowverse.net 은 사이트명이 "KNOWVERSE" 인데
+    //   별칭이 비어 영어 답변의 "KNOWVERSE" 가 언급 후보조차 되지 못했다.
+    //   도메인 이름과 글자가 같은 표기만 채택한다(추측·번역 없음).
+    const brandVariants = [
+      ...new Set(
+        [
+          ...identity.brandVariants,
+          ...(input.brandVariants ?? []),
+          ...officialSiteAliases(input.domain, officialSiteIdentity),
+        ].filter((name) => name.toLowerCase() !== brandName.toLowerCase())
+      ),
+    ];
 
     /**
      * 등록 경쟁사 — **표기 병합 사전**으로만 쓴다(👤 승인 ⓐ · N-44). 거르지 않는다.
@@ -396,7 +354,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   brandId가 없어 항상 폴백(회귀 0). 원가·429 보호로 상한(RUNNER_PROMPT_LIMIT)까지만.
     const prompts = await resolveRunPrompts(
       input.brandId,
-      brandName,
+      { ko: brandName, en: englishPromptName(brandName, brandVariants) },
       input.language
     );
 
@@ -629,6 +587,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         //      → UI 를 먼저 만들면 표본 1(클로드)의 일반화가 된다. 분포부터 쌓는다.
         mentionQuality: r.mentionQuality,
         verdictVia: r.verdictVia,
+        // 비집계 사유(2026-09-28): 「판정기 실패(judge_failed)」와 「공식 근거 없음
+        //   (official_evidence_missing)」을 저장 단계에서 구분한다. 재검증이 이 값을 본다.
+        ...(r.verdictReason ? { verdictReason: r.verdictReason } : {}),
         // 심층 분석의 인용 출처 판정도 원본 측정에 근거해야 한다. 도메인 집계만
         // 남기면 수진 분석기가 실제 출처 URL·제목을 전혀 받지 못해, "출처 분석"이라는
         // 이름과 입력 데이터가 어긋난다.
