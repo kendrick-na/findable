@@ -23,7 +23,12 @@ import {
   trackReportViewed,
 } from "@repo/analytics/funnel";
 import { objectParticle } from "@repo/audit/actions";
-import { auditPublicationIssue } from "@repo/audit/normalize-stored-metrics";
+import {
+  auditPublicationIssue,
+  auditPublicationStatus,
+  MIN_VERIFIED_ANSWERS,
+  PROVISIONAL_MAX_UNVERIFIED_SHARE,
+} from "@repo/audit/normalize-stored-metrics";
 import {
   geoAxisScores,
   type ScoreTier,
@@ -1334,21 +1339,17 @@ function VerificationPartialView({
   ).length;
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr";
-  const publicationIssue = auditPublicationIssue(result);
-  const citationIssue = publicationIssue === "citation_attribution";
-
+  // 이 화면은 이제 「확정 답변이 0건」이거나 판정 계약 이전 회차(재검증 필요)일
+  //   때만 쓴다(2026-09-28). 확정 답변이 있는 잠정 회차는 CompletedView 가
+  //   경고 띠와 부분 가림으로 보여준다.
   return (
     <div className="space-y-8 pb-24 lg:pb-12">
       <MeasuredAtNotice isKo={isKo} job={job} />
       <section className="rounded-2xl border border-amber-400/30 bg-zinc-900/80 p-6 md:p-10">
         <div className="font-medium text-amber-300 text-xs tracking-[0.16em] uppercase">
           {isKo
-            ? citationIssue
-              ? "출처 귀속 미확인 · 잠정 결과"
-              : "판별 미완료 · 잠정 결과"
-            : citationIssue
-              ? "Citation attribution incomplete · provisional result"
-              : "Verification incomplete · provisional result"}
+            ? "판별 미완료 · 잠정 결과"
+            : "Verification incomplete · provisional result"}
         </div>
         <h1 className="mt-3 max-w-3xl font-semibold text-2xl text-zinc-50 leading-tight md:text-4xl">
           {isKo
@@ -1357,12 +1358,8 @@ function VerificationPartialView({
         </h1>
         <p className="mt-4 max-w-2xl text-sm text-zinc-300 leading-relaxed">
           {isKo
-            ? citationIssue
-              ? "답변에 나온 외부 링크가 실제로 이 브랜드를 뒷받침하는지 확인되지 않았습니다. 원문은 보존하지만 점수·인용 성과·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
-              : "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
-            : citationIssue
-              ? "We could not confirm that external links in the answers support this brand. Raw answers remain available, but scores, citation performance, missed-visit estimates, and recommendations are provisional. This is a measurement limitation, not a problem with your site."
-              : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
+            ? "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
+            : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
         </p>
         {result.metrics.errors.length > 0 && (
           <p className="mt-3 max-w-2xl text-sm text-amber-200 leading-relaxed">
@@ -1380,16 +1377,8 @@ function VerificationPartialView({
               result.metrics.errors.length,
             ],
             [
-              citationIssue
-                ? isKo
-                  ? "출처 귀속 미확인"
-                  : "Unattributed citations"
-                : isKo
-                  ? "브랜드 판별 불가"
-                  : "Unverified matches",
-              citationIssue
-                ? (result.metrics.unattributedCitationCount ?? 0)
-                : (result.metrics.unverifiedCount ?? 0),
+              isKo ? "브랜드 판별 불가" : "Unverified matches",
+              result.metrics.unverifiedCount ?? 0,
             ],
           ].map(([label, value]) => (
             <div
@@ -1547,9 +1536,15 @@ function CompletedView({
     );
   }
 
-  if (auditPublicationIssue(result) !== null) {
+  // 🔴 2026-09-28 — 예전엔 게이트에 걸리면 이 화면 전체를 경고 화면으로 **통째로
+  //   교체**했다. 이제는 확정 답변이 하나도 없을 때만 교체하고, 잠정 회차는 원래
+  //   섹션을 그대로 보여주되 점수 옆 경고 띠 + 확인 안 된 파생 수치(놓치는 유입
+  //   금액·개선 처방)만 가린다. 판별 불가 답변은 분모에서 이미 빠져 있다.
+  const publicationStatus = auditPublicationStatus(result);
+  if (publicationStatus === "withheld") {
     return <VerificationPartialView isKo={isKo} job={job} result={result} />;
   }
+  const provisional = publicationStatus === "provisional";
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -1559,9 +1554,16 @@ function CompletedView({
             혼란이 되지만, 밝히면 즉시 응답이 오히려 장점으로 읽힌다. */}
         <MeasuredAtNotice isKo={isKo} job={job} />
 
-        <HeroSection isKo={isKo} job={job} result={result} />
+        <HeroSection
+          isKo={isKo}
+          job={job}
+          provisional={provisional}
+          result={result}
+        />
 
-        {(result.metrics.unverifiedCount ?? 0) === 0 ? (
+        {provisional ? (
+          <ProvisionalMaskNotice isKo={isKo} subject="impact" />
+        ) : (
           <RevenueImpactCard
             attemptedEngines={attempted}
             // 전수감사 §A-1: 규모 초기값을 측정 신호(인지 엔진 비율·SoV)로 추정.
@@ -1579,12 +1581,6 @@ function CompletedView({
             readOnly
             sov={result.metrics.sov}
           />
-        ) : (
-          <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-200 text-sm">
-            {isKo
-              ? "브랜드 판별이 완료되지 않은 답변이 있어 이번 회차의 놓치는 유입 추정은 표시하지 않습니다."
-              : "The missed-visit estimate is unavailable because some brand mentions could not be verified in this run."}
-          </p>
         )}
 
         <CompetitorBenchmark
@@ -1605,7 +1601,11 @@ function CompletedView({
         {/* 전수감사 §A-7: 처방(측정 기반)을 문제 인식(진실거울) 직후로 이동.
             기존엔 페이지 맨 아래라 crew 액션과 뒤섞여 "추가 액션이랑 오늘 할일이랑
             무슨 관계냐"는 혼란을 만들었다. 측정 처방 먼저, 심층 분석은 그 다음. */}
-        <ActionTeaser isKo={isKo} locale={locale} result={result} />
+        {provisional ? (
+          <ProvisionalMaskNotice isKo={isKo} subject="actions" />
+        ) : (
+          <ActionTeaser isKo={isKo} locale={locale} result={result} />
+        )}
 
         <NaverBriefingReadOnlyCard
           briefingPrompt={result.briefingPrompt}
@@ -1641,6 +1641,29 @@ function CompletedView({
   );
 }
 
+/** 잠정 회차에서 확정 판별이 필요한 파생 수치 자리를 가린다(섹션 자체는 유지). */
+function ProvisionalMaskNotice({
+  isKo,
+  subject,
+}: {
+  isKo: boolean;
+  subject: "impact" | "actions";
+}) {
+  const copy =
+    subject === "impact"
+      ? isKo
+        ? "놓치는 유입 추정 — 이번 회차는 잠정 결과라 금액을 표시하지 않습니다. 판별이 충분한 다음 측정에서 제공됩니다."
+        : "Missed-visit estimate — hidden because this run is provisional. It appears once a run is final."
+      : isKo
+        ? "개선 처방 — 이번 회차는 잠정 결과라 처방을 확정하지 않습니다. 아래 엔진별 답변 원문은 그대로 확인할 수 있습니다."
+        : "Recommendations — withheld because this run is provisional. Engine answers below remain available.";
+  return (
+    <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-200 text-sm">
+      {copy}
+    </p>
+  );
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Hero — McKinsey Action Title + Score Donut + KPI 4 tile
 // ──────────────────────────────────────────────────────────────────
@@ -1649,10 +1672,13 @@ function HeroSection({
   job,
   result,
   isKo,
+  provisional = false,
 }: {
   job: JobResponse;
   result: JobResult;
   isKo: boolean;
+  /** 판별 불가 비율·확정 답변 수가 기준 미달 — 점수는 보이되 「잠정」으로 표시. */
+  provisional?: boolean;
 }) {
   // 중복 제거 — enginesCovered/enginesWithMention 배열에 같은 AI가 프롬프트 수만큼 들어있음
   const enginesCoveredUnique = Array.from(
@@ -1732,12 +1758,17 @@ function HeroSection({
     result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
   );
   const measuredEnginesCoverage = coverage.measured;
-  const headline = mckinseyHeadline(
-    result.brandName,
-    dedupMetrics,
-    isKo,
-    measuredEnginesCoverage
-  );
+  // 잠정 회차는 아래 처방을 가리므로 「무엇부터 손볼지 알려드려요」류 약속을 하지 않는다.
+  const headline = provisional
+    ? isKo
+      ? `${result.brandName}, 확정 답변 기준 AI 답변 등장률은 ${Math.round(result.metrics.sov)}%예요. 브랜드 판별이 충분히 끝나지 않아 이번 회차는 잠정 결과예요.`
+      : `${result.brandName} appears in ${Math.round(result.metrics.sov)}% of verified AI answers. Brand verification is incomplete, so this run is provisional.`
+    : mckinseyHeadline(
+        result.brandName,
+        dedupMetrics,
+        isKo,
+        measuredEnginesCoverage
+      );
 
   // ──────────────────────────────────────────────────
   // 🔴 "AI 몇 곳" 분모 단일화 (2026-08-06 세션N-7)
@@ -1796,6 +1827,11 @@ function HeroSection({
             />
             <span className="text-zinc-300">{label}</span>
           </div>
+          {provisional && (
+            <span className="mt-1 ml-2 inline-flex items-center rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-0.5 font-medium text-amber-200 text-xs">
+              {isKo ? "잠정 결과" : "Provisional"}
+            </span>
+          )}
         </div>
         {job.pdfUrl && (
           <Button asChild className="gap-2" size="sm" variant="outline">
@@ -1854,12 +1890,23 @@ function HeroSection({
           </span>
         )}
       </p>
-      {(result.metrics.unverifiedCount ?? 0) > 0 && (
-        <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-amber-200 text-sm">
+      {provisional ? (
+        <p
+          className="mt-3 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-amber-100 text-sm"
+          role="status"
+        >
           {isKo
-            ? `일부 답변에 브랜드명이 있었지만 실제 같은 브랜드인지 확인하지 못했습니다. 등장률은 판별 완료 ${result.metrics.verifiedCount ?? 0}개 답변만 기준으로 계산했으므로 이번 점수를 전체 AI의 확정 결과로 해석하지 마세요.`
-            : `Some answers contained the brand name, but entity verification did not finish. The appearance rate uses only ${result.metrics.verifiedCount ?? 0} verified answers; do not treat this as a complete AI result.`}
+            ? `잠정 결과 — 브랜드 판별 불가 ${result.metrics.unverifiedCount ?? 0}건은 제외하고 확정 답변 ${result.metrics.verifiedCount ?? 0}건으로 계산했습니다. 판별 불가가 ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}%를 넘거나 확정 답변이 ${MIN_VERIFIED_ANSWERS}건 미만이면 점수를 확정하지 않습니다. 놓치는 유입 추정·개선 처방·PDF·공유는 확정된 회차에서만 제공합니다.`
+            : `Provisional — ${result.metrics.unverifiedCount ?? 0} unverified answers were excluded; figures use ${result.metrics.verifiedCount ?? 0} verified answers. A run is not final when more than ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}% of answers are unverified or fewer than ${MIN_VERIFIED_ANSWERS} are verified. Missed-visit estimates, recommendations, PDF and sharing are available only for final runs.`}
         </p>
+      ) : (
+        (result.metrics.unverifiedCount ?? 0) > 0 && (
+          <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-amber-200 text-sm">
+            {isKo
+              ? `브랜드 판별 불가 ${result.metrics.unverifiedCount}건은 제외하고 확정 답변 ${result.metrics.verifiedCount ?? 0}건으로 계산했습니다.`
+              : `${result.metrics.unverifiedCount} unverified answers were excluded; figures use ${result.metrics.verifiedCount ?? 0} verified answers.`}
+          </p>
+        )
       )}
 
       <div className="mt-5 grid gap-2 sm:grid-cols-2">
@@ -1904,7 +1951,11 @@ function HeroSection({
         <div className="flex shrink-0 flex-col items-center gap-3">
           <ScoreDonut isKo={isKo} severity={severity} value={totalScore} />
           <p className="max-w-[14rem] text-center text-sm text-zinc-400 leading-relaxed">
-            {scoreTierMeaning(totalScore, isKo)}
+            {provisional
+              ? isKo
+                ? "잠정 점수예요. 판별이 충분한 다음 측정에서 확정돼요."
+                : "Provisional score — it becomes final once a run is sufficiently verified."
+              : scoreTierMeaning(totalScore, isKo)}
           </p>
           <PreviousRunBadge history={job.history} isKo={isKo} />
         </div>
