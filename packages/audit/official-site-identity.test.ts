@@ -2,9 +2,32 @@ import { describe, expect, it } from "vitest";
 import {
   extractOfficialSiteIdentity,
   readIdentityHtml,
+  registeredBrandIdentityFallback,
 } from "./official-site-identity";
 
 describe("official site identity response", () => {
+  it("falls back only for a confirmed organisation brand and does not invent site evidence", () => {
+    expect(
+      registeredBrandIdentityFallback({
+        brandId: "brand-1",
+        brandName: "코스메카코리아",
+        domain: "cosmecca.com",
+      })
+    ).toEqual({
+      description: null,
+      finalUrl: "cosmecca.com",
+      h1: null,
+      siteName: null,
+      title: null,
+    });
+    expect(
+      registeredBrandIdentityFallback({
+        brandName: "코스메카코리아",
+        domain: "cosmecca.com",
+      })
+    ).toBeNull();
+  });
+
   it("does not treat a script template as visible identity evidence", () => {
     const html =
       '<head><title>Example</title></head><body><script>const card = "<p>Fake marketing service from a script.</p>";</script><p>Actual customer-facing consulting service.</p></body>';

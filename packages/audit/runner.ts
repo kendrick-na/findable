@@ -64,7 +64,10 @@ import {
   isMeasurementFailure,
 } from "./measurement-coverage";
 import { isPublishableAuditResult } from "./normalize-stored-metrics";
-import { resolveOfficialSiteIdentity } from "./official-site-identity";
+import {
+  registeredBrandIdentityFallback,
+  resolveOfficialSiteIdentity,
+} from "./official-site-identity";
 import { generateAuditPdf } from "./pdf-generator";
 import type { AuditPdfData } from "./pdf-template";
 import { RUNNER_PROMPT_LIMIT } from "./prompt-limits";
@@ -360,13 +363,23 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // 동명의 다른 대상을 확정 언급으로 세지 않도록 공식 홈페이지의 제목·설명·H1을
     // 한 번만 읽어 엔티티 기준 사실로 고정한다. 근거를 확보하지 못하면 AI 호출 전에
     // 중단한다. 수치는 없는 편이 다른 엔티티를 자사 언급으로 공개하는 것보다 정확하다.
-    const officialSiteIdentity = await resolveOfficialSiteIdentity(
+    const resolvedOfficialSiteIdentity = await resolveOfficialSiteIdentity(
       input.domain
     );
+    const officialSiteIdentity =
+      resolvedOfficialSiteIdentity ?? registeredBrandIdentityFallback(input);
     if (!officialSiteIdentity) {
       throw new Error(
         "공식 사이트에서 브랜드 식별 근거(title, description, H1)를 확인하지 못했습니다. 사이트 접근 설정을 확인한 뒤 다시 측정해 주세요."
       );
+    }
+    const identityGrounded = Boolean(resolvedOfficialSiteIdentity);
+    if (!identityGrounded) {
+      log.warn("audit.official_site_identity.registration_fallback", {
+        brandId: input.brandId,
+        domain: input.domain,
+        jobId: input.jobId,
+      });
     }
     // 공식 사이트가 스스로 쓰는 표기(og:site_name·제목 조각)와 도메인 이름을
     //   별칭에 더한다(2026-09-28). knowverse.net 은 사이트명이 "KNOWVERSE" 인데
@@ -621,7 +634,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       domain: input.domain,
       measurementContext: {
         officialSiteIdentity,
-        identityGrounded: true,
+        // A customer-confirmed organisation brand may run when its public site
+        // serves a bot challenge/empty shell to our serverless fetcher. Do not
+        // represent this as extracted official-page evidence.
+        identityGrounded,
         // 입력 브랜드명이 공식 사이트 표기와 맞는지(2026-09-29). 「Findable OAuth
         //   Verification」처럼 이름이 틀리면 결과 화면이 경고한다.
         brandNameCheck: checkBrandNameAgainstSite(

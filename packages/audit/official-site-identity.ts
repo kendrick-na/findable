@@ -23,6 +23,32 @@ export interface OfficialSiteIdentity {
   title: string | null;
 }
 
+/**
+ * Some otherwise public sites return a bot challenge or an empty HTML shell to
+ * serverless fetchers. A signed-in customer has already confirmed the domain,
+ * name, industry, and market before an organisation measurement is created.
+ *
+ * This intentionally contains no invented page evidence: callers must expose
+ * that it is a registration fallback (`identityGrounded: false`). It is never
+ * available to an anonymous/free audit, where that confirmation does not exist.
+ */
+export function registeredBrandIdentityFallback(input: {
+  brandId?: string;
+  brandName?: string;
+  domain: string;
+}): OfficialSiteIdentity | null {
+  if (!(input.brandId && input.brandName?.trim())) {
+    return null;
+  }
+  return {
+    description: null,
+    finalUrl: input.domain,
+    h1: null,
+    siteName: null,
+    title: null,
+  };
+}
+
 export function extractOfficialSiteIdentity(
   html: string,
   finalUrl: string
