@@ -21,10 +21,28 @@
           "Claude"
         ],
         "productConfirmed": 1,
+        "officialDomains": [
+          "trops.kr"
+        ],
         "answersWithCitations": 22,
         "officialCited": 1,
+        "topOtherSources": [
+          {
+            "domain": "thetrops.com",
+            "answers": 6
+          },
+          {
+            "domain": "trops.es",
+            "answers": 4
+          },
+          {
+            "domain": "aliveshoes.com",
+            "answers": 4
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -47,10 +65,28 @@
           "Claude"
         ],
         "productConfirmed": 5,
+        "officialDomains": [
+          "dd.knowverse.net"
+        ],
         "answersWithCitations": 22,
         "officialCited": 1,
+        "topOtherSources": [
+          {
+            "domain": "techdd.co.uk",
+            "answers": 15
+          },
+          {
+            "domain": "knowverse.net",
+            "answers": 6
+          },
+          {
+            "domain": "dextralabs.com",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -73,10 +109,28 @@
           "Claude"
         ],
         "productConfirmed": 13,
+        "officialDomains": [
+          "knowverse.net"
+        ],
         "answersWithCitations": 24,
         "officialCited": 13,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 4
+          },
+          {
+            "domain": "zoominfo.com",
+            "answers": 4
+          },
+          {
+            "domain": "knowverseapp.com",
+            "answers": 3
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -99,10 +153,28 @@
           "Claude"
         ],
         "productConfirmed": 0,
+        "officialDomains": [
+          "aieum.ai.kr"
+        ],
         "answersWithCitations": 21,
         "officialCited": 0,
+        "topOtherSources": [
+          {
+            "domain": "marketeam.ai",
+            "answers": 9
+          },
+          {
+            "domain": "delve.ai",
+            "answers": 4
+          },
+          {
+            "domain": "spartacodingclub.kr",
+            "answers": 3
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -125,10 +197,28 @@
           "Claude"
         ],
         "productConfirmed": 5,
+        "officialDomains": [
+          "openseed.kr"
+        ],
         "answersWithCitations": 23,
         "officialCited": 6,
+        "topOtherSources": [
+          {
+            "domain": "openseed.co",
+            "answers": 10
+          },
+          {
+            "domain": "getopenseed.app",
+            "answers": 4
+          },
+          {
+            "domain": "zoominfo.com",
+            "answers": 4
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -151,10 +241,28 @@
           "Claude"
         ],
         "productConfirmed": 5,
+        "officialDomains": [
+          "barunshield.com"
+        ],
         "answersWithCitations": 12,
         "officialCited": 5,
+        "topOtherSources": [
+          {
+            "domain": "cookiedeal.io",
+            "answers": 2
+          },
+          {
+            "domain": "xpelkorea.com",
+            "answers": 1
+          },
+          {
+            "domain": "v.daum.net",
+            "answers": 1
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -177,10 +285,28 @@
           "Claude"
         ],
         "productConfirmed": 0,
+        "officialDomains": [
+          "trust-scan.me"
+        ],
         "answersWithCitations": 22,
         "officialCited": 0,
+        "topOtherSources": [
+          {
+            "domain": "trust.com",
+            "answers": 13
+          },
+          {
+            "domain": "en.wikipedia.org",
+            "answers": 6
+          },
+          {
+            "domain": "trustwallet.com",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -203,10 +329,28 @@
           "Claude"
         ],
         "productConfirmed": 9,
+        "officialDomains": [
+          "staybility.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 5,
+        "topOtherSources": [
+          {
+            "domain": "stability.ai",
+            "answers": 7
+          },
+          {
+            "domain": "staybility.co.uk",
+            "answers": 5
+          },
+          {
+            "domain": "cbinsights.com",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -229,10 +373,28 @@
           "Claude"
         ],
         "productConfirmed": 0,
+        "officialDomains": [
+          "safety-check-web.vercel.app"
+        ],
         "answersWithCitations": 23,
         "officialCited": 0,
+        "topOtherSources": [
+          {
+            "domain": "safekorea.go.kr",
+            "answers": 11
+          },
+          {
+            "domain": "safety.or.kr",
+            "answers": 9
+          },
+          {
+            "domain": "mois.go.kr",
+            "answers": 8
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -260,9 +422,179 @@
           "Claude"
         ],
         "productConfirmed": 25,
+        "officialDomains": [
+          "torriden.com",
+          "torriden.us"
+        ],
         "answersWithCitations": 24,
-        "officialCited": 8,
+        "officialCited": 12,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 7
+          },
+          {
+            "domain": "yesstyle.com",
+            "answers": 5
+          },
+          {
+            "domain": "hwahae.com",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 151,
+        "questionsMentioned": 40,
+        "rank": 4,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb46",
+            "prompt": "Best Korean skincare products for acne-prone skin",
+            "topic": "피부고민-여드름",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX Advanced Snail Mucin Gel Cleanser: Ideal for stressed, acne-prone skin to calm and hydrate during cleansing."
+            }
+          },
+          {
+            "promptId": "kb48",
+            "prompt": "Best Korean anti-aging skincare brands",
+            "topic": "피부고민-주름",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is known for its gentle yet effective products. While not specifically highlighted for a single anti-aging product in the search, their overall brand phi…"
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 10,
+            "leader": {
+              "brand": "넘버즈인",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "이 외에도 넘버즈인 1번 판토텐산 액티브업 수딩세럼, 아누아 피디알엔 히알루론산 캡슐 100 세럼 등이 2026년 8월 올리브영 스킨케어 랭킹 상위권에 올랐습니다. 또한, 달바 화이트 트러플 퍼스트 스프레이 세럼은 2024년 상반기 베스트 스킨케어 제품 중 하나로 꾸준히 사랑받고 있습…"
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 8,
+            "leader": {
+              "brand": "이즈앤트리",
+              "mentioned": 6
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Isntree Ultra-Low Molecular Hyaluronic Acid Serum This serum is recognized for its ultra-low molecular weight hyaluronic acid, designed for effective absorptio…"
+            }
+          },
+          {
+            "promptId": "kb17",
+            "prompt": "저렴하고 성분 좋은 앰플 추천해줘",
+            "topic": "가격·가성비",
+            "answers": 10,
+            "mentioned": 9,
+            "leader": {
+              "brand": "이즈앤트리",
+              "mentioned": 4
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "이즈앤트리 어니언 뉴페어 B5 앰플 (Isntree Onion Newpair B5 Ampoule)"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -291,9 +623,180 @@
           "Claude"
         ],
         "productConfirmed": 10,
+        "officialDomains": [
+          "isntree.com",
+          "isntree-global.com",
+          "theisntree.com"
+        ],
         "answersWithCitations": 24,
-        "officialCited": 15,
+        "officialCited": 14,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 6
+          },
+          {
+            "domain": "yesstyle.com",
+            "answers": 5
+          },
+          {
+            "domain": "m.jobkorea.co.kr",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 50,
+        "questionsMentioned": 19,
+        "rank": 15,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb31",
+            "prompt": "요즘 인기 있는 K뷰티 스킨케어 브랜드 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스): 5년 연속 글로벌 K-뷰티 1위를 차지했으며, 누적 7천만 개 이상 판매된 '어드밴스드 스네일 96 뮤신 파워 에센스'가 대표적입니다. 성분 중심의 스킨케어로도 유명합니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb38",
+            "prompt": "외국 친구에게 선물할 한국 화장품 추천해줘",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라네즈",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "라네즈 (Laneige) 립 슬리핑 마스크: 비타민 C와 코코넛 오일이 함유되어 잠자기 전에 바르면 아침에 촉촉하고 부드러운 입술을 만들어 줍니다."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 7,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 6,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb01",
+            "prompt": "히알루론산 세럼 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 5,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -322,9 +825,178 @@
           "Claude"
         ],
         "productConfirmed": 25,
+        "officialDomains": [
+          "numbuzin.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 18,
+        "topOtherSources": [
+          {
+            "domain": "yesstyle.com",
+            "answers": 6
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 5
+          },
+          {
+            "domain": "stibee.com",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 69,
+        "questionsMentioned": 23,
+        "rank": 12,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb45",
+            "prompt": "Affordable Korean skincare brands that actually work",
+            "topic": "가격·가성비",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is a popular choice, especially for snail mucin products that aid in barrier repair. They are frequently mentioned as a strong seller in Korea and abroad."
+            }
+          },
+          {
+            "promptId": "kb46",
+            "prompt": "Best Korean skincare products for acne-prone skin",
+            "topic": "피부고민-여드름",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX Advanced Snail Mucin Gel Cleanser: Ideal for stressed, acne-prone skin to calm and hydrate during cleansing."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 9,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb47",
+            "prompt": "Best Korean serum for dark spots and hyperpigmentation",
+            "topic": "피부고민-미백",
+            "answers": 8,
+            "mentioned": 5,
+            "leader": {
+              "brand": "조선미녀",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Beauty of Joseon Glow Deep Serum (Rice + Alpha-Arbutin): This serum is a staple for gentle brightening and addressing dullness and early-stage pigmentation. It…"
+            }
+          },
+          {
+            "promptId": "kb26",
+            "prompt": "톤업 브라이트닝 앰플 추천",
+            "topic": "피부고민-미백",
+            "answers": 10,
+            "mentioned": 6,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 4
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "1. 스킨1004 마다가스카르 센텔라 톤 브라이트닝 캡슐 앰플"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -353,9 +1025,179 @@
           "Claude"
         ],
         "productConfirmed": 24,
+        "officialDomains": [
+          "purito.com",
+          "purito.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 19,
+        "topOtherSources": [
+          {
+            "domain": "yesstyle.com",
+            "answers": 5
+          },
+          {
+            "domain": "holyskin.fr",
+            "answers": 5
+          },
+          {
+            "domain": "reddit.com",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 24,
+        "questionsMentioned": 12,
+        "rank": 21,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb31",
+            "prompt": "요즘 인기 있는 K뷰티 스킨케어 브랜드 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스): 5년 연속 글로벌 K-뷰티 1위를 차지했으며, 누적 7천만 개 이상 판매된 '어드밴스드 스네일 96 뮤신 파워 에센스'가 대표적입니다. 성분 중심의 스킨케어로도 유명합니다."
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb45",
+            "prompt": "Affordable Korean skincare brands that actually work",
+            "topic": "가격·가성비",
+            "answers": 8,
+            "mentioned": 6,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is a popular choice, especially for snail mucin products that aid in barrier repair. They are frequently mentioned as a strong seller in Korea and abroad."
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 5,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb47",
+            "prompt": "Best Korean serum for dark spots and hyperpigmentation",
+            "topic": "피부고민-미백",
+            "answers": 8,
+            "mentioned": 2,
+            "leader": {
+              "brand": "조선미녀",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Beauty of Joseon Glow Deep Serum (Rice + Alpha-Arbutin): This serum is a staple for gentle brightening and addressing dullness and early-stage pigmentation. It…"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -384,9 +1226,179 @@
           "Claude"
         ],
         "productConfirmed": 22,
+        "officialDomains": [
+          "abib.co.kr",
+          "abib.com"
+        ],
         "answersWithCitations": 24,
-        "officialCited": 3,
+        "officialCited": 20,
+        "topOtherSources": [
+          {
+            "domain": "yesstyle.com",
+            "answers": 5
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 5
+          },
+          {
+            "domain": "sincereskincare.com",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 57,
+        "questionsMentioned": 23,
+        "rank": 13,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb45",
+            "prompt": "Affordable Korean skincare brands that actually work",
+            "topic": "가격·가성비",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is a popular choice, especially for snail mucin products that aid in barrier repair. They are frequently mentioned as a strong seller in Korea and abroad."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 10,
+            "leader": {
+              "brand": "아누아",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "1) 아누아 어성초 77 수딩 토너"
+            }
+          },
+          {
+            "promptId": "kb10",
+            "prompt": "닦토용 토너패드 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 8,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 5
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "이 외에도 야다 선인장 토너패드, 스킨푸드 당근 PDRN 속수분 패드, 토리든 밸런스풀 시카 토너 패드 등 다양한 제품들이 좋은 평가를 받고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb28",
+            "prompt": "주름 개선 기능성 크림 추천해줘",
+            "topic": "피부고민-주름",
+            "answers": 10,
+            "mentioned": 4,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 6
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 더 레티놀 0.1 크림 / 더 레티놀 0.3 크림: 레티놀 성분을 함유하여 주름 개선에 도움을 줍니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -415,9 +1427,179 @@
           "Claude"
         ],
         "productConfirmed": 7,
+        "officialDomains": [
+          "roundlab.co.kr",
+          "roundlab.com"
+        ],
         "answersWithCitations": 24,
-        "officialCited": 4,
+        "officialCited": 14,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 6
+          },
+          {
+            "domain": "koreadaily.com",
+            "answers": 4
+          },
+          {
+            "domain": "tistory.com",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 164,
+        "questionsMentioned": 40,
+        "rank": 2,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          },
+          {
+            "brand": "토리든",
+            "mentioned": 151
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb01",
+            "prompt": "히알루론산 세럼 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼"
+            }
+          },
+          {
+            "promptId": "kb04",
+            "prompt": "레티놀 입문용 화장품 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "이니스프리",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) Innisfree Retinol Cica Repair Ampoule"
+            }
+          },
+          {
+            "promptId": "kb23",
+            "prompt": "피부 장벽 강화 크림 추천해줘",
+            "topic": "피부고민-민감",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "에스트라",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "에스트라 아토베리어 365 크림: 고보습 피부 장벽 강화 크림으로 많이 추천됩니다."
+            }
+          },
+          {
+            "promptId": "kb29",
+            "prompt": "탄력 좋아지는 앰플 추천",
+            "topic": "피부고민-주름",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "이니스프리",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "이니스프리 레티놀 그린티 PDRN 스킨부스터 앰플: PDRN 성분을 포함하고 있습니다."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 8,
+            "leader": {
+              "brand": "이즈앤트리",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "ISNTREE Hyaluronic Acid Daily Sun Gel SPF 50+ PA++++ This gel is frequently cited for leaving absolutely zero white cast, even on deeper skin tones. It contain…"
+            }
+          },
+          {
+            "promptId": "kb50",
+            "prompt": "Which K-beauty brands are trending on Amazon and TikTok?",
+            "topic": "해외",
+            "answers": 8,
+            "mentioned": 7,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX: A long-standing favorite, COSRX continues to trend with its Advanced Snail 96 Mucin Power Essence, celebrated for enhancing skin recovery and providing …"
+            }
+          },
+          {
+            "promptId": "kb13",
+            "prompt": "순한 약산성 클렌징폼 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 8,
+            "leader": {
+              "brand": "비플레인",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "비플레인 녹두 약산성 클렌징폼: 화해 랭킹 상위권에 꾸준히 오르는 제품으로, 녹두 추출물과 녹차가루를 함유하여 모공 속 노폐물과 피지 관리에 도움을 준다고 합니다. 지성 피부나 모공 관리가 필요한 분들에게 추천됩니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -441,9 +1623,132 @@
           "Claude"
         ],
         "productConfirmed": 21,
+        "officialDomains": [
+          "franzskincare.com"
+        ],
         "answersWithCitations": 23,
         "officialCited": 12,
+        "topOtherSources": [
+          {
+            "domain": "franzskincareusa.com",
+            "answers": 10
+          },
+          {
+            "domain": "theguru.co.kr",
+            "answers": 6
+          },
+          {
+            "domain": "franz.kr",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 0,
+        "questionsMentioned": 0,
+        "rank": 24,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb31",
+            "prompt": "요즘 인기 있는 K뷰티 스킨케어 브랜드 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스): 5년 연속 글로벌 K-뷰티 1위를 차지했으며, 누적 7천만 개 이상 판매된 '어드밴스드 스네일 96 뮤신 파워 에센스'가 대표적입니다. 성분 중심의 스킨케어로도 유명합니다."
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          }
+        ],
+        "won": []
       },
       "reportUrl": null
     },
@@ -467,9 +1772,178 @@
           "Claude"
         ],
         "productConfirmed": 31,
+        "officialDomains": [
+          "drg.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 0,
+        "topOtherSources": [
+          {
+            "domain": "dr-g.co.kr",
+            "answers": 6
+          },
+          {
+            "domain": "loreal.com",
+            "answers": 5
+          },
+          {
+            "domain": "yesstyle.com",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 102,
+        "questionsMentioned": 33,
+        "rank": 7,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb48",
+            "prompt": "Best Korean anti-aging skincare brands",
+            "topic": "피부고민-주름",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is known for its gentle yet effective products. While not specifically highlighted for a single anti-aging product in the search, their overall brand phi…"
+            }
+          },
+          {
+            "promptId": "kb47",
+            "prompt": "Best Korean serum for dark spots and hyperpigmentation",
+            "topic": "피부고민-미백",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "조선미녀",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Beauty of Joseon Glow Deep Serum (Rice + Alpha-Arbutin): This serum is a staple for gentle brightening and addressing dullness and early-stage pigmentation. It…"
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 7,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb08",
+            "prompt": "끈적이지 않는 수분크림 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 5,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 6
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "라운드랩 자작나무 수분크림: 산뜻하고 끈적임 없이 수분을 채워주는 깔끔한 크림으로, 남성분들도 많이 사용하는 제품입니다. 수분 공급에 도움을 주는 자작나무 수액 성분과 수분 캡슐이 함유되어 보습에 도움을 줍니다."
+            }
+          },
+          {
+            "promptId": "kb09",
+            "prompt": "산뜻한 선크림 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 5,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "라운드랩 자작나무 수분 선크림: 부드러운 수분 에센스 타입으로 바르자마자 흡수되며, 자작나무 수액과 히알루론산을 함유해 끈적임 없이 촉촉한 마무리감을 선사합니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -493,9 +1967,178 @@
           "Claude"
         ],
         "productConfirmed": 21,
+        "officialDomains": [
+          "aestura.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 19,
+        "topOtherSources": [
+          {
+            "domain": "stories.amorepacific.com",
+            "answers": 8
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 5
+          },
+          {
+            "domain": "apgroup.com",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 102,
+        "questionsMentioned": 31,
+        "rank": 8,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb46",
+            "prompt": "Best Korean skincare products for acne-prone skin",
+            "topic": "피부고민-여드름",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX Advanced Snail Mucin Gel Cleanser: Ideal for stressed, acne-prone skin to calm and hydrate during cleansing."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb24",
+            "prompt": "붉은기 진정 제품 추천해줘",
+            "topic": "피부고민-민감",
+            "answers": 10,
+            "mentioned": 9,
+            "leader": {
+              "brand": "아누아",
+              "mentioned": 4
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "6. 아누아 어성초 77 수딩 토너"
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 8,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb12",
+            "prompt": "백탁 없는 무기자차 선크림 추천",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 7,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 5
+            },
+            "leaderExcerpt": {
+              "engine": "Claude",
+              "text": "2. 🌲 라운드랩 자작나무 무기자차 선크림"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -519,9 +2162,178 @@
           "Claude"
         ],
         "productConfirmed": 27,
+        "officialDomains": [
+          "cosrx.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 18,
+        "topOtherSources": [
+          {
+            "domain": "biodance.com",
+            "answers": 7
+          },
+          {
+            "domain": "theindustry.beauty",
+            "answers": 5
+          },
+          {
+            "domain": "kylecoxmd.com",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 183,
+        "questionsMentioned": 42,
+        "rank": 1,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          },
+          {
+            "brand": "토리든",
+            "mentioned": 151
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb24",
+            "prompt": "붉은기 진정 제품 추천해줘",
+            "topic": "피부고민-민감",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "에스트라",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "에스트라 에이시카365 수분 진정 크림: 민감한 피부에도 편안하며, 피부 장벽 개선과 일시적인 붉은기 개선에 도움을 줍니다."
+            }
+          },
+          {
+            "promptId": "kb32",
+            "prompt": "20대 여자친구 화장품 선물 추천해줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라네즈",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "라네즈 워터뱅크 블루 히알루로닉 크림: 건조한 피부에 촉촉한 수분감을 제공합니다."
+            }
+          },
+          {
+            "promptId": "kb09",
+            "prompt": "산뜻한 선크림 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "라운드랩 자작나무 수분 선크림: 부드러운 수분 에센스 타입으로 바르자마자 흡수되며, 자작나무 수액과 히알루론산을 함유해 끈적임 없이 촉촉한 마무리감을 선사합니다."
+            }
+          },
+          {
+            "promptId": "kb12",
+            "prompt": "백탁 없는 무기자차 선크림 추천",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "에스트라",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Claude",
+              "text": "3. 💧 에스트라 더마UV365 장벽수분 무기자차 선크림 SPF50+ PA++++"
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb31",
+            "prompt": "요즘 인기 있는 K뷰티 스킨케어 브랜드 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 10,
+            "leader": {
+              "brand": "아누아",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Anua (아누아): '어성초 77% 수딩 토너'가 항염 및 진정 효과로 인기를 끌며 글로벌 품절 사태를 겪기도 했습니다."
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 10,
+            "leader": {
+              "brand": "아누아",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "아누아 (Anua): 성분 중심 마케팅으로 동남아와 일본 MZ세대를 공략하는 데 성공했으며, '어성초 토너'는 일본 소비자들 사이에서 특히 인기가 많습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 9,
+            "leader": {
+              "brand": "아누아",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "아누아 (Anua): 미국 아마존 상위권에 오르는 K-뷰티 제품 중 하나이며, 틱톡 해시태그 마케팅을 통해 아마존 매출을 크게 성장시켰습니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -545,9 +2357,178 @@
           "Claude"
         ],
         "productConfirmed": 20,
+        "officialDomains": [
+          "anua.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 9,
+        "topOtherSources": [
+          {
+            "domain": "anua.kr",
+            "answers": 8
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 7
+          },
+          {
+            "domain": "skincupid.us",
+            "answers": 7
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 164,
+        "questionsMentioned": 34,
+        "rank": 3,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "토리든",
+            "mentioned": 151
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb48",
+            "prompt": "Best Korean anti-aging skincare brands",
+            "topic": "피부고민-주름",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is known for its gentle yet effective products. While not specifically highlighted for a single anti-aging product in the search, their overall brand phi…"
+            }
+          },
+          {
+            "promptId": "kb13",
+            "prompt": "순한 약산성 클렌징폼 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 라운드랩 1025 독도 클렌저"
+            }
+          },
+          {
+            "promptId": "kb32",
+            "prompt": "20대 여자친구 화장품 선물 추천해줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라네즈",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "라네즈 워터뱅크 블루 히알루로닉 크림: 건조한 피부에 촉촉한 수분감을 제공합니다."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 10,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 10,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 9,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -571,9 +2552,178 @@
           "Claude"
         ],
         "productConfirmed": 24,
+        "officialDomains": [
+          "sulwhasoo.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 17,
+        "topOtherSources": [
+          {
+            "domain": "wikipedia.org",
+            "answers": 5
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 5
+          },
+          {
+            "domain": "apgroup.com",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 43,
+        "questionsMentioned": 13,
+        "rank": 16,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb45",
+            "prompt": "Affordable Korean skincare brands that actually work",
+            "topic": "가격·가성비",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is a popular choice, especially for snail mucin products that aid in barrier repair. They are frequently mentioned as a strong seller in Korea and abroad."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb48",
+            "prompt": "Best Korean anti-aging skincare brands",
+            "topic": "피부고민-주름",
+            "answers": 8,
+            "mentioned": 7,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is known for its gentle yet effective products. While not specifically highlighted for a single anti-aging product in the search, their overall brand phi…"
+            }
+          },
+          {
+            "promptId": "kb28",
+            "prompt": "주름 개선 기능성 크림 추천해줘",
+            "topic": "피부고민-주름",
+            "answers": 10,
+            "mentioned": 6,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 6
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 더 레티놀 0.1 크림 / 더 레티놀 0.3 크림: 레티놀 성분을 함유하여 주름 개선에 도움을 줍니다."
+            }
+          },
+          {
+            "promptId": "kb30",
+            "prompt": "30대 안티에이징 스킨케어 브랜드 추천",
+            "topic": "피부고민-주름",
+            "answers": 10,
+            "mentioned": 6,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 4
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "추천 브랜드/제품: 아이오페 레티놀 슈퍼 바운스 세럼, 이니스프리 레티놀 피디알엔 스킨부스터, 코스알엑스 더 레티놀 0.1/0.3 크림, 더마팩토리 레티날 300ppm/1000ppm 크림 (레티놀은 자외선에 민감하므로 저녁에 사용하고, 저농도부터 시작하여 점차 농도를 높이며, 다음날 …"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -597,9 +2747,178 @@
           "Claude"
         ],
         "productConfirmed": 16,
+        "officialDomains": [
+          "drjart.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 16,
+        "topOtherSources": [
+          {
+            "domain": "wikipedia.org",
+            "answers": 6
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 6
+          },
+          {
+            "domain": "sephora.com",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 54,
+        "questionsMentioned": 21,
+        "rank": 14,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb02",
+            "prompt": "시카 성분 들어간 진정 크림 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 6,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 6
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 밸런스풀 시카 진정 크림 (Torriden BALANCEFUL CICA CREAM): Hwahae 앱에서 좋은 평가를 받고 있는 제품 중 하나입니다."
+            }
+          },
+          {
+            "promptId": "kb38",
+            "prompt": "외국 친구에게 선물할 한국 화장품 추천해줘",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 5,
+            "leader": {
+              "brand": "라네즈",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "라네즈 (Laneige) 립 슬리핑 마스크: 비타민 C와 코코넛 오일이 함유되어 잠자기 전에 바르면 아침에 촉촉하고 부드러운 입술을 만들어 줍니다."
+            }
+          },
+          {
+            "promptId": "kb07",
+            "prompt": "세라마이드 보습 크림 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 5,
+            "leader": {
+              "brand": "에스트라",
+              "mentioned": 6
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "에스트라 아토베리어365 크림: 글로우픽 랭킹에서 상위권에 들었으며, 화해 실사용자 리뷰 기반으로도 추천되는 제품입니다. 피부과에서도 자주 언급되는 제품입니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -623,9 +2942,178 @@
           "Claude"
         ],
         "productConfirmed": 18,
+        "officialDomains": [
+          "innisfree.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 13,
+        "topOtherSources": [
+          {
+            "domain": "en.wikipedia.org",
+            "answers": 6
+          },
+          {
+            "domain": "wikipedia.org",
+            "answers": 5
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 138,
+        "questionsMentioned": 40,
+        "rank": 5,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb47",
+            "prompt": "Best Korean serum for dark spots and hyperpigmentation",
+            "topic": "피부고민-미백",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "조선미녀",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Beauty of Joseon Glow Deep Serum (Rice + Alpha-Arbutin): This serum is a staple for gentle brightening and addressing dullness and early-stage pigmentation. It…"
+            }
+          },
+          {
+            "promptId": "kb17",
+            "prompt": "저렴하고 성분 좋은 앰플 추천해줘",
+            "topic": "가격·가성비",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼 (Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum)"
+            }
+          },
+          {
+            "promptId": "kb40",
+            "prompt": "미국 틱톡에서 유행하는 K뷰티 제품 알려줘",
+            "topic": "해외",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스) Advanced Snail 라인:"
+            }
+          },
+          {
+            "promptId": "kb10",
+            "prompt": "닦토용 토너패드 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "아비브 어성초 흔적 에센스 패드 클리어터치: 어성초 성분이 피부 흔적 관리와 진정에 도움을 주며, 촉촉한 에센스가 특징입니다."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb48",
+            "prompt": "Best Korean anti-aging skincare brands",
+            "topic": "피부고민-주름",
+            "answers": 8,
+            "mentioned": 6,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is known for its gentle yet effective products. While not specifically highlighted for a single anti-aging product in the search, their overall brand phi…"
+            }
+          },
+          {
+            "promptId": "kb04",
+            "prompt": "레티놀 입문용 화장품 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 7,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 3
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "1) COSRX 더 레티놀 0.1 크림"
+            }
+          },
+          {
+            "promptId": "kb29",
+            "prompt": "탄력 좋아지는 앰플 추천",
+            "topic": "피부고민-주름",
+            "answers": 10,
+            "mentioned": 7,
+            "leader": {
+              "brand": "닥터지",
+              "mentioned": 3
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "7) 닥터지 블랙 스네일 레티놀 앰플"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -649,9 +3137,178 @@
           "Claude"
         ],
         "productConfirmed": 31,
+        "officialDomains": [
+          "beautyofjoseon.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 16,
+        "topOtherSources": [
+          {
+            "domain": "roundlab.com",
+            "answers": 5
+          },
+          {
+            "domain": "yesstyle.com",
+            "answers": 5
+          },
+          {
+            "domain": "wikipedia.org",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 113,
+        "questionsMentioned": 26,
+        "rank": 6,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb17",
+            "prompt": "저렴하고 성분 좋은 앰플 추천해줘",
+            "topic": "가격·가성비",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼 (Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum)"
+            }
+          },
+          {
+            "promptId": "kb24",
+            "prompt": "붉은기 진정 제품 추천해줘",
+            "topic": "피부고민-민감",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "에스트라",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "에스트라 에이시카365 수분 진정 크림: 민감한 피부에도 편안하며, 피부 장벽 개선과 일시적인 붉은기 개선에 도움을 줍니다."
+            }
+          },
+          {
+            "promptId": "kb10",
+            "prompt": "닦토용 토너패드 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "아비브 어성초 흔적 에센스 패드 클리어터치: 어성초 성분이 피부 흔적 관리와 진정에 도움을 주며, 촉촉한 에센스가 특징입니다."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 10,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb47",
+            "prompt": "Best Korean serum for dark spots and hyperpigmentation",
+            "topic": "피부고민-미백",
+            "answers": 8,
+            "mentioned": 8,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX The Vitamin C 23 Serum: This serum contains a high concentration of 23% pure Vitamin C (L-Ascorbic Acid) along with Super Vitamin E (Tocotrienol) to ampl…"
+            }
+          },
+          {
+            "promptId": "kb49",
+            "prompt": "What are the most popular K-beauty skincare brands right now?",
+            "topic": "선물·인기",
+            "answers": 8,
+            "mentioned": 8,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "The K-beauty skincare market continues to evolve, with several brands consistently ranking as popular choices right now, driven by innovative formulations and …"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -675,9 +3332,178 @@
           "Claude"
         ],
         "productConfirmed": 25,
+        "officialDomains": [
+          "laneige.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 15,
+        "topOtherSources": [
+          {
+            "domain": "en.wikipedia.org",
+            "answers": 6
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 5
+          },
+          {
+            "domain": "wikipedia.org",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 76,
+        "questionsMentioned": 19,
+        "rank": 11,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb46",
+            "prompt": "Best Korean skincare products for acne-prone skin",
+            "topic": "피부고민-여드름",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX Advanced Snail Mucin Gel Cleanser: Ideal for stressed, acne-prone skin to calm and hydrate during cleansing."
+            }
+          },
+          {
+            "promptId": "kb47",
+            "prompt": "Best Korean serum for dark spots and hyperpigmentation",
+            "topic": "피부고민-미백",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "조선미녀",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Beauty of Joseon Glow Deep Serum (Rice + Alpha-Arbutin): This serum is a staple for gentle brightening and addressing dullness and early-stage pigmentation. It…"
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb38",
+            "prompt": "외국 친구에게 선물할 한국 화장품 추천해줘",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 8,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 6
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX) Advanced Snail 96 뮤신 파워 에센스: 해외에서 입소문이 난 제품 중 하나로, 달팽이 점액 추출물이 함유되어 피부 진정과 보습에 도움을 줍니다."
+            }
+          },
+          {
+            "promptId": "kb32",
+            "prompt": "20대 여자친구 화장품 선물 추천해줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 8,
+            "leader": {
+              "brand": "이니스프리",
+              "mentioned": 5
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "이니스프리 그린티 씨드 세럼: 산뜻한 수분 공급으로 인기가 많습니다."
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 8,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -701,9 +3527,178 @@
           "Claude"
         ],
         "productConfirmed": 6,
+        "officialDomains": [
+          "beplain.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 7,
+        "topOtherSources": [
+          {
+            "domain": "beplainglobal.com",
+            "answers": 9
+          },
+          {
+            "domain": "musinsa.com",
+            "answers": 8
+          },
+          {
+            "domain": "yesstyle.com",
+            "answers": 7
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 32,
+        "questionsMentioned": 14,
+        "rank": 19,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb13",
+            "prompt": "순한 약산성 클렌징폼 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 8,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 라운드랩 1025 독도 클렌저"
+            }
+          },
+          {
+            "promptId": "kb45",
+            "prompt": "Affordable Korean skincare brands that actually work",
+            "topic": "가격·가성비",
+            "answers": 8,
+            "mentioned": 3,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is a popular choice, especially for snail mucin products that aid in barrier repair. They are frequently mentioned as a strong seller in Korea and abroad."
+            }
+          },
+          {
+            "promptId": "kb10",
+            "prompt": "닦토용 토너패드 추천해줘",
+            "topic": "사용감·제형",
+            "answers": 10,
+            "mentioned": 3,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "아비브 어성초 흔적 에센스 패드 클리어터치: 어성초 성분이 피부 흔적 관리와 진정에 도움을 주며, 촉촉한 에센스가 특징입니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -727,9 +3722,178 @@
           "Claude"
         ],
         "productConfirmed": 14,
+        "officialDomains": [
+          "skin1004.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 11,
+        "topOtherSources": [
+          {
+            "domain": "hankyung.com",
+            "answers": 8
+          },
+          {
+            "domain": "skinsort.com",
+            "answers": 5
+          },
+          {
+            "domain": "kloft.com.au",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 98,
+        "questionsMentioned": 28,
+        "rank": 9,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb48",
+            "prompt": "Best Korean anti-aging skincare brands",
+            "topic": "피부고민-주름",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is known for its gentle yet effective products. While not specifically highlighted for a single anti-aging product in the search, their overall brand phi…"
+            }
+          },
+          {
+            "promptId": "kb38",
+            "prompt": "외국 친구에게 선물할 한국 화장품 추천해줘",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라네즈",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "라네즈 (Laneige) 립 슬리핑 마스크: 비타민 C와 코코넛 오일이 함유되어 잠자기 전에 바르면 아침에 촉촉하고 부드러운 입술을 만들어 줍니다."
+            }
+          },
+          {
+            "promptId": "kb05",
+            "prompt": "비타민C 세럼 한국 브랜드 추천",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '더 비타민 C 23 세럼'은 고함량 비타민C 제품으로 피부 광채와 잡티 개선에 도움을 줍니다. '더 비타민 C 13 세럼' 또한 좋은 반응을 얻고 있습니다."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 8,
+            "leader": {
+              "brand": "퓨리토 서울",
+              "mentioned": 5
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Purito Centella Unscented Toner is praised for its lightweight, instantly calming, and hydrating formula, making it ideal for sensitive skin."
+            }
+          },
+          {
+            "promptId": "kb49",
+            "prompt": "What are the most popular K-beauty skincare brands right now?",
+            "topic": "선물·인기",
+            "answers": 8,
+            "mentioned": 8,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "The K-beauty skincare market continues to evolve, with several brands consistently ranking as popular choices right now, driven by innovative formulations and …"
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 7,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -753,9 +3917,178 @@
           "Claude"
         ],
         "productConfirmed": 0,
+        "officialDomains": [
+          "medicube.co.kr"
+        ],
         "answersWithCitations": 24,
-        "officialCited": 6,
+        "officialCited": 0,
+        "topOtherSources": [
+          {
+            "domain": "medicube.us",
+            "answers": 12
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 7
+          },
+          {
+            "domain": "themedicube.co.kr",
+            "answers": 6
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 85,
+        "questionsMentioned": 30,
+        "rank": 10,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb45",
+            "prompt": "Affordable Korean skincare brands that actually work",
+            "topic": "가격·가성비",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is a popular choice, especially for snail mucin products that aid in barrier repair. They are frequently mentioned as a strong seller in Korea and abroad."
+            }
+          },
+          {
+            "promptId": "kb17",
+            "prompt": "저렴하고 성분 좋은 앰플 추천해줘",
+            "topic": "가격·가성비",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼 (Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum)"
+            }
+          },
+          {
+            "promptId": "kb38",
+            "prompt": "외국 친구에게 선물할 한국 화장품 추천해줘",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라네즈",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "라네즈 (Laneige) 립 슬리핑 마스크: 비타민 C와 코코넛 오일이 함유되어 잠자기 전에 바르면 아침에 촉촉하고 부드러운 입술을 만들어 줍니다."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 9,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          },
+          {
+            "promptId": "kb50",
+            "prompt": "Which K-beauty brands are trending on Amazon and TikTok?",
+            "topic": "해외",
+            "answers": 8,
+            "mentioned": 8,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX: A long-standing favorite, COSRX continues to trend with its Advanced Snail 96 Mucin Power Essence, celebrated for enhancing skin recovery and providing …"
+            }
+          },
+          {
+            "promptId": "kb40",
+            "prompt": "미국 틱톡에서 유행하는 K뷰티 제품 알려줘",
+            "topic": "해외",
+            "answers": 8,
+            "mentioned": 7,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스) Advanced Snail 라인:"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -779,9 +4112,148 @@
           "Claude"
         ],
         "productConfirmed": 28,
+        "officialDomains": [
+          "klairscosmetics.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 12,
+        "topOtherSources": [
+          {
+            "domain": "yesstyle.com",
+            "answers": 10
+          },
+          {
+            "domain": "wishtrend.com",
+            "answers": 7
+          },
+          {
+            "domain": "klairs.com",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 1,
+        "questionsMentioned": 1,
+        "rank": 23,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb31",
+            "prompt": "요즘 인기 있는 K뷰티 스킨케어 브랜드 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스): 5년 연속 글로벌 K-뷰티 1위를 차지했으며, 누적 7천만 개 이상 판매된 '어드밴스드 스네일 96 뮤신 파워 에센스'가 대표적입니다. 성분 중심의 스킨케어로도 유명합니다."
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 1,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -805,9 +4277,178 @@
           "Claude"
         ],
         "productConfirmed": 7,
+        "officialDomains": [
+          "manyo.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 5,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 8
+          },
+          {
+            "domain": "kbeautyworld.com",
+            "answers": 6
+          },
+          {
+            "domain": "manyoglobal.com",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 42,
+        "questionsMentioned": 19,
+        "rank": 17,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb45",
+            "prompt": "Affordable Korean skincare brands that actually work",
+            "topic": "가격·가성비",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is a popular choice, especially for snail mucin products that aid in barrier repair. They are frequently mentioned as a strong seller in Korea and abroad."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 5,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb39",
+            "prompt": "일본에서 인기 있는 한국 스킨케어 브랜드는?",
+            "topic": "해외",
+            "answers": 8,
+            "mentioned": 4,
+            "leader": {
+              "brand": "아누아",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "아누아(Anua): 마스크팩 등이 도쿄 드럭스토어에서 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb48",
+            "prompt": "Best Korean anti-aging skincare brands",
+            "topic": "피부고민-주름",
+            "answers": 8,
+            "mentioned": 3,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is known for its gentle yet effective products. While not specifically highlighted for a single anti-aging product in the search, their overall brand phi…"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -831,9 +4472,178 @@
           "Claude"
         ],
         "productConfirmed": 17,
+        "officialDomains": [
+          "missha.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 15,
+        "topOtherSources": [
+          {
+            "domain": "misshaus.com",
+            "answers": 7
+          },
+          {
+            "domain": "cosinkorea.com",
+            "answers": 5
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 5
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 34,
+        "questionsMentioned": 17,
+        "rank": 18,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb46",
+            "prompt": "Best Korean skincare products for acne-prone skin",
+            "topic": "피부고민-여드름",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX Advanced Snail Mucin Gel Cleanser: Ideal for stressed, acne-prone skin to calm and hydrate during cleansing."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 4,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          },
+          {
+            "promptId": "kb34",
+            "prompt": "남자 스킨케어 선물 세트 추천",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 4,
+            "leader": {
+              "brand": "닥터지",
+              "mentioned": 4
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "올인원 제품: 바쁜 일상으로 여러 단계의 스킨케어가 부담스러운 남성에게는 올인원 제품이 적합합니다. 토리든 다이브인 포맨 저분자 히알루론산 올인원, 닥터지 레드 블레미쉬 포 맨 진정 올인원, 라운드랩 포 맨 1025 독도 올인원 플루이드 등이 있습니다."
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 4,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -857,9 +4667,178 @@
           "Claude"
         ],
         "productConfirmed": 5,
+        "officialDomains": [
+          "dalba.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 6,
+        "topOtherSources": [
+          {
+            "domain": "dalba.com",
+            "answers": 9
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 8
+          },
+          {
+            "domain": "tistory.com",
+            "answers": 4
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 26,
+        "questionsMentioned": 11,
+        "rank": 20,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          },
+          {
+            "promptId": "kb42",
+            "prompt": "Recommend Korean skincare with centella for sensitive skin",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "스킨1004",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "SKIN1004 Madagascar Centella Ampoule Foam is a low-pH foam cleanser designed to calm the skin while cleansing."
+            }
+          },
+          {
+            "promptId": "kb43",
+            "prompt": "Best lightweight Korean sunscreen with no white cast",
+            "topic": "사용감·제형",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "라운드랩",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Round Lab Birch Juice Moisturizing Sun Cream SPF 50+ PA++++ Known for its hydrating and cooling feel, this sunscreen is a long-running Korean favorite, especia…"
+            }
+          },
+          {
+            "promptId": "kb45",
+            "prompt": "Affordable Korean skincare brands that actually work",
+            "topic": "가격·가성비",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX is a popular choice, especially for snail mucin products that aid in barrier repair. They are frequently mentioned as a strong seller in Korea and abroad."
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb39",
+            "prompt": "일본에서 인기 있는 한국 스킨케어 브랜드는?",
+            "topic": "해외",
+            "answers": 8,
+            "mentioned": 5,
+            "leader": {
+              "brand": "아누아",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "아누아(Anua): 마스크팩 등이 도쿄 드럭스토어에서 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 6,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 3,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -883,9 +4862,178 @@
           "Claude"
         ],
         "productConfirmed": 22,
+        "officialDomains": [
+          "belifcosmetic.com"
+        ],
         "answersWithCitations": 23,
         "officialCited": 1,
+        "topOtherSources": [
+          {
+            "domain": "belifbrand.com",
+            "answers": 11
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 8
+          },
+          {
+            "domain": "miintrade.com",
+            "answers": 6
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 14,
+        "questionsMentioned": 10,
+        "rank": 22,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb31",
+            "prompt": "요즘 인기 있는 K뷰티 스킨케어 브랜드 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스): 5년 연속 글로벌 K-뷰티 1위를 차지했으며, 누적 7천만 개 이상 판매된 '어드밴스드 스네일 96 뮤신 파워 에센스'가 대표적입니다. 성분 중심의 스킨케어로도 유명합니다."
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          },
+          {
+            "promptId": "kb41",
+            "prompt": "Best Korean hyaluronic acid serum?",
+            "topic": "효능·성분",
+            "answers": 8,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "Torriden DIVE-IN Low Molecular Hyaluronic Acid Serum This serum is consistently ranked among the most popular and highly-rated. It features five varieties of h…"
+            }
+          }
+        ],
+        "won": [
+          {
+            "promptId": "kb02",
+            "prompt": "시카 성분 들어간 진정 크림 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 3,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 6
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 밸런스풀 시카 진정 크림 (Torriden BALANCEFUL CICA CREAM): Hwahae 앱에서 좋은 평가를 받고 있는 제품 중 하나입니다."
+            }
+          },
+          {
+            "promptId": "kb49",
+            "prompt": "What are the most popular K-beauty skincare brands right now?",
+            "topic": "선물·인기",
+            "answers": 8,
+            "mentioned": 2,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 8
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "The K-beauty skincare market continues to evolve, with several brands consistently ranking as popular choices right now, driven by innovative formulations and …"
+            }
+          },
+          {
+            "promptId": "kb04",
+            "prompt": "레티놀 입문용 화장품 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 2,
+            "leader": {
+              "brand": "이니스프리",
+              "mentioned": 7
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) Innisfree Retinol Cica Repair Ampoule"
+            }
+          }
+        ]
       },
       "reportUrl": null
     },
@@ -909,10 +5057,28 @@
           "Claude"
         ],
         "productConfirmed": 6,
+        "officialDomains": [
+          "diadent.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 5,
+        "topOtherSources": [
+          {
+            "domain": "dentalnews.or.kr",
+            "answers": 13
+          },
+          {
+            "domain": "diadent.com",
+            "answers": 13
+          },
+          {
+            "domain": "dental365.co.kr",
+            "answers": 6
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -935,10 +5101,28 @@
           "Claude"
         ],
         "productConfirmed": 21,
+        "officialDomains": [
+          "cnspharm.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 16,
+        "topOtherSources": [
+          {
+            "domain": "rehahomecare.com",
+            "answers": 16
+          },
+          {
+            "domain": "bizno.net",
+            "answers": 9
+          },
+          {
+            "domain": "novarex.co.kr",
+            "answers": 8
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -961,10 +5145,28 @@
           "Claude"
         ],
         "productConfirmed": 23,
+        "officialDomains": [
+          "youthbioglobal.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 0,
+        "topOtherSources": [
+          {
+            "domain": "etnews.com",
+            "answers": 11
+          },
+          {
+            "domain": "thevc.kr",
+            "answers": 7
+          },
+          {
+            "domain": "unicornfactory.co.kr",
+            "answers": 7
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -987,10 +5189,28 @@
           "Claude"
         ],
         "productConfirmed": 18,
+        "officialDomains": [
+          "hdsr.co.kr"
+        ],
         "answersWithCitations": 23,
         "officialCited": 18,
+        "topOtherSources": [
+          {
+            "domain": "jobplanet.co.kr",
+            "answers": 16
+          },
+          {
+            "domain": "rndcircle.io",
+            "answers": 8
+          },
+          {
+            "domain": "cbiz.kr",
+            "answers": 6
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1013,10 +5233,28 @@
           "Claude"
         ],
         "productConfirmed": 17,
+        "officialDomains": [
+          "cubictek.co.kr"
+        ],
         "answersWithCitations": 23,
         "officialCited": 16,
+        "topOtherSources": [
+          {
+            "domain": "saramin.co.kr",
+            "answers": 8
+          },
+          {
+            "domain": "incruit.com",
+            "answers": 6
+          },
+          {
+            "domain": "youtube.com",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1039,10 +5277,28 @@
           "Claude"
         ],
         "productConfirmed": 7,
+        "officialDomains": [
+          "dfusionlab.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 7,
+        "topOtherSources": [
+          {
+            "domain": "nextunicorn.kr",
+            "answers": 12
+          },
+          {
+            "domain": "diffusionlab.de",
+            "answers": 4
+          },
+          {
+            "domain": "diffusionlabs.com",
+            "answers": 4
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1065,10 +5321,28 @@
           "Claude"
         ],
         "productConfirmed": 2,
+        "officialDomains": [
+          "rexolution.ai"
+        ],
         "answersWithCitations": 21,
         "officialCited": 3,
+        "topOtherSources": [
+          {
+            "domain": "thevc.kr",
+            "answers": 7
+          },
+          {
+            "domain": "resolutionbrand.com",
+            "answers": 6
+          },
+          {
+            "domain": "nextround.kr",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1091,10 +5365,28 @@
           "Claude"
         ],
         "productConfirmed": 13,
+        "officialDomains": [
+          "withwe.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 3,
+        "topOtherSources": [
+          {
+            "domain": "thevc.kr",
+            "answers": 14
+          },
+          {
+            "domain": "withwe.kr",
+            "answers": 12
+          },
+          {
+            "domain": "oopy.io",
+            "answers": 8
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1117,10 +5409,28 @@
           "Claude"
         ],
         "productConfirmed": 20,
+        "officialDomains": [
+          "k-modilabs.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 20,
+        "topOtherSources": [
+          {
+            "domain": "daara.co.kr",
+            "answers": 3
+          },
+          {
+            "domain": "litt.ly",
+            "answers": 3
+          },
+          {
+            "domain": "modlabs.kr",
+            "answers": 3
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1143,10 +5453,28 @@
           "Claude"
         ],
         "productConfirmed": 3,
+        "officialDomains": [
+          "ummobility.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 5,
+        "topOtherSources": [
+          {
+            "domain": "umomobility.com",
+            "answers": 8
+          },
+          {
+            "domain": "unitedmobilityinc.com",
+            "answers": 4
+          },
+          {
+            "domain": "umich.edu",
+            "answers": 4
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1169,10 +5497,28 @@
           "Claude"
         ],
         "productConfirmed": 25,
+        "officialDomains": [
+          "uidkorea.co.kr"
+        ],
         "answersWithCitations": 20,
         "officialCited": 10,
+        "topOtherSources": [
+          {
+            "domain": "wikipedia.org",
+            "answers": 6
+          },
+          {
+            "domain": "saramin.co.kr",
+            "answers": 6
+          },
+          {
+            "domain": "jobplanet.co.kr",
+            "answers": 4
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1195,10 +5541,28 @@
           "Claude"
         ],
         "productConfirmed": 2,
+        "officialDomains": [
+          "amcore.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 2,
+        "topOtherSources": [
+          {
+            "domain": "komachine.com",
+            "answers": 13
+          },
+          {
+            "domain": "woojinswitches.com",
+            "answers": 12
+          },
+          {
+            "domain": "tistory.com",
+            "answers": 6
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1221,10 +5585,28 @@
           "Claude"
         ],
         "productConfirmed": 27,
+        "officialDomains": [
+          "theksteel.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 9,
+        "topOtherSources": [
+          {
+            "domain": "youtube.com",
+            "answers": 8
+          },
+          {
+            "domain": "hankyung.com",
+            "answers": 7
+          },
+          {
+            "domain": "goodmorningcc.com",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1247,10 +5629,28 @@
           "Claude"
         ],
         "productConfirmed": 12,
+        "officialDomains": [
+          "goodymt.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 12,
+        "topOtherSources": [
+          {
+            "domain": "linkonbiz.com",
+            "answers": 9
+          },
+          {
+            "domain": "wikipedia.org",
+            "answers": 5
+          },
+          {
+            "domain": "ko.wikipedia.org",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1273,10 +5673,28 @@
           "Claude"
         ],
         "productConfirmed": 24,
+        "officialDomains": [
+          "simmtech.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 14,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 6
+          },
+          {
+            "domain": "komachine.com",
+            "answers": 5
+          },
+          {
+            "domain": "saramin.co.kr",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1299,10 +5717,28 @@
           "Claude"
         ],
         "productConfirmed": 7,
+        "officialDomains": [
+          "stemco.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 6,
+        "topOtherSources": [
+          {
+            "domain": "stemco.com",
+            "answers": 13
+          },
+          {
+            "domain": "incruit.com",
+            "answers": 5
+          },
+          {
+            "domain": "conmet.com",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1325,10 +5761,28 @@
           "Claude"
         ],
         "productConfirmed": 26,
+        "officialDomains": [
+          "lgchem.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 16,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 8
+          },
+          {
+            "domain": "globaldata.com",
+            "answers": 8
+          },
+          {
+            "domain": "wikipedia.org",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1351,10 +5805,28 @@
           "Claude"
         ],
         "productConfirmed": 19,
+        "officialDomains": [
+          "lgensol.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 18,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 8
+          },
+          {
+            "domain": "wikipedia.org",
+            "answers": 4
+          },
+          {
+            "domain": "craft.co",
+            "answers": 4
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1377,10 +5849,28 @@
           "Claude"
         ],
         "productConfirmed": 17,
+        "officialDomains": [
+          "ls-electric.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 17,
+        "topOtherSources": [
+          {
+            "domain": "wikipedia.org",
+            "answers": 5
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 4
+          },
+          {
+            "domain": "ko.wikipedia.org",
+            "answers": 4
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1403,10 +5893,28 @@
           "Claude"
         ],
         "productConfirmed": 19,
+        "officialDomains": [
+          "nexans.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 12,
+        "topOtherSources": [
+          {
+            "domain": "incruit.com",
+            "answers": 12
+          },
+          {
+            "domain": "electimes.com",
+            "answers": 9
+          },
+          {
+            "domain": "lscns.co.kr",
+            "answers": 7
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1429,10 +5937,28 @@
           "Claude"
         ],
         "productConfirmed": 18,
+        "officialDomains": [
+          "yuhan.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 14,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 11
+          },
+          {
+            "domain": "wikipedia.org",
+            "answers": 7
+          },
+          {
+            "domain": "jobplanet.co.kr",
+            "answers": 7
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1455,9 +5981,132 @@
           "Claude"
         ],
         "productConfirmed": 13,
+        "officialDomains": [
+          "hitejinro.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 9,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 11
+          },
+          {
+            "domain": "wikipedia.org",
+            "answers": 8
+          },
+          {
+            "domain": "en.wikipedia.org",
+            "answers": 6
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 0,
+        "questionsMentioned": 0,
+        "rank": 25,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb31",
+            "prompt": "요즘 인기 있는 K뷰티 스킨케어 브랜드 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스): 5년 연속 글로벌 K-뷰티 1위를 차지했으며, 누적 7천만 개 이상 판매된 '어드밴스드 스네일 96 뮤신 파워 에센스'가 대표적입니다. 성분 중심의 스킨케어로도 유명합니다."
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          }
+        ],
+        "won": []
       },
       "reportUrl": null
     },
@@ -1481,9 +6130,132 @@
           "Claude"
         ],
         "productConfirmed": 32,
+        "officialDomains": [
+          "lotte-nestle.co.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 0,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 14
+          },
+          {
+            "domain": "lotte.co.kr",
+            "answers": 14
+          },
+          {
+            "domain": "nestle.co.kr",
+            "answers": 8
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 0,
+        "questionsMentioned": 0,
+        "rank": 26,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb31",
+            "prompt": "요즘 인기 있는 K뷰티 스킨케어 브랜드 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스): 5년 연속 글로벌 K-뷰티 1위를 차지했으며, 누적 7천만 개 이상 판매된 '어드밴스드 스네일 96 뮤신 파워 에센스'가 대표적입니다. 성분 중심의 스킨케어로도 유명합니다."
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          }
+        ],
+        "won": []
       },
       "reportUrl": null
     },
@@ -1507,9 +6279,132 @@
           "Claude"
         ],
         "productConfirmed": 15,
+        "officialDomains": [
+          "lxhausys.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 13,
+        "topOtherSources": [
+          {
+            "domain": "namu.wiki",
+            "answers": 11
+          },
+          {
+            "domain": "lxholdings.co.kr",
+            "answers": 10
+          },
+          {
+            "domain": "lxhausys.co.kr",
+            "answers": 8
+          }
+        ],
         "hook": null
+      },
+      "category": {
+        "questionSet": "K-뷰티 구매 질문 (브랜드명 없음)",
+        "questions": 50,
+        "answers": 474,
+        "engines": [
+          "ChatGPT",
+          "Gemini",
+          "Claude"
+        ],
+        "mentioned": 0,
+        "questionsMentioned": 0,
+        "rank": 27,
+        "brandsCompared": 27,
+        "leaders": [
+          {
+            "brand": "코스알엑스",
+            "mentioned": 183
+          },
+          {
+            "brand": "라운드랩",
+            "mentioned": 164
+          },
+          {
+            "brand": "아누아",
+            "mentioned": 164
+          }
+        ],
+        "missed": [
+          {
+            "promptId": "kb06",
+            "prompt": "어성초 토너 추천해줘",
+            "topic": "효능·성분",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "아비브",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "ChatGPT",
+              "text": "2) 아비브 어성초 카밍 토너 스킨부스터"
+            }
+          },
+          {
+            "promptId": "kb31",
+            "prompt": "요즘 인기 있는 K뷰티 스킨케어 브랜드 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "COSRX (코스알엑스): 5년 연속 글로벌 K-뷰티 1위를 차지했으며, 누적 7천만 개 이상 판매된 '어드밴스드 스네일 96 뮤신 파워 에센스'가 대표적입니다. 성분 중심의 스킨케어로도 유명합니다."
+            }
+          },
+          {
+            "promptId": "kb33",
+            "prompt": "올리브영 스킨케어 베스트 제품 알려줘",
+            "topic": "선물·인기",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "토리든",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "토리든 다이브인 저분자 히알루론산 세럼: 글로우픽 15위이자 2024년 상반기 베스트 스킨케어템으로 선정되었습니다."
+            }
+          },
+          {
+            "promptId": "kb36",
+            "prompt": "외국인이 좋아하는 K뷰티 브랜드 알려줘",
+            "topic": "해외",
+            "answers": 10,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 10
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): 효과적이고 미니멀한 스킨케어를 지향하는 브랜드로, 특히 '어드밴스드 스네일 96 뮤신 파워 에센스'가 유명하며 북미와 유럽 시장에서 큰 인기를 얻고 있습니다."
+            }
+          },
+          {
+            "promptId": "kb37",
+            "prompt": "해외 아마존에서 잘 팔리는 한국 화장품 브랜드는?",
+            "topic": "해외",
+            "answers": 9,
+            "mentioned": 0,
+            "leader": {
+              "brand": "코스알엑스",
+              "mentioned": 9
+            },
+            "leaderExcerpt": {
+              "engine": "Gemini",
+              "text": "코스알엑스 (COSRX): '스네일 뮤신 96% 파워 에센스'와 '약산성 굿모닝 젤 클렌저', 선크림 등이 인기가 많습니다. 특히 선크림은 유럽 아마존 프라임데이에서 카테고리 1위를 차지했습니다."
+            }
+          }
+        ],
+        "won": []
       },
       "reportUrl": null
     },
@@ -1533,10 +6428,28 @@
           "Claude"
         ],
         "productConfirmed": 14,
+        "officialDomains": [
+          "shinhan.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 11,
+        "topOtherSources": [
+          {
+            "domain": "wikipedia.org",
+            "answers": 5
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 4
+          },
+          {
+            "domain": "bankmeister.com",
+            "answers": 3
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1559,10 +6472,28 @@
           "Claude"
         ],
         "productConfirmed": 7,
+        "officialDomains": [
+          "hanabank.com"
+        ],
         "answersWithCitations": 23,
         "officialCited": 7,
+        "topOtherSources": [
+          {
+            "domain": "kebhana.com",
+            "answers": 9
+          },
+          {
+            "domain": "hanafn.com",
+            "answers": 7
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 6
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1585,10 +6516,28 @@
           "Claude"
         ],
         "productConfirmed": 12,
+        "officialDomains": [
+          "kt.com"
+        ],
         "answersWithCitations": 21,
         "officialCited": 8,
+        "topOtherSources": [
+          {
+            "domain": "wikipedia.org",
+            "answers": 3
+          },
+          {
+            "domain": "namu.wiki",
+            "answers": 3
+          },
+          {
+            "domain": "kttape.com",
+            "answers": 3
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1611,10 +6560,28 @@
           "Claude"
         ],
         "productConfirmed": 18,
+        "officialDomains": [
+          "hanwha.com"
+        ],
         "answersWithCitations": 24,
         "officialCited": 15,
+        "topOtherSources": [
+          {
+            "domain": "hanwhacorp.co.kr",
+            "answers": 8
+          },
+          {
+            "domain": "wikipedia.org",
+            "answers": 7
+          },
+          {
+            "domain": "hanwha.co.kr",
+            "answers": 5
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1637,10 +6604,28 @@
           "Claude"
         ],
         "productConfirmed": 17,
+        "officialDomains": [
+          "cheongjucci.korcham.net"
+        ],
         "answersWithCitations": 22,
         "officialCited": 7,
+        "topOtherSources": [
+          {
+            "domain": "korcham.net",
+            "answers": 11
+          },
+          {
+            "domain": "cheongju.grandculture.net",
+            "answers": 4
+          },
+          {
+            "domain": "m.korcham.net",
+            "answers": 3
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     },
     {
@@ -1663,10 +6648,28 @@
           "Claude"
         ],
         "productConfirmed": 13,
+        "officialDomains": [
+          "cri.re.kr"
+        ],
         "answersWithCitations": 24,
         "officialCited": 11,
+        "topOtherSources": [
+          {
+            "domain": "youtube.com",
+            "answers": 7
+          },
+          {
+            "domain": "krila.re.kr",
+            "answers": 4
+          },
+          {
+            "domain": "erc.re.kr",
+            "answers": 4
+          }
+        ],
         "hook": null
       },
+      "category": null,
       "reportUrl": null
     }
   ]

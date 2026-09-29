@@ -104,6 +104,8 @@ const domainByBrand = new Map(
   )
 );
 const PROMPT_BRAND_RE = /^(.+)-s\d+$/;
+/** 도메인별 브랜드 질문(「OO은 어떤 브랜드야?」 등) 원자료. 업종 질문(job2)은 따로 센다. */
+const brandedRows = new Map();
 // 판정 요약(summary)의 promptId 앞부분(예: "Purito-s1" → purito)도 도메인 단서로 쓴다
 // (명단 브랜드명 「퓨리토 서울」 ≠ 측정 브랜드명 「퓨리토」 인 경우).
 const summaryDirEarly = join(dataDir, "summary/leads");
@@ -133,6 +135,11 @@ for (const row of rawRows) {
   if (!(domain && row.timestamp) || row.error) {
     continue;
   }
+  if (row.job !== "job2" && row.rawResponse) {
+    const list = brandedRows.get(domain) ?? [];
+    list.push(row);
+    brandedRows.set(domain, list);
+  }
   const prev = lastMeasured.get(domain);
   if (!prev || row.timestamp > prev) {
     lastMeasured.set(domain, row.timestamp);
@@ -154,12 +161,64 @@ const summaries = new Map(
     })
 );
 
+const profiles = JSON.parse(
+  readFileSync(join(here, "brand-profiles.json"), "utf8")
+);
+const WWW_RE = /^www\./;
+const MARKDOWN_RE = /[*#`]/g;
+const bare = (d) =>
+  String(d ?? "")
+    .toLowerCase()
+    .replace(WWW_RE, "");
+function officialDomainsOf(domain) {
+  return [
+    ...new Set([
+      bare(domain),
+      ...(profiles[domain]?.officialDomains ?? []).map(bare),
+    ]),
+  ];
+}
+function aliasesOf(lead) {
+  const list = profiles[lead.domain]?.aliases ?? [lead.brand, lead.brand_en];
+  return [...new Set(list.filter((a) => a && a.length >= 2))];
+}
+const isOfficial = (sourceDomain, officials) => {
+  const d = bare(sourceDomain);
+  return officials.some((o) => d === o || d.endsWith(`.${o}`));
+};
+
+/** 출처 인용 — 원자료의 citedSources 를 공식 도메인 목록(해외 공식몰 포함)과 대조. */
+function citationsOf(domain) {
+  const rows = brandedRows.get(domain) ?? [];
+  const officials = officialDomainsOf(domain);
+  const withSources = rows.filter((r) => (r.citedSources ?? []).length > 0);
+  const official = withSources.filter((r) =>
+    r.citedSources.some((c) => isOfficial(c.domain, officials))
+  );
+  const others = new Map();
+  for (const r of withSources) {
+    for (const d of new Set(r.citedSources.map((c) => bare(c.domain)))) {
+      if (d && !isOfficial(d, officials)) {
+        others.set(d, (others.get(d) ?? 0) + 1);
+      }
+    }
+  }
+  return {
+    officialDomains: officials,
+    answersWithCitations: withSources.length,
+    officialCited: official.length,
+    topOtherSources: [...others.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([d, answers]) => ({ domain: d, answers })),
+  };
+}
+
 function measurementOf(s) {
   if (!s) {
     return null;
   }
   const verdicts = Array.isArray(s.verdicts) ? s.verdicts : [];
-  const withCitations = verdicts.filter((v) => (v.citedCount ?? 0) > 0);
   const engines = ENGINE_ORDER.filter((name) =>
     verdicts.some((v) => (ENGINE_NAMES[v.engine] ?? v.engine) === name)
   );
@@ -180,10 +239,118 @@ function measurementOf(s) {
     engines,
     /** 저장소 판정기(mention-verdict)가 「이 브랜드를 맞게 안다」로 확정한 답변 수. */
     productConfirmed: verdicts.filter((v) => v.quality === "confirmed").length,
-    /** 출처 링크를 1개 이상 단 답변 / 그중 공식 도메인을 인용한 답변 — URL 대조라 판정기와 무관. */
-    answersWithCitations: withCitations.length,
-    officialCited: withCitations.filter((v) => v.officialDomainCited).length,
+    /** 출처 링크를 1개 이상 단 답변 / 그중 공식 도메인(해외 공식몰 포함)을 인용한 답변 — URL 대조라 판정기와 무관. */
+    ...citationsOf(s.domain),
     hook,
+  };
+}
+
+// ── 업종 구매 질문(job2: 브랜드 이름 없이 「어성초 토너 추천해줘」 등) ────────────
+// 답변 원문에 브랜드 표기가 들어 있으면 「추천됨」으로 센다(문자열 대조, 판정기 없음).
+const categoryRows = rawRows.filter(
+  (r) => r.job === "job2" && !r.error && r.rawResponse
+);
+const beautyLeads = leads.filter((l) => industryOf(l.segment) === "beauty");
+const mentions = (text, lead) => {
+  const t = text.toLowerCase();
+  return aliasesOf(lead).some((a) => t.includes(a.toLowerCase()));
+};
+/** 답변에서 브랜드 표기가 든 한 줄. 서식 기호(*, #, `)만 지우고 글자는 그대로 둔다. */
+function lineWith(text, lead) {
+  const line = text
+    .split("\n")
+    .find((l) => mentions(l, lead))
+    ?.replace(MARKDOWN_RE, "")
+    .trim();
+  if (!line) {
+    return null;
+  }
+  return line.length > 160 ? `${line.slice(0, 159)}…` : line;
+}
+const questions = new Map();
+for (const r of categoryRows) {
+  const q = questions.get(r.promptId) ?? {
+    promptId: r.promptId,
+    prompt: r.prompt,
+    topic: r.topic,
+    rows: [],
+  };
+  q.rows.push(r);
+  questions.set(r.promptId, q);
+}
+const mentionCount = new Map(
+  beautyLeads.map((l) => [
+    l.domain,
+    categoryRows.filter((r) => mentions(r.rawResponse, l)).length,
+  ])
+);
+const rankOrder = [...mentionCount.entries()].sort((a, b) => b[1] - a[1]);
+
+function categoryOf(lead) {
+  if (!(categoryRows.length && industryOf(lead.segment) === "beauty")) {
+    return null;
+  }
+  const perQuestion = [...questions.values()].map((q) => {
+    const counts = beautyLeads
+      .map((l) => ({
+        lead: l,
+        mentioned: q.rows.filter((r) => mentions(r.rawResponse, l)).length,
+      }))
+      .sort((a, b) => b.mentioned - a.mentioned);
+    const ours =
+      counts.find((c) => c.lead.domain === lead.domain)?.mentioned ?? 0;
+    const leader = counts.find((c) => c.lead.domain !== lead.domain);
+    const leaderRow = leader
+      ? q.rows.find((r) => mentions(r.rawResponse, leader.lead))
+      : null;
+    return {
+      promptId: q.promptId,
+      prompt: q.prompt,
+      topic: q.topic,
+      answers: q.rows.length,
+      mentioned: ours,
+      leader: leader
+        ? { brand: leader.lead.brand, mentioned: leader.mentioned }
+        : null,
+      leaderExcerpt:
+        leaderRow && leader
+          ? {
+              engine: ENGINE_NAMES[leaderRow.engine] ?? leaderRow.engine,
+              text: lineWith(leaderRow.rawResponse, leader.lead),
+            }
+          : null,
+    };
+  });
+  const missed = perQuestion
+    .filter((q) => q.mentioned === 0 && q.leader && q.leader.mentioned > 0)
+    .sort(
+      (a, b) => b.leader.mentioned / b.answers - a.leader.mentioned / a.answers
+    )
+    .slice(0, 5);
+  const won = perQuestion
+    .filter((q) => q.mentioned > 0)
+    .sort((a, b) => b.mentioned / b.answers - a.mentioned / a.answers)
+    .slice(0, 3);
+  return {
+    questionSet: "K-뷰티 구매 질문 (브랜드명 없음)",
+    questions: questions.size,
+    answers: categoryRows.length,
+    engines: ENGINE_ORDER.filter((name) =>
+      categoryRows.some((r) => (ENGINE_NAMES[r.engine] ?? r.engine) === name)
+    ),
+    mentioned: mentionCount.get(lead.domain) ?? 0,
+    questionsMentioned: perQuestion.filter((q) => q.mentioned > 0).length,
+    rank: rankOrder.findIndex(([d]) => d === lead.domain) + 1,
+    brandsCompared: beautyLeads.length,
+    leaders: rankOrder
+      .filter(([d]) => d !== lead.domain)
+      .slice(0, 3)
+      .map(([d, n]) => ({
+        brand: beautyLeads.find((l) => l.domain === d)?.brand ?? d,
+        mentioned: n,
+      })),
+    missed,
+    won,
   };
 }
 
@@ -201,6 +368,7 @@ const snapshot = leads.map((lead) => {
     track: trackOf(lead),
     contact,
     measurement: measurementOf(summaries.get(lead.domain)),
+    category: categoryOf(lead),
     reportUrl: null,
   };
 });

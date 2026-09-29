@@ -1,0 +1,37 @@
+{
+  "_note": "브랜드 표기(aliases)와 공식 도메인(officialDomains). 공식 도메인은 2026-09-30 사이트 <title> 을 직접 열어 확인한 것만. 명단에 없는 브랜드는 leads.json 의 brand·brand_en 만 쓴다.",
+  "www.torriden.com": {
+    "aliases": ["토리든", "Torriden"],
+    "officialDomains": ["torriden.com", "torriden.us"],
+    "evidence": "torriden.us <title> 'Torriden Clean Korean Skincare' (2026-09-30)"
+  },
+  "isntree.com": {
+    "aliases": ["이즈앤트리", "Isntree"],
+    "officialDomains": ["isntree.com", "isntree-global.com", "theisntree.com"],
+    "evidence": "isntree-global.com 'Isntree | Official Global Store', theisntree.com 'Isntree Skincare & Sunscreen Official Website' (2026-09-30)"
+  },
+  "numbuzin.com": {
+    "aliases": ["넘버즈인", "numbuzin"],
+    "officialDomains": ["numbuzin.com"],
+    "evidence": "us.numbuzin.com 'numbuzin official' — numbuzin.com 하위 도메인이라 자동 포함 (2026-09-30)"
+  },
+  "purito.com": {
+    "aliases": ["퓨리토", "Purito"],
+    "officialDomains": ["purito.com", "purito.co.kr"],
+    "evidence": "purito.com 'Purito Seoul'; purito.co.kr 은 공식 문의 메일 도메인 (2026-09-30)"
+  },
+  "abib.co.kr": {
+    "aliases": ["아비브", "Abib"],
+    "officialDomains": ["abib.co.kr", "abib.com"],
+    "evidence": "abib.com 'Abib Cosmetic - 아비브 코스메틱', en.abib.com 'Abib US' (2026-09-30)"
+  },
+  "www.roundlab.co.kr": {
+    "aliases": ["라운드랩", "Round Lab", "Roundlab"],
+    "officialDomains": ["roundlab.co.kr", "roundlab.com"],
+    "evidence": "roundlab.com 'Round Lab U.S. Official Shop' (2026-09-30)"
+  },
+  "www.cosrx.com": { "aliases": ["코스알엑스", "COSRX"] },
+  "anua.com": { "aliases": ["아누아", "Anua"] },
+  "beautyofjoseon.com": { "aliases": ["조선미녀", "Beauty of Joseon"] },
+  "www.skin1004.com": { "aliases": ["스킨1004", "SKIN1004"] }
+}
