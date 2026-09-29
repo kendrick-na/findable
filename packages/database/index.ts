@@ -20,8 +20,12 @@ if (usesSupabase) {
 }
 const adapter = new PrismaPg({
   connectionString: databaseUrl.toString(),
+  // `pg` otherwise defaults to ten connections per serverless instance.
+  // Several concurrent Vercel instances can exhaust the production pool even
+  // when the connection string itself points at a pooled database endpoint.
+  max: 1,
   ...(usesSupabase
-    ? { ssl: { ca: SUPABASE_ROOT_CA, rejectUnauthorized: true }, max: 1 }
+    ? { ssl: { ca: SUPABASE_ROOT_CA, rejectUnauthorized: true } }
     : {}),
 });
 
