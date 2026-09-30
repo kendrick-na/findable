@@ -118,7 +118,46 @@ export const clientReportDataSchema = z.object({
   computed: computedSchema,
 });
 
-export interface ClientReportData {
+/**
+ * v2 (2026-09-30) — 측정 1회차 원본(ReportSource@1)과 사람 승인(ReportReview@1)으로 만든 발행본.
+ * v1 필드 + 원본 지문·승인 기록·분모·만료. 만드는 곳은 `publish.ts` 한 곳뿐이다.
+ * 🔴 `review.status` 가 approved 가 아니면 파싱 단계에서 거부한다(초안이 링크로 새지 않게).
+ */
+export const clientReportDataV2Schema = z.object({
+  schema: z.literal(CLIENT_REPORT_SCHEMA),
+  schemaVersion: z.literal(2),
+  version: z.number().int().positive(),
+  templateVersion: z.string(),
+  source: z.object({
+    auditId: z.string(),
+    auditJobId: z.string().uuid(),
+    clientSlug: z.string(),
+    completedAt: z.string(),
+    importedAt: z.string(),
+    resultSha256: z.string().regex(/^[0-9a-f]{64}$/),
+    verdictVersion: z.number(),
+  }),
+  review: z.object({
+    status: z.literal("approved"),
+    reviewer: z.string().min(1),
+    reviewedAt: z.string().min(1),
+    rubric: z.string().min(1),
+  }),
+  denominator: z.object({
+    engines: z.array(z.string()).min(1),
+    promptKinds: z.array(z.string()).min(1),
+    n: z.number().int().positive(),
+  }),
+  evidence: z.array(z.object({ answerKey: z.string(), quote: z.string() })),
+  release: z.object({
+    issuedAt: z.string(),
+    expiresAt: z.string().nullable(),
+  }),
+  config: clientReportConfigViewSchema,
+  computed: computedSchema,
+});
+
+export interface ClientReportDataV1 {
   computed: ClientReportComputed;
   config: ClientReportConfigView;
   schema: typeof CLIENT_REPORT_SCHEMA;
@@ -128,11 +167,55 @@ export interface ClientReportData {
   version: number;
 }
 
-/** 저장된 JSON → 타입. 형식이 다르면 null(페이지는 404 로 처리). */
+export interface ClientReportDataV2 {
+  computed: ClientReportComputed;
+  config: ClientReportConfigView;
+  denominator: { engines: string[]; n: number; promptKinds: string[] };
+  evidence: { answerKey: string; quote: string }[];
+  release: { expiresAt: string | null; issuedAt: string };
+  review: {
+    reviewedAt: string | null;
+    reviewer: string | null;
+    rubric: string;
+    status: "draft" | "approved";
+  };
+  schema: typeof CLIENT_REPORT_SCHEMA;
+  schemaVersion: 2;
+  source: {
+    auditId: string;
+    auditJobId: string;
+    clientSlug: string;
+    completedAt: string;
+    importedAt: string;
+    resultSha256: string;
+    verdictVersion: number;
+  };
+  templateVersion: string;
+  version: number;
+}
+
+export type ClientReportData = ClientReportDataV1 | ClientReportDataV2;
+
+/** 저장된 JSON → 타입. 형식이 다르면 null(페이지는 404 로 처리). v2 는 승인본만 통과. */
 export function parseClientReportData(json: unknown): ClientReportData | null {
+  const v2 = clientReportDataV2Schema.safeParse(json);
+  if (v2.success) {
+    return json as ClientReportDataV2;
+  }
   const r = clientReportDataSchema.safeParse(json);
   // 검사는 형태 확인용이고, 반환은 원본 그대로(검사 스키마가 느슨한 부분의 필드를 잃지 않게).
-  return r.success ? (json as ClientReportData) : null;
+  return r.success ? (json as ClientReportDataV1) : null;
+}
+
+/** v2 발행본의 만료 — 지난 링크는 열지 않는다(v1 은 만료 개념 없음). */
+export function isClientReportExpired(
+  data: ClientReportData,
+  now: Date = new Date()
+): boolean {
+  if (data.schemaVersion !== 2 || !data.release.expiresAt) {
+    return false;
+  }
+  return new Date(data.release.expiresAt).getTime() <= now.getTime();
 }
 
 export function buildClientReportData(input: {
@@ -141,7 +224,7 @@ export function buildClientReportData(input: {
   importedAt: Date;
   slug: string;
   version: number;
-}): ClientReportData {
+}): ClientReportDataV1 {
   const computed = computeClientReport(input.config, input.audit);
   const rendered = renderStrings(input.config, {
     s: computed.s,

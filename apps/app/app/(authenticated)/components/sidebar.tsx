@@ -126,6 +126,7 @@ export interface SidebarLabels {
   adminOps: string;
   adminOrgs: string;
   adminPartners: string;
+  adminReports: string;
   alerts: string;
   billing: string;
   brandMeasure: string;
@@ -268,6 +269,11 @@ const accountNav = (t: SidebarLabels): NavItem[] => [
 const adminNav = (t: SidebarLabels): NavItem[] => [
   { title: t.adminOps, url: "/admin/ops", icon: ActivityIcon },
   { title: t.adminMail, url: "/admin/ax-mail", icon: MailIcon },
+  {
+    title: t.adminReports,
+    url: "/admin/client-reports",
+    icon: FileTextIcon,
+  },
   { title: t.adminContent, url: "/admin/content", icon: PenLineIcon },
   // 🆕 세션N-42: 가입 조직·초대 코드. 오버엣지 참여 기업이 코드로 들어오는데
   //   **누가 가입했는지 앱에서 볼 화면이 0곳**이었다(운영자가 SQL 을 돌려야 했다).
