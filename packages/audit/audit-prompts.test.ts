@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { classifySavedPromptKind, generateAuditPrompts } from "./audit-prompts";
 import { summarizeAnswerBuckets } from "./answer-buckets";
+import { classifySavedPromptKind, generateAuditPrompts } from "./audit-prompts";
 
 it("classifies saved Melt Halo questions by brand mention before persisting AuditJob rows", () => {
   const names = { ko: "멜트헤일로", en: "Melt Halo" };
@@ -42,11 +42,10 @@ it("routes the seven saved Melt Halo questions into direct dashboard buckets", (
     "마스크팩 추천 제품을 고를 때 모공 관리 관련 표기와 사용법을 어떻게 비교하나요?",
   ];
   const kinds = questions.map((question) =>
-    classifySavedPromptKind(
-      question,
-      { ko: "멜트헤일로", en: "Melt Halo" },
-      ["Melt Halo", "melthalo"]
-    )
+    classifySavedPromptKind(question, { ko: "멜트헤일로", en: "Melt Halo" }, [
+      "Melt Halo",
+      "melthalo",
+    ])
   );
   expect(kinds).toEqual([
     "brand",

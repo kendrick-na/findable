@@ -236,7 +236,9 @@ export function generateDiscoveryPrompts(
   }
   const terms = siteCategoryTerms(site, nameList);
   const koTerms = terms.filter(
-    (t) => (HANGUL_RE.test(t) || !LATIN_TERM_RE.test(t)) && isDiscoveryCategoryTerm(t)
+    (t) =>
+      (HANGUL_RE.test(t) || !LATIN_TERM_RE.test(t)) &&
+      isDiscoveryCategoryTerm(t)
   );
   // 영어 조각은 약어 한 토막("AX")이 아니라 뜻이 서는 표기만 — 두 단어 이상이거나 6자 이상.
   const enTerms = terms.filter(
