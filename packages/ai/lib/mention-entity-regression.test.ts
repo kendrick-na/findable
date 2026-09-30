@@ -40,6 +40,28 @@ it("rechecks raw answer text when an adapter forgot to set brandMentioned", asyn
   });
 });
 
+it("confirms a Korean product answer with two official product descriptors", async () => {
+  // Live regression: Naver AI Briefing named 멜트헤일로 and its product, but
+  // the homepage identity gate discarded it because NAD and 마스크 are 3 chars.
+  vi.stubEnv("LETSUR_API_KEY", "test-key");
+  vi.mocked(generateObject).mockResolvedValue({
+    object: { quality: "confirmed" },
+  } as never);
+
+  await expect(
+    verifyMention({
+      brandName: "멜트헤일로",
+      brandDomain: "melthalo.com",
+      stringMatched: true,
+      officialSite: {
+        description: "멜트헤일로 스킨케어 | NAD 마스크, 재생 크림, 톤업크림, 선세럼",
+        title: "멜트헤일로 | 만져지는 변화, NAD+ / Metl Halo",
+      },
+      text: "멜트헤일로 PDRN 리쥬비네이팅 마스크팩은 NAD+ 성분을 담은 제품입니다.",
+    })
+  ).resolves.toMatchObject({ counted: true, quality: "confirmed" });
+});
+
 it("does not mistake an official subdomain for a namesake", () => {
   expect(
     __internal.isOfficialDomain("product.example.com", "example.com")

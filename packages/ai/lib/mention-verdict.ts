@@ -197,7 +197,7 @@ const IDENTITY_TOKEN_STOPWORDS = new Set([
 const KOREAN_PARTICLE_SUFFIX_RE =
   /(?:에서|으로|에게|부터|까지|처럼|보다|은|는|이|가|을|를|과|와|도|로|의)$/;
 
-function identityTokens(value: string): string[] {
+function identityTokens(value: string, minLength = 4): string[] {
   return value
     .toLowerCase()
     .split(/[^a-z0-9가-힣]+/)
@@ -206,10 +206,41 @@ function identityTokens(value: string): string[] {
       (token) =>
         // 단독 2~3글자 낱말은 "기술·회사·실사"처럼 업종 일반론일 확률이 높다.
         // 공식 도메인 없이 엔티티를 확정하는 보조 증거는 충분히 구체적인 토큰만 쓴다.
-        token.length >= 4 &&
+        token.length >= minLength &&
         !IDENTITY_TOKEN_STOPWORDS.has(token) &&
         !/^\d+$/.test(token)
     );
+}
+
+/**
+ * 한국어 고유 브랜드의 제품 답변은 공식 메타 설명에 3글자짜리 성분·제품군(NAD,
+ * 마스크 등)으로 남는 경우가 많다. 긴 브랜드명 + LLM의 엔티티 판정 + 서로 다른
+ * 공식 설명 토큰 두 개가 함께 맞을 때만 보조 근거로 허용한다.
+ *
+ * 단일 3글자 단어를 허용하면 동명이인 오판정이 되므로, 이 함수는 두 토큰을 요구하고
+ * 영어·짧은 한글명에는 절대 적용하지 않는다.
+ */
+function hasKoreanProductMetadataEvidence(input: VerifyInput): boolean {
+  if (!/^[가-힣]{4,}$/.test(input.brandName.trim())) {
+    return false;
+  }
+  const description = input.officialSite?.description ?? "";
+  const tokens = new Set(
+    identityTokens(description, 3).filter(
+      (token) => compactIdentity(token) !== compactIdentity(input.brandName)
+    )
+  );
+  let matches = 0;
+  const response = input.text.toLowerCase();
+  for (const token of tokens) {
+    if (response.includes(token)) {
+      matches += 1;
+      if (matches >= 2) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /** 등록 도메인의 하위 서비스와 본사 도메인은 같은 공식 소유 범위로 본다. */
@@ -281,7 +312,7 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
       }
     }
   }
-  return false;
+  return hasKoreanProductMetadataEvidence(input);
 }
 
 /**
