@@ -102,6 +102,12 @@ const HANGUL_RE = /[가-힣]/;
 const LATIN_TERM_RE = /^[A-Za-z][A-Za-z0-9 &+.'-]*$/;
 const MIN_TERM_LENGTH = 2;
 const MAX_TERM_LENGTH = 40;
+// 제목의 슬로건·성분명은 업종이 아니다. 예: "만져지는 변화, NAD+ / Metl Halo".
+// 이름 없는 질문은 실제 고객이 업종을 물었을 때의 발견 가능성을 재야 하므로,
+// 서비스·업종을 뜻하는 명사가 확인되는 조각만 쓴다. 확신이 없으면 만들지 않는
+// 편이 그럴듯하지만 무관한 질문을 측정하는 것보다 정확하다.
+const KO_CATEGORY_HEAD_RE =
+  /(서비스|플랫폼|솔루션|컨설팅|구독|전략|교육|마케팅|커머스|쇼핑몰|화장품|스킨케어|뷰티|병원|의료|법률|회계|보안|제조|유통|금융|여행|숙박|부동산|물류|채용|채널|도구|앱|소프트웨어|에이전시)/;
 // "…으로 {문제}를 지원합니다" 처럼 **사이트가 스스로 쓴** 문제 문장만 집는다.
 const KO_PROBLEM_RE =
   /(?:으로|로|통해|하여)\s+([^.!?。]{4,40}?)[을를]\s*(?:지원|돕|도와|해결|개선|혁신|자동화|관리|높여|줄여)/;
@@ -160,6 +166,17 @@ export function siteCategoryTerms(
   return out;
 }
 
+/**
+ * 제목 조각이 실제 업종·서비스를 뜻하는지의 보수적 판별.
+ * 슬로건·성분·오탈자 브랜드 조각은 "이름 없이 묻는 질문"의 재료가 될 수 없다.
+ */
+function isDiscoveryCategoryTerm(term: string): boolean {
+  if (HANGUL_RE.test(term)) {
+    return KO_CATEGORY_HEAD_RE.test(term);
+  }
+  return LATIN_TERM_RE.test(term) && (term.includes(" ") || term.length >= 6);
+}
+
 /** 설명 문장에서 사이트가 스스로 적은 「해결하는 문제」를 뽑는다. 없으면 null. */
 export function siteProblemPhrase(
   site: DiscoverySiteIdentity | null | undefined,
@@ -199,16 +216,16 @@ export function generateDiscoveryPrompts(
   }
   const terms = siteCategoryTerms(site, nameList);
   const koTerms = terms.filter(
-    (t) => HANGUL_RE.test(t) || !LATIN_TERM_RE.test(t)
+    (t) => (HANGUL_RE.test(t) || !LATIN_TERM_RE.test(t)) && isDiscoveryCategoryTerm(t)
   );
   // 영어 조각은 약어 한 토막("AX")이 아니라 뜻이 서는 표기만 — 두 단어 이상이거나 6자 이상.
   const enTerms = terms.filter(
-    (t) => LATIN_TERM_RE.test(t) && (t.includes(" ") || t.length >= 6)
+    (t) => LATIN_TERM_RE.test(t) && isDiscoveryCategoryTerm(t)
   );
   const ko: RunPrompt[] = [];
   const en: RunPrompt[] = [];
 
-  const koCategory = (koTerms.length > 0 ? koTerms : terms).slice(0, 2);
+  const koCategory = koTerms.slice(0, 2);
   if (koCategory.length > 0) {
     ko.push({
       kind: "discovery",

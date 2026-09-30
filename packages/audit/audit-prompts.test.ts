@@ -71,6 +71,19 @@ it("업종 단서가 없는 사이트(Indigochild · We Create the Future)는 �
   ).toEqual([]);
 });
 
+it("슬로건·성분명·오탈자 브랜드 조각은 이름 없는 질문의 업종으로 쓰지 않는다", () => {
+  expect(
+    generateDiscoveryPrompts(
+      { ko: "멜트헤일로", en: "Melt Halo" },
+      {
+        title: "멜트헤일로 | 만져지는 변화, NAD+ / Metl Halo",
+        description: "멜트헤일로 스킨케어 | NAD 마스크, 재생 크림, 톤업크림",
+      },
+      "ko"
+    )
+  ).toEqual([]);
+});
+
 it("영어 질문은 사이트가 영어로 쓴 조각이 있을 때만 — 한글 조각을 번역하지 않는다", () => {
   const en = generateDiscoveryPrompts(
     { ko: "노우버스", en: "KNOWVERSE" },
