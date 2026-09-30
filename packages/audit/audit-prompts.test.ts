@@ -1,5 +1,75 @@
 import { expect, it } from "vitest";
-import { generateAuditPrompts } from "./audit-prompts";
+import { classifySavedPromptKind, generateAuditPrompts } from "./audit-prompts";
+import { summarizeAnswerBuckets } from "./answer-buckets";
+
+it("classifies saved Melt Halo questions by brand mention before persisting AuditJob rows", () => {
+  const names = { ko: "멜트헤일로", en: "Melt Halo" };
+  const variants = ["Melt Halo", "melthalo"];
+  expect(
+    classifySavedPromptKind(
+      "멜트헤일로는 어떤 화장품 브랜드이며 공식 사이트에서 판매하는 제품은 무엇인가?",
+      names,
+      variants
+    )
+  ).toBe("brand");
+  expect(
+    classifySavedPromptKind(
+      "초밀착 시트 마스크팩 구매 전 제품별 구성과 가격을 비교해줘",
+      names,
+      variants
+    )
+  ).toBe("discovery");
+  expect(
+    classifySavedPromptKind(
+      "바이오셀룰로오스 시트 마스크팩을 살 때 어떤 브랜드를 비교하면 좋을까?",
+      names,
+      variants
+    )
+  ).toBe("discovery");
+  expect(
+    classifySavedPromptKind("Compare Melt Halo mask packs", names, variants)
+  ).toBe("brand");
+});
+
+it("routes the seven saved Melt Halo questions into direct dashboard buckets", () => {
+  const questions = [
+    "멜트헤일로는 어떤 화장품 브랜드이며 공식 사이트에서 판매하는 제품은 무엇인가?",
+    "멜트헤일로 공식 쇼핑몰의 운영사와 공식 도메인은 무엇인가?",
+    "바이오셀룰로오스 시트 마스크팩을 살 때 어떤 브랜드를 비교하면 좋을까?",
+    "초밀착 시트 마스크팩 구매 전 제품별 구성과 가격을 비교해줘",
+    "온라인에서 마스크팩을 구매할 때 공식 판매처와 교환·반품 조건을 비교해줘",
+    "모공 관리용 마스크팩을 고를 때 제품 정보와 사용법을 어떻게 확인하면 좋을까?",
+    "마스크팩 추천 제품을 고를 때 모공 관리 관련 표기와 사용법을 어떻게 비교하나요?",
+  ];
+  const kinds = questions.map((question) =>
+    classifySavedPromptKind(
+      question,
+      { ko: "멜트헤일로", en: "Melt Halo" },
+      ["Melt Halo", "melthalo"]
+    )
+  );
+  expect(kinds).toEqual([
+    "brand",
+    "brand",
+    "discovery",
+    "discovery",
+    "discovery",
+    "discovery",
+    "discovery",
+  ]);
+  const summary = summarizeAnswerBuckets(
+    kinds.flatMap((promptKind) =>
+      ["chatgpt", "claude", "perplexity", "gemini"].map((engineId) => ({
+        engineId,
+        promptKind,
+        brandMentioned: false,
+        mentionQuality: "absent",
+      }))
+    )
+  );
+  expect(summary.ai).toMatchObject({ total: 8 });
+  expect(summary.discovery).toMatchObject({ asked: 20, recommended: 0 });
+});
 
 it("asks English prompts with the English name and Korean prompts with the Korean name", () => {
   const prompts = generateAuditPrompts(
