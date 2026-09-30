@@ -197,7 +197,11 @@ const IDENTITY_TOKEN_STOPWORDS = new Set([
 const KOREAN_PARTICLE_SUFFIX_RE =
   /(?:에서|으로|에게|부터|까지|처럼|보다|은|는|이|가|을|를|과|와|도|로|의)$/;
 
-function identityTokens(value: string, minLength = 4): string[] {
+function identityTokens(
+  value: string,
+  minLength = 4,
+  asciiMinLength = Math.max(minLength, 5)
+): string[] {
   return value
     .toLowerCase()
     .split(/[^a-z0-9가-힣]+/)
@@ -211,9 +215,23 @@ function identityTokens(value: string, minLength = 4): string[] {
         // "Melt Halo"의 `Halo` 한 단어만으로 통과할 수 있다. 영문 보조 근거는
         // 최소 5글자로 제한하고, 짧은 제품명은 아래의 한국 제품 메타데이터 경로에서
         // 서로 다른 두 개가 맞을 때만 별도로 허용한다.
-        token.length >= (/[a-z]/.test(token) ? Math.max(minLength, 5) : minLength) &&
+        token.length >= (/[a-z]/.test(token) ? asciiMinLength : minLength) &&
         !IDENTITY_TOKEN_STOPWORDS.has(token) &&
         !/^\d+$/.test(token)
+    );
+}
+
+/** 등록한 이름 또는 별칭의 일부는, 조사 제거 뒤에도 공식 사실로 세지 않는다. */
+function isRegisteredNameFragment(token: string, input: VerifyInput): boolean {
+  const compact = compactIdentity(token);
+  if (!compact) {
+    return true;
+  }
+  return registeredBrandNames(input)
+    .map(compactIdentity)
+    .some(
+      (registered) =>
+        registered.length >= compact.length && registered.includes(compact)
     );
 }
 
@@ -231,8 +249,9 @@ function hasKoreanProductMetadataEvidence(input: VerifyInput): boolean {
   }
   const description = input.officialSite?.description ?? "";
   const tokens = new Set(
-    identityTokens(description, 3).filter(
-      (token) => compactIdentity(token) !== compactIdentity(input.brandName)
+    // NAD처럼 3글자 영문 성분도 두 개의 독립 제품 단서가 함께 맞을 때만 쓴다.
+    identityTokens(description, 3, 3).filter(
+      (token) => !isRegisteredNameFragment(token, input)
     )
   );
   let matches = 0;
@@ -297,7 +316,6 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
   }
 
   const brandToken = compactIdentity(input.brandName);
-  const registeredNameTokens = registeredBrandNames(input).map(compactIdentity);
   const tokens = new Set(
     [
       input.officialSite.title,
@@ -305,7 +323,7 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
       input.officialSite.h1,
     ]
       .filter((value): value is string => Boolean(value))
-      .flatMap(identityTokens)
+      .flatMap((value) => identityTokens(value))
       .filter((token) => {
         const compact = compactIdentity(token);
         // 조사 제거 과정에서 고유명사 끝 글자까지 떨어져 나올 수 있다
@@ -313,10 +331,7 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
         // 공식 사실이 아니므로, 그 자체로는 엔티티 근거가 될 수 없다.
         return (
           compact !== brandToken &&
-          !registeredNameTokens.some(
-            (registered) =>
-              registered.length >= compact.length && registered.includes(compact)
-          )
+          !isRegisteredNameFragment(token, input)
         );
       })
   );
