@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { env } from "@/env";
 import { listIssuedReports, reportWebUrl } from "@/lib/client-report/admin";
 import { Header } from "../../components/header";
-import { IssueForm, RevokeButton } from "./issue-form";
+import { IssueForm, RevokeButton, SendApproveButton } from "./issue-form";
 
 export const metadata: Metadata = {
   title: "영업 리포트 발행",
@@ -48,7 +48,8 @@ function ReportsBody({
         <tr>
           <th className="px-4 py-2">브랜드 · 판</th>
           <th className="px-4 py-2">정확 / 분모</th>
-          <th className="px-4 py-2">검토</th>
+          <th className="px-4 py-2">① 판별 검토 (reviewer)</th>
+          <th className="px-4 py-2">② 대표 고객 발송 승인</th>
           <th className="px-4 py-2">발행 · 만료</th>
           <th className="px-4 py-2">상태</th>
           <th className="px-4 py-2" />
@@ -73,6 +74,20 @@ function ReportsBody({
                   ? dateFormatter.format(new Date(r.reviewedAt))
                   : "—"}
               </span>
+            </td>
+            <td className="px-4 py-2 text-xs">
+              {r.sendApproval ? (
+                <span className="text-emerald-300">
+                  {r.sendApproval.approverName}
+                  <span className="block text-[color:var(--findable-ink-subtle,#8a8f98)]">
+                    {dateFormatter.format(new Date(r.sendApproval.approvedAt))}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-amber-300">
+                  대기 — 링크는 「내부 시안 · 외부 발송 금지」 표시
+                </span>
+              )}
             </td>
             <td className="px-4 py-2 text-xs">
               {dateFormatter.format(new Date(r.issuedAt))}
@@ -103,6 +118,17 @@ function ReportsBody({
                   >
                     인쇄용
                   </a>{" "}
+                  <a
+                    className="underline underline-offset-2"
+                    href={`${r.url}/pdf`}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    PDF
+                  </a>{" "}
+                  {r.sendApproval ? null : (
+                    <SendApproveButton reportId={r.id} url={r.url} />
+                  )}{" "}
                   <RevokeButton reportId={r.id} />
                 </>
               )}
@@ -134,6 +160,13 @@ export default async function ClientReportsAdminPage() {
             않습니다. PDF 는 발행된 링크를 그대로 인쇄한 같은 판입니다. 무료
             진단 화면(/ko/audit)은 원문 전체가 공개되므로 영업 링크로 쓰지
             않습니다.
+          </p>
+          <p className="max-w-3xl rounded-md border border-amber-800/60 bg-amber-950/30 p-3 text-amber-100 text-sm leading-6">
+            🔴 승인은 두 단계입니다. <b>① 판별 검토</b>(판별 파일의 reviewer —
+            답변 판별이 맞는지)와 <b>② 대표 고객 발송 최종 승인</b>(발행된
+            링크·PDF 를 대표가 직접 열어 보고 고객에게 보내도 된다고 승인)은
+            다른 단계입니다. ②가 끝나기 전 링크는 모든 쪽에 「내부 시안 · 외부
+            발송 금지」가 찍히고, 영업 메일에 들어가지 않습니다.
           </p>
         </div>
 

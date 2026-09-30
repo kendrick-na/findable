@@ -203,10 +203,103 @@ export function IssueForm() {
           >
             {result.url}
           </a>{" "}
-          (고객에게 보내기 전 직접 열어 확인하세요)
+          — 아직 「내부 시안」입니다. 목록에서 링크·PDF 를 직접 열어 본 뒤 ②
+          고객 발송 최종 승인을 누르세요
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * ② 대표 고객 발송 최종 승인 — ① 판별 검토(reviewer)와 다른 단계.
+ * 링크·PDF 를 직접 열어 본 뒤, 승인자 이름을 적고 체크해야 누를 수 있다.
+ */
+export function SendApproveButton({
+  reportId,
+  url,
+}: {
+  reportId: string;
+  url: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("나현덕");
+  const [viewed, setViewed] = useState(false);
+  const [state, setState] = useState<"idle" | "pending" | "done" | "failed">(
+    "idle"
+  );
+  if (state === "done") {
+    return <span className="text-emerald-300">발송 승인됨</span>;
+  }
+  if (!open) {
+    return (
+      <button
+        className="text-emerald-300 underline underline-offset-2"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        ② 고객 발송 최종 승인
+      </button>
+    );
+  }
+  return (
+    <span className="mt-2 block space-y-1.5 rounded-md border border-[color:var(--findable-hairline,#23252a)] p-2 text-left">
+      <label className="flex items-center gap-2">
+        <input
+          checked={viewed}
+          onChange={(e) => setViewed(e.target.checked)}
+          type="checkbox"
+        />
+        <span>
+          <a
+            className="underline"
+            href={url}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            링크
+          </a>
+          와{" "}
+          <a
+            className="underline"
+            href={`${url}/pdf`}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            PDF
+          </a>
+          를 직접 열어 확인했습니다
+        </span>
+      </label>
+      <label className="flex items-center gap-2">
+        <span>승인자</span>
+        <input
+          className="w-24 rounded border border-[color:var(--findable-hairline,#23252a)] bg-black/20 px-1"
+          onChange={(e) => setName(e.target.value)}
+          value={name}
+        />
+      </label>
+      <button
+        className="rounded bg-emerald-400 px-2 py-1 font-semibold text-slate-950 disabled:opacity-50"
+        disabled={!(viewed && name.trim()) || state === "pending"}
+        onClick={async () => {
+          setState("pending");
+          const res = await fetch(`/api/admin/client-reports/${reportId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "approve-send",
+              approverName: name.trim(),
+              viewedLink: true,
+            }),
+          });
+          setState(res.ok ? "done" : "failed");
+        }}
+        type="button"
+      >
+        {state === "failed" ? "승인 실패 — 다시" : "발송 승인"}
+      </button>
+    </span>
   );
 }
 

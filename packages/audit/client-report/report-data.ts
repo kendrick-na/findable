@@ -58,7 +58,13 @@ export const clientReportConfigViewSchema = z
       })
     ),
     playbook: z.array(
-      z.object({ p: z.enum(["P0", "P1", "P2"]), h: z.string(), d: z.string() })
+      z.object({
+        p: z.enum(["P0", "P1", "P2"]),
+        h: z.string(),
+        d: z.string(),
+        /** v12 — 조치 성격(GEO 실험·UX·전환·측정 설계 …). 없으면 표시 안 함. */
+        kind: z.string().optional(),
+      })
     ),
     poc: z.array(z.object({ d: z.string(), h: z.string(), p: z.string() })),
     site_checked_at: z.string().optional(),
@@ -152,6 +158,18 @@ export const clientReportDataV2Schema = z.object({
   release: z.object({
     issuedAt: z.string(),
     expiresAt: z.string().nullable(),
+    /**
+     * 🔴 대표 **고객 발송 최종 승인** — 판별 검토 승인(review)과 다른 단계.
+     * null/없음 = 발행은 됐지만 외부 발송 전(모든 쪽에 「내부 시안 · 외부 발송 금지」).
+     */
+    sendApproval: z
+      .object({
+        approvedAt: z.string().min(1),
+        approvedBy: z.string().min(1),
+        approverName: z.string().min(1),
+      })
+      .nullable()
+      .optional(),
   }),
   config: clientReportConfigViewSchema,
   computed: computedSchema,
@@ -172,7 +190,15 @@ export interface ClientReportDataV2 {
   config: ClientReportConfigView;
   denominator: { engines: string[]; n: number; promptKinds: string[] };
   evidence: { answerKey: string; quote: string }[];
-  release: { expiresAt: string | null; issuedAt: string };
+  release: {
+    expiresAt: string | null;
+    issuedAt: string;
+    sendApproval?: {
+      approvedAt: string;
+      approvedBy: string;
+      approverName: string;
+    } | null;
+  };
   review: {
     reviewedAt: string | null;
     reviewer: string | null;
@@ -205,6 +231,11 @@ export function parseClientReportData(json: unknown): ClientReportData | null {
   const r = clientReportDataSchema.safeParse(json);
   // 검사는 형태 확인용이고, 반환은 원본 그대로(검사 스키마가 느슨한 부분의 필드를 잃지 않게).
   return r.success ? (json as ClientReportDataV1) : null;
+}
+
+/** 대표 고객 발송 최종 승인이 끝난 v2 발행본인가(v1 은 발송 승인 개념 없음 → false). */
+export function isClientReportSendApproved(data: ClientReportData): boolean {
+  return data.schemaVersion === 2 && Boolean(data.release.sendApproval);
 }
 
 /** v2 발행본의 만료 — 지난 링크는 열지 않는다(v1 은 만료 개념 없음). */

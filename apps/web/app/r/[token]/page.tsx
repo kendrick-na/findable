@@ -1,9 +1,13 @@
-import { clientReportPdfFilename } from "@repo/audit/client-report/report-data";
+import {
+  clientReportPdfFilename,
+  isClientReportSendApproved,
+} from "@repo/audit/client-report/report-data";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { ClientReport } from "@/components/client-report/client-report";
+import { ClientReportV12 } from "@/components/client-report-v12/report-v12";
 import {
   loadClientReport,
   recordClientReportView,
@@ -51,6 +55,7 @@ export async function generateMetadata({
 const SCALE_SCRIPT =
   "(function(){var r=document.documentElement;function f(){var w=r.clientWidth;r.style.setProperty('--fr-scale',String(Math.min(1,(w-24)/794)))}f();addEventListener('resize',f)})();";
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: v1(기존)·v2(v12) 두 템플릿 분기 + 화면/인쇄 분기를 한곳에 둔다
 export default async function ClientReportPage({
   params,
   searchParams,
@@ -69,6 +74,40 @@ export default async function ClientReportPage({
     after(() => recordClientReportView(reportId, userAgent));
   }
   const webUrl = reportId ? `${SITE_URL}/r/${token}` : `${SITE_URL}/r/…`;
+
+  // v2(측정 원본 + 사람 판별 승인) = v12 11쪽 템플릿. v1(9/28 import) = 기존 템플릿 그대로.
+  if (data.schemaVersion === 2) {
+    const sendApproved = isClientReportSendApproved(data);
+    const fixture = first(sp.fixture);
+    const pdfHref = `/r/${token}/pdf${reportId || !fixture ? "" : `?fixture=${encodeURIComponent(fixture)}`}`;
+    return (
+      <div className={`fr12-root ${print ? "fr12-print" : "fr12-screen"}`}>
+        {print ? null : (
+          <script
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: 고정 문자열(사용자 값 없음)
+            dangerouslySetInnerHTML={{ __html: SCALE_SCRIPT }}
+          />
+        )}
+        {print ? null : (
+          <div className="fr12-bar">
+            {sendApproved ? null : (
+              <div className="internal" role="alert">
+                내부 시안 — 대표 고객 발송 최종 승인 전입니다. 이 링크·PDF 를
+                고객에게 보내지 마세요. (판별 검토: {data.review.reviewer}{" "}
+                {data.review.reviewedAt?.slice(0, 10)})
+              </div>
+            )}
+            <a download={clientReportPdfFilename(data)} href={pdfHref}>
+              PDF 내려받기
+            </a>
+          </div>
+        )}
+        <main className="fr12">
+          <ClientReportV12 data={data} sendApproved={sendApproved} />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className={`fr-root ${print ? "fr-print" : "fr-screen"}`}>

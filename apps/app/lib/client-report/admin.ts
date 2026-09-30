@@ -15,6 +15,7 @@ import {
 import {
   type ClientReportDataV2,
   isClientReportExpired,
+  isClientReportSendApproved,
   parseClientReportData,
 } from "@repo/audit/client-report/report-data";
 import {
@@ -153,6 +154,64 @@ export async function issueClientReport(input: {
   return { kind: "issued", reportId: row.id, token, data: built.data };
 }
 
+export type SendApprovalOutcome =
+  | { kind: "not_found" }
+  | { kind: "not_live"; reason: "revoked" | "expired" | "not_v2" }
+  | { kind: "already_approved" }
+  | { kind: "approved"; approvedAt: string };
+
+/**
+ * 🔴 대표 **고객 발송 최종 승인** — 판별 검토(review.reviewer)와 **다른 단계**다.
+ * 대표가 발행된 링크를 직접 열어 본 뒤 누른다. 승인 전 링크는 「내부 시안」 표시이고,
+ * 영업 메일 reportUrl 에도 들어가지 않는다. 폐기·만료된 링크는 승인할 수 없다.
+ * Report.data 의 release.sendApproval 한 칸만 채운다(판별·계산 스냅숏은 그대로).
+ */
+export async function approveClientReportSend(input: {
+  adminId: string;
+  approverName: string;
+  now?: Date;
+  reportId: string;
+}): Promise<SendApprovalOutcome> {
+  const row = await database.report.findFirst({
+    where: { id: input.reportId, type: "custom" },
+    select: { id: true, accessToken: true, data: true },
+  });
+  if (!row) {
+    return { kind: "not_found" };
+  }
+  const data = parseClientReportData(row.data);
+  if (data?.schemaVersion !== 2) {
+    return { kind: "not_live", reason: "not_v2" };
+  }
+  if (!row.accessToken) {
+    return { kind: "not_live", reason: "revoked" };
+  }
+  const now = input.now ?? new Date();
+  if (isClientReportExpired(data, now)) {
+    return { kind: "not_live", reason: "expired" };
+  }
+  if (isClientReportSendApproved(data)) {
+    return { kind: "already_approved" };
+  }
+  const approvedAt = now.toISOString();
+  const next: ClientReportDataV2 = {
+    ...data,
+    release: {
+      ...data.release,
+      sendApproval: {
+        approvedAt,
+        approvedBy: input.adminId,
+        approverName: input.approverName,
+      },
+    },
+  };
+  await database.report.update({
+    where: { id: row.id },
+    data: { data: JSON.parse(JSON.stringify(next)) },
+  });
+  return { kind: "approved", approvedAt };
+}
+
 /** 링크 폐기 — 토큰만 지운다(발행본 데이터·열람 기록은 보존). 즉시 404. */
 export async function revokeClientReport(reportId: string): Promise<boolean> {
   const result = await database.report.updateMany({
@@ -180,6 +239,8 @@ export interface IssuedReportView {
   okN: number;
   reviewedAt: string | null;
   reviewer: string | null;
+  /** 대표 고객 발송 최종 승인(판별 검토와 별개). null = 발송 전 내부 시안. */
+  sendApproval: { approvedAt: string; approverName: string } | null;
   state: "live" | "expired" | "revoked";
   url: string | null;
   version: number;
@@ -215,6 +276,12 @@ export function issuedReportViews(
         okN: data.computed.s.ok_n,
         reviewer: data.review.reviewer,
         reviewedAt: data.review.reviewedAt,
+        sendApproval: data.release.sendApproval
+          ? {
+              approvedAt: data.release.sendApproval.approvedAt,
+              approverName: data.release.sendApproval.approverName,
+            }
+          : null,
         issuedAt: data.release.issuedAt,
         expiresAt: data.release.expiresAt,
         state,
@@ -225,15 +292,16 @@ export function issuedReportViews(
 }
 
 /**
- * T8 — 영업 리드 도메인 → 승인된 v12 링크. 살아 있는(폐기·만료 아님) 승인본 중 가장 최신 판.
- * 초안·v1·만료·폐기는 절대 들어가지 않는다.
+ * T8 — 영업 리드 도메인 → 발송 승인된 v12 링크. 살아 있고(폐기·만료 아님) 대표 발송 승인까지
+ * 끝난 판 중 가장 최신 판. 초안·v1·만료·폐기·발송 승인 전은 절대 들어가지 않는다.
  */
 export function approvedReportUrlByDomain(
   views: IssuedReportView[]
 ): Map<string, string> {
   const best = new Map<string, IssuedReportView>();
   for (const v of views) {
-    if (!(v.state === "live" && v.url)) {
+    // 🔴 발송 승인 전(내부 시안) 링크는 영업 메일에 넣지 않는다.
+    if (!(v.state === "live" && v.url && v.sendApproval)) {
       continue;
     }
     const key = bareDomain(v.domain);

@@ -12,6 +12,7 @@ const db = vi.hoisted(() => ({
     create: vi.fn(),
     findFirst: vi.fn(),
     findMany: vi.fn(),
+    update: vi.fn(),
     updateMany: vi.fn(),
   },
 }));
@@ -315,82 +316,193 @@ describe("T5·T6 발행", () => {
   });
 });
 
-describe("T8 영업 reportUrl — 승인·공개 중인 판만", () => {
-  it("폐기·만료·v1·초안은 빠지고, 같은 도메인은 최신 판 링크만", async () => {
-    const approved = await post({
-      auditJobId: JOB_ID,
-      review: review("approved"),
-      version: 1,
-      slug: "knowverse",
-      mode: "issue",
+const approval = {
+  approvedAt: "2026-09-30T12:00:00.000Z",
+  approvedBy: "user_admin",
+  approverName: "나현덕",
+};
+
+async function issuedData() {
+  const res = await post({
+    auditJobId: JOB_ID,
+    review: review("approved"),
+    version: 1,
+    slug: "knowverse",
+    mode: "issue",
+  });
+  if (res.status !== 201) {
+    throw new Error(`발행 실패 ${res.status}`);
+  }
+  return db.report.create.mock.calls[0][0].data.data;
+}
+
+describe("② 대표 고객 발송 최종 승인 — ① 판별 검토와 다른 단계", () => {
+  it("발행 직후에는 발송 승인이 비어 있다(판별 검토 승인만 있음)", async () => {
+    const data = await issuedData();
+    expect(data.review.status).toBe("approved");
+    expect(data.release.sendApproval).toBeNull();
+  });
+
+  it("🔴 링크를 직접 열어 봤다는 체크 없이는 승인 요청 자체가 400", async () => {
+    const res = await revokeRoute.PATCH(
+      new Request("http://x", {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "approve-send",
+          approverName: "나현덕",
+        }),
+      }),
+      params({ reportId: "11111111-1111-4111-8111-111111111111" })
+    );
+    expect(res.status).toBe(400);
+    expect(db.report.update).not.toHaveBeenCalled();
+  });
+
+  it("살아 있는 v2 발행본만 승인 — 폐기·만료·이미 승인은 409, 없으면 404", async () => {
+    const data = await issuedData();
+    const patch = (rid = "11111111-1111-4111-8111-111111111111") =>
+      revokeRoute.PATCH(
+        new Request("http://x", {
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "approve-send",
+            approverName: "나현덕",
+            viewedLink: true,
+          }),
+        }),
+        params({ reportId: rid })
+      );
+    db.report.findFirst.mockResolvedValueOnce(null);
+    expect((await patch()).status).toBe(404);
+    db.report.findFirst.mockResolvedValueOnce({
+      id: "r",
+      accessToken: null,
+      data,
     });
-    expect(approved.status).toBe(201);
-    const v1data = db.report.create.mock.calls[0][0].data.data;
-    const v2data = { ...v1data, version: 2 };
+    expect((await patch()).status).toBe(409);
+    db.report.findFirst.mockResolvedValueOnce({
+      id: "r",
+      accessToken: "t".repeat(43),
+      data: {
+        ...data,
+        release: { ...data.release, expiresAt: "2020-01-01T00:00:00.000Z" },
+      },
+    });
+    expect((await patch()).status).toBe(409);
+    db.report.findFirst.mockResolvedValueOnce({
+      id: "r",
+      accessToken: "t".repeat(43),
+      data: { ...data, release: { ...data.release, sendApproval: approval } },
+    });
+    expect((await patch()).status).toBe(409);
+    expect(db.report.update).not.toHaveBeenCalled();
+    db.report.findFirst.mockResolvedValueOnce({
+      id: "r",
+      accessToken: "t".repeat(43),
+      data,
+    });
+    db.report.update.mockResolvedValueOnce({});
+    const ok = await patch();
+    expect(ok.status).toBe(200);
+    const saved = db.report.update.mock.calls[0][0].data.data;
+    expect(saved.release.sendApproval).toMatchObject({
+      approvedBy: "user_admin",
+      approverName: "나현덕",
+    });
+    // 판별·계산 스냅숏은 그대로
+    expect(saved.computed).toEqual(data.computed);
+    expect(saved.review).toEqual(data.review);
+  });
+
+  it("비관리자는 발송 승인 403", async () => {
+    admin.requireAdmin.mockRejectedValue(new Error("forbidden"));
+    const res = await revokeRoute.PATCH(
+      new Request("http://x", { method: "PATCH", body: "{}" }),
+      params({ reportId: "11111111-1111-4111-8111-111111111111" })
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("T8 영업 reportUrl — 발송 승인까지 끝난 판만", () => {
+  it("🔴 발송 승인 전·폐기·만료·v1·초안은 빠지고, 같은 도메인은 최신 판 링크만", async () => {
+    const base = await issuedData();
+    const approved = (v: number) => ({
+      ...base,
+      version: v,
+      release: { ...base.release, sendApproval: approval },
+    });
     const expired = {
-      ...v1data,
-      version: 3,
-      release: { ...v1data.release, expiresAt: "2020-01-01T00:00:00.000Z" },
+      ...approved(3),
+      release: {
+        ...approved(3).release,
+        expiresAt: "2020-01-01T00:00:00.000Z",
+      },
     };
     const draft = {
-      ...v1data,
-      version: 4,
-      review: { ...v1data.review, status: "draft" },
+      ...approved(4),
+      review: { ...base.review, status: "draft" },
     };
     const legacy = read<unknown>("knowverse.report.json");
+    const tok = (c: string) => `tok_${c.repeat(39)}`;
     const views = adminLib.issuedReportViews(
       [
         {
           id: "a",
-          accessToken: "tok_v1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          data: v1data,
+          accessToken: tok("a"),
+          data: approved(1),
           generatedAt: new Date(),
         },
         {
           id: "b",
-          accessToken: "tok_v2_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          data: v2data,
+          accessToken: tok("b"),
+          data: approved(2),
           generatedAt: new Date(),
         },
         {
           id: "c",
-          accessToken: "tok_v3_cccccccccccccccccccccccccccccccccccc",
+          accessToken: tok("c"),
           data: expired,
           generatedAt: new Date(),
         },
         {
           id: "d",
-          accessToken: "tok_v4_dddddddddddddddddddddddddddddddddddd",
+          accessToken: tok("d"),
           data: draft,
           generatedAt: new Date(),
         },
         {
           id: "e",
           accessToken: null,
-          data: { ...v1data, version: 9 },
+          data: approved(9),
           generatedAt: new Date(),
         },
         {
           id: "f",
-          accessToken: "tok_legacy_ffffffffffffffffffffffffffffffff",
+          accessToken: tok("f"),
           data: legacy,
+          generatedAt: new Date(),
+        },
+        {
+          id: "g",
+          accessToken: tok("g"),
+          data: { ...base, version: 7 },
           generatedAt: new Date(),
         },
       ],
       "https://www.example.test"
     );
-    expect(views.map((v) => [v.id, v.state])).toEqual([
-      ["a", "live"],
-      ["b", "live"],
-      ["c", "expired"],
-      ["e", "revoked"],
+    expect(views.map((v) => [v.id, v.state, Boolean(v.sendApproval)])).toEqual([
+      ["a", "live", true],
+      ["b", "live", true],
+      ["c", "expired", true],
+      ["e", "revoked", true],
+      ["g", "live", false],
     ]);
     const urls = adminLib.approvedReportUrlByDomain(views);
+    // v7(g) 이 가장 높은 판이지만 발송 승인 전이라 빠지고, 승인된 최신 판 v2(b)만 남는다
     expect([...urls]).toEqual([
-      [
-        "knowverse.net",
-        "https://www.example.test/r/tok_v2_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      ],
+      ["knowverse.net", `https://www.example.test/r/${tok("b")}`],
     ]);
   });
 });

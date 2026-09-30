@@ -389,6 +389,8 @@ export function buildReportFromReview(input: {
       release: {
         issuedAt: input.issuedAt.toISOString(),
         expiresAt: input.expiresAt ? input.expiresAt.toISOString() : null,
+        // 발행 시점에는 항상 발송 전 — 대표가 링크를 직접 열어 본 뒤 따로 승인한다.
+        sendApproval: null,
       },
       config: view,
       computed,
