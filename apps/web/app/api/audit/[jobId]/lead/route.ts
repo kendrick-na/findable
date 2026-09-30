@@ -148,8 +148,12 @@ export async function POST(
   }
 
   // Resend 키 미설정 시 — 등록만 하고 종료
-  if (!resend) {
-    log.warn("lead.resend_not_configured", { jobId });
+  const configuredFrom = process.env.RESEND_FROM;
+  if (!resend || !configuredFrom) {
+    log.warn("lead.resend_not_configured", {
+      jobId,
+      missingFrom: !configuredFrom,
+    });
     return NextResponse.json({
       ok: true,
       emailSent: false,
@@ -183,7 +187,7 @@ export async function POST(
     //    APP_URL을 먼저 쓰면 리포트 메일의 "결과 보기"가 app.findable.co.kr 404로 발송된다.
     const baseUrl = process.env.NEXT_PUBLIC_WEB_URL ?? "https://findable.co.kr";
 
-    const fromAddress = process.env.RESEND_FROM ?? "onboarding@resend.dev";
+    const fromAddress = configuredFrom;
     const sendResult = await resend.emails.send({
       from: `Findable <${fromAddress}>`,
       to: email,

@@ -27,7 +27,8 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: "invalid_request" }, { status: 400 });
   }
-  if (!resend) {
+  const fromAddress = process.env.RESEND_FROM;
+  if (!resend || !fromAddress) {
     return Response.json({ error: "email_unavailable" }, { status: 503 });
   }
   if (limiter) {
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
     process.env.NEXT_PUBLIC_WEB_URL ?? "https://www.findable.co.kr";
   const confirmUrl = `${webUrl}/api/newsletter/confirm?token=${confirmationToken}`;
   await resend.emails.send({
-    from: process.env.RESEND_FROM ?? "Findable <newsletter@findable.co.kr>",
+    from: fromAddress,
     to: parsed.data.email,
     subject: `${publisher.name} 뉴스레터 구독 확인`,
     react: NewsletterConfirmationEmail({
