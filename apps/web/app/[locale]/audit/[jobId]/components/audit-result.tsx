@@ -4512,7 +4512,7 @@ function ActionTeaser({
       <p className="mt-3 text-xs text-zinc-400">
         {isKo ? (
           <>
-            처방은 Princeton GEO 논문(arXiv 2311.09735) 실측 근거로 만들어요.{" "}
+            처방은 이번 측정 결과와 각 카드에 표시한 근거를 함께 사용해 만들어요.{" "}
             <a
               className="underline decoration-white/20 hover:text-zinc-300"
               href={`/${locale}/contact`}
@@ -4522,8 +4522,8 @@ function ActionTeaser({
           </>
         ) : (
           <>
-            Prescriptions are grounded in the Princeton GEO paper (arXiv
-            2311.09735).{" "}
+            Prescriptions combine this measurement with the evidence shown on
+            each card.{" "}
             <a
               className="underline decoration-white/20 hover:text-zinc-300"
               href={`/${locale}/contact`}
