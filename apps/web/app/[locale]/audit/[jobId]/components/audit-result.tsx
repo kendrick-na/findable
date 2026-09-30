@@ -3459,6 +3459,13 @@ function NaverBriefingCompletedCard({
             <MentionBadge isKo={isKo} row={briefing} />
             <SentimentBadge sentiment={briefing.sentiment} />
           </div>
+          {briefing.verdictReason === "official_evidence_missing" ? (
+            <p className="mt-3 rounded-lg border border-[var(--signal-warn)]/20 bg-[var(--signal-warn)]/5 px-3 py-2 text-xs text-zinc-300 leading-relaxed">
+              {isKo
+                ? "답변에는 등록한 이름이 보이지만, 공식 사이트의 고유 사실과 대조할 근거가 부족해 이 브랜드의 답변으로 확정하지 않았어요. 원문과 공식 출처를 함께 확인해 주세요."
+                : "The name appears in the answer, but it lacks enough official-site evidence to confirm that it refers to this brand. Review the raw answer and official source together."}
+            </p>
+          ) : null}
           <p className="mt-4 whitespace-pre-line text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]">
             {briefing.isStub
               ? isKo

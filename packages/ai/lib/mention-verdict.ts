@@ -206,7 +206,12 @@ function identityTokens(value: string, minLength = 4): string[] {
       (token) =>
         // 단독 2~3글자 낱말은 "기술·회사·실사"처럼 업종 일반론일 확률이 높다.
         // 공식 도메인 없이 엔티티를 확정하는 보조 증거는 충분히 구체적인 토큰만 쓴다.
-        token.length >= minLength &&
+        // 영문 4글자 단어(`halo`, `care`, `shop`)는 제목의 브랜드 표기 일부이거나
+        // 일반 단어인 경우가 많다. 이것을 공식 사실로 쓰면 동명 브랜드 답변이
+        // "Melt Halo"의 `Halo` 한 단어만으로 통과할 수 있다. 영문 보조 근거는
+        // 최소 5글자로 제한하고, 짧은 제품명은 아래의 한국 제품 메타데이터 경로에서
+        // 서로 다른 두 개가 맞을 때만 별도로 허용한다.
+        token.length >= (/[a-z]/.test(token) ? Math.max(minLength, 5) : minLength) &&
         !IDENTITY_TOKEN_STOPWORDS.has(token) &&
         !/^\d+$/.test(token)
     );
@@ -292,6 +297,7 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
   }
 
   const brandToken = compactIdentity(input.brandName);
+  const registeredNameTokens = registeredBrandNames(input).map(compactIdentity);
   const tokens = new Set(
     [
       input.officialSite.title,
@@ -300,7 +306,19 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
     ]
       .filter((value): value is string => Boolean(value))
       .flatMap(identityTokens)
-      .filter((token) => compactIdentity(token) !== brandToken)
+      .filter((token) => {
+        const compact = compactIdentity(token);
+        // 조사 제거 과정에서 고유명사 끝 글자까지 떨어져 나올 수 있다
+        // (예: `멜트헤일로` → `멜트헤일`). 등록명/별칭의 일부는 독립적인
+        // 공식 사실이 아니므로, 그 자체로는 엔티티 근거가 될 수 없다.
+        return (
+          compact !== brandToken &&
+          !registeredNameTokens.some(
+            (registered) =>
+              registered.length >= compact.length && registered.includes(compact)
+          )
+        );
+      })
   );
   const response = input.text.toLowerCase();
   let matches = 0;

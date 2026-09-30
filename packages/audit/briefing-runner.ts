@@ -62,8 +62,13 @@ interface StoredEngineResponse {
   /** 순위의 분모(세션N-10). 도입 전 저장분은 undefined → 복원 시 null. */
   mentionListSize?: number | null;
   mentionPosition: number | null;
+  /** 본류와 같은 4분류 판정. 브리핑도 "미노출"과 "다른 대상으로 앎"을 뭉개지 않는다. */
+  mentionQuality?: EngineResponse["mentionQuality"];
   sentiment: "positive" | "neutral" | "negative" | null;
   sov: number | null;
+  /** 판정이 제외된 이유. 공개 리포트가 "모름"이라고 단정하지 않게 보존한다. */
+  verdictReason?: "official_evidence_missing" | "judge_failed";
+  verdictVia?: "rule" | "llm" | "skipped";
   /** crew-runner가 심층 출처 분석에 쓰는 측정 원본. 구 리포트에는 없다. */
   citedSources?: CitedSource[];
 }
@@ -90,7 +95,13 @@ interface StoredResult {
   topRecommendations: string[];
 }
 
-function toStoredEngineResponse(r: EngineResponse): StoredEngineResponse {
+type VerifiedBriefingResponse = EngineResponse & {
+  mentionQuality?: NonNullable<EngineResponse["mentionQuality"]>;
+  verdictReason?: "official_evidence_missing" | "judge_failed";
+  verdictVia?: "rule" | "llm" | "skipped";
+};
+
+function toStoredEngineResponse(r: VerifiedBriefingResponse): StoredEngineResponse {
   return {
     engineId: r.engineId,
     brandMentioned: r.brandMentioned,
@@ -102,6 +113,9 @@ function toStoredEngineResponse(r: EngineResponse): StoredEngineResponse {
     isStub: r.isStub,
     errorMessage: r.errorMessage,
     citedSources: r.citedSources,
+    mentionQuality: r.mentionQuality,
+    verdictReason: r.verdictReason,
+    verdictVia: r.verdictVia,
     // runner.ts의 excerpt 한도(4000자)와 정합. 브리핑 텍스트는 어댑터가 이미 4000자 캡.
     excerpt: r.rawResponse.slice(0, 4000),
   };

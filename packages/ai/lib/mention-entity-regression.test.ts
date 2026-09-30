@@ -62,6 +62,36 @@ it("confirms a Korean product answer with two official product descriptors", asy
   ).resolves.toMatchObject({ counted: true, quality: "confirmed" });
 });
 
+it("rejects a same-name creative studio even if the LLM initially says confirmed", async () => {
+  // Live regression: the model called a 3D/CG studio "멜트헤일로". The
+  // entity judge must not accept the mere spelling as recognition of the
+  // registered skincare brand.
+  vi.stubEnv("LETSUR_API_KEY", "test-key");
+  vi.mocked(generateObject).mockResolvedValue({
+    object: { quality: "confirmed" },
+  } as never);
+
+  await expect(
+    verifyMention({
+      brandName: "멜트헤일로",
+      brandDomain: "melthalo.com",
+      stringMatched: true,
+      officialSite: {
+        title: "멜트헤일로 | 만져지는 변화, NAD+ / Metl Halo",
+        description:
+          "멜트헤일로 스킨케어 | NAD 마스크, 재생 크림, 톤업크림, 선세럼",
+        h1: "{#pc_thumb_tag}",
+      },
+      text:
+        "멜트헤일로와 유사하게 브랜드/제품용 3D·CG 비주얼, 모션 그래픽, 광고용 디지털 콘텐츠 제작 쪽 서비스를 찾는다면 아래 브랜드를 비교해 보세요.",
+    })
+  ).resolves.toMatchObject({
+    counted: false,
+    quality: "unknown_brand",
+    reason: "official_evidence_missing",
+  });
+});
+
 it("does not mistake an official subdomain for a namesake", () => {
   expect(
     __internal.isOfficialDomain("product.example.com", "example.com")

@@ -40,4 +40,24 @@ describe("official identity evidence", () => {
       })
     ).toBe(true);
   });
+
+  it("does not validate a namesake creative-studio answer with a skincare brand's metadata", () => {
+    // Live regression (멜트헤일로): the answer names a 3D/CG studio and has no
+    // official source. A literal brand-name match must never turn that into
+    // evidence for the skincare brand.
+    expect(
+      __internal.hasOfficialIdentityEvidence({
+        brandName: "멜트헤일로",
+        brandDomain: "melthalo.com",
+        officialSite: {
+          title: "멜트헤일로 | 만져지는 변화, NAD+ / Metl Halo",
+          description:
+            "멜트헤일로 스킨케어 | NAD 마스크, 재생 크림, 톤업크림, 선세럼",
+          h1: "{#pc_thumb_tag}",
+        },
+        text:
+          "멜트헤일로와 유사하게 브랜드/제품용 3D·CG 비주얼, 모션 그래픽, 광고용 디지털 콘텐츠 제작 쪽 서비스를 찾는다면 아래 브랜드를 비교해 보세요.",
+      })
+    ).toBe(false);
+  });
 });
