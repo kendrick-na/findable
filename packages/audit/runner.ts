@@ -531,6 +531,15 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const isBrandRow = (_row: unknown, i: number) =>
       !isDiscoveryAnswer({ promptKind: tagged[i]?.promptKind });
     const brandFlat = flat.filter(isBrandRow);
+    // 네이버·다음은 이 제품에서 AI 답변이 아니라 검색 노출로 별도 집계한다.
+    // 액션 카드가 이를 섞어 "AI 6곳" 또는 "AI 답변 24건"이라고 부르면
+    // 리포트의 AI 4개 엔진 분모와 달라져 고객이 무엇을 고쳐야 하는지 흐려진다.
+    const isSearchResponse = (response: { engineId: string }) =>
+      response.engineId === "naver" || response.engineId === "daum";
+    const aiBrandFlat = brandFlat.filter(
+      (response) => !isSearchResponse(response)
+    );
+    const aiMeasurementCoverage = countMeasurementCoverage(aiBrandFlat);
     // 시장 분해(2026-08-21)용 언어 태깅 — flat·tagged 는 같은 flatMap 순서를
     //   공유하므로(위 주석) 인덱스로 안전하게 붙일 수 있다. flat 자체 구조는 안 바꾼다
     //   (aggregateAudit·auditCost 는 여전히 원본 flat 을 그대로 받는다).
@@ -575,7 +584,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       const width = sevenEngineResponses[i]?.length ?? 0;
       const slice = flat.slice(offset, offset + width);
       offset += width;
-      const usable = slice.filter((r) => !(r.errorMessage || r.isStub));
+      const usable = slice.filter(
+        (r) => !(r.errorMessage || r.isStub) && !isSearchResponse(r)
+      );
       return {
         text: p.text,
         hit: usable.filter((r) => r.brandMentioned).length,
@@ -602,8 +613,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       averageMentionPosition: metrics.averageMentionPosition,
       // 성공 응답 수만 처방 근거에 쓴다. 실패 엔진까지 "측정했다"고 쓰면
       // 부분 측정을 완전한 표본처럼 보이게 만든다.
-      enginesMeasured: measurementCoverage.measured,
-      enginesAttempted: measurementCoverage.attempted,
+      enginesMeasured: aiMeasurementCoverage.measured,
+      enginesAttempted: aiMeasurementCoverage.attempted,
       enginesMentioned: new Set(metrics.enginesWithMention).size,
       // 처방의 채널을 타깃 시장에 맞춘다(세션N-24). 점수의 분모를 정하는 값과 **같은 것**을 쓴다
       //   — 여기서 따로 추정하면 화면 안에서 시장 판정이 둘로 갈린다.
@@ -626,7 +637,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       // Discovery is intentionally excluded from the score and appearance-rate
       // denominator. Keep action evidence on that same scored brand-answer set
       // or the guide can claim a larger “AI answered N times” than the report.
-      verdicts: summarizeVerdicts(brandFlat, {
+      verdicts: summarizeVerdicts(aiBrandFlat, {
         brandName,
         brandDomain: input.domain,
       }),
