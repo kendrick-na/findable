@@ -79,7 +79,7 @@ export function generateAuditPrompts(
 // ──────────────────────────────────────────────────────────────────
 
 export interface RunPrompt {
-  /** 없으면 브랜드 이름 질문(기존 저장 프롬프트·폴백 4개). */
+  /** 없으면 브랜드 이름 질문(폴백 4개). 저장 질문은 실행 전 분류한다. */
   kind?: PromptKind;
   lang: "ko" | "en";
   text: string;
@@ -116,6 +116,26 @@ const EN_PROBLEM_RE =
 
 function compact(value: string): string {
   return value.toLowerCase().replace(NON_IDENTITY_CHAR_RE, "");
+}
+
+/**
+ * Saved Prompt rows have a topical category, but no brand/discovery kind.
+ * Classify the selected question at run time so its AuditJob response rows,
+ * discovery count and answer buckets share the same explicit kind. This is a
+ * text-derived classification, not a migration or a change to saved Prompts.
+ */
+export function classifySavedPromptKind(
+  text: string,
+  names: PromptBrandNames,
+  variants: readonly string[]
+): PromptKind {
+  const question = compact(text);
+  const aliases = [names.ko, names.en, ...variants]
+    .map(compact)
+    .filter((alias) => alias.length >= 2);
+  return aliases.some((alias) => question.includes(alias))
+    ? "brand"
+    : "discovery";
 }
 
 function containsName(value: string, nameKeys: string[]): boolean {
@@ -216,7 +236,9 @@ export function generateDiscoveryPrompts(
   }
   const terms = siteCategoryTerms(site, nameList);
   const koTerms = terms.filter(
-    (t) => (HANGUL_RE.test(t) || !LATIN_TERM_RE.test(t)) && isDiscoveryCategoryTerm(t)
+    (t) =>
+      (HANGUL_RE.test(t) || !LATIN_TERM_RE.test(t)) &&
+      isDiscoveryCategoryTerm(t)
   );
   // 영어 조각은 약어 한 토막("AX")이 아니라 뜻이 서는 표기만 — 두 단어 이상이거나 6자 이상.
   const enTerms = terms.filter(
