@@ -2149,8 +2149,8 @@ function MarketRegionCards({
               </div>
               <div className="mt-1 text-xs text-zinc-400">
                 {isKo
-                  ? `응답 기준 등장률 ${r.mentionRate}% · AI 엔진 ${r.enginesMeasured}개 측정`
-                  : `${r.mentionRate}% of responses mention the brand · ${r.enginesMeasured} AI engines measured`}
+                  ? `응답 기준 등장률 ${r.mentionRate}% · 엔진 ${r.enginesMeasured}개 측정 (생성형 AI·검색 노출 포함)`
+                  : `${r.mentionRate}% of responses mention the brand · ${r.enginesMeasured} engines measured (generative AI + search visibility)`}
               </div>
             </div>
           );
