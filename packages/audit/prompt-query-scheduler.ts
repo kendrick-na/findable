@@ -5,11 +5,11 @@
  */
 export async function queryPromptsSequentially<TPrompt, TResult>(
   prompts: readonly TPrompt[],
-  query: (prompt: TPrompt) => Promise<TResult>
+  query: (prompt: TPrompt, index: number) => Promise<TResult>
 ): Promise<TResult[]> {
   const results: TResult[] = [];
-  for (const prompt of prompts) {
-    results.push(await query(prompt));
+  for (const [index, prompt] of prompts.entries()) {
+    results.push(await query(prompt, index));
   }
   return results;
 }

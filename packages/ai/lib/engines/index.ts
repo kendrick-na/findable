@@ -20,8 +20,8 @@ import type {
   EngineResponse,
 } from "./types";
 
-export * from "./cost";
 export * from "./aggregate";
+export * from "./cost";
 export * from "./types";
 
 const ADAPTERS: Record<EngineId, EngineAdapter> = {
@@ -97,10 +97,36 @@ export async function queryEngine(query: EngineQuery): Promise<EngineResponse> {
  */
 export async function queryAllEngines(
   base: Omit<EngineQuery, "engineId">,
-  engineIds: EngineId[] = DEFAULT_ENGINES
+  engineIds: EngineId[] = DEFAULT_ENGINES,
+  onEngineEvent?: (event: {
+    engineId: EngineId;
+    phase: "started" | "finished";
+    status?: "fulfilled" | "rejected";
+  }) => void
 ): Promise<EngineResponse[]> {
+  const observe = (event: {
+    engineId: EngineId;
+    phase: "started" | "finished";
+    status?: "fulfilled" | "rejected";
+  }) => {
+    try {
+      onEngineEvent?.(event);
+    } catch {
+      /* logging is best-effort */
+    }
+  };
   const settled = await Promise.allSettled(
-    engineIds.map((engineId) => queryEngine({ ...base, engineId }))
+    engineIds.map(async (engineId) => {
+      observe({ engineId, phase: "started" });
+      try {
+        const response = await queryEngine({ ...base, engineId });
+        observe({ engineId, phase: "finished", status: "fulfilled" });
+        return response;
+      } catch (error) {
+        observe({ engineId, phase: "finished", status: "rejected" });
+        throw error;
+      }
+    })
   );
   return settled.map((result, i) => {
     if (result.status === "fulfilled") {

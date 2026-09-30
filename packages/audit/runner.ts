@@ -75,6 +75,7 @@ import type { AuditPdfData } from "./pdf-template";
 import { RUNNER_PROMPT_LIMIT } from "./prompt-limits";
 import { queryPromptsSequentially } from "./prompt-query-scheduler";
 import { pickRotatingPrompts } from "./prompt-rotation";
+import { createRunTiming } from "./run-timing";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
 
 export interface AuditRunInput {
@@ -356,25 +357,46 @@ function buildRegionBreakdown(
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Audit orchestration combines engine, storage, PDF and briefing lifecycle guards.
 export async function runAuditJob(input: AuditRunInput): Promise<void> {
+  const timing = createRunTiming(input.jobId, log.info);
+  const finishJob = timing.start("job");
+  const timed = async <T>(
+    stage: Parameters<typeof timing.start>[0],
+    action: () => Promise<T>,
+    detail?: Parameters<typeof timing.start>[1]
+  ): Promise<T> => {
+    const finish = timing.start(stage, detail);
+    try {
+      const value = await action();
+      finish();
+      return value;
+    } catch (error) {
+      finish("rejected");
+      throw error;
+    }
+  };
   try {
-    await database.auditJob.update({
-      where: { id: input.jobId },
-      data: { status: "processing" },
-    });
+    await timed("mark_processing", () =>
+      database.auditJob.update({
+        where: { id: input.jobId },
+        data: { status: "processing" },
+      })
+    );
 
     // 브랜드명 해석 (P0-b): 폼입력→정적사전→LLM→영문 폴백 체인으로 한/영 변형 확보.
     // 도메인만 입력돼도 한국어 답변의 "설화수"를 판정이 잡도록 variants에 한글명 포함.
     // 가입 단계의 저장 별칭과 도메인 기반 추론 별칭을 합친다. 전자만 쓰면 빈/불완전한
     // 저장값이 후자를 덮어쓰고, 후자만 쓰면 고객이 등록한 공식 영문·한글 표기를 잃는다.
-    const identity = await resolveBrandIdentity(input.domain, input.brandName);
+    const identity = await timed("brand_identity", () =>
+      resolveBrandIdentity(input.domain, input.brandName)
+    );
     const brandName = identity.brandName;
 
     // 응답 생성 모델에는 주입하지 않는다(실제 AI 인지도를 재야 하므로). 대신 판정기가
     // 동명의 다른 대상을 확정 언급으로 세지 않도록 공식 홈페이지의 제목·설명·H1을
     // 한 번만 읽어 엔티티 기준 사실로 고정한다. 근거를 확보하지 못하면 AI 호출 전에
     // 중단한다. 수치는 없는 편이 다른 엔티티를 자사 언급으로 공개하는 것보다 정확하다.
-    const resolvedOfficialSiteIdentity = await resolveOfficialSiteIdentity(
-      input.domain
+    const resolvedOfficialSiteIdentity = await timed("official_site", () =>
+      resolveOfficialSiteIdentity(input.domain)
     );
     const officialSiteIdentity =
       resolvedOfficialSiteIdentity ?? registeredBrandIdentityFallback(input);
@@ -414,19 +436,21 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
      *
      * ⚠️ 무료 진단은 `brandId` 가 없다 → 조회 없이 빈 배열(기존 동작 그대로 · 회귀 0).
      */
-    const registeredCompetitors = await resolveRegisteredCompetitors(
-      input.brandId
+    const registeredCompetitors = await timed("competitors", () =>
+      resolveRegisteredCompetitors(input.brandId)
     );
 
     // 프롬프트 소스: 마법사가 저장한 프롬프트가 있으면 우선(백로그 1, 2026-07-30),
     //   없으면 기존 고정 4개 폴백. org 브랜드(brandId)일 때만 조회 — 무료 email 진단은
     //   brandId가 없어 항상 폴백(회귀 0). 원가·429 보호로 상한(RUNNER_PROMPT_LIMIT)까지만.
-    const prompts = await resolveRunPrompts(
-      input.brandId,
-      { ko: brandName, en: englishPromptName(brandName, brandVariants) },
-      input.language,
-      officialSiteIdentity,
-      brandVariants
+    const prompts = await timed("resolve_prompts", () =>
+      resolveRunPrompts(
+        input.brandId,
+        { ko: brandName, en: englishPromptName(brandName, brandVariants) },
+        input.language,
+        officialSiteIdentity,
+        brandVariants
+      )
     );
 
     // D-058 (2026-05-09) 분리 운영 구조:
@@ -461,23 +485,47 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const enginesForLang = (lang: "ko" | "en") =>
       lang === "en" ? GLOBAL_4 : DEFAULT_7;
 
-    const sevenEngineResponses = await queryPromptsSequentially(
-      prompts,
-      async (p) =>
-        queryAllEngines(
-          {
-            prompt: p.text,
-            language: p.lang,
-            brandName,
-            brandVariants,
-            // 🔴 N-47 — 자사 도메인을 엔진에 넘겨 **본문 URL 폴백에서 자사를 제외**한다.
-            //   안 넘기면 AI 가 답변에 적은 자기 홈페이지가 「인용 출처」로 잡힌다.
-            brandDomain: input.domain,
-          },
-          enginesForLang(p.lang) as unknown as Parameters<
-            typeof queryAllEngines
-          >[1]
-        )
+    const engineFinishers = new Map<
+      string,
+      (status?: "fulfilled" | "rejected") => void
+    >();
+    const sevenEngineResponses = await timed(
+      "prompt_query",
+      () =>
+        queryPromptsSequentially(prompts, async (p, promptIndex) =>
+          timed(
+            "prompt_query",
+            () =>
+              queryAllEngines(
+                {
+                  prompt: p.text,
+                  language: p.lang,
+                  brandName,
+                  brandVariants,
+                  // 🔴 N-47 — 자사 도메인을 엔진에 넘겨 **본문 URL 폴백에서 자사를 제외**한다.
+                  //   안 넘기면 AI 가 답변에 적은 자기 홈페이지가 「인용 출처」로 잡힌다.
+                  brandDomain: input.domain,
+                },
+                enginesForLang(p.lang) as unknown as Parameters<
+                  typeof queryAllEngines
+                >[1],
+                ({ engineId, phase, status }) => {
+                  const key = `${promptIndex}:${engineId}`;
+                  if (phase === "started") {
+                    engineFinishers.set(
+                      key,
+                      timing.start("engine_query", { promptIndex, engineId })
+                    );
+                  } else {
+                    engineFinishers.get(key)?.(status);
+                    engineFinishers.delete(key);
+                  }
+                }
+              ),
+            { promptIndex, engineCount: enginesForLang(p.lang).length }
+          )
+        ),
+      { promptCount: prompts.length }
     );
 
     // 20번(dual-write): flat() 하면 각 응답이 어느 프롬프트에서 나왔는지 소실된다.
@@ -508,12 +556,38 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   되물음("무슨 의미의 기아를 원하시나요?"). 상세=docs/_적용/측정정확도_전면진단_2026-07-31.md
     //   ⚠️ 모호한 경우에만 LLM 판정 → 명확한 브랜드는 추가 원가 0.
     const rawFlat = sevenEngineResponses.flat();
-    const flat = await verifyMentions(rawFlat, {
-      brandName,
-      brandVariants,
-      brandDomain: input.domain,
-      industry: input.industry ?? undefined,
-      officialSite: officialSiteIdentity,
+    const chunkFinishers = new Map<
+      number,
+      (status?: "fulfilled" | "rejected") => void
+    >();
+    const flat = await timed(
+      "verify_mentions",
+      () =>
+        verifyMentions(
+          rawFlat,
+          {
+            brandName,
+            brandVariants,
+            brandDomain: input.domain,
+            industry: input.industry ?? undefined,
+            officialSite: officialSiteIdentity,
+          },
+          ({ chunkIndex, responseCount, phase }) => {
+            if (phase === "started") {
+              chunkFinishers.set(
+                chunkIndex,
+                timing.start("verdict_chunk", { chunkIndex, responseCount })
+              );
+            } else {
+              chunkFinishers.get(chunkIndex)?.();
+              chunkFinishers.delete(chunkIndex);
+            }
+          }
+        ),
+      { responseCount: rawFlat.length }
+    );
+    const finishAggregate = timing.start("aggregate", {
+      responseCount: flat.length,
     });
     const measurementCoverage = countMeasurementCoverage(flat);
     if (isMeasurementFailure(measurementCoverage)) {
@@ -594,7 +668,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       const slice = flat.slice(offset, offset + width);
       offset += width;
       const usable = slice.filter(
-        (r) => !(r.errorMessage || r.isStub) && !isSearchResponse(r)
+        (r) => !(r.errorMessage || r.isStub || isSearchResponse(r))
       );
       return {
         text: p.text,
@@ -789,15 +863,19 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // 결과와 시계열을 PDF보다 먼저 커밋한다. PDF의 Chromium 시작·폰트 대기·Blob
     // 업로드는 부가 작업인데, 이를 앞에 두면 300초 함수 상한에서 이미 수집한 AI
     // 응답까지 통째로 잃고 job이 영원히 processing에 남는다.
+    finishAggregate();
     const completedAt = new Date();
-    await database.auditJob.update({
-      where: { id: input.jobId },
-      data: {
-        status: "completed",
-        result: result as never,
-        completedAt,
-      },
-    });
+    await timed("db_commit", () =>
+      database.auditJob.update({
+        where: { id: input.jobId },
+        data: {
+          status: "completed",
+          result: result as never,
+          completedAt,
+        },
+      })
+    );
+    finishJob();
     // 원가계기(유닛이코노믹스): 진단 1건 실비용을 로그로도 실측 축적(result.cost 와 동일).
     log.info("audit.job.completed", {
       jobId: input.jobId,
@@ -915,6 +993,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   (POST /api/audit/[jobId]/crew → runCrewForAuditJob). crewStatus는 기본값
     //   "not_requested"로 남아 UI가 트리거 카드를 표시한다.
   } catch (error) {
+    finishJob("rejected");
     log.error("audit.job.failed", {
       jobId: input.jobId,
       error: parseError(error),

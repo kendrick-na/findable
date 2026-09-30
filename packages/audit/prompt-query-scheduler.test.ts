@@ -23,4 +23,13 @@ describe("queryPromptsSequentially", () => {
     expect(started).toEqual(["q1", "q2", "q3"]);
     expect(result).toEqual(["q1-done", "q2-done", "q3-done"]);
   });
+
+  it("각 질문의 0-based index를 순서대로 전달한다", async () => {
+    const indexes: number[] = [];
+    await queryPromptsSequentially(["a", "b"], (_prompt, index) => {
+      indexes.push(index);
+      return Promise.resolve(index);
+    });
+    expect(indexes).toEqual([0, 1]);
+  });
 });

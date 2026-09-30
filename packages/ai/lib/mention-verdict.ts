@@ -70,10 +70,10 @@ export interface MentionVerdict {
   /** 점수·SoV에 실제로 반영할 최종 판정. confirmed 만 true. */
   counted: boolean;
   quality: MentionQuality;
-  /** 판정 경로(관측용). rule=규칙만으로 확정, llm=모호해서 LLM 판정, skipped=검증 미실행. */
-  via: "rule" | "llm" | "skipped";
   /** 비집계 판정의 사유(관측·재검증용). 없으면 quality 자체가 사유다. */
   reason?: MentionVerdictReason;
+  /** 판정 경로(관측용). rule=규칙만으로 확정, llm=모호해서 LLM 판정, skipped=검증 미실행. */
+  via: "rule" | "llm" | "skipped";
 }
 
 export type MentionVerdictReason =
@@ -330,8 +330,7 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
         // (예: `멜트헤일로` → `멜트헤일`). 등록명/별칭의 일부는 독립적인
         // 공식 사실이 아니므로, 그 자체로는 엔티티 근거가 될 수 없다.
         return (
-          compact !== brandToken &&
-          !isRegisteredNameFragment(token, input)
+          compact !== brandToken && !isRegisteredNameFragment(token, input)
         );
       })
   );
@@ -709,7 +708,12 @@ export async function verifyMentions<T extends VerifiableResponse>(
     brandDomain?: string;
     industry?: string;
     officialSite?: VerifyInput["officialSite"];
-  }
+  },
+  onChunkEvent?: (event: {
+    chunkIndex: number;
+    responseCount: number;
+    phase: "started" | "finished";
+  }) => void
 ): Promise<
   Array<
     T & {
@@ -730,6 +734,15 @@ export async function verifyMentions<T extends VerifiableResponse>(
   // 인덱스를 청크로 끊어 동시 실행 상한을 지킨다.
   for (let start = 0; start < responses.length; start += VERDICT_CONCURRENCY) {
     const slice = responses.slice(start, start + VERDICT_CONCURRENCY);
+    const event = {
+      chunkIndex: start / VERDICT_CONCURRENCY,
+      responseCount: slice.length,
+    };
+    try {
+      onChunkEvent?.({ ...event, phase: "started" });
+    } catch {
+      /* logging is best-effort */
+    }
     const verdicts = await Promise.all(
       slice.map((r): Promise<MentionVerdict> => {
         // 측정 실패/stub 은 판정 대상 아님 — 원본 유지.
@@ -773,6 +786,11 @@ export async function verifyMentions<T extends VerifiableResponse>(
         verdictVia: verdict.via,
         ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
       };
+    }
+    try {
+      onChunkEvent?.({ ...event, phase: "finished" });
+    } catch {
+      /* logging is best-effort */
     }
   }
 
