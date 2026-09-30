@@ -26,6 +26,7 @@ import { generateObject } from "ai";
 import { getDomain } from "tldts";
 import { z } from "zod";
 import { describeProviderError } from "./engines/provider-error";
+import { detectBrandMention } from "./engines/utils";
 
 export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
 
@@ -685,7 +686,15 @@ export async function verifyMentions<T extends VerifiableResponse>(
           industry: brand.industry,
           officialSite: brand.officialSite,
           text: r.rawResponse ?? "",
-          stringMatched: r.brandMentioned,
+          // Adapter flags are an optimization hint, not the source of truth.
+          // A live Naver AI Briefing response started with the brand name while
+          // its adapter flag was false; passing that flag through made a named
+          // answer look absent before the entity verifier could inspect it.
+          stringMatched: detectBrandMention(
+            r.rawResponse ?? "",
+            brand.brandName,
+            brand.brandVariants
+          ).mentioned,
         });
       })
     );

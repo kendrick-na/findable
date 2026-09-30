@@ -1,11 +1,43 @@
 import { generateObject } from "ai";
 import { afterEach, expect, it, vi } from "vitest";
-import { __internal, verifyMention } from "./mention-verdict";
+import { __internal, verifyMention, verifyMentions } from "./mention-verdict";
 
 vi.mock("ai", () => ({ generateObject: vi.fn() }));
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.mocked(generateObject).mockReset();
+});
+
+it("rechecks raw answer text when an adapter forgot to set brandMentioned", async () => {
+  // Live regression: Naver AI Briefing began with “멜트헤일로 …” but persisted
+  // brandMentioned=false, making the public report show “모름”.
+  vi.stubEnv("LETSUR_API_KEY", "test-key");
+  vi.mocked(generateObject).mockResolvedValue({
+    object: { quality: "confirmed" },
+  } as never);
+
+  const [verified] = await verifyMentions(
+    [
+      {
+        brandMentioned: false,
+        citedSources: [{ domain: "melthalo.com" }],
+        errorMessage: null,
+        isStub: false,
+        rawResponse:
+          "멜트헤일로의 공식 사이트 melthalo.com은 스킨케어 제품을 소개합니다.",
+      },
+    ],
+    {
+      brandName: "멜트헤일로",
+      brandDomain: "melthalo.com",
+      officialSite: { title: "멜트헤일로 스킨케어" },
+    }
+  );
+
+  expect(verified).toMatchObject({
+    brandMentioned: true,
+    mentionQuality: "confirmed",
+  });
 });
 
 it("does not mistake an official subdomain for a namesake", () => {

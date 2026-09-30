@@ -35,6 +35,23 @@ export type MarketRegion = "korea" | "global";
 export type MarketScope = "korea" | "global" | "both";
 
 /**
+ * 고객이 확정한 타깃 시장을 첫 측정의 질문 언어로 바꾼다.
+ * 엔진 구성 자체를 줄이지 않는다. 한국어 질문은 기본 7개 엔진, 영어 질문은
+ * 글로벌 4개 엔진으로 각각 기존 runner 정책을 그대로 사용한다.
+ */
+export function auditLanguageForMarketScope(
+  scope: MarketScope | null | undefined
+): "ko" | "en" | "both" {
+  if (scope === "korea") {
+    return "ko";
+  }
+  if (scope === "global") {
+    return "en";
+  }
+  return "both";
+}
+
+/**
  * 한국 엔진 — 한국어권 AI 답변/검색을 대표한다.
  * ⚠️ naver-briefing 은 on-demand 별도 트리거(본류 7엔진에 없음)지만 권역상 한국이다.
  */

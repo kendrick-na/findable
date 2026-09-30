@@ -22,6 +22,7 @@ import {
   partitionCitedSources,
   queryAllEngines,
 } from "@repo/ai/lib/engines";
+import { detectBrandMention } from "@repo/ai/lib/engines/utils";
 import {
   MENTION_VERDICT_VERSION,
   verifyMentions,
@@ -622,7 +623,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           )
         : undefined,
       // 답변 단위 판정 집계 — 동명 오인·모름을 처방이 건수로 말한다(2026-09-28).
-      verdicts: summarizeVerdicts(flat, {
+      // Discovery is intentionally excluded from the score and appearance-rate
+      // denominator. Keep action evidence on that same scored brand-answer set
+      // or the guide can claim a larger “AI answered N times” than the report.
+      verdicts: summarizeVerdicts(brandFlat, {
         brandName,
         brandDomain: input.domain,
       }),
@@ -653,9 +657,14 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       cost: costSummary,
       engineResponses: flat.map((r, index) => ({
         // Excerpts remain a display convenience; revalidation must retain the
-        // complete evidence and the original pre-verifier name-match result.
+        // complete evidence and the raw-text name-match result. Adapters may
+        // omit their own Boolean even when their returned answer names us.
         rawResponse: r.rawResponse,
-        stringMatched: rawFlat[index]?.brandMentioned ?? false,
+        stringMatched: detectBrandMention(
+          r.rawResponse ?? "",
+          brandName,
+          brandVariants
+        ).mentioned,
         promptText: tagged[index]?.promptText,
         promptLang: tagged[index]?.promptLang,
         // 이름 없는 질문인지(2026-09-29) — 화면이 「이름 없이 물었을 때 추천됨」을 따로 센다.

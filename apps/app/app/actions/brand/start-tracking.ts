@@ -3,6 +3,7 @@
 import { isUsableRun } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
 import { AUDIT_JOB_STALE_AFTER_MS } from "@repo/audit/stale-job";
+import { auditLanguageForMarketScope } from "@repo/audit/market-scope";
 import { hasPlan } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth, clerkClient } from "@repo/auth/server";
@@ -237,7 +238,6 @@ export const startOrgTracking = async (
   if (!(domain && isValidDomain(domain))) {
     return { error: "도메인 형식이 올바르지 않습니다. 예: example.com" };
   }
-  const language = input.language ?? "both";
   const brandName = input.brandName?.trim() || undefined;
 
   try {
@@ -291,6 +291,12 @@ export const startOrgTracking = async (
         code: "identity_incomplete",
       };
     }
+
+    // Explicit callers may choose a language. Normal customer flows do not
+    // send one, so honour the market they confirmed at onboarding instead of
+    // silently adding a second (global) question set to a Korea-only audit.
+    const language =
+      input.language ?? auditLanguageForMarketScope(brandRecord.marketScope);
 
     // 7) 재측정 정책 — 차단 사유가 있으면 에러 결과 반환.
     const blocked = await checkRemeasurePolicy(orgId, domain);
