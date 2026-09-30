@@ -43,12 +43,23 @@ export interface ReportSource {
   answers: ReportSourceAnswer[];
   contract: typeof REPORT_SOURCE_CONTRACT;
   identity: { identityGrounded: boolean | null; officialSite: unknown };
+  /**
+   * 누가·언제 만든 원본인가. 앱 관리자 내보내기는 `app-export`. 렌더러는 이 값이 없거나
+   * `snapshot-fixture` 면 승인본을 만들지 않는다(리포트 세션 계약).
+   */
+  provenance: {
+    exportedAt: string | null;
+    exportedBy: string | null;
+    kind: "app-export";
+  };
   run: {
     auditJobId: string;
     brandName: string | null;
     completedAt: string;
     createdAt: string;
     domain: string;
+    /** answers 배열(이 원본 그대로)을 키 정렬한 JSON 의 SHA-256 — result 없이 재계산 가능. */
+    answersSha256: string;
     /** AuditJob.result 를 키 정렬한 JSON 의 SHA-256. 원본이 한 글자라도 바뀌면 달라진다. */
     resultSha256: string;
     verdictVersion: number;
@@ -208,6 +219,9 @@ export function buildReportSource(
     return { ok: false, errors: [...errors] };
   }
 
+  const answersSha256 = createHash("sha256")
+    .update(canonicalJson(answers))
+    .digest("hex");
   const context = isRecord(result.measurementContext)
     ? result.measurementContext
     : {};
@@ -216,6 +230,7 @@ export function buildReportSource(
     ok: true,
     source: {
       contract: REPORT_SOURCE_CONTRACT,
+      provenance: { kind: "app-export", exportedAt: null, exportedBy: null },
       run: {
         auditJobId: job.id,
         createdAt: iso(job.createdAt),
@@ -225,6 +240,7 @@ export function buildReportSource(
           typeof result.brandName === "string" ? result.brandName : null,
         verdictVersion,
         resultSha256: resultSha256(result),
+        answersSha256,
       },
       identity: {
         officialSite: context.officialSiteIdentity ?? null,

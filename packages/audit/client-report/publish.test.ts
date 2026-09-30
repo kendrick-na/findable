@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { ClientReportConfig } from "./compute";
+import type { ClientReportAudit, ClientReportConfig } from "./compute";
 import {
   buildReportFromReview,
   comparableAnswers,
@@ -15,7 +15,11 @@ import {
   type ReportReview,
   validateReview,
 } from "./publish";
-import { isClientReportExpired, parseClientReportData } from "./report-data";
+import {
+  buildClientReportData,
+  isClientReportExpired,
+  parseClientReportData,
+} from "./report-data";
 import {
   type AuditJobRow,
   answerKeyOf,
@@ -232,8 +236,25 @@ describe("T2 원본 고정 — ReportSource", () => {
 });
 
 describe("T4 분모 — 16건(AI 4곳×질문 4개) vs 22건(7개 엔진)", () => {
-  it("🔴 같은 회차·같은 판별이라도 분모가 다르면 숫자가 다르다 — 섞어 쓰면 안 되는 이유", () => {
+  it("🔴 16건(v12) vs 22건(기존 v1 웹 경로) — 같은 판별이라도 숫자가 다르고, 22건 분모는 발행이 막힌다", () => {
     const source = sourceOf(knowverseJob());
+    // 기존 v1 경로(/r 의 9/28 import 방식) = 7개 엔진 22건 그대로 계산
+    const v1 = buildClientReportData({
+      config: read<ClientReportConfig>("knowverse.config.json"),
+      audit: read<ClientReportAudit>("knowverse.audit.min.json"),
+      slug: "knowverse",
+      version: 1,
+      importedAt: ISSUED,
+    });
+    const ai4 = issue(source, knowverseReview(source));
+    if (!ai4.ok) {
+      throw new Error("발행 실패");
+    }
+    expect(v1.computed.s.n).toBe(22);
+    expect(ai4.data.computed.s.n).toBe(16);
+    expect(v1.computed.s.ok_n).toBe(ai4.data.computed.s.ok_n);
+    expect(v1.computed.s.ok_rate).not.toBe(ai4.data.computed.s.ok_rate);
+    // 7개 엔진을 분모로 두면 HyperCLOVA·네이버·다음이 비운 칸 때문에 새 경로에서는 거부된다
     const all7 = issue(
       source,
       knowverseReview(source, {
@@ -251,13 +272,12 @@ describe("T4 분모 — 16건(AI 4곳×질문 4개) vs 22건(7개 엔진)", () =
         },
       })
     );
-    const ai4 = issue(source, knowverseReview(source));
-    if (!(all7.ok && ai4.ok)) {
-      throw new Error("발행 실패");
+    expect(all7.ok).toBe(false);
+    if (!all7.ok) {
+      expect(all7.errors.map((e) => e.code)).toContain(
+        "denominator_cell_missing"
+      );
     }
-    expect(all7.data.computed.s.n).toBe(22);
-    expect(ai4.data.computed.s.n).toBe(16);
-    expect(all7.data.computed.s.ok_rate).not.toBe(ai4.data.computed.s.ok_rate);
     expect(ai4.data.denominator).toEqual({
       engines: ["chatgpt", "claude", "perplexity", "gemini"],
       promptKinds: ["brand"],
@@ -298,6 +318,11 @@ describe("T4 분모 — 16건(AI 4곳×질문 4개) vs 22건(7개 엔진)", () =
       bad_with_official: 0,
     });
     expect(r.data.computed.s.engines_total).toBe(4);
+    // v12 문장용 값 — 렌더러 out_v2 추적(numbers)과 같은 문자열
+    expect(r.data.computed.s.off_ans).toBe(5);
+    expect(r.data.computed.s.bad_parts).toBe(
+      "다른 회사로 착각 5 · 지어낸 설명 3 · 모른다 3"
+    );
     expect(r.data.computed.per_q).toHaveLength(4);
   });
 
@@ -475,5 +500,58 @@ describe("T3·T5 판별 검증과 승인 게이트", () => {
     }
     expect(isClientReportExpired(parsed, new Date("2026-10-01"))).toBe(false);
     expect(isClientReportExpired(parsed, new Date("2026-10-31"))).toBe(true);
+  });
+});
+
+describe("리포트 세션 계약 보강 (06 계약 4절 요청)", () => {
+  const source = sourceOf(knowverseJob());
+
+  it("answersSha256 은 answers 만으로 재계산되고, provenance 는 app-export", () => {
+    expect(source.run.answersSha256).toBe(resultSha256(source.answers));
+    expect(source.provenance.kind).toBe("app-export");
+  });
+
+  it("🔴 분모 칸(엔진×질문)에 반복 답변이 2건이면 거부, 빈 칸도 거부", () => {
+    const dup = sourceOf(
+      knowverseJob((rows) => {
+        rows.push({ ...rows[0], rawResponse: "같은 칸 두 번째" });
+      })
+    );
+    const base = knowverseReview(source);
+    const extra = dup.answers.find((a) => a.repeat === 2);
+    if (!extra) {
+      throw new Error("fixture");
+    }
+    const withDup = {
+      ...base,
+      resultSha256: dup.run.resultSha256,
+      labels: {
+        ...base.labels,
+        [extra.answerKey]: { l: "ok" as const, who: "", summary: "" },
+      },
+    };
+    const r = validateReview(dup, withDup, { requireApproval: false });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errors.map((e) => e.code)).toContain(
+        "denominator_cell_duplicate"
+      );
+    }
+    const missingCell = validateReview(
+      source,
+      knowverseReview(source, {
+        denominator: {
+          engines: ["chatgpt", "claude", "perplexity", "gemini", "hyperclova"],
+          promptKinds: ["brand"],
+        },
+      }),
+      { requireApproval: false }
+    );
+    expect(missingCell.ok).toBe(false);
+    if (!missingCell.ok) {
+      expect(missingCell.errors.map((e) => e.code)).toContain(
+        "denominator_cell_missing"
+      );
+    }
   });
 });

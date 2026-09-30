@@ -185,6 +185,8 @@ export interface ReportTopDomain {
 
 export interface ReportStats {
   bad_n: number;
+  /** v12 문장용(발행 v2 에서만 채움) — 「다른 회사로 착각 5 · 지어낸 설명 3 · 모른다 3」. */
+  bad_parts?: string;
   bad_rate: number;
   bad_with_official: number;
   cites_total: number;
@@ -196,6 +198,8 @@ export interface ReportStats {
   made_n: number;
   n: number;
   nq: number;
+  /** v12 — 출처에 공식 사이트가 있던 답변 수(v2 에서만 채움). */
+  off_ans?: number;
   official_cites: number;
   /** 파이썬에서 인용이 있으면 소수 1자리 실수, 없으면 정수 0. 표시는 formatOfficialPct. */
   official_pct: number;

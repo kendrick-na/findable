@@ -12,6 +12,7 @@ import {
   computeClientReport,
   ENGINE_NAMES,
   type EngineId,
+  LABELS,
 } from "./compute";
 import { renderStrings } from "./render-strings";
 import {
@@ -74,6 +75,8 @@ export type ReviewError =
   | { code: "question_not_in_source"; promptText: string }
   | { code: "question_without_answers"; promptText: string }
   | { code: "denominator_empty" }
+  | { code: "denominator_cell_missing"; engineId: string; promptText: string }
+  | { code: "denominator_cell_duplicate"; engineId: string; promptText: string }
   | { code: "label_missing"; answerKey: string }
   | { code: "label_unknown_key"; answerKey: string }
   | { code: "quote_not_in_raw"; answerKey: string }
@@ -170,6 +173,28 @@ export function validateReview(
       });
     }
   }
+  // v12 분모 = 엔진 × 질문 칸마다 정확히 1건(반복 측정이 섞이면 어느 답을 셀지 모호하다).
+  for (const q of review.questions) {
+    const text = q.promptText.trim();
+    for (const engineId of review.denominator.engines) {
+      const inCell = comparable.filter(
+        (a) => a.engineId === engineId && a.promptText === text
+      ).length;
+      if (inCell === 0) {
+        errors.push({
+          code: "denominator_cell_missing",
+          engineId,
+          promptText: text,
+        });
+      } else if (inCell > 1) {
+        errors.push({
+          code: "denominator_cell_duplicate",
+          engineId,
+          promptText: text,
+        });
+      }
+    }
+  }
   const byKey = new Map(source.answers.map((a) => [a.answerKey, a]));
   for (const a of comparable) {
     if (!review.labels[a.answerKey]) {
@@ -263,17 +288,44 @@ export function buildReportFromReview(input: {
     }),
   };
   let computed: ReturnType<typeof computeClientReport>;
+  /** v12 build.py 가 s 에 더하는 두 값 — 같은 규칙(렌더러 교차 대조로 확인). */
+  const withV12Stats = (c: ReturnType<typeof computeClientReport>) => {
+    const s = c.s;
+    const parts: string[] = [];
+    if (s.other_n) {
+      parts.push(`${LABELS.other.name} ${s.other_n}`);
+    }
+    if (s.made_n) {
+      parts.push(`${LABELS.made.name} ${s.made_n}`);
+    }
+    if (s.generic_n) {
+      parts.push(`${LABELS.generic.name} ${s.generic_n}`);
+    }
+    if (s.unknown_n) {
+      parts.push(`${LABELS.unknown.name} ${s.unknown_n}`);
+    }
+    return {
+      ...c,
+      s: {
+        ...s,
+        off_ans: s.ok_with_official + s.bad_with_official,
+        bad_parts: parts.join(" · "),
+      },
+    };
+  };
   let view: z.infer<typeof clientReportConfigViewSchema>;
   try {
-    computed = computeClientReport(config, {
-      result: {
-        engineResponses: rows.map((a) => ({
-          engineId: a.engineId,
-          promptText: a.promptText,
-          citedSources: a.citedSources,
-        })),
-      },
-    });
+    computed = withV12Stats(
+      computeClientReport(config, {
+        result: {
+          engineResponses: rows.map((a) => ({
+            engineId: a.engineId,
+            promptText: a.promptText,
+            citedSources: a.citedSources,
+          })),
+        },
+      })
+    );
     const parsedView = clientReportConfigViewSchema.safeParse(
       renderStrings(config, { s: computed.s, c: config })
     );

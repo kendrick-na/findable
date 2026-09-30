@@ -47,7 +47,15 @@ export async function GET(
     jobId,
     answers: loaded.source.answers.length,
   });
-  return NextResponse.json(loaded.source, {
+  const exported = {
+    ...loaded.source,
+    provenance: {
+      kind: "app-export" as const,
+      exportedAt: new Date().toISOString(),
+      exportedBy: adminId,
+    },
+  };
+  return NextResponse.json(exported, {
     headers: {
       ...NO_STORE,
       "Content-Disposition": `attachment; filename="report-source_${jobId.slice(0, 8)}.json"`,
