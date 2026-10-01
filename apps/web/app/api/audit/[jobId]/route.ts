@@ -127,6 +127,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         crewCompletedAt: true,
         errorMessage: true,
         createdAt: true,
+        attemptStartedAt: true,
+        leaseUntil: true,
         completedAt: true,
       },
     });

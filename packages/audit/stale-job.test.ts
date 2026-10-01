@@ -34,6 +34,39 @@ describe("serverless audit timeout recovery", () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 
+  it("uses the resumed attempt instead of the original job creation time", async () => {
+    const resumed = {
+      ...oldJob,
+      attemptStartedAt: new Date(),
+      leaseUntil: null,
+    };
+    expect(isStaleAuditJob(resumed)).toBe(false);
+    expect(await reconcileStaleAuditJob({ ...resumed, email: "org:one" })).toBe(
+      "processing"
+    );
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("expires an abandoned execution lease", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+    const expired = {
+      ...oldJob,
+      attemptStartedAt: new Date(),
+      leaseUntil: new Date(Date.now() - 1000),
+    };
+    expect(isStaleAuditJob(expired)).toBe(true);
+    expect(await reconcileStaleAuditJob({ ...expired, email: "org:one" })).toBe(
+      "failed"
+    );
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          leaseUntil: { lt: expect.any(Date) },
+        }),
+      })
+    );
+  });
+
   it("atomically fails a timed-out measurement under its original owner", async () => {
     updateMany.mockResolvedValue({ count: 1 });
     expect(await reconcileStaleAuditJob(oldJob)).toBe("failed");

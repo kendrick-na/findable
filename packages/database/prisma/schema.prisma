@@ -529,6 +529,10 @@ model AuditJob {
   status   AuditStatus   @default(queued)
   pdfUrl   String?
   result   Json? // SoV · 경쟁사 비교 · Top 3 추천 (휴리스틱 빠른 모드)
+  checkpoint Json? // 미완료 질문 응답. completed result와 분리해 공개 리포트에 노출하지 않는다.
+  leaseToken String? // 실행별 fencing token. 늦은 writer가 재개된 Job을 덮어쓰지 못하게 한다.
+  leaseUntil DateTime?
+  attemptStartedAt DateTime? // 재개 시 createdAt 대신 stale 판정 기준
 
   // 강화 모드 (4 에이전트 분석) — 옵션
   crewStatus      CrewStatus @default(not_requested)

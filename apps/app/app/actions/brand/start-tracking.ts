@@ -1,9 +1,9 @@
 "use server";
 
+import { auditLanguageForMarketScope } from "@repo/audit/market-scope";
 import { isUsableRun } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
 import { AUDIT_JOB_STALE_AFTER_MS } from "@repo/audit/stale-job";
-import { auditLanguageForMarketScope } from "@repo/audit/market-scope";
 import { hasPlan } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth, clerkClient } from "@repo/auth/server";
@@ -187,7 +187,8 @@ async function checkRemeasurePolicy(
     return null;
   }
 
-  const age = Date.now() - recent.createdAt.getTime();
+  const age =
+    Date.now() - (recent.attemptStartedAt ?? recent.createdAt).getTime();
   const isRunning =
     recent.status === "processing" || recent.status === "queued";
   if (isRunning && age <= STALE_THRESHOLD_MS) {

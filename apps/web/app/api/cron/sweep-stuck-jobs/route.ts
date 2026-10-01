@@ -39,13 +39,18 @@ export const GET = async (request: NextRequest) => {
   const fast = await database.auditJob.updateMany({
     where: {
       status: { in: ["queued", "processing"] },
-      createdAt: { lt: staleBefore },
+      OR: [
+        { attemptStartedAt: { lt: staleBefore } },
+        { attemptStartedAt: null, createdAt: { lt: staleBefore } },
+      ],
     },
     data: {
       status: "failed",
       errorMessage:
         "stuck-swept: 백그라운드 처리가 시간 내 완료되지 않았습니다.",
       completedAt: new Date(),
+      leaseToken: null,
+      leaseUntil: null,
     },
   });
 

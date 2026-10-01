@@ -1,7 +1,7 @@
 "use server";
 
-import { database } from "@repo/database";
 import { reconcileStaleAuditJob } from "@repo/audit/stale-job";
+import { database } from "@repo/database";
 import { requireOrg } from "@/lib/db/scoped";
 
 /**
@@ -28,7 +28,14 @@ export const getTrackingStatus = async (
 
   const job = await database.auditJob.findFirst({
     where: { id: jobId, email: `org:${orgId}` },
-    select: { id: true, email: true, status: true, createdAt: true },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+      createdAt: true,
+      attemptStartedAt: true,
+      leaseUntil: true,
+    },
   });
   return job
     ? ((await reconcileStaleAuditJob(job)) ?? "not_found")

@@ -5,11 +5,22 @@
  */
 export async function queryPromptsSequentially<TPrompt, TResult>(
   prompts: readonly TPrompt[],
-  query: (prompt: TPrompt, index: number) => Promise<TResult>
+  query: (prompt: TPrompt, index: number) => Promise<TResult>,
+  options: {
+    completed?: readonly TResult[];
+    onCompleted?: (results: readonly TResult[]) => Promise<void>;
+  } = {}
 ): Promise<TResult[]> {
-  const results: TResult[] = [];
+  if ((options.completed?.length ?? 0) > prompts.length) {
+    throw new Error("Saved audit responses exceed the prompt plan");
+  }
+  const results: TResult[] = [...(options.completed ?? [])];
   for (const [index, prompt] of prompts.entries()) {
+    if (index < results.length) {
+      continue;
+    }
     results.push(await query(prompt, index));
+    await options.onCompleted?.(results);
   }
   return results;
 }

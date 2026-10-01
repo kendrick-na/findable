@@ -28,7 +28,11 @@
 
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
+import { readAuditCheckpoint } from "./checkpoint";
 import { runAuditJob } from "./runner";
+import { reconcileStaleAuditJob } from "./stale-job";
+
+const RESUMABLE_TIMEOUT_RE = /FUNCTION_INVOCATION_TIMEOUT|stuck-swept/i;
 
 /** 측정 1건의 결과 — 화면·API 가 그대로 보여준다. */
 export interface MeasureOneResult {
@@ -83,14 +87,25 @@ export async function startMeasureOne(
   });
 
   const running = await database.auditJob.findFirst({
-    select: { id: true },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+      createdAt: true,
+      attemptStartedAt: true,
+      leaseUntil: true,
+    },
     where: {
       domain: brand.domain,
       email: `org:${organizationId}`,
       status: { in: ["queued", "processing"] },
     },
   });
-  if (running) {
+  const runningStatus = running ? await reconcileStaleAuditJob(running) : null;
+  if (
+    running &&
+    (runningStatus === "queued" || runningStatus === "processing")
+  ) {
     return {
       brandId: brand.id,
       brandName: brand.name,
@@ -98,6 +113,78 @@ export async function startMeasureOne(
       jobId: running.id,
       organizationId,
       skipped: "already_running",
+      trackingBefore,
+    };
+  }
+
+  // A timed-out attempt keeps its whole-question checkpoint. An explicit
+  // admin re-measure atomically requeues that same Job, preserving the plan.
+  // Never copy a checkpoint from a different brand/org/domain or a non-timeout
+  // failure; those require a new measurement rather than silent reuse.
+  const failed = await database.auditJob.findFirst({
+    orderBy: { createdAt: "desc" },
+    select: { id: true, checkpoint: true, errorMessage: true },
+    where: {
+      brandId: brand.id,
+      domain: brand.domain,
+      email: `org:${organizationId}`,
+      status: "failed",
+    },
+  });
+  let resumedCheckpoint: ReturnType<typeof readAuditCheckpoint> = null;
+  if (
+    failed?.checkpoint &&
+    RESUMABLE_TIMEOUT_RE.test(failed.errorMessage ?? "")
+  ) {
+    try {
+      resumedCheckpoint = readAuditCheckpoint(failed.checkpoint, {
+        brandId: brand.id,
+        domain: brand.domain,
+        language: "both",
+        organizationId,
+      });
+    } catch (error) {
+      log.warn("admin.measure_one.checkpoint_ignored", {
+        jobId: failed.id,
+        error: String(error),
+      });
+    }
+  }
+  if (resumedCheckpoint && failed) {
+    const resumedAt = new Date();
+    const requeued = await database.auditJob.updateMany({
+      where: {
+        id: failed.id,
+        brandId: brand.id,
+        domain: brand.domain,
+        email: `org:${organizationId}`,
+        status: "failed",
+      },
+      data: {
+        status: "queued",
+        errorMessage: null,
+        completedAt: null,
+        attemptStartedAt: resumedAt,
+        leaseToken: null,
+        leaseUntil: null,
+      },
+    });
+    if (requeued.count !== 1) {
+      // A concurrent click already claimed the failed Job. Never create a
+      // second paid run from the same checkpoint.
+      throw new Error("Measurement was already resumed; refresh its status");
+    }
+    log.info("admin.measure_one.resumed", {
+      brandId: brand.id,
+      jobId: failed.id,
+      completedQuestions: resumedCheckpoint.responses.length,
+    });
+    return {
+      brandId: brand.id,
+      brandName: brand.name,
+      domain: brand.domain,
+      jobId: failed.id,
+      organizationId,
       trackingBefore,
     };
   }
@@ -141,13 +228,23 @@ export async function checkMeasureOne(
   trackingNow: number;
 }> {
   const job = await database.auditJob.findUnique({
-    select: { brandId: true, status: true },
+    select: {
+      id: true,
+      email: true,
+      createdAt: true,
+      attemptStartedAt: true,
+      leaseUntil: true,
+      brandId: true,
+      status: true,
+    },
     where: { id: jobId },
   });
   const trackingNow = job?.brandId
     ? await database.tracking.count({ where: { brandId: job.brandId } })
     : trackingBefore;
-  const status = job?.status ?? "unknown";
+  const status = job
+    ? ((await reconcileStaleAuditJob(job)) ?? "unknown")
+    : "unknown";
   return {
     done: status === "completed" || status === "failed",
     status,
