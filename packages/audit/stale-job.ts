@@ -28,6 +28,37 @@ export const isStaleAuditJob = (
         : (job.attemptStartedAt ?? job.createdAt).getTime() <
           now - AUDIT_JOB_STALE_AFTER_MS);
 
+/**
+ * Bulk form of `isStaleAuditJob` for the sweep cron: same thresholds and the
+ * same lease rule, so the cron never fails a job the per-job check still
+ * treats as alive (e.g. a queued job younger than the queue limit).
+ */
+export const staleAuditJobsWhere = (
+  status: PendingAuditStatus,
+  now = new Date()
+) => {
+  const before = new Date(
+    now.getTime() -
+      (status === "queued"
+        ? AUDIT_JOB_QUEUE_STALE_AFTER_MS
+        : AUDIT_JOB_STALE_AFTER_MS)
+  );
+  const aged = [
+    { attemptStartedAt: { lt: before } },
+    { attemptStartedAt: null, createdAt: { lt: before } },
+  ];
+  if (status === "queued") {
+    return { status, OR: aged };
+  }
+  return {
+    status,
+    OR: [
+      { leaseUntil: { lt: now } },
+      ...aged.map((clause) => ({ leaseUntil: null, ...clause })),
+    ],
+  };
+};
+
 /** Finalize jobs killed by the serverless time limit before runner catch ran. */
 export async function reconcileStaleAuditJob(job: {
   id: string;

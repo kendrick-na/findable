@@ -5,7 +5,9 @@
 //       또는 queued 에 영구 고정된다. 이 cron 이 오래된 것을 failed 로 정리한다.
 //
 // 정리 대상(멱등, updateMany, 스키마 무변경):
-//   1) 빠른 모드: status IN (queued, processing) 이고 createdAt 이 STALE 초과 → status=failed
+//   1) 빠른 모드: `@repo/audit/stale-job` 의 `staleAuditJobsWhere` 단일 기준 → status=failed
+//      (processing = 실행 lease 만료 또는 lease 없는 6분 초과, queued = 30분 초과).
+//      러너·화면의 `isStaleAuditJob` 과 같은 기준이라 cron 만 먼저 죽이는 일이 없다.
 //   2) crew:    crewStatus = processing 이고 crewStartedAt 이 STALE 초과 → crewStatus=failed
 //
 // ⚠️ 배포 위치 = apps/web(findable, 이미 배포·env 세팅됨). apps/api 는 미배포라 web 에 둠.
@@ -16,6 +18,10 @@
 //   🔴 예전엔 `x-vercel-cron` 헤더 폴백이 있었고 그게 **외부에서 스푸핑 가능한 구멍**이었다.
 //      되살리지 말 것 → `packages/security/cron.ts` 주석 참고.
 
+import {
+  AUDIT_JOB_QUEUE_STALE_ERROR,
+  staleAuditJobsWhere,
+} from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { captureOpsAlert } from "@repo/observability/ops-alert";
@@ -24,7 +30,7 @@ import type { NextRequest } from "next/server";
 
 export const maxDuration = 30;
 
-// 이 시간 초과한 진행/대기 잡은 죽은 것으로 보고 정리. crew route STALE_AFTER_MS(15분)와 동일.
+// crew 단계 전용 임계값. crew route STALE_AFTER_MS(15분)와 동일.
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export const GET = async (request: NextRequest) => {
@@ -35,24 +41,31 @@ export const GET = async (request: NextRequest) => {
 
   const staleBefore = new Date(Date.now() - STALE_AFTER_MS);
 
-  // 1) 빠른 모드 stuck
-  const fast = await database.auditJob.updateMany({
-    where: {
-      status: { in: ["queued", "processing"] },
-      OR: [
-        { attemptStartedAt: { lt: staleBefore } },
-        { attemptStartedAt: null, createdAt: { lt: staleBefore } },
-      ],
-    },
+  // 1) 빠른 모드 stuck — 기준은 stale-job 단일 진실. 문구 "stuck-swept" 는
+  //    measure-one 의 재개 판별(RESUMABLE_TIMEOUT_RE)이 읽으므로 바꾸지 말 것.
+  const now = new Date();
+  const fastProcessing = await database.auditJob.updateMany({
+    where: staleAuditJobsWhere("processing", now),
     data: {
       status: "failed",
       errorMessage:
         "stuck-swept: 백그라운드 처리가 시간 내 완료되지 않았습니다.",
-      completedAt: new Date(),
+      completedAt: now,
       leaseToken: null,
       leaseUntil: null,
     },
   });
+  const fastQueued = await database.auditJob.updateMany({
+    where: staleAuditJobsWhere("queued", now),
+    data: {
+      status: "failed",
+      errorMessage: AUDIT_JOB_QUEUE_STALE_ERROR,
+      completedAt: now,
+      leaseToken: null,
+      leaseUntil: null,
+    },
+  });
+  const fast = { count: fastProcessing.count + fastQueued.count };
 
   // 2) crew stuck
   const crew = await database.auditJob.updateMany({
