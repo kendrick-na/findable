@@ -10,7 +10,7 @@
 //
 // 설계 원칙:
 //   1. 모든 액션은 **우리가 실제로 측정한 데이터**에 근거한다(evidence 필드 필수).
-//   2. 효과 없는 액션은 "하지 마라"고 명시한다(키워드 스터핑·llms.txt) — 업계 차별화.
+//   2. 효과 근거 없는 액션은 "기대하지 마라"고 명시한다(키워드 스터핑·llms.txt만 믿기).
 //   3. 상관 근거는 인과로 단정하지 않는다.
 //   4. 채널은 **타깃 시장에 맞는 것만** 제안한다(세션N-24). 한국 브랜드에 영어권
 //      커뮤니티를, 해외 브랜드에 네이버를 권하면 둘 다 똑같이 엉뚱하다.
@@ -18,6 +18,7 @@
 // 타입만 가져온다(런타임 의존 0) — 이 파일은 순수 함수 모듈로 유지한다.
 import {
   type ActionGuide,
+  applyGuideCopy,
   awarenessActions,
   crawlAccessAction,
   DONT_LIST,
@@ -257,10 +258,10 @@ function promptGapActions(input: ActionInput): GeoAction[] {
       // 같은 문구 반복을 피한다(무명 브랜드는 갭이 여러 개 잡힌다).
       how:
         index === 0
-          ? "이 질문에 정면으로 답하는 페이지를 만드세요. 제목에 질문을 그대로 쓰고, " +
-            "첫 문단에서 결론부터 제시하는 구조가 AI가 인용하기 좋습니다."
-          : "위와 같은 방식으로 이 질문 전용 섹션을 만들거나, 기존 FAQ에 항목으로 추가하세요. " +
-            "질문 문구를 소제목으로 그대로 쓰는 것이 핵심입니다.",
+          ? "이 질문에 실제로 도움이 되는 고유 정보(사양·가격·사례·확인 가능한 근거)를 기존의 알맞은 페이지에 먼저 보강하세요. " +
+            "첫 문단에 결론을 쓰고, 질문을 소제목으로 두면 읽는 사람이 답을 바로 찾습니다. 관찰 연구에서 AI가 인용한 페이지는 제목이 질문과 더 비슷했습니다."
+          : "위와 같은 방식으로 기존 FAQ나 관련 페이지에 이 질문의 답을 항목으로 보강하세요. " +
+            "새 페이지는 이 질문만으로 독립된 가치가 있을 때만 만들고, 관찰 결과를 효과 보장으로 읽지 마세요.",
       source: "우리 측정 데이터 — 프롬프트별 언급 여부",
       where: `${primaryOwnedPage(input)} — 이 질문을 제목 또는 H2로 둔 FAQ·전용 섹션`,
       verification: promptVerification(p.text),
@@ -383,8 +384,8 @@ function sourcePortfolioAction(input: ActionInput): GeoAction | null {
             "잘못된 내용이 있으면 최신 정보로 답글·정정 요청부터 하세요.\n"
           : "") +
         "② 같은 질문에 대한 '공식 답'을 우리 도메인에 만드세요. " +
-        "제품 사양·가격·FAQ를 한 페이지에 정리하고, 질문 문구를 소제목으로 그대로 쓰면 " +
-        "AI가 자사 페이지를 근거로 채택할 확률이 올라갑니다.\n" +
+        "제품 사양·가격·FAQ를 한 페이지에 정리하고 질문 문구를 소제목으로 두세요. " +
+        "자사 페이지가 근거로 채택된다는 보장은 없으니 다음 측정에서 확인합니다.\n" +
         "③ 그 채널에 우리 콘텐츠를 직접 올리는 것도 유효합니다. " +
         "AI가 이미 그 채널을 신뢰하고 있다는 뜻이니, 그곳에 정확한 정보를 두는 게 빠릅니다.",
       source: "우리 측정 데이터 — 실제 인용된 출처 도메인·건수",
@@ -436,6 +437,11 @@ function legacyGuide(action: GeoAction): ActionGuide | undefined {
   if (action.kind === "prompt_gap") {
     return {
       evidenceGrade: "medium",
+      evidenceBasis: "observational",
+      notGuaranteed:
+        "질문에 맞춘 제목·FAQ가 인용을 늘린다는 실험 결과는 없습니다. 같은 문구의 페이지를 여러 개 만들면 품질 문제가 될 수 있습니다.",
+      publishCheck:
+        "보강한 페이지가 공개 주소에서 열리고 검색엔진에서 검색되는지(색인) 확인하세요.",
       sources: [RULE_SOURCES.ahrefsWhyCited],
       engines: ["chatgpt"],
       effortHours: { min: 2, max: 4, per: "total" },
@@ -448,6 +454,11 @@ function legacyGuide(action: GeoAction): ActionGuide | undefined {
   if (action.kind === "source_portfolio") {
     return {
       evidenceGrade: "medium",
+      evidenceBasis: "observational",
+      notGuaranteed:
+        "제3자 언급이 늘면 AI 노출도 는다는 것은 상관관계입니다. 출처 비중이 바뀐다는 보장은 없습니다.",
+      publishCheck:
+        "외부 글이 공개돼 있고 회사 이름으로 검색되는지(색인) 확인하세요.",
       sources: [RULE_SOURCES.ahrefsVisibility],
       engines: [],
       effortHours: { min: 4, max: 12, per: "total" },
@@ -520,7 +531,7 @@ export function buildGeoActions(input: ActionInput): GeoAction[] {
   const todo = actions
     .sort((a, b) => b.priority - a.priority)
     .slice(0, MAX_ACTIONS)
-    .map((a) => (a.guide ? a : { ...a, guide: legacyGuide(a) }));
+    .map((a) => applyGuideCopy(a.guide ? a : { ...a, guide: legacyGuide(a) }));
   return [...todo, avoidAction()];
 }
 

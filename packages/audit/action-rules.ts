@@ -48,6 +48,23 @@ export const EVIDENCE_GRADE_LABEL: Record<
   },
 };
 
+/**
+ * 근거의 **종류**(2026-10-03 AG-1). 등급(강도)과 따로 둔다 — 대규모 관찰 연구도
+ * 「근거 보통」일 수 있지만, 그것은 효과를 보여준 실험이 아니라 상관관계다.
+ */
+export type EvidenceBasis =
+  | "official_requirement"
+  | "controlled_experiment"
+  | "observational"
+  | "internal_hypothesis";
+
+export const EVIDENCE_BASIS_LABEL: Record<EvidenceBasis, string> = {
+  official_requirement: "공식 플랫폼 문서",
+  controlled_experiment: "통제 실험",
+  observational: "관찰 상관",
+  internal_hypothesis: "Findable 내부 가설",
+};
+
 export interface EvidenceSource {
   label: string;
   url: string;
@@ -66,8 +83,14 @@ export interface ActionGuide {
   effortHours: { max: number; min: number; per: "total" | "week" };
   /** 적용되는 AI(엔진 id). 빈 배열 = 측정한 AI 전체. */
   engines: string[];
+  /** 근거 종류. 2026-10-03 이전 저장분에는 없다. */
+  evidenceBasis?: EvidenceBasis;
   evidenceGrade: EvidenceGrade;
   failCondition: string;
+  /** 이 작업이 보장하지 않는 것(비보장 범위). */
+  notGuaranteed?: string;
+  /** 재측정 전에 게시·색인이 됐는지 확인하는 방법. */
+  publishCheck?: string;
   quotes?: ConfusedQuote[];
   remeasureMetric: string;
   sources: EvidenceSource[];
@@ -124,57 +147,63 @@ export interface VerdictEvidence {
 
 export const RULE_SOURCES = {
   googleOrganization: {
-    label: "Google 검색 센터 — Organization 구조화 데이터(sameAs)",
+    label: "[공식 문서] Google 검색 센터 — Organization 구조화 데이터(sameAs)",
     url: "https://developers.google.com/search/docs/appearance/structured-data/organization",
   },
   naverBriefing: {
     label:
-      "SEO뉴스 — 네이버 AI 브리핑 인용 272건 분석(49.3%가 검색 상위 10위 밖 문서)",
+      "[사례 분석] SEO뉴스 — 네이버 AI 브리핑 인용 272건(질의 유형 혼합) 중 49.3%가 검색 상위 10위 밖 문서",
     url: "https://seonews.co.kr/naver-ai-briefing-geo-202605/",
   },
   ahrefsBestLists: {
     label:
-      "Ahrefs — ChatGPT 인용 URL 26,283개 중 '추천 목록(best X)' 글이 43.8%",
+      "[관찰 연구] Ahrefs — 프롬프트 750개·ChatGPT 인용 URL 26,283개 중 '추천 목록(best X)' 글이 43.8%(게재 효과 실험 아님)",
     url: "https://ahrefs.com/blog/best-lists-research/",
   },
   seerBing: {
     label:
-      "Seer Interactive — SearchGPT 인용의 87% 이상이 Bing 상위 결과와 일치",
+      "[관찰 연구] Seer Interactive(2025-02) — 질문 약 100개·인용 약 500건에서 SearchGPT 인용의 87% 이상이 Bing 상위 결과와 일치(Bing 밖 출처 인용도 있음)",
     url: "https://www.seerinteractive.com/insights/87-percent-of-searchgpt-citations-match-bings-top-results",
+  },
+  bingAiPerformance: {
+    label:
+      "[공식 문서] Bing 웹마스터 블로그 — AI Performance(Copilot·Bing AI 답변의 인용 URL·쿼리 보고)",
+    url: "https://blogs.bing.com/webmaster/2026/2/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview/",
   },
   ahrefsWhyCited: {
     label:
-      "Ahrefs — 프롬프트 140만 건 분석: 인용된 페이지는 제목이 질문과 더 비슷함",
+      "[관찰 연구] Ahrefs — 프롬프트 140만 건 분석: 인용된 페이지는 제목이 질문과 더 비슷함",
     url: "https://ahrefs.com/blog/why-chatgpt-cites-pages/",
   },
   googleJsSeo: {
-    label: "Google 검색 센터 — 자바스크립트 SEO 기본(렌더링)",
+    label: "[공식 문서] Google 검색 센터 — 자바스크립트 SEO 기본(렌더링)",
     url: "https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics",
   },
   openaiBots: {
-    label: "OpenAI — 크롤러(OAI-SearchBot·GPTBot) 안내",
+    label: "[공식 문서] OpenAI — 크롤러(OAI-SearchBot·GPTBot) 안내",
     url: "https://platform.openai.com/docs/bots",
   },
   ahrefsVisibility: {
     label:
-      "Ahrefs — 브랜드 7.5만 개 분석: YouTube 언급 상관 약 0.737, 웹 언급 0.656~0.709(상관이며 인과 아님)",
+      "[관찰 연구] Ahrefs — 브랜드 7.5만 개 분석: YouTube 언급 상관 약 0.737, 웹 언급 0.656~0.709(상관이며 인과 아님)",
     url: "https://ahrefs.com/blog/ai-brand-visibility-correlations",
   },
   ahrefsSchema: {
     label:
-      "Ahrefs — 스키마를 추가한 1,885개 페이지: AI 인용 유의미한 증가 없음",
+      "[관찰 연구] Ahrefs — 스키마를 추가한 1,885개 페이지 매칭 비교: AI Mode·ChatGPT 인용 유의미한 증가 없음",
     url: "https://ahrefs.com/blog/schema-ai-citations/",
   },
   googleAiFeatures: {
-    label: "Google 검색 센터 — AI 기능과 웹사이트(별도 AI용 파일 불필요)",
+    label:
+      "[공식 문서] Google 검색 센터 — AI 기능과 웹사이트(별도 AI용 파일 불필요)",
     url: "https://developers.google.com/search/docs/appearance/ai-features",
   },
   googleSpam: {
-    label: "Google 검색 센터 — 스팸 정책(클로킹)",
+    label: "[공식 문서] Google 검색 센터 — 스팸 정책(클로킹)",
     url: "https://developers.google.com/search/docs/essentials/spam-policies",
   },
   kftcAdAct: {
-    label: "국가법령정보센터 — 표시·광고의 공정화에 관한 법률",
+    label: "[법령] 국가법령정보센터 — 표시·광고의 공정화에 관한 법률",
     url: "https://www.law.go.kr/법령/표시ㆍ광고의공정화에관한법률",
   },
 } as const satisfies Record<string, EvidenceSource>;
@@ -404,6 +433,30 @@ function card(
   };
 }
 
+const NOT_GUARANTEED_PREFIX = "보장하지 않는 것:";
+const PUBLISH_CHECK_PREFIX = "게시·색인 확인:";
+
+/**
+ * 카드 템플릿(관측→실행→근거→비보장→게시·색인 확인→재측정)을 **기존 화면 칸**에 싣는다.
+ * 새 UI 칸 없이 보이게: 비보장은 실행 방법 끝에, 게시·색인 확인은 확인 방법 앞에 붙인다.
+ * 두 번 불러도 같은 결과(이미 붙었으면 그대로).
+ */
+export function applyGuideCopy(action: GeoAction): GeoAction {
+  const g = action.guide;
+  if (!g) {
+    return action;
+  }
+  const how =
+    g.notGuaranteed && !action.how.includes(NOT_GUARANTEED_PREFIX)
+      ? `${action.how}\n${NOT_GUARANTEED_PREFIX} ${g.notGuaranteed}`
+      : action.how;
+  const verification =
+    g.publishCheck && !action.verification?.startsWith(PUBLISH_CHECK_PREFIX)
+      ? `${PUBLISH_CHECK_PREFIX} ${g.publishCheck}${action.verification ? ` 재측정: ${action.verification}` : ""}`
+      : action.verification;
+  return { ...action, how, verification };
+}
+
 /** 인지 낮음 판정 — 판정 집계가 있으면 답변 단위, 없으면 엔진 단위(구버전). */
 export function isAwarenessLow(sig: RuleSignals): boolean {
   const v = sig.verdicts?.counts;
@@ -456,6 +509,11 @@ export function entityClarityAction(sig: RuleSignals): GeoAction | null {
     },
     {
       evidenceGrade: "medium",
+      evidenceBasis: "official_requirement",
+      notGuaranteed:
+        "구조화 데이터는 Google 이 회사 정보를 이해하도록 돕는 공식 기능입니다. 다른 AI의 착각이 줄거나 AI 언급이 늘어난다는 보장은 아닙니다.",
+      publishCheck:
+        "수정한 소개 페이지가 공개 주소에서 열리고, Google 리치 결과 테스트에서 Organization 데이터가 오류 없이 읽히는지 확인하세요.",
       sources: [RULE_SOURCES.googleOrganization],
       engines: ["google", "gemini"],
       effortHours: { min: 2, max: 4, per: "total" },
@@ -493,14 +551,19 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
           title: "네이버 블로그에 한 주제로 꾸준히 글을 올리세요",
           evidence,
           how:
-            "우리 업종의 한 주제만 정해, 고객이 실제로 묻는 질문을 제목으로 삼아 매주 올리세요. 첫 문단에 답을 먼저 쓰고, 회사 이름을 정확히 적습니다. " +
-            "분석에 따르면 네이버 AI 브리핑은 검색 상위 10위 밖 문서도 절반 가까이 인용합니다 — 순위보다 질문에 맞게 정리된 글이 뽑힐 여지가 있습니다.",
+            "우리 업종의 한 주제만 정해, 고객이 실제로 묻는 질문에 도움이 되는 글을 꾸준히 올리세요. 첫 문단에 답을 먼저 쓰고, 회사 이름을 정확히 적습니다. " +
+            "한 사례 분석(네이버 AI 브리핑 인용 272건)에서는 검색 상위 10위 밖 문서도 인용됐습니다. 그 분석은 기업 블로그 게시의 효과를 잰 것이 아니어서, 이 카드는 Findable의 실행 가설입니다.",
           where: "네이버 블로그(회사 공식 계정)",
           verification:
             "다음 측정에서 네이버·네이버 AI 브리핑·HyperCLOVA X 답변이 우리를 알아봤는지 보세요.",
         },
         {
-          evidenceGrade: "medium",
+          evidenceGrade: "weak",
+          evidenceBasis: "internal_hypothesis",
+          notGuaranteed:
+            "매주(주 1회) 올리면 네이버 AI 브리핑이나 HyperCLOVA X 가 우리를 인용·언급한다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.",
+          publishCheck:
+            "올린 글이 네이버 검색에서 회사 이름이나 글 제목으로 검색되는지(색인) 확인하세요.",
           sources: [RULE_SOURCES.naverBriefing],
           engines: ["naver", "naver-briefing", "hyperclova"],
           effortHours: { min: 2, max: 4, per: "week" },
@@ -529,6 +592,11 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
       },
       {
         evidenceGrade: "medium",
+        evidenceBasis: "observational",
+        notGuaranteed:
+          "ChatGPT 가 추천 목록 글을 많이 인용한다는 관찰입니다. 목록에 실리면 우리 이름이 나온다는 실험 결과는 아닙니다.",
+        publishCheck:
+          "실린 글의 주소가 공개돼 있고, 검색엔진에서 그 글이 검색되는지(색인) 확인하세요.",
         sources: [RULE_SOURCES.ahrefsBestLists],
         engines: ["chatgpt"],
         effortHours: { min: 4, max: 10, per: "total" },
@@ -546,18 +614,25 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
       "bing_webmaster",
       2,
       {
-        title: "Bing 웹마스터 도구에 사이트를 등록하세요",
+        title:
+          "Bing 웹마스터 도구에 사이트를 등록해 색인·AI 인용 현황을 확인하세요",
         evidence,
         how:
           "Bing Webmaster Tools 에 사이트를 등록하고 사이트맵을 제출하세요(구글 서치 콘솔 계정으로 가져올 수 있습니다). " +
-          "ChatGPT 검색이 인용한 곳의 대부분이 Bing 상위 결과와 겹친다는 분석이 있어, Bing 에 안 잡히면 ChatGPT 검색에도 나오기 어렵습니다.",
+          "등록하면 Bing 색인 상태와, AI Performance 보고서에서 Copilot·Bing AI 답변이 우리 페이지를 인용한 기록을 직접 볼 수 있습니다. " +
+          "한 관찰 연구(SearchGPT, 질문 약 100개)에서는 인용의 대부분이 Bing 상위 결과와 겹쳤지만, Bing 밖 출처도 인용됐습니다.",
         where: "https://www.bing.com/webmasters",
         verification:
           "등록 후 Bing 에서 회사 이름을 검색해 공식 사이트가 나오는지, 다음 측정에서 ChatGPT 답변을 보세요.",
       },
       {
-        evidenceGrade: "medium",
-        sources: [RULE_SOURCES.seerBing],
+        evidenceGrade: "weak",
+        evidenceBasis: "observational",
+        notGuaranteed:
+          "등록만으로 ChatGPT 인용이 늘지는 않을 수 있습니다. ChatGPT 검색 노출은 OpenAI 의 OAI-SearchBot 접근 등 별도 조건도 있습니다.",
+        publishCheck:
+          "Bing 웹마스터 도구에서 사이트맵이 처리됐고 주요 페이지가 색인됐는지 확인하세요.",
+        sources: [RULE_SOURCES.bingAiPerformance, RULE_SOURCES.seerBing],
         engines: ["chatgpt"],
         effortHours: { min: 0.5, max: 1, per: "total" },
         effectLag: "색인까지 며칠~몇 주.",
@@ -584,6 +659,11 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
       },
       {
         evidenceGrade: "medium",
+        evidenceBasis: "observational",
+        notGuaranteed:
+          "언급이 많은 브랜드가 AI에도 많이 나온다는 상관관계입니다. 조사 대상은 이미 규모가 있는 브랜드 위주라, 작은 신규 브랜드에 같은 관계가 나타난다는 보장은 없습니다.",
+        publishCheck:
+          "영상·기사·사례 글이 공개돼 있고, 회사 이름으로 검색했을 때 그 글이 나오는지 확인하세요.",
         sources: [RULE_SOURCES.ahrefsVisibility],
         engines: ["chatgpt", "google"],
         effortHours: { min: 8, max: 20, per: "total" },
@@ -626,7 +706,7 @@ export function ownedPageAction(sig: RuleSignals, where: string): GeoAction {
       evidence: `${mentionLine}${ownedLine}`,
       how:
         "고객이 AI에 실제로 묻는 질문(예: '○○는 어떤 회사야?', '○○ 추천')마다 답하는 페이지를 하나씩 두고, 그 질문을 페이지 제목과 주소(URL)에 그대로 쓰세요. " +
-        "첫 문단에 답을 먼저 적습니다. 분석에서 AI가 인용한 페이지는 제목이 질문과 더 비슷했습니다. " +
+        "첫 문단에 답을 먼저 적습니다. 관찰 연구에서 AI가 인용한 페이지는 제목이 질문과 더 비슷했습니다. " +
         "수치·사례는 확인 가능한 것만 쓰고 원출처를 연결하세요.",
       where,
       verification:
@@ -634,6 +714,11 @@ export function ownedPageAction(sig: RuleSignals, where: string): GeoAction {
     },
     {
       evidenceGrade: "medium",
+      evidenceBasis: "observational",
+      notGuaranteed:
+        "제목을 질문에 맞추면 인용된 페이지와 모양이 비슷해질 뿐, 인용이 늘어난다는 실험 결과는 아닙니다. 같은 문구의 페이지를 여러 개 만들면 품질 문제가 될 수 있습니다.",
+      publishCheck:
+        "바꾼 페이지가 공개 주소에서 열리고, 검색엔진에서 새 제목으로 검색되는지(색인) 확인하세요.",
       sources: [RULE_SOURCES.ahrefsWhyCited],
       engines: ["chatgpt"],
       effortHours: { min: 2, max: 6, per: "total" },
@@ -661,7 +746,7 @@ export function crawlAccessAction(sig: RuleSignals): GeoAction | null {
       evidence:
         "공식 사이트가 출처로 인용된 적이 한 번도 없습니다. 봇이 페이지를 못 읽는 상태라면 다른 처방은 효과가 없습니다.",
       how:
-        "① 브라우저에서 '페이지 소스 보기'를 눌렀을 때 본문 글자가 보여야 합니다(자바스크립트로만 그리는 화면은 봇이 빈 페이지로 볼 수 있습니다 — 서버 렌더링 필요). " +
+        "① 브라우저에서 '페이지 소스 보기'를 눌렀을 때 본문 글자가 보이는지 확인하세요. Google 은 자바스크립트를 렌더링하지만 모든 봇이 그렇다고 확인된 것은 아니어서, 핵심 본문은 서버 HTML에 두는 편이 안전합니다. " +
         "② robots.txt 에서 OAI-SearchBot·Googlebot 같은 검색·AI 봇을 막고 있지 않은지 확인하세요. 개발자에게 이 두 가지를 그대로 요청하면 됩니다.",
       where: sig.brandDomain
         ? `https://${sig.brandDomain}/robots.txt 및 주요 페이지의 소스`
@@ -671,6 +756,11 @@ export function crawlAccessAction(sig: RuleSignals): GeoAction | null {
     },
     {
       evidenceGrade: "strong",
+      evidenceBasis: "official_requirement",
+      notGuaranteed:
+        "봇이 읽을 수 있는 것은 인용의 전제 조건일 뿐입니다. 고친다고 인용이 생긴다는 보장은 없고, 인용 0건이 곧 차단을 뜻하지도 않습니다.",
+      publishCheck:
+        "고친 뒤 공개 주소의 소스 보기와 robots.txt 를 다시 열어 실제로 반영됐는지 확인하세요.",
       sources: [RULE_SOURCES.googleJsSeo, RULE_SOURCES.openaiBots],
       engines: [],
       effortHours: { min: 1, max: 3, per: "total" },
@@ -696,9 +786,9 @@ export const DONT_LIST: DontItem[] = [
     sources: [RULE_SOURCES.ahrefsSchema],
   },
   {
-    title: "llms.txt 파일 만들기",
+    title: "llms.txt 파일만 만들고 AI 노출이 늘기를 기대하기",
     reason:
-      "주요 AI 서비스가 이 파일을 읽는다고 밝힌 적이 없고, Google 도 AI 기능을 위해 별도 파일을 만들 필요가 없다고 안내합니다.",
+      "Google 은 AI 기능을 위해 별도 파일을 만들 필요가 없다고 안내하고, 다른 AI 서비스에서의 효과도 확인되지 않았습니다. 파일을 두는 것은 선택 사항이지만, 그것만으로 노출을 기대할 근거는 없습니다.",
     evidenceGrade: "none",
     sources: [RULE_SOURCES.googleAiFeatures],
   },
