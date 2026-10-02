@@ -96,6 +96,10 @@ export function paymentGrantAfterPayment(
     typeof privateMetadata?.[PAYMENT_GRANT_ID_KEY] === "string"
       ? privateMetadata[PAYMENT_GRANT_ID_KEY]
       : null;
+  // verify와 Paid 웹훅이 같은 결제를 처리해도 환불 복원 스택은 한 번만 쌓는다.
+  if (currentPaymentId === paymentId) {
+    return { plan: currentPlan, privateMetadata: privateMetadata ?? null };
+  }
   const prior =
     existing[0]?.plan === currentPlan &&
     existing[0]?.paymentId === currentPaymentId

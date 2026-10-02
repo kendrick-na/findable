@@ -64,6 +64,30 @@ describe("결제 권한 출처", () => {
     });
   });
 
+  it("verify와 Paid 웹훅이 같은 결제를 부여한 뒤 전액 환불하면 한 번만 회수한다", () => {
+    const verified = paymentGrantAfterPayment(
+      "free",
+      {},
+      "growth",
+      "payment-1"
+    );
+    const webhook = paymentGrantAfterPayment(
+      verified.plan,
+      verified.privateMetadata,
+      "growth",
+      "payment-1"
+    );
+
+    expect(webhook).toEqual(verified);
+    expect(
+      paymentGrantAfterRefund(webhook.privateMetadata, "payment-1")
+    ).toEqual({
+      plan: "free",
+      privateMetadata: null,
+      revoked: true,
+    });
+  });
+
   it("상위 플랜 결제 후 환불하면 직전 유료 권한과 출처를 복원한다", () => {
     const starter = paymentGrantAfterPayment("free", {}, "starter", "starter-1");
     const growth = paymentGrantAfterPayment(
