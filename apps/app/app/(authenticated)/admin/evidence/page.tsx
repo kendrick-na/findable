@@ -13,15 +13,8 @@
 // ⚠️ 계산은 `@repo/audit/before-after` 순수 함수가 한다. 이 파일은 **조회와 표시만**.
 //   (같은 계산을 화면에서 다시 하면 두 숫자가 갈린다 — 프로젝트 규칙.)
 
-import {
-  type BeforeAfterRow,
-  buildBeforeAfterRow,
-} from "@repo/audit/before-after";
-import {
-  completionMentionRate,
-  type EvidenceTrackingRow,
-  mentionRateSeries,
-} from "@repo/audit/evidence-series";
+import type { BeforeAfterRow } from "@repo/audit/before-after";
+import { buildUnattributedEvidenceRow } from "@repo/audit/evidence-series";
 import { isAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
@@ -42,7 +35,7 @@ const pctText = (v: number | null): string =>
 /** 델타 표기 — 부호를 명시한다. 🔴 "↗" 같은 화살표는 방향 오독을 낳아 쓰지 않는다. */
 const deltaText = (v: number | null): string => {
   if (v === null) {
-    return "아직 모름";
+    return "비교 불가";
   }
   const pp = Math.round(v * 100);
   return `${pp > 0 ? "+" : ""}${pp}%p`;
@@ -69,30 +62,9 @@ const AdminEvidencePage = async () => {
 
   const totalCompletions = await database.actionCompletion.count();
 
-  // 조치가 있는 브랜드의 측정 시계열만 가져온다(전체를 긁지 않는다).
-  const brandIds = [...new Set(completions.map((c) => c.brandId))];
-  const trackings = brandIds.length
-    ? await database.tracking.findMany({
-        orderBy: { trackedAt: "asc" },
-        select: { brandId: true, brandMentioned: true, trackedAt: true },
-        where: { brandId: { in: brandIds } },
-      })
-    : [];
-
-  // 브랜드별 측정 시계열로 접는다.
-  const seriesByBrand = new Map<string, EvidenceTrackingRow[]>();
-  for (const t of trackings) {
-    const list = seriesByBrand.get(t.brandId) ?? [];
-    list.push({ trackedAt: t.trackedAt, brandMentioned: t.brandMentioned });
-    seriesByBrand.set(t.brandId, list);
-  }
-
   const rows = completions.map((c) => ({
     brandLabel: c.brand?.name ?? c.brand?.domain ?? "(브랜드 없음)",
-    row: buildBeforeAfterRow(
-      { ...c, sovAtCompletion: completionMentionRate(c.sovAtCompletion) },
-      mentionRateSeries(seriesByBrand.get(c.brandId) ?? [])
-    ),
+    row: buildUnattributedEvidenceRow(c),
   }));
 
   const withNumbers = rows.filter((r) => r.row.deltaSov !== null);
@@ -106,9 +78,10 @@ const AdminEvidencePage = async () => {
             고객사 조치 전후 대조
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            완료 시점과 이후 측정의 브랜드 언급률 차이를 관찰합니다. 이는 처방의
-            효과를 입증하지 않습니다. 질문·엔진 구성과 시스템 브리핑 행이 같은지
-            확인되기 전에는 투자·영업 효과 근거로 인용하지 마세요.
+            완료 시점의 언급률 스냅샷만 표시합니다. 과거 측정에는
+            실행·질문·엔진·판정 버전의 연결 정보가 없어 이후 측정과 안전하게
+            짝지을 수 없습니다. 전후 변화나 처방 효과를 투자·영업 근거로
+            인용하지 마세요.
           </p>
         </div>
 
@@ -125,8 +98,9 @@ const AdminEvidencePage = async () => {
             </p>
           ) : null}
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-            비교가 안 되는 건은 대부분 “조치 후 재측정이 아직 없음”입니다.
-            시간이 지나면 채워집니다.
+            재측정이 있더라도 현재 데이터만으로는 동일한 질문·엔진·판정 기준인지
+            확인할 수 없습니다. 비교 수치는 실행 원장과 검증 절차를 갖춘 뒤
+            표시합니다.
           </p>
         </section>
 
@@ -137,8 +111,8 @@ const AdminEvidencePage = async () => {
             </h2>
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
               고객사가 진단 결과에서 처방을 실행하고 “완료로 표시”를 누르면
-              여기에 쌓입니다. 그 뒤 재측정이 한 번 더 돌면 전후 비교가
-              만들어집니다.
+              여기에 쌓입니다. 전후 비교는 동일한 측정 조건과 실행 이력을 검증한
+              뒤에만 제공됩니다.
             </p>
           </section>
         ) : (

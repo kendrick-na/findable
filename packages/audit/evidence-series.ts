@@ -1,4 +1,8 @@
-import type { MeasurementPoint } from "./before-after";
+import {
+  type BeforeAfterRow,
+  buildBeforeAfterRow,
+  type CompletionRecord,
+} from "./before-after";
 
 /**
  * ActionCompletion snapshots are displayed as 0–100 mention percentages.
@@ -17,32 +21,26 @@ export function completionMentionRate(percent: number | null): number | null {
   return percent / 100;
 }
 
-export interface EvidenceTrackingRow {
-  brandMentioned: boolean;
-  trackedAt: Date;
-}
-
-/** One observation per run timestamp, using the same mention/answer axis as
- * the completion snapshot. Tracking has no runId: same-time system briefings
- * may still contaminate a cohort, so this is observational only. */
-export function mentionRateSeries(
-  rows: EvidenceTrackingRow[]
-): MeasurementPoint[] {
-  const runs = new Map<number, { mentions: number; total: number }>();
-  for (const row of rows) {
-    const time = row.trackedAt.getTime();
-    if (!Number.isFinite(time)) {
-      continue;
-    }
-    const run = runs.get(time) ?? { mentions: 0, total: 0 };
-    run.total += 1;
-    if (row.brandMentioned) {
-      run.mentions += 1;
-    }
-    runs.set(time, run);
-  }
-  return [...runs].map(([time, run]) => ({
-    measuredAt: new Date(time),
-    sov: run.mentions / run.total,
-  }));
+/**
+ * Historical Tracking rows have no auditJobId/axis, and can contain a briefing
+ * row with the same timestamp, a briefing-only run, or a different question and
+ * verdict cohort. A scalar snapshot cannot prove that any later run is
+ * comparable. Hide the delta until provenance-aware pairing is implemented.
+ */
+export function buildUnattributedEvidenceRow(
+  completion: CompletionRecord
+): BeforeAfterRow {
+  const row = buildBeforeAfterRow(
+    {
+      ...completion,
+      sovAtCompletion: completionMentionRate(completion.sovAtCompletion),
+    },
+    []
+  );
+  return {
+    ...row,
+    caveats: [
+      "측정 실행·질문·엔진·판정 버전을 조치 전후에 연결할 근거가 없어 변화 수치를 표시하지 않습니다. 재측정이 있더라도 비교 가능성이 확인되기 전에는 효과로 인용할 수 없습니다.",
+    ],
+  };
 }
