@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isPreviewStubAuditRequest } from "../lib/preview-audit-stub-proxy";
 
@@ -10,7 +10,10 @@ const previewStub = {
 
 describe("Preview stub public audit proxy boundary", () => {
   it("checks the narrow Preview bypass before invoking Clerk", () => {
-    const proxy = readFileSync(join(process.cwd(), "proxy.ts"), "utf8");
+    const proxy = readFileSync(
+      fileURLToPath(new URL("../proxy.ts", import.meta.url)),
+      "utf8"
+    );
     expect(proxy).toContain('from "./lib/preview-audit-stub-proxy"');
     expect(proxy).toContain("if (isPreviewStubAuditRequest(request.nextUrl.pathname))");
   });
