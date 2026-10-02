@@ -97,11 +97,8 @@ async function findEmailAuditActions(): Promise<{
     brandLabel: result.brandName || job?.domain || "",
     brandName: result.brandName,
     domain: job?.domain ?? null,
-    // 🔴 2차 교차검증에서 잡음: 예전엔 `null` 을 넘겨 **완료 시점 SoV 가 안 남았다**.
-    //   그러면 `ActionCompletion.sovAtCompletion` 이 비어 "완료 후 몇 점 올랐나"를
-    //   영영 계산할 수 없다 — 이 기능을 만든 목적 자체가 사라진다.
-    //   ⚠️ 정의가 같은지 확인함: 진단 `metrics.sov` 와 대시보드 `currentSov` 는
-    //     둘 다 "언급된 응답 / 성공 응답 × 100"(0~100)이라 **같은 축에서 비교 가능**하다.
+    // 완료 시점의 0~100 스냅샷은 원장 구축을 위해 보존한다. 무료 진단과
+    // 조직 추적은 질문·엔진·판정 버전이 다를 수 있으므로 이 값만으로 변화 배지를 만들지 않는다.
     sov: typeof result.metrics?.sov === "number" ? result.metrics.sov : null,
   };
 }
@@ -203,8 +200,8 @@ const AuditActions = ({
         </h1>
         <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
           {domain
-            ? "무료 진단에서 나온 처방 전체예요. 완료로 표시하면 이 브랜드가 내 목록에 등록돼요. 추적을 시작하면 다음 측정에서 점수 변화까지 이어집니다."
-            : "무료 진단에서 나온 처방 전체예요. 브랜드를 등록하고 추적을 시작하면 완료 체크와 다음 측정에서의 점수 변화까지 이어집니다."}
+            ? "무료 진단에서 나온 처방 전체예요. 완료로 표시하면 이 브랜드가 내 목록에 등록돼요. 추적을 시작해 다음 측정 결과를 별도로 확인할 수 있습니다."
+            : "무료 진단에서 나온 처방 전체예요. 브랜드를 등록하고 추적을 시작하면 완료 체크와 다음 측정 결과를 별도로 확인할 수 있습니다."}
         </p>
         <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
           다른 브랜드의 과거 처방은 섞지 않아요.
@@ -522,8 +519,8 @@ async function ActionsPage({
             {first.brand.name || first.brand.domain} — 지금 할 일
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            최근 측정 결과를 바탕으로 효과가 큰 순서로 정리했어요. 완료로
-            표시하면 다음 측정에서 점수 변화를 함께 보여드립니다.
+            최근 측정에서 관찰된 문제와 실행 우선순위를 정리했어요. 완료 표시는
+            작업 기록이며, 효과를 입증하지 않습니다.
           </p>
         </div>
         <ActionList

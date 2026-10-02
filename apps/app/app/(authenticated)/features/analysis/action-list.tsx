@@ -31,7 +31,7 @@ export type ActionTarget =
 
 export interface ActionItem {
   completed: boolean;
-  /** 완료 시점 SoV — 지금 값과 비교해 변화를 보여준다(루프 닫기). */
+  /** 완료 시점 스냅샷. 실행·질문·엔진·판정 버전이 연결되기 전까지 효과 배지에 쓰지 않는다. */
   completedSov: number | null;
   /** 「하지 마세요」 카드에만 — 항목별 근거. 구 데이터엔 없다. */
   donts?: DontItem[];
@@ -94,12 +94,6 @@ const ActionCard = ({
   const [pending, startTransition] = useTransition();
   const meta = PRIORITY_META[action.priority] ?? PRIORITY_META[1];
 
-  // 루프 닫기: 완료 시점 대비 현재 SoV 변화.
-  const delta =
-    done && action.completedSov !== null && currentSov !== null
-      ? Math.round(currentSov - action.completedSov)
-      : null;
-
   const onToggle = () => {
     startTransition(async () => {
       const next = !done;
@@ -145,19 +139,6 @@ const ActionCard = ({
         >
           {meta?.label}
         </span>
-        {delta !== null && delta !== 0 && (
-          <span
-            className={cn(
-              "rounded-full px-2 py-0.5 font-medium text-xs tabular-nums",
-              delta > 0
-                ? "bg-emerald-500/12 text-emerald-300"
-                : "bg-red-500/12 text-red-300"
-            )}
-          >
-            완료 후 {delta > 0 ? "+" : ""}
-            {delta}%p
-          </span>
-        )}
       </div>
 
       <h3

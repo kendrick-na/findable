@@ -44,8 +44,8 @@ export const NextActionsCard = ({
       </span>
       <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
         {brandName
-          ? `${brandName}의 실측 근거와 함께 효과가 큰 순서로 정리했어요`
-          : "실측 근거와 함께 효과가 큰 순서로 정리했어요"}
+          ? `${brandName}의 최근 측정에서 관찰된 문제와 실행 우선순위를 정리했어요`
+          : "최근 측정에서 관찰된 문제와 실행 우선순위를 정리했어요"}
       </span>
     </span>
     <ArrowRight
