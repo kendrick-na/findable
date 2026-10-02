@@ -20,11 +20,14 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   filterByRange,
   headlineOf,
   rangeOptions,
+  SovTrendChart,
 } from "../app/(authenticated)/components/sov-trend-chart";
 import type { SovTrendPoint } from "../app/(authenticated)/lib/dashboard-data";
 
@@ -54,6 +57,27 @@ const NIKE = [
   point(2, 97),
   point(0, 94),
 ];
+
+describe("추세 수치 해석", () => {
+  it("발행 핀과 증감이 함께 보일 때 인과 효과로 읽지 않도록 고지한다", () => {
+    const html = renderToStaticMarkup(
+      createElement(SovTrendChart, {
+        annotations: [
+          {
+            id: "published",
+            label: "콘텐츠 발행: 테스트",
+            occurredAt: new Date(NOW - 2 * DAY),
+          },
+        ],
+        trend: NIKE,
+      })
+    );
+    expect(html).toContain("콘텐츠 발행 등 조치의 효과를 뜻하지 않으며");
+    expect(html).toContain(
+      "질문·엔진 구성이 달라지면 직접 비교하기 어렵습니다"
+    );
+  });
+});
 
 describe("기간 필터 — 마지막 측정 기준으로 자른다", () => {
   it("🔴 기준시각은 `오늘`이 아니라 **마지막 측정**이다", () => {
