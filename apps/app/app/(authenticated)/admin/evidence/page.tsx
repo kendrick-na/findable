@@ -17,6 +17,11 @@ import {
   type BeforeAfterRow,
   buildBeforeAfterRow,
 } from "@repo/audit/before-after";
+import {
+  completionMentionRate,
+  type EvidenceTrackingRow,
+  mentionRateSeries,
+} from "@repo/audit/evidence-series";
 import { isAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
@@ -69,25 +74,25 @@ const AdminEvidencePage = async () => {
   const trackings = brandIds.length
     ? await database.tracking.findMany({
         orderBy: { trackedAt: "asc" },
-        select: { brandId: true, shareOfVoice: true, trackedAt: true },
+        select: { brandId: true, brandMentioned: true, trackedAt: true },
         where: { brandId: { in: brandIds } },
       })
     : [];
 
   // 브랜드별 측정 시계열로 접는다.
-  const seriesByBrand = new Map<
-    string,
-    { measuredAt: Date; sov: number | null }[]
-  >();
+  const seriesByBrand = new Map<string, EvidenceTrackingRow[]>();
   for (const t of trackings) {
     const list = seriesByBrand.get(t.brandId) ?? [];
-    list.push({ measuredAt: t.trackedAt, sov: t.shareOfVoice });
+    list.push({ trackedAt: t.trackedAt, brandMentioned: t.brandMentioned });
     seriesByBrand.set(t.brandId, list);
   }
 
   const rows = completions.map((c) => ({
     brandLabel: c.brand?.name ?? c.brand?.domain ?? "(브랜드 없음)",
-    row: buildBeforeAfterRow(c, seriesByBrand.get(c.brandId) ?? []),
+    row: buildBeforeAfterRow(
+      { ...c, sovAtCompletion: completionMentionRate(c.sovAtCompletion) },
+      mentionRateSeries(seriesByBrand.get(c.brandId) ?? [])
+    ),
   }));
 
   const withNumbers = rows.filter((r) => r.row.deltaSov !== null);
@@ -101,8 +106,9 @@ const AdminEvidencePage = async () => {
             고객사 조치 전후 대조
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            처방을 완료 표시한 뒤 재측정에서 점수가 어떻게 변했는지 봅니다. 읽기
-            전용이며, 외부에 인용할 때는 각 행의 주의사항을 함께 옮기세요.
+            완료 시점과 이후 측정의 브랜드 언급률 차이를 관찰합니다. 이는 처방의
+            효과를 입증하지 않습니다. 질문·엔진 구성과 시스템 브리핑 행이 같은지
+            확인되기 전에는 투자·영업 효과 근거로 인용하지 마세요.
           </p>
         </div>
 
