@@ -34,6 +34,7 @@ import {
   summarizeAnswerBuckets,
 } from "@repo/audit/answer-buckets";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
+import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 import { engineDisplayName } from "@repo/audit/engine-labels";
 import {
   geoAxisScores,
@@ -710,7 +711,12 @@ export function AuditResultView({ jobId, locale }: Props) {
           return;
         }
         consecutiveErrors = 0;
-        setJob(data);
+        // 저장된 crewResult 의 근거 없는 수치 문장(Reddit 40%·+40% 가시성 등)은
+        // 화면에 그리기 전에 뺀다 — 저장 데이터는 그대로다(`crew-display-filter.ts`).
+        setJob({
+          ...data,
+          crewResult: sanitizeStoredCrewResult(data.crewResult),
+        });
 
         // 🔴 세션N-25 — 이 이벤트는 **완료 시점에 발화하는데 이름이 `audit_started`**
         //   였다. 퍼널을 그리면 *"시작"* 칸에 완료 수가 들어가 **시작·완료가 같은 숫자로

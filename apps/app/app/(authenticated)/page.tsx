@@ -1,3 +1,4 @@
+import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 import {
   auditPublicationIssue,
   MIN_VERIFIED_ANSWERS,
@@ -284,7 +285,9 @@ const App = async ({ searchParams }: AppProperties) => {
       latestJobForTracking.completedAt > initialTrackingData.latestMeasuredAt
   );
   const jobsWithResult =
-    (trackingData === null || trackingIsStale) && jobsLite.length > 0 && JOB_WHERE
+    (trackingData === null || trackingIsStale) &&
+    jobsLite.length > 0 &&
+    JOB_WHERE
       ? await database.auditJob.findMany({
           where: JOB_WHERE,
           orderBy: { createdAt: "desc" },
@@ -554,7 +557,12 @@ const App = async ({ searchParams }: AppProperties) => {
 
             {currentRunPublishable ? (
               <DashboardDeepAnalysis
-                crewResult={(currentRunAnalysis?.crewResult as never) ?? null}
+                crewResult={
+                  // 근거 없는 저장 수치 문장은 표시 직전에 뺀다(`crew-display-filter.ts`).
+                  (sanitizeStoredCrewResult(
+                    currentRunAnalysis?.crewResult
+                  ) as never) ?? null
+                }
                 crewStatus={currentRunAnalysis?.crewStatus ?? "not_requested"}
                 jobId={currentRunJob?.id ?? null}
               />
