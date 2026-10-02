@@ -600,7 +600,7 @@
     "sidebar": {
       "adminAudits": "Audits",
       "adminContent": "Content moderation",
-      "adminEvidence": "Before/after evidence",
+      "adminEvidence": "Completed actions",
       "adminMeasure": "Measurement console",
       "adminMail": "Outreach",
       "adminOps": "Operations",

@@ -277,9 +277,8 @@ const adminNav = (t: SidebarLabels): NavItem[] => [
   { title: t.adminPartners, url: "/admin/partners", icon: ShieldCheckIcon },
   // 🔴 세션N-34: admin 화면 4개 중 **이것만 링크가 없었다**(실측 인바운드 0건).
   //   바로 위 주석이 말한 그대로 — 링크가 없어서 **있어도 없는 것**이었다.
-  //   ⚠️ 죽은 코드가 아니다: 212줄짜리 실제 기능(조치 전후 근거)이고
-  //   `@repo/audit/before-after` 를 쓰는 우리 코드다. 투자·영업 자리에서 쓰라고 만들었다.
-  { title: t.adminEvidence, url: "/admin/evidence", icon: TrendingUpIcon },
+  //   완료 기록은 열어 두되 실행 원장 검증 전에는 효과 수치를 표시하지 않는다.
+  { title: t.adminEvidence, url: "/admin/evidence", icon: ListChecksIcon },
   // 🆕 세션N-37: 브랜드 1건 측정·수정·삭제. cron 이 한 번에 5건(435원)을 집는 탓에
   //   1건(87원)만 돌릴 방법이 없어 N-36 의 Tracking 유실 수정을 확인 못 하고 있었다.
   { title: t.adminMeasure, url: "/admin/measure", icon: PlayIcon },
