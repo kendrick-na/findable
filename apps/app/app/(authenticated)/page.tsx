@@ -502,7 +502,7 @@ const App = async ({ searchParams }: AppProperties) => {
                 {currentRunIssue === "insufficient_sample"
                   ? `이번 측정은 브랜드 판별이 끝난 답변이 ${typeof correctedMetrics?.verifiedCount === "number" ? correctedMetrics.verifiedCount : 0}건뿐이라 기준(${MIN_VERIFIED_ANSWERS}건)에 못 미칩니다.`
                   : `이번 측정은 브랜드 판별 ${currentRunUnverified}회가 완료되지 않았습니다.`}{" "}
-                이번 회차의 점수·등장률·추세·놓치는 유입 추정·개선 처방은
+                이번 회차의 점수·등장률·추세·개선 처방은
                 확정하지 않습니다.{" "}
                 <Link
                   className="underline underline-offset-2"
