@@ -15,6 +15,8 @@ import { AuditReportEmail } from "@repo/email/templates/audit-report";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { NextResponse } from "next/server";
+import { resolveIsOwner } from "../../_lib/owner";
+import { canExposeAuditResult } from "../../_lib/public-access";
 
 export const runtime = "nodejs";
 
@@ -105,8 +107,21 @@ export async function POST(
   // 판별 미완료 결과에 기존 점수·등급을 담은 메일이 나가지 않도록 먼저 확인한다.
   const job = await database.auditJob.findUnique({
     where: { id: jobId },
-    select: { result: true, pdfUrl: true, crewResult: true, status: true },
+    select: {
+      email: true,
+      organizationId: true,
+      result: true,
+      pdfUrl: true,
+      crewResult: true,
+      status: true,
+    },
   });
+  if (job && !canExposeAuditResult(job, await resolveIsOwner(job))) {
+    return NextResponse.json(
+      { error: "이 진단 결과를 조회할 권한이 없습니다." },
+      { status: 403 }
+    );
+  }
   if (job?.result) {
     const corrected = withRecomputedAuditMetrics(job.result);
     if (!isPublishableAuditResult(corrected)) {

@@ -9,6 +9,8 @@ import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
+import { resolveIsOwner } from "../../../api/audit/_lib/owner";
+import { canExposeAuditResult } from "../../../api/audit/_lib/public-access";
 import { AuditResultView } from "./components/audit-result";
 import { AuditSummarySsr } from "./components/audit-summary-ssr";
 
@@ -58,11 +60,18 @@ async function loadSummaryJob(jobId: string) {
   try {
     const job = await database.auditJob.findUnique({
       where: { id: jobId },
-      select: { domain: true, result: true, status: true },
+      select: {
+        email: true,
+        organizationId: true,
+        domain: true,
+        result: true,
+        status: true,
+      },
     });
-    return job
-      ? { ...job, result: withRecomputedAuditMetrics(job.result) }
-      : null;
+    if (!job || !(await canExposeAuditResult(job, await resolveIsOwner(job)))) {
+      return null;
+    }
+    return { ...job, result: withRecomputedAuditMetrics(job.result) };
   } catch (error) {
     log.error("audit.ssr_summary.failed", { error: parseError(error) });
     return null;

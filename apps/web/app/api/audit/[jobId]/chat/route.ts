@@ -27,6 +27,8 @@ import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { resolveIsOwner } from "../../_lib/owner";
+import { canExposeAuditResult } from "../../_lib/public-access";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -156,13 +158,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const job = await database.auditJob.findUnique({
       where: { id: jobId },
-      select: { id: true, crewStatus: true, crewResult: true, result: true },
+      select: {
+        id: true,
+        email: true,
+        organizationId: true,
+        crewStatus: true,
+        crewResult: true,
+        result: true,
+      },
     });
 
     if (!job) {
       return NextResponse.json(
         { error: "존재하지 않는 jobId입니다." },
         { status: 404 }
+      );
+    }
+    if (!canExposeAuditResult(job, await resolveIsOwner(job))) {
+      return NextResponse.json(
+        { error: "이 진단 결과를 조회할 권한이 없습니다." },
+        { status: 403 }
       );
     }
     if (job.crewStatus !== "completed" || !job.crewResult) {
