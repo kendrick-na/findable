@@ -307,11 +307,12 @@ const NavRow = ({
     "/sources",
     "/site-audit",
   ].includes(item.url);
-  const href = locked
-    ? "/billing"
-    : brandAwarePath && selectedBrandId
-      ? `${item.url}?brand=${encodeURIComponent(selectedBrandId)}`
-      : item.url;
+  let href = item.url;
+  if (locked) {
+    href = "/billing";
+  } else if (brandAwarePath && selectedBrandId) {
+    href = `${item.url}?brand=${encodeURIComponent(selectedBrandId)}`;
+  }
 
   const inner = (
     <>
@@ -352,7 +353,9 @@ const NavRow = ({
         {item.external && !locked ? (
           <a href={href}>{inner}</a>
         ) : (
-          <Link href={href} prefetch={false}>{inner}</Link>
+          <Link href={href} prefetch={false}>
+            {inner}
+          </Link>
         )}
       </SidebarMenuButton>
     </SidebarMenuItem>
