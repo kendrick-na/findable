@@ -248,8 +248,8 @@ export const SovTrendChart = ({
         ) : null}
         {headline?.delta !== null && headline?.delta !== undefined ? (
           <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-            구간 첫 측정 대비 변화입니다. 콘텐츠 발행 등 조치의 효과를 뜻하지
-            않으며, 질문·엔진 구성이 달라지면 직접 비교하기 어렵습니다.
+            구간 첫 측정 대비 변화입니다. 회차마다 질문·응답한 엔진·판정 기준이
+            달라질 수 있어, 콘텐츠 발행 등 조치의 효과로 해석할 수 없습니다.
           </p>
         ) : null}
       </div>

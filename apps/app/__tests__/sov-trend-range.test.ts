@@ -59,7 +59,7 @@ const NIKE = [
 ];
 
 describe("추세 수치 해석", () => {
-  it("발행 핀과 증감이 함께 보일 때 인과 효과로 읽지 않도록 고지한다", () => {
+  it("증감이 보일 때 인과 효과로 읽지 않도록 고지한다", () => {
     const html = renderToStaticMarkup(
       createElement(SovTrendChart, {
         annotations: [
@@ -72,10 +72,16 @@ describe("추세 수치 해석", () => {
         trend: NIKE,
       })
     );
-    expect(html).toContain("콘텐츠 발행 등 조치의 효과를 뜻하지 않으며");
-    expect(html).toContain(
-      "질문·엔진 구성이 달라지면 직접 비교하기 어렵습니다"
+    expect(html).toContain("회차마다 질문·응답한 엔진·판정 기준이");
+    expect(html).toContain("콘텐츠 발행 등 조치의 효과로 해석할 수 없습니다");
+    expect(html).toContain("94%p");
+  });
+
+  it("비교할 이전 측정이 없으면 변화 경고도 표시하지 않는다", () => {
+    const html = renderToStaticMarkup(
+      createElement(SovTrendChart, { trend: [point(0, 94)] })
     );
+    expect(html).not.toContain("조치의 효과로 해석할 수 없습니다");
   });
 });
 

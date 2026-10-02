@@ -14,6 +14,30 @@ import type { DashboardData, SentimentSummary } from "../lib/dashboard-data";
 import { formatMeasuredAt, positiveRateOf } from "../lib/dashboard-data";
 import { KpiSparkline } from "./kpi-sparkline";
 
+export function measurementCoverageHint(
+  coverage: DashboardData["coverage"],
+  latestSov: number | null
+): string {
+  if (coverage) {
+    return `측정한 AI·검색 ${coverage.total}곳 중 ${coverage.mentioned}곳에 등장했어요`;
+  }
+  return latestSov === null
+    ? "측정하면 AI가 우리를 아는지 보여드려요"
+    : "이번 회차는 AI별 집계가 없어 비율만 보여드려요";
+}
+
+function MeasurementComparisonCaveat({ totalCount }: { totalCount: number }) {
+  if (totalCount < 2) {
+    return null;
+  }
+  return (
+    <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+      이전 측정과의 차이입니다. 회차마다 질문·응답한 엔진·판정 기준이 달라질 수
+      있어, 조치의 효과로 해석할 수 없습니다.
+    </p>
+  );
+}
+
 // `export` 인 이유: 스토리(`.stories.tsx`)가 `Meta<typeof DashboardKpis>` 로 이 타입을
 //   참조한다. 안 내보내면 tsc 가 TS4023("이름을 지을 수 없다")로 막는다.
 export interface DashboardKpisProps {
@@ -402,23 +426,7 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
               <SovDeltaBadge delta={sovDeltaPoints} />
             ) : undefined
           }
-          hint={
-            coverage
-              ? // 🔴 2026-08-16 — `N곳에 물어` 는 **시도(attempted)** 처럼 읽힌다.
-                //   실제 `coverage.total` 은 Tracking 행이 **실제로 쌓인 엔진 수**(=measured)다
-                //   (dashboard-data.ts:556 `new Set(group.map(r=>r.engineId))`).
-                //   응답 못 받은 엔진은 애초에 행이 없어서 이 수에 안 들어간다.
-                //   web 은 이미 `측정한 AI N곳` 이라고 쓴다 → 같은 값을 두 앱이 다르게 부르던 것.
-                `측정한 AI·검색 ${coverage.total}곳 중 ${coverage.mentioned}곳에 등장했어요`
-              : // 🔴 **값이 있으면 빈 상태 문구를 쓰지 않는다** (N-46 · 스크린샷이 잡음).
-                //   값(`latestSov` ← `metrics.sov`)과 힌트(`coverage` ← `metrics.enginesCovered`)가
-                //   **서로 다른 필드**를 본다. `enginesCovered` 만 비면 `coverage=null` 이 되어
-                //   **「62%」 옆에 「측정하면 …보여드려요」** 가 떴다.
-                //   📕 N-45 온보딩 4단계와 같은 유형(조건부 값 + 무조건 설명).
-                latestSov === null
-                ? "측정하면 AI가 우리를 아는지 보여드려요"
-                : "이번 회차는 AI별 집계가 없어 비율만 보여드려요"
-          }
+          hint={measurementCoverageHint(coverage, latestSov)}
           // 🔴 **라벨을 값의 축에 맞춘다** (N-46 · 👤 Ⓐ안 · 라이브 실측으로 확정).
           //   라벨은 `recognition`(엔진 축 · **곳**)인데 값은 `sov`(응답 축 · **%**)였다.
           //   라이브에서 *"AI가 우리를 아나? **95%**"* 밑에 *"7곳 중 **7곳**"*(=100%)이 붙어
@@ -514,6 +522,8 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
           }
         />
       </div>
+
+      <MeasurementComparisonCaveat totalCount={totalCount} />
 
       {/* A안 — 운영지표는 성과와 같은 자리를 차지하지 않는다(Apple Deference:
           "UI는 콘텐츠와 경쟁하지 않는다"). 정보는 유지하고 위계만 내린다.
@@ -687,23 +697,12 @@ function sentimentHint(summary: SentimentSummary | null): string {
   return `${parts.join(" · ")} · 총 ${summary.total}건`;
 }
 
-// 델타 배지. §9-2 + 리서치: 하락에 빨강을 쓰지 않는다.
-//   🎯 GSC는 하락에 색상 경고를 **아예 안 쓴다**(의도적 안티패닉 설계). 0점 고객이 많은
-//   제품에서 온통 빨강이면 재방문하지 않는다. 색맹의 99%가 적녹이라 접근성 문제도 겹친다.
-//   → 상승만 초록으로 강조하고, 하락은 **중립 회색 + 화살표 + 텍스트**로 사실만 전달.
-//   (Atlassian: 상태색은 비색상 신호 병기 필수 — 화살표·부호가 색 없이도 방향을 말한다)
+// 델타는 측정 간 차이이며 조치 효과가 아니다. 상승/하락 모두 중립색으로 표시한다.
 const SovDeltaBadge = ({ delta }: { delta: number }) => {
   const positive = delta > 0;
   const rounded = Math.abs(Math.round(delta * 10) / 10);
   return (
-    <span
-      className={cn(
-        "mb-1 inline-flex items-center gap-0.5 rounded-full border border-transparent px-2 py-0.5 font-medium text-xs",
-        positive
-          ? "bg-emerald-500/12 text-emerald-400"
-          : "bg-[color:var(--findable-surface-3,#18191a)] text-[color:var(--findable-ink-subtle,#8a8f98)]"
-      )}
-    >
+    <span className="mb-1 inline-flex items-center gap-0.5 rounded-full border border-transparent bg-[color:var(--findable-surface-3,#18191a)] px-2 py-0.5 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
       {positive ? (
         <ArrowUpRight aria-hidden="true" className="size-3" />
       ) : (

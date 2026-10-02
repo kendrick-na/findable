@@ -63,7 +63,10 @@ describe("순위 카드 — 모집단을 밝힌다", () => {
   it("⚠️ 표본 수를 **모르면**(폴백 경로) 표기를 생략한다 — 지어내지 않는다", () => {
     // AuditJob 폴백은 이 수를 모른다 → null. 0 으로 깔면 "0개 응답 평균"이라는 거짓이 된다.
     render(
-      <DashboardKpis data={{ ...base, positionSampleCount: null }} paid={true} />
+      <DashboardKpis
+        data={{ ...base, positionSampleCount: null }}
+        paid={true}
+      />
     );
     expect(screen.queryByText(/응답 평균/)).toBeNull();
     // 그래도 순위 자체는 계속 보여준다(값은 있다).
@@ -98,7 +101,25 @@ describe("순위 카드 — 모집단을 밝힌다", () => {
       />
     );
     // 한 줄 안에서 「질문 N개 기준」과 「순위는 M개 응답 평균」이 같이 읽혀야 한다.
-    expect(screen.getByText(/질문 2개 기준.*순위는 18개 응답 평균/)).toBeTruthy();
+    expect(
+      screen.getByText(/질문 2개 기준.*순위는 18개 응답 평균/)
+    ).toBeTruthy();
+  });
+});
+
+describe("대시보드 이전 회차 비교", () => {
+  afterEach(cleanup);
+
+  it("상승 배지도 중립색이며 조치 효과가 아니라는 고지를 함께 보인다", () => {
+    render(<DashboardKpis data={{ ...base, sovDeltaPoints: 5 }} paid={true} />);
+    const badge = screen.getByText("+5%p").parentElement;
+    expect(badge?.className).not.toContain("emerald");
+    expect(screen.getByText(/조치의 효과로 해석할 수 없습니다/)).toBeTruthy();
+  });
+
+  it("측정 1회이면 이전 회차 비교 고지를 표시하지 않는다", () => {
+    render(<DashboardKpis data={{ ...base, totalCount: 1 }} paid={true} />);
+    expect(screen.queryByText(/조치의 효과로 해석할 수 없습니다/)).toBeNull();
   });
 });
 
