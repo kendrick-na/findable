@@ -8,8 +8,14 @@ import {
   securityMiddleware,
 } from "@repo/security/proxy";
 import { createNEMO } from "@rescale/nemo";
-import { type NextProxy, type NextRequest, NextResponse } from "next/server";
+import {
+  type NextFetchEvent,
+  type NextProxy,
+  type NextRequest,
+  NextResponse,
+} from "next/server";
 import { env } from "@/env";
+import { isPreviewStubAuditRequest } from "./lib/preview-audit-stub-proxy";
 
 const SEARCH_CRAWLER_USER_AGENT =
   /Googlebot|Google-InspectionTool|AdsBot-Google|Bingbot|NaverBot|Yeti|Daumoa/i;
@@ -184,8 +190,8 @@ export function customDomainRewrite(request: NextRequest) {
   return null;
 }
 
-// Clerk middleware wraps other middleware in its callback
-export default authMiddleware(async (_auth, request, event) => {
+// Clerk middleware wraps other middleware in its callback.
+const clerkProxy = authMiddleware(async (_auth, request, event) => {
   // Run security headers first
   const headersResponse = await securityHeaders();
 
@@ -216,3 +222,20 @@ export default authMiddleware(async (_auth, request, event) => {
     ? withSecurityHeaders(middlewareResponse, headersResponse)
     : headersResponse;
 }) as unknown as NextProxy;
+
+/**
+ * The free audit creation/status APIs are intentionally public. In the
+ * dedicated Preview stub, no Clerk server secret is configured; running the
+ * Clerk wrapper first would therefore turn that public smoke test into a 500.
+ * Keep this before Clerk and keep it restricted by both Preview and stub flags.
+ */
+export default function previewAwareProxy(
+  request: NextRequest,
+  event: NextFetchEvent
+) {
+  if (isPreviewStubAuditRequest(request.nextUrl.pathname)) {
+    return securityHeaders();
+  }
+
+  return clerkProxy(request, event);
+}
