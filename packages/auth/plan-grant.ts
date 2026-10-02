@@ -28,27 +28,32 @@ const MAX_PUSH_RETRIES = 3;
 const PAYMENT_GRANT_ID_KEY = "findablePaymentId";
 const PAYMENT_GRANT_STACK_KEY = "findablePaymentGrantStack";
 
-type PaymentGrantState = {
+interface PaymentGrantState {
   paymentId: string | null;
   plan: Plan;
-};
+}
 
-type PaymentGrantResult = {
+interface PaymentGrantResult {
   plan: Plan;
   privateMetadata: Record<string, unknown> | null;
-};
+}
 
 function paymentGrantStack(
   privateMetadata: Record<string, unknown> | null | undefined
 ): PaymentGrantState[] {
   const value = privateMetadata?.[PAYMENT_GRANT_STACK_KEY];
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
 
   return value.flatMap((entry) => {
-    if (!entry || typeof entry !== "object") return [];
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
     const candidate = entry as Record<string, unknown>;
     if (
-      (typeof candidate.paymentId !== "string" && candidate.paymentId !== null) ||
+      (typeof candidate.paymentId !== "string" &&
+        candidate.paymentId !== null) ||
       typeof candidate.plan !== "string"
     ) {
       return [];
@@ -65,7 +70,9 @@ function privateMetadataForStack(
 ): Record<string, unknown> | null {
   if (
     stack.length === 0 ||
-    (stack.length === 1 && stack[0]?.plan === "free" && stack[0].paymentId === null)
+    (stack.length === 1 &&
+      stack[0]?.plan === "free" &&
+      stack[0].paymentId === null)
   ) {
     return null;
   }
@@ -174,7 +181,7 @@ async function updatePlanMetadata(input: {
   return false;
 }
 
-export async function grantPlan(userId: string, plan: Plan): Promise<boolean> {
+export function grantPlan(userId: string, plan: Plan): Promise<boolean> {
   // 파트너·초대코드·관리자 부여는 결제 취소로 회수하면 안 된다.
   return updatePlanMetadata({ userId, plan, privateMetadata: null });
 }
@@ -220,22 +227,24 @@ export async function grantPlanFromPayment(
 export async function revokePlanFromPayment(
   userId: string,
   paymentId: string
-): Promise<{ revoked: boolean; reason: "not_current_payment" | "push_failed" | "revoked" }> {
+): Promise<{
+  revoked: boolean;
+  reason: "not_current_payment" | "push_failed" | "revoked";
+}> {
   const clerk = await clerkClient();
   let privateMetadata: Record<string, unknown> | undefined;
   let currentPlan: Plan;
   try {
     const user = await clerk.users.getUser(userId);
-    privateMetadata = user.privateMetadata as Record<string, unknown> | undefined;
+    privateMetadata = user.privateMetadata as
+      | Record<string, unknown>
+      | undefined;
     currentPlan = normalizePlan(user.publicMetadata.plan);
   } catch {
     return { revoked: false, reason: "push_failed" };
   }
 
-  const next = paymentGrantAfterRefund(
-    privateMetadata,
-    paymentId
-  );
+  const next = paymentGrantAfterRefund(privateMetadata, paymentId);
   if (!next.revoked) {
     return { revoked: false, reason: "not_current_payment" };
   }

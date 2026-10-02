@@ -21,6 +21,11 @@ interface StoredActionLike {
 }
 
 const PRINCETON_RE = /Princeton|프린스턴/i;
+const TOP_RECOMMENDATION_REDDIT_RE = /reddit|레딧/i;
+const TOP_RECOMMENDATION_FORTY_RE = /40(?:\.\d+)?\s*%/;
+const TOP_RECOMMENDATION_SCOPE_RE = /모든|전체|업계|all\s|overall|across/i;
+const TOP_RECOMMENDATION_PRINCETON_RE = /princeton|프린스턴/i;
+const TOP_RECOMMENDATION_PERCENT_RE = /[+−-]?\s*\d+(?:\.\d+)?\s*%/;
 
 function isUnsupportedStoredAction(action: StoredActionLike): boolean {
   if (action.kind === "rank_strategy" || action.kind === "source_portfolio") {
@@ -63,12 +68,12 @@ export function filterStoredTopRecommendations(
       return false;
     }
     const industryRedditClaim =
-      /reddit|레딧/i.test(recommendation) &&
-      /40(?:\.\d+)?\s*%/.test(recommendation) &&
-      /모든|전체|업계|all\s|overall|across/i.test(recommendation);
+      TOP_RECOMMENDATION_REDDIT_RE.test(recommendation) &&
+      TOP_RECOMMENDATION_FORTY_RE.test(recommendation) &&
+      TOP_RECOMMENDATION_SCOPE_RE.test(recommendation);
     const unsupportedLift =
-      /princeton|프린스턴/i.test(recommendation) &&
-      /[+−-]?\s*\d+(?:\.\d+)?\s*%/.test(recommendation);
+      TOP_RECOMMENDATION_PRINCETON_RE.test(recommendation) &&
+      TOP_RECOMMENDATION_PERCENT_RE.test(recommendation);
     return !(industryRedditClaim || unsupportedLift);
   });
 }

@@ -101,6 +101,20 @@ async function loadHistory(job: {
   }
 }
 
+function sanitizePublicAuditResult(result: unknown): Record<string, unknown> {
+  const publicResult = publicAuditResult(result) as Record<string, unknown>;
+  return {
+    ...publicResult,
+    geoActions: filterStoredGeoActions(
+      publicResult.geoActions as Record<string, unknown>[] | undefined
+    ),
+    topRecommendations: filterStoredTopRecommendations(
+      publicResult.topRecommendations as unknown[] | undefined
+    ),
+  };
+}
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Polling route must keep authorization, reconciliation, history, and publication checks ordered.
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const startedAt = performance.now();
   const { jobId } = await params;
@@ -195,16 +209,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const result = withRecomputedAuditMetrics(job.result);
     const publishable = isPublishableAuditResult(result);
-    const publicResult = publicAuditResult(result) as Record<string, unknown>;
-    const safeResult = {
-      ...publicResult,
-      geoActions: filterStoredGeoActions(
-        publicResult.geoActions as Array<Record<string, unknown>> | undefined
-      ),
-      topRecommendations: filterStoredTopRecommendations(
-        publicResult.topRecommendations as Array<unknown> | undefined
-      ),
-    };
+    const safeResult = sanitizePublicAuditResult(result);
     const pdfOutdated = Boolean(
       job.pdfUrl && hasStaleAuditPdf(job.result, result)
     );
@@ -233,9 +238,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       pdfOutdated,
       result: safeResult,
       crewStatus: job.crewStatus,
-      crewResult: publishable
-        ? sanitizeStoredCrewResult(job.crewResult)
-        : null,
+      crewResult: publishable ? sanitizeStoredCrewResult(job.crewResult) : null,
       crewOutdated: !publishable && Boolean(job.crewResult),
       crewStartedAt: job.crewStartedAt?.toISOString() ?? null,
       crewCompletedAt: job.crewCompletedAt?.toISOString() ?? null,

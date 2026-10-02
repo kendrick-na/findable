@@ -331,16 +331,12 @@ describe("audit route tenant boundary", () => {
       },
     });
 
-    const payload = await (
-      await pollAudit(request() as never, params)
-    ).json();
+    const payload = await (await pollAudit(request() as never, params)).json();
 
     expect(payload.result.geoActions).toEqual([
       { kind: "prompt_gap", title: "safe action" },
     ]);
-    expect(payload.result.topRecommendations).toEqual([
-      "Safe recommendation",
-    ]);
+    expect(payload.result.topRecommendations).toEqual(["Safe recommendation"]);
     expect(payload.crewResult.strategist.output.topActions).toEqual([
       { title: "" },
       { title: "Safe action" },
@@ -365,8 +361,9 @@ describe("audit route tenant boundary", () => {
     });
 
     await sendLead(request({ email: "recipient@example.com" }), params);
-    const emailProps = mocks.sendEmail.mock.calls[0]?.[0]?.react
-      ?.props as { topActions: unknown[] };
+    const emailProps = mocks.sendEmail.mock.calls[0]?.[0]?.react?.props as {
+      topActions: unknown[];
+    };
     expect(emailProps.topActions).toEqual([
       { rank: 1, title: "", timeframe: "이번 주" },
       { rank: 2, title: "Safe action", timeframe: "이번 주" },
@@ -378,7 +375,9 @@ describe("audit route tenant boundary", () => {
       return Response.json({ ok: true });
     });
     await chat(
-      request({ messages: [{ role: "user", content: "What changed?" }] }) as never,
+      request({
+        messages: [{ role: "user", content: "What changed?" }],
+      }) as never,
       params
     );
     expect(JSON.stringify(copilotContext)).not.toContain("Reddit is 40%");
