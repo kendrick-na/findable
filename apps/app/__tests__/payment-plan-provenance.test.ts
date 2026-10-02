@@ -10,6 +10,7 @@ import {
   isCurrentPaymentGrant,
   paymentGrantAfterPayment,
   paymentGrantAfterRefund,
+  revokePlanFromPayment,
 } from "@repo/auth/plan-grant";
 import { describe, expect, it, vi } from "vitest";
 
@@ -142,6 +143,100 @@ describe("결제 권한 출처", () => {
       privateMetadata: null,
       revoked: true,
     });
+  });
+
+  it("아래쪽 결제를 먼저 환불해도 현재 권한을 유지하고 나중에 부활시키지 않는다", () => {
+    const starter = paymentGrantAfterPayment(
+      "free",
+      {},
+      "starter",
+      "payment-1"
+    );
+    const growth = paymentGrantAfterPayment(
+      starter.plan,
+      starter.privateMetadata,
+      "growth",
+      "payment-2"
+    );
+
+    const olderRefund = paymentGrantAfterRefund(
+      growth.privateMetadata,
+      "payment-1"
+    );
+    expect(olderRefund).toEqual({
+      plan: "growth",
+      privateMetadata: {
+        findablePaymentId: "payment-2",
+        findablePaymentGrantStack: [
+          { paymentId: "payment-2", plan: "growth" },
+          { paymentId: null, plan: "free" },
+        ],
+      },
+      revoked: true,
+    });
+    expect(
+      paymentGrantAfterRefund(olderRefund.privateMetadata, "payment-2")
+    ).toEqual({
+      plan: "free",
+      privateMetadata: null,
+      revoked: true,
+    });
+  });
+
+  it("아래쪽 환불도 Clerk 스택에 반영하고 현재 결제 환불 시 Free로 내린다", async () => {
+    const starter = paymentGrantAfterPayment(
+      "free",
+      {},
+      "starter",
+      "payment-1"
+    );
+    const growth = paymentGrantAfterPayment(
+      starter.plan,
+      starter.privateMetadata,
+      "growth",
+      "payment-2"
+    );
+    clerkUsers.getUser.mockResolvedValue({
+      publicMetadata: { plan: growth.plan },
+      privateMetadata: growth.privateMetadata,
+    });
+    clerkUsers.updateUserMetadata.mockClear();
+
+    expect(await revokePlanFromPayment("user-1", "payment-1")).toEqual({
+      revoked: true,
+      reason: "revoked",
+    });
+    expect(clerkUsers.updateUserMetadata).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        publicMetadata: { plan: "growth" },
+        privateMetadata: expect.objectContaining({
+          findablePaymentId: "payment-2",
+          findablePaymentGrantStack: [
+            { paymentId: "payment-2", plan: "growth" },
+            { paymentId: null, plan: "free" },
+          ],
+        }),
+      })
+    );
+
+    const afterOlder = paymentGrantAfterRefund(
+      growth.privateMetadata,
+      "payment-1"
+    );
+    clerkUsers.getUser.mockResolvedValue({
+      publicMetadata: { plan: "growth" },
+      privateMetadata: afterOlder.privateMetadata,
+    });
+    clerkUsers.updateUserMetadata.mockClear();
+    expect(await revokePlanFromPayment("user-1", "payment-2")).toEqual({
+      revoked: true,
+      reason: "revoked",
+    });
+    expect(clerkUsers.updateUserMetadata).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ publicMetadata: { plan: "free" } })
+    );
   });
 
   it("이미 부여된 결제의 재전송은 Clerk metadata를 다시 쓰지 않는다", async () => {

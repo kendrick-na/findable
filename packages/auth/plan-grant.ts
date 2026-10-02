@@ -117,20 +117,25 @@ export function paymentGrantAfterPayment(
   };
 }
 
-/** 현재 결제가 전면에 있을 때만 직전 권한으로 되돌린다. */
+/**
+ * 환불된 결제 출처를 제거하고, 현재 결제라면 직전 권한으로 되돌린다.
+ * revoked는 출처 제거 성공을 뜻하며, 아래쪽 결제 환불 때 현재 plan은 그대로다.
+ */
 export function paymentGrantAfterRefund(
   privateMetadata: Record<string, unknown> | null | undefined,
   paymentId: string
 ): PaymentGrantResult & { revoked: boolean } {
-  if (!isCurrentPaymentGrant(privateMetadata, paymentId)) {
+  const stack = paymentGrantStack(privateMetadata);
+  const isCurrent = isCurrentPaymentGrant(privateMetadata, paymentId);
+  const hasPaymentGrant =
+    isCurrent || stack.some((grant) => grant.paymentId === paymentId);
+  if (!hasPaymentGrant) {
     return { plan: "free", privateMetadata: null, revoked: false };
   }
 
-  const remaining = paymentGrantStack(privateMetadata).filter(
-    (grant) => grant.paymentId !== paymentId
-  );
+  const remaining = stack.filter((grant) => grant.paymentId !== paymentId);
   return {
-    plan: remaining[0]?.plan ?? "free",
+    plan: (isCurrent ? remaining[0] : stack[0])?.plan ?? "free",
     privateMetadata: privateMetadataForStack(remaining),
     revoked: true,
   };
@@ -208,7 +213,8 @@ export async function grantPlanFromPayment(
 }
 
 /**
- * 전액 환불 처리. 현재 권한이 **해당 결제**에서 온 경우에만 Free로 되돌린다.
+ * 전액 환불 처리. 현재 결제면 직전 권한으로 되돌리고, 아래쪽 결제면
+ * 현재 권한을 유지하면서 환불된 출처만 제거한다.
  * 이후 파트너 승인·초대코드·관리자 부여가 덮어쓴 사용자는 절대 내리지 않는다.
  */
 export async function revokePlanFromPayment(
@@ -217,17 +223,11 @@ export async function revokePlanFromPayment(
 ): Promise<{ revoked: boolean; reason: "not_current_payment" | "push_failed" | "revoked" }> {
   const clerk = await clerkClient();
   let privateMetadata: Record<string, unknown> | undefined;
+  let currentPlan: Plan;
   try {
     const user = await clerk.users.getUser(userId);
     privateMetadata = user.privateMetadata as Record<string, unknown> | undefined;
-    if (
-      !isCurrentPaymentGrant(
-        privateMetadata,
-        paymentId
-      )
-    ) {
-      return { revoked: false, reason: "not_current_payment" };
-    }
+    currentPlan = normalizePlan(user.publicMetadata.plan);
   } catch {
     return { revoked: false, reason: "push_failed" };
   }
@@ -236,7 +236,13 @@ export async function revokePlanFromPayment(
     privateMetadata,
     paymentId
   );
-  const revoked = next.revoked && (await updatePlanMetadata({ userId, ...next }));
+  if (!next.revoked) {
+    return { revoked: false, reason: "not_current_payment" };
+  }
+  const plan = isCurrentPaymentGrant(privateMetadata, paymentId)
+    ? next.plan
+    : currentPlan;
+  const revoked = await updatePlanMetadata({ userId, ...next, plan });
   return revoked
     ? { revoked: true, reason: "revoked" }
     : { revoked: false, reason: "push_failed" };
