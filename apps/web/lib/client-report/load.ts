@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import {
   type ClientReportData,
+  isClientReportExpired,
   parseClientReportData,
 } from "@repo/audit/client-report/report-data";
 import { log } from "@repo/observability/log";
@@ -49,6 +50,10 @@ export async function loadClientReport(
   const data = parseClientReportData(row.data);
   if (!data) {
     log.warn("client-report: data 형식 불일치", { reportId: row.id });
+    return null;
+  }
+  // v2 발행본은 만료일이 지나면 404(토큰 폐기와 같은 효과, DB 쓰기 없음).
+  if (isClientReportExpired(data)) {
     return null;
   }
   return { data, reportId: row.id, pdfUrl: row.pdfUrl };

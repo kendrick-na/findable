@@ -185,6 +185,8 @@ export interface ReportTopDomain {
 
 export interface ReportStats {
   bad_n: number;
+  /** v12 발행 화면의 원인 요약. 기존 v1 계산에서는 생략될 수 있다. */
+  bad_parts?: string;
   bad_rate: number;
   bad_with_official: number;
   cites_total: number;
@@ -196,6 +198,8 @@ export interface ReportStats {
   made_n: number;
   n: number;
   nq: number;
+  /** v12 발행 화면의 공식 사이트 출처 답변 수. */
+  off_ans?: number;
   official_cites: number;
   /** 파이썬에서 인용이 있으면 소수 1자리 실수, 없으면 정수 0. 표시는 formatOfficialPct. */
   official_pct: number;
