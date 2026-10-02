@@ -25,7 +25,6 @@ import { BrandSwitcher } from "./components/brand-switcher";
 import { DashboardAnswerBuckets } from "./components/dashboard-answer-buckets";
 import { DashboardDeepAnalysis } from "./components/dashboard-deep-analysis";
 import { DashboardEmptyState } from "./components/dashboard-empty-state-server";
-import { DashboardImpactEstimate } from "./components/dashboard-impact-estimate";
 import { DashboardKpis } from "./components/dashboard-kpis";
 import { DashboardRunContext } from "./components/dashboard-run-context";
 import {
@@ -523,16 +522,6 @@ const App = async ({ searchParams }: AppProperties) => {
               <div id="tour-kpis">
                 <DashboardKpis data={data} paid={isPaid(plan)} />
               </div>
-            ) : null}
-
-            {currentRunPublishable &&
-            data.coverage &&
-            data.latestSov !== null ? (
-              <DashboardImpactEstimate
-                brandId={data.latestBrandId}
-                coverage={data.coverage}
-                sov={data.latestSov}
-              />
             ) : null}
 
             {data.latestBrandId && orgId ? (
