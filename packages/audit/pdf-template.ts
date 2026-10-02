@@ -2,7 +2,13 @@
 // Pretendard CDN 폰트 사용. Puppeteer가 페이지 로드 후 PDF로 변환.
 
 import type { AuditMetrics, EngineId } from "@repo/ai/lib/engines";
-import { ANSWER_BUCKET_COPY_KO, classifyAnswer } from "./answer-buckets";
+import {
+  ANSWER_BUCKET_COPY_KO,
+  type PromptKind,
+  answerGroup,
+  classifyAnswer,
+  isDiscoveryAnswer,
+} from "./answer-buckets";
 import { engineDisplayName } from "./engine-labels";
 
 export interface AuditPdfData {
@@ -20,6 +26,7 @@ export interface AuditPdfData {
     excerpt: string;
     /** 판정(2026-09-29) — 배지를 4분류로 그린다. 구 회차엔 없다. */
     mentionQuality?: string | null;
+    promptKind?: PromptKind | null;
   }>;
   generatedAt: string;
   language: "ko" | "en" | "both";
@@ -75,8 +82,41 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
   const sov = data.metrics.sov;
   // 결함감사(2026-07-30) §10: enginesCovered는 응답 단위(엔진×프롬프트=중복)라
   // raw 길이를 쓰면 "28개 AI 엔진 = 112회 호출"로 부풀었음 → 고유화 + 오류 제외.
-  const uniqueCovered = new Set(data.metrics.enginesCovered).size;
-  const uniqueMention = new Set(data.metrics.enginesWithMention).size;
+  const successfulRows = data.engineResponses.filter(
+    (row) =>
+      !isDiscoveryAnswer(row) &&
+      !(row.errorMessage || row.isStub) &&
+      answerGroup(row.engineId) !== "briefing" &&
+      answerGroup(row.engineId) !== "retired"
+  );
+  const successfulIds = new Set(successfulRows.map((row) => row.engineId));
+  const uniqueCovered = successfulIds.size;
+  const uniqueMention = new Set(
+    data.metrics.enginesWithMention.filter((id) => successfulIds.has(id))
+  ).size;
+  const aiCount = new Set(
+    successfulRows
+      .filter((row) => answerGroup(row.engineId) === "ai")
+      .map((row) => row.engineId)
+  ).size;
+  const searchCount = new Set(
+    successfulRows
+      .filter((row) => answerGroup(row.engineId) === "search")
+      .map((row) => row.engineId)
+  ).size;
+  const attemptedIds = new Set(
+    data.engineResponses
+      .filter(
+        (row) =>
+          !isDiscoveryAnswer(row) &&
+          answerGroup(row.engineId) !== "briefing" &&
+          answerGroup(row.engineId) !== "retired"
+      )
+      .map((row) => row.engineId)
+  );
+  const failedEngineCount = [...attemptedIds].filter(
+    (id) => !successfulIds.has(id)
+  ).length;
 
   return `<!doctype html>
 <html lang="ko">
@@ -152,15 +192,15 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
 </div>
 
 <h1 class="title">${escapeHtml(data.brandName)}의 AI 가시성 진단 (${escapeHtml(data.domain)})</h1>
-<p class="subtitle">질문 ${data.promptsCount}개 · 대상 AI 엔진 ${uniqueCovered}개 · 실제 ${data.metrics.enginesCovered.length}회 호출 분석 · 측정 언어 ${LANGUAGE_LABEL[data.language]}</p>
+<p class="subtitle">질문 ${data.promptsCount}개 · 브랜드 질문 기준 AI 답변 ${aiCount}곳 · 검색 노출 ${searchCount}곳 · 미측정 ${failedEngineCount}곳 · 실제 ${data.metrics.enginesCovered.length}회 시도 · 측정 언어 ${LANGUAGE_LABEL[data.language]}</p>
 
 <div class="scorecard">
   <div class="card primary">
-    <div class="label">Share of Voice</div>
+    <div class="label">등장률 (검색 노출 포함)</div>
     <div class="value">${sov}<span class="unit">/100</span></div>
   </div>
   <div class="card">
-    <div class="label">언급 엔진</div>
+    <div class="label">언급 엔진 (AI·검색)</div>
     <div class="value">${uniqueMention}<span class="unit">/${uniqueCovered}</span></div>
   </div>
   <div class="card">

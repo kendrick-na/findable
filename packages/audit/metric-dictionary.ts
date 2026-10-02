@@ -145,8 +145,9 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
   /** 등장률 — 이름이 4개였던 그 지표(`우리 비중`·`언급률`·`SoV`·`등장률`). */
   sov: {
     label: "등장률",
-    question: "AI가 우리를 얼마나 말하나?",
-    description: "AI 답변 중 우리 브랜드가 등장한 비율입니다.",
+    question: "AI·검색에서 얼마나 등장하나?",
+    description:
+      "판정이 끝난 AI 답변과 검색 노출 결과 중 브랜드가 등장한 비율입니다.",
     format: "percent",
     direction: "higher",
     axis: "response",

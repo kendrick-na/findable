@@ -1,3 +1,5 @@
+import { isDiscoveryAnswer } from "@repo/audit/answer-buckets";
+import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
 import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun } from "@repo/audit/run-quality";
 import type { AuditJob } from "@repo/database";
@@ -7,6 +9,7 @@ import type { AuditJob } from "@repo/database";
 // 런타임 가드(typeof / Number.isFinite / Array.isArray)로 안전하게 추출한다.
 interface AuditResultShape {
   brandName?: unknown;
+  engineResponses?: unknown;
   metrics?: {
     sov?: unknown;
     enginesCovered?: unknown;
@@ -42,21 +45,6 @@ export function extractBrandName(result: AuditJob["result"]): string | null {
   return typeof brandName === "string" && brandName.length > 0
     ? brandName
     : null;
-}
-
-// enginesCovered / enginesWithMention 는 프롬프트 수만큼 중복 엔진이 들어있으므로
-// Set 으로 고유화한 개수를 센다. (audit-result.tsx 와 동일한 처리)
-function uniqueCount(value: unknown): number {
-  if (!Array.isArray(value)) {
-    return 0;
-  }
-  const set = new Set<string>();
-  for (const item of value) {
-    if (typeof item === "string" && item.length > 0) {
-      set.add(item);
-    }
-  }
-  return set.size;
 }
 
 export interface EngineCoverage {
@@ -128,11 +116,45 @@ export function extractEngineCoverage(
   if (!metrics) {
     return null;
   }
-  const total = uniqueCount(metrics.enginesCovered);
+  const responseRows = Array.isArray(shape.engineResponses)
+    ? shape.engineResponses.filter(
+        (
+          row
+        ): row is {
+          engineId: string;
+          errorMessage?: string | null;
+          isStub?: boolean;
+          promptKind?: string | null;
+        } =>
+          Boolean(row) &&
+          typeof row === "object" &&
+          typeof (row as { engineId?: unknown }).engineId === "string" &&
+          !isDiscoveryAnswer(row as { promptKind?: string | null })
+      )
+    : null;
+  // A legacy metrics array lists attempts, not successful answers. Without
+  // rows we cannot distinguish 429/stub from a measured non-mention.
+  if (!responseRows) {
+    return null;
+  }
+  const total = countMeasurementCoverage(responseRows).measured;
   if (total === 0) {
     return null;
   }
-  return { mentioned: uniqueCount(metrics.enginesWithMention), total };
+  const measuredIds = new Set(
+    responseRows
+      .filter((row) => !(row.errorMessage || row.isStub))
+      .map((row) => row.engineId)
+  );
+  const mentionedIds = Array.isArray(metrics.enginesWithMention)
+    ? metrics.enginesWithMention.filter(
+        (id): id is string => typeof id === "string"
+      )
+    : [];
+  return {
+    mentioned: new Set(mentionedIds.filter((id) => measuredIds.has(id))).size,
+    total,
+  };
 }
 
 export interface SovTrendPoint {

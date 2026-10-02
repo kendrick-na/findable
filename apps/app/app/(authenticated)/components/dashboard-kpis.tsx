@@ -409,7 +409,7 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
                 //   (dashboard-data.ts:556 `new Set(group.map(r=>r.engineId))`).
                 //   응답 못 받은 엔진은 애초에 행이 없어서 이 수에 안 들어간다.
                 //   web 은 이미 `측정한 AI N곳` 이라고 쓴다 → 같은 값을 두 앱이 다르게 부르던 것.
-                `측정한 AI ${coverage.total}곳 중 ${coverage.mentioned}곳이 우리를 말했어요`
+                `측정한 AI·검색 ${coverage.total}곳 중 ${coverage.mentioned}곳에 등장했어요`
               : // 🔴 **값이 있으면 빈 상태 문구를 쓰지 않는다** (N-46 · 스크린샷이 잡음).
                 //   값(`latestSov` ← `metrics.sov`)과 힌트(`coverage` ← `metrics.enginesCovered`)가
                 //   **서로 다른 필드**를 본다. `enginesCovered` 만 비면 `coverage=null` 이 되어
@@ -538,7 +538,7 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
         측정 {totalCount}회
         {latestMeasuredAt ? ` · ${formatMeasuredAt(latestMeasuredAt)}` : ""}
         {coverage
-          ? ` · 측정한 AI ${coverage.total}곳 중 ${coverage.mentioned}곳에서 등장`
+          ? ` · 측정한 AI·검색 ${coverage.total}곳 중 ${coverage.mentioned}곳에서 등장`
           : ""}
         {promptScores.length > 0 ? ` · 질문 ${promptScores.length}개 기준` : ""}
         {rankBasisNote(positionSampleCount)}

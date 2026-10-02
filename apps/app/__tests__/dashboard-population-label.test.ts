@@ -77,7 +77,7 @@ const POPULATION_PROMPTS = /질문 \$\{promptScores\.length\}개 기준/;
 /** 0건일 때 표기를 생략하는 가드(빈 원장에 "질문 0개 기준"을 쓰지 않는다). */
 const POPULATION_ZERO_GUARD = /promptScores\.length > 0\s*\?/;
 /** 엔진 수 모집단 — 이미 있던 표기. 같이 사라지지 않게 함께 잠근다. */
-const POPULATION_ENGINES = /측정한 AI \$\{coverage\.total\}곳/;
+const POPULATION_ENGINES = /측정한 AI·검색 \$\{coverage\.total\}곳/;
 /** 상수로 박은 질문 수(날조). 실측치 보간이 아니면 이 패턴에 걸린다. */
 const POPULATION_HARDCODED = /질문 \d+개 기준/;
 
