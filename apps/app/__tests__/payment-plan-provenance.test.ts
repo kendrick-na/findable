@@ -5,12 +5,26 @@
  * @vitest-environment node
  */
 
-import { describe, expect, it } from "vitest";
 import {
+  grantPlanFromPayment,
   isCurrentPaymentGrant,
   paymentGrantAfterPayment,
   paymentGrantAfterRefund,
 } from "@repo/auth/plan-grant";
+import { describe, expect, it, vi } from "vitest";
+
+const clerkUsers = vi.hoisted(() => ({
+  getUser: vi.fn(),
+  updateUserMetadata: vi.fn(),
+}));
+
+// auth 패키지가 실제 import하는 Clerk 복사본을 가로챈다.
+vi.mock(
+  "../../../packages/auth/node_modules/@clerk/nextjs/dist/esm/server/index.js",
+  () => ({
+    clerkClient: vi.fn(async () => ({ users: clerkUsers })),
+  })
+);
 
 describe("결제 권한 출처", () => {
   it("결제 ID가 정확히 같을 때만 권한 회수 후보가 된다", () => {
@@ -86,6 +100,77 @@ describe("결제 권한 출처", () => {
       privateMetadata: null,
       revoked: true,
     });
+  });
+
+  it("늦게 도착한 과거 결제 Paid 웹훅은 현재 결제를 덮거나 중복 기록하지 않는다", () => {
+    const first = paymentGrantAfterPayment("free", {}, "growth", "payment-1");
+    const second = paymentGrantAfterPayment(
+      first.plan,
+      first.privateMetadata,
+      "growth",
+      "payment-2"
+    );
+    const lateFirst = paymentGrantAfterPayment(
+      second.plan,
+      second.privateMetadata,
+      "growth",
+      "payment-1"
+    );
+
+    expect(lateFirst).toEqual(second);
+    expect(
+      paymentGrantAfterRefund(lateFirst.privateMetadata, "payment-2")
+    ).toEqual({
+      plan: "growth",
+      privateMetadata: first.privateMetadata,
+      revoked: true,
+    });
+  });
+
+  it("기존 중복 결제 출처를 환불할 때 같은 ID를 모두 제거한다", () => {
+    const legacy = {
+      findablePaymentId: "payment-1",
+      findablePaymentGrantStack: [
+        { paymentId: "payment-1", plan: "growth" },
+        { paymentId: "payment-1", plan: "growth" },
+        { paymentId: null, plan: "free" },
+      ],
+    };
+
+    expect(paymentGrantAfterRefund(legacy, "payment-1")).toEqual({
+      plan: "free",
+      privateMetadata: null,
+      revoked: true,
+    });
+  });
+
+  it("이미 부여된 결제의 재전송은 Clerk metadata를 다시 쓰지 않는다", async () => {
+    const existing = paymentGrantAfterPayment("free", {}, "growth", "payment-1");
+    clerkUsers.getUser.mockResolvedValue({
+      publicMetadata: { plan: existing.plan },
+      privateMetadata: existing.privateMetadata,
+    });
+    clerkUsers.updateUserMetadata.mockClear();
+
+    const result = await grantPlanFromPayment("user-1", "growth", "payment-1");
+    expect(clerkUsers.getUser).toHaveBeenCalledWith("user-1");
+    expect(result).toBe(true);
+    expect(clerkUsers.updateUserMetadata).not.toHaveBeenCalled();
+
+    const newer = paymentGrantAfterPayment(
+      existing.plan,
+      existing.privateMetadata,
+      "growth",
+      "payment-2"
+    );
+    clerkUsers.getUser.mockResolvedValue({
+      publicMetadata: { plan: newer.plan },
+      privateMetadata: newer.privateMetadata,
+    });
+    expect(await grantPlanFromPayment("user-1", "growth", "payment-1")).toBe(
+      true
+    );
+    expect(clerkUsers.updateUserMetadata).not.toHaveBeenCalled();
   });
 
   it("상위 플랜 결제 후 환불하면 직전 유료 권한과 출처를 복원한다", () => {

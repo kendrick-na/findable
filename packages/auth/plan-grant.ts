@@ -96,8 +96,11 @@ export function paymentGrantAfterPayment(
     typeof privateMetadata?.[PAYMENT_GRANT_ID_KEY] === "string"
       ? privateMetadata[PAYMENT_GRANT_ID_KEY]
       : null;
-  // verify와 Paid 웹훅이 같은 결제를 처리해도 환불 복원 스택은 한 번만 쌓는다.
-  if (currentPaymentId === paymentId) {
+  // 현재 또는 과거 결제의 늦은 재전송은 기존 권한 출처를 바꾸지 않는다.
+  if (
+    currentPaymentId === paymentId ||
+    existing.some((grant) => grant.paymentId === paymentId)
+  ) {
     return { plan: currentPlan, privateMetadata: privateMetadata ?? null };
   }
   const prior =
@@ -123,7 +126,9 @@ export function paymentGrantAfterRefund(
     return { plan: "free", privateMetadata: null, revoked: false };
   }
 
-  const remaining = paymentGrantStack(privateMetadata).slice(1);
+  const remaining = paymentGrantStack(privateMetadata).filter(
+    (grant) => grant.paymentId !== paymentId
+  );
   return {
     plan: remaining[0]?.plan ?? "free",
     privateMetadata: privateMetadataForStack(remaining),
@@ -178,15 +183,22 @@ export async function grantPlanFromPayment(
   const clerk = await clerkClient();
   try {
     const user = await clerk.users.getUser(userId);
+    const currentPlan = normalizePlan(user.publicMetadata.plan);
+    const privateMetadata = user.privateMetadata as
+      | Record<string, unknown>
+      | undefined;
     const next = paymentGrantAfterPayment(
-      normalizePlan(user.publicMetadata.plan),
-      user.privateMetadata as Record<string, unknown> | undefined,
+      currentPlan,
+      privateMetadata,
       plan,
       paymentId
     );
-    // 상위 권한 보유자의 하위 결제는 entitlement 변경이 없다. "부여 성공"으로
-    // 처리해 webhook 재시도를 막되, 결제 ID를 권한 출처로 기록하지 않는다.
-    if (next.plan === normalizePlan(user.publicMetadata.plan) && next.privateMetadata === null) {
+    // 변경이 없는 재전송과 상위 권한 보유자의 하위 결제는 쓰지 않는다.
+    if (
+      next.plan === currentPlan &&
+      (next.privateMetadata === privateMetadata ||
+        next.privateMetadata === null)
+    ) {
       return true;
     }
     return updatePlanMetadata({ userId, ...next });
