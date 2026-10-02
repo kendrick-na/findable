@@ -247,6 +247,12 @@ async function findCachedByDomain(
       // F8 수정 — 언어를 캐시 키에 포함(누락 시 다른 언어 결과가 배급된다).
       language: { in: cacheableLanguages(language) },
       status: "completed",
+      // Workspace results are private. They must never be selected as the
+      // anonymous/free-domain cache hit.
+      organizationId: null,
+      // Organization deletion uses SetNull on the FK, but the legacy
+      // `org:{orgId}` email marker remains. Keep those rows private too.
+      NOT: { email: { startsWith: "org:" } },
       // result 가 실제로 있는 것만(빈 완료 job 을 캐시로 주면 빈 화면이 된다).
       // ⚠️ Prisma Json 필터는 plain null 을 받지 않는다 → DbNull 센티널 사용.
       result: { not: Prisma.DbNull },
