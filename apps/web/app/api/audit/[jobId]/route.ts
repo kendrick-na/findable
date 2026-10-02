@@ -4,6 +4,11 @@
 // jobId는 UUID v4 (Prisma @default(uuid))이므로 추측 불가.
 
 import {
+  filterStoredGeoActions,
+  filterStoredTopRecommendations,
+} from "@repo/audit/action-display-filter";
+import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
+import {
   type AuditHistoryComparison,
   buildAuditHistory,
   EMPTY_HISTORY,
@@ -190,6 +195,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const result = withRecomputedAuditMetrics(job.result);
     const publishable = isPublishableAuditResult(result);
+    const publicResult = publicAuditResult(result) as Record<string, unknown>;
+    const safeResult = {
+      ...publicResult,
+      geoActions: filterStoredGeoActions(
+        publicResult.geoActions as Array<Record<string, unknown>> | undefined
+      ),
+      topRecommendations: filterStoredTopRecommendations(
+        publicResult.topRecommendations as Array<unknown> | undefined
+      ),
+    };
     const pdfOutdated = Boolean(
       job.pdfUrl && hasStaleAuditPdf(job.result, result)
     );
@@ -216,9 +231,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       language: job.language,
       pdfUrl: pdfOutdated || !publishable ? null : job.pdfUrl,
       pdfOutdated,
-      result: publicAuditResult(result),
+      result: safeResult,
       crewStatus: job.crewStatus,
-      crewResult: publishable ? job.crewResult : null,
+      crewResult: publishable
+        ? sanitizeStoredCrewResult(job.crewResult)
+        : null,
       crewOutdated: !publishable && Boolean(job.crewResult),
       crewStartedAt: job.crewStartedAt?.toISOString() ?? null,
       crewCompletedAt: job.crewCompletedAt?.toISOString() ?? null,

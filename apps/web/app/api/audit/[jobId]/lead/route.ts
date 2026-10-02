@@ -2,6 +2,7 @@
 //
 // 사용자가 결과 페이지 하단 "📩 풀 리포트 받기" 클릭 → 이 API 호출 → Resend로 이메일 발송
 
+import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 import { geoAxisScores, scoreTier, TIER_LABEL_KO } from "@repo/audit/geo-score";
 import { maskEmail } from "@repo/audit/mask";
 import {
@@ -185,7 +186,9 @@ export async function POST(
     const enginesMentioned = new Set(metrics.enginesWithMention).size;
     const enginesTotal = new Set(metrics.enginesCovered).size;
 
-    const crew = job.crewResult as unknown as CrewResult | null;
+    const crew = sanitizeStoredCrewResult(
+      job.crewResult
+    ) as unknown as CrewResult | null;
     const topActions = (crew?.strategist?.output?.topActions ?? [])
       .slice(0, 3)
       .map((a) => ({

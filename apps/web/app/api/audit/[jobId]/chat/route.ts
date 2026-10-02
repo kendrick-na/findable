@@ -16,6 +16,7 @@ import {
   isCopilotConfigured,
   streamCopilotResponse,
 } from "@repo/ai/lib/crew";
+import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 // 🔴 분모 단일 진실(세션N-28) — 결과 화면·OG 이미지와 같은 함수를 쓴다.
 import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
 import {
@@ -190,7 +191,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const crew = job.crewResult as unknown as StoredCrewReport;
+    const crew = sanitizeStoredCrewResult(
+      job.crewResult
+    ) as unknown as StoredCrewReport;
     const result = withRecomputedAuditMetrics(
       (job.result as unknown as StoredResult) ?? {}
     );

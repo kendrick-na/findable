@@ -67,7 +67,7 @@ vi.mock("@repo/email", () => ({
   resend: { emails: { send: mocks.sendEmail } },
 }));
 vi.mock("@repo/email/templates/audit-report", () => ({
-  AuditReportEmail: () => null,
+  AuditReportEmail: (props: unknown) => ({ props }),
 }));
 vi.mock("@repo/audit/normalize-stored-metrics", () => ({
   withRecomputedAuditMetrics: (result: unknown) => result,
@@ -298,6 +298,91 @@ describe("audit route tenant boundary", () => {
       })
     );
     expect(html).toContain("private.example");
+  });
+
+  test("owner API response sanitizes stored geo and crew claims at the server boundary", async () => {
+    mocks.auth.mockResolvedValue({ userId: "owner", orgId: "owner-org" });
+    mocks.findUnique.mockResolvedValue({
+      ...privateJob,
+      result: {
+        ...privateJob.result,
+        geoActions: [
+          {
+            kind: "rank_strategy",
+            title: "already #1",
+            source: "Princeton Table 2 +115%",
+          },
+          { kind: "prompt_gap", title: "safe action" },
+        ],
+        topRecommendations: [
+          "Princeton Table 2 +115% expected lift",
+          "Safe recommendation",
+        ],
+      },
+      crewResult: {
+        strategist: {
+          output: {
+            topActions: [
+              { title: "Reddit is 40% of all LLM citations." },
+              { title: "Safe action" },
+            ],
+          },
+        },
+      },
+    });
+
+    const payload = await (
+      await pollAudit(request() as never, params)
+    ).json();
+
+    expect(payload.result.geoActions).toEqual([
+      { kind: "prompt_gap", title: "safe action" },
+    ]);
+    expect(payload.result.topRecommendations).toEqual([
+      "Safe recommendation",
+    ]);
+    expect(payload.crewResult.strategist.output.topActions).toEqual([
+      { title: "" },
+      { title: "Safe action" },
+    ]);
+  });
+
+  test("lead email and copilot receive sanitized stored crew claims", async () => {
+    mocks.auth.mockResolvedValue({ userId: "owner", orgId: "owner-org" });
+    mocks.findUnique.mockResolvedValue({
+      ...privateJob,
+      crewResult: {
+        analysts: [],
+        strategist: {
+          output: {
+            topActions: [
+              { rank: 1, title: "Reddit is 40% of all LLM citations." },
+              { rank: 2, title: "Safe action" },
+            ],
+          },
+        },
+      },
+    });
+
+    await sendLead(request({ email: "recipient@example.com" }), params);
+    const emailProps = mocks.sendEmail.mock.calls[0]?.[0]?.react
+      ?.props as { topActions: unknown[] };
+    expect(emailProps.topActions).toEqual([
+      { rank: 1, title: "", timeframe: "이번 주" },
+      { rank: 2, title: "Safe action", timeframe: "이번 주" },
+    ]);
+
+    let copilotContext: Record<string, unknown> | undefined;
+    mocks.streamChat.mockImplementation((context: Record<string, unknown>) => {
+      copilotContext = context;
+      return Response.json({ ok: true });
+    });
+    await chat(
+      request({ messages: [{ role: "user", content: "What changed?" }] }) as never,
+      params
+    );
+    expect(JSON.stringify(copilotContext)).not.toContain("Reddit is 40%");
+    expect(JSON.stringify(copilotContext)).toContain("Safe action");
   });
 
   test("free result remains link-readable without login", async () => {

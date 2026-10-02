@@ -46,3 +46,29 @@ export function filterStoredGeoActions<T extends StoredActionLike>(
       !isUnsupportedStoredAction(action)
   );
 }
+
+/**
+ * Legacy PDFs/results also carry a string-only recommendation projection.
+ * It has no `kind`/`source`, so only remove the known unsupported claim shapes;
+ * this is a containment filter, not a semantic proof of every recommendation.
+ */
+export function filterStoredTopRecommendations(
+  recommendations: readonly unknown[] | null | undefined
+): string[] {
+  if (!Array.isArray(recommendations)) {
+    return [];
+  }
+  return recommendations.filter((recommendation): recommendation is string => {
+    if (typeof recommendation !== "string") {
+      return false;
+    }
+    const industryRedditClaim =
+      /reddit|레딧/i.test(recommendation) &&
+      /40(?:\.\d+)?\s*%/.test(recommendation) &&
+      /모든|전체|업계|all\s|overall|across/i.test(recommendation);
+    const unsupportedLift =
+      /princeton|프린스턴/i.test(recommendation) &&
+      /[+−-]?\s*\d+(?:\.\d+)?\s*%/.test(recommendation);
+    return !(industryRedditClaim || unsupportedLift);
+  });
+}
