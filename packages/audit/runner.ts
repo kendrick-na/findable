@@ -16,18 +16,13 @@ import {
   englishPromptName,
   officialSiteAliases,
 } from "@repo/ai/lib/brand-aliases";
-import { resolveBrandIdentity } from "@repo/ai/lib/brand-identity";
 import {
   aggregateAudit,
   auditCost,
   partitionCitedSources,
-  queryAllEngines,
 } from "@repo/ai/lib/engines";
 import { detectBrandMention } from "@repo/ai/lib/engines/utils";
-import {
-  MENTION_VERDICT_VERSION,
-  verifyMentions,
-} from "@repo/ai/lib/mention-verdict";
+import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict";
 import { database, Prisma } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -51,6 +46,7 @@ import {
   type PromptBrandNames,
   type RunPrompt,
 } from "./audit-prompts";
+import { assertCheckpointMode, selectAuditAi } from "./audit-stub";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
 import { runBriefingForAuditJob } from "./briefing-runner";
 import {
@@ -76,10 +72,7 @@ import {
   isMeasurementFailure,
 } from "./measurement-coverage";
 import { isPublishableAuditResult } from "./normalize-stored-metrics";
-import {
-  registeredBrandIdentityFallback,
-  resolveOfficialSiteIdentity,
-} from "./official-site-identity";
+import { registeredBrandIdentityFallback } from "./official-site-identity";
 import { generateAuditPdf } from "./pdf-generator";
 import type { AuditPdfData } from "./pdf-template";
 import type { AuditPostprocessing } from "./postprocessing";
@@ -395,6 +388,12 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       finishJob();
       return;
     }
+    // Live functions unless FINDABLE_AUDIT_STUB_MODE=1 (Preview only). Chosen
+    // after the claim so a refused production flag fails this Job visibly.
+    const ai = selectAuditAi();
+    if (ai.stubMode) {
+      log.warn("audit.job.stub_mode", { jobId: input.jobId });
+    }
     const savedJob = await database.auditJob.findUnique({
       where: { id: input.jobId },
       select: {
@@ -411,6 +410,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     }
     if (savedCheckpoint) {
       assertCheckpointProvenance(savedCheckpoint, savedJob.createdAt);
+      assertCheckpointMode(savedCheckpoint, ai.stubMode);
       const newerCompleted = await database.auditJob.findFirst({
         select: { id: true },
         where: {
@@ -435,7 +435,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const identity = savedCheckpoint
       ? null
       : await timed("brand_identity", () =>
-          resolveBrandIdentity(input.domain, input.brandName)
+          ai.resolveBrandIdentity(input.domain, input.brandName)
         );
     const brandName = savedCheckpoint?.context.brandName ?? identity?.brandName;
     if (!brandName) {
@@ -449,7 +449,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const resolvedOfficialSiteIdentity = savedCheckpoint
       ? null
       : await timed("official_site", () =>
-          resolveOfficialSiteIdentity(input.domain)
+          ai.resolveOfficialSiteIdentity(input.domain)
         );
     const officialSiteIdentity =
       savedCheckpoint?.context.officialSiteIdentity ??
@@ -553,7 +553,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             timed(
               "prompt_query",
               () =>
-                queryAllEngines(
+                ai.queryAllEngines(
                   {
                     prompt: prompts[promptIndex].text,
                     language: prompts[promptIndex].lang,
@@ -564,7 +564,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
                     brandDomain: input.domain,
                   },
                   checkpoint.enginePlan[promptIndex] as unknown as Parameters<
-                    typeof queryAllEngines
+                    typeof ai.queryAllEngines
                   >[1],
                   ({ engineId, phase, status }) => {
                     const key = `${promptIndex}:${engineId}`;
@@ -635,7 +635,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const flat = await timed(
       "verify_mentions",
       () =>
-        verifyMentions(
+        ai.verifyMentions(
           rawFlat,
           {
             brandName,
@@ -662,7 +662,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       responseCount: flat.length,
     });
     const measurementCoverage = countMeasurementCoverage(flat);
-    if (isMeasurementFailure(measurementCoverage)) {
+    // Stub rows stay isStub and never count as measured. In Preview stub mode
+    // the run still completes so claim → checkpoint → commit is exercised.
+    if (!ai.stubMode && isMeasurementFailure(measurementCoverage)) {
       throw new Error(
         `AI 엔진 응답을 받지 못했습니다. 연결 설정을 확인한 뒤 다시 시도해 주세요. (시도 ${measurementCoverage.attempted}곳)`
       );
@@ -803,6 +805,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       brandName,
       domain: input.domain,
       measurementContext: {
+        // Present only on synthetic Preview runs; live results are unchanged.
+        ...(ai.stubMode ? { stubMode: true as const } : {}),
         resume: {
           originCreatedAt: checkpoint.originCreatedAt,
           attempt: checkpoint.retry.attempt,
@@ -945,9 +949,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const trackingExpected = Boolean(
       dualWriteEnabled && input.organizationId && input.brandId
     );
-    const pdfExpected = isPublishableAuditResult(result);
+    const pdfExpected = !ai.stubMode && isPublishableAuditResult(result);
     const briefingExpected = Boolean(
-      keys().AUDIT_BRIEFING_IN_MAIN_ENABLED &&
+      !ai.stubMode &&
+        keys().AUDIT_BRIEFING_IN_MAIN_ENABLED &&
         input.organizationId &&
         input.brandId
     );
