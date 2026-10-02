@@ -1,8 +1,53 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { RevenueImpactCard } from "../app/[locale]/audit/[jobId]/components/revenue-impact-card";
+import { RevenueImpactOptIn } from "../app/[locale]/audit/[jobId]/components/answer-buckets";
+import {
+  initialRevenueAssumptions,
+  RevenueImpactCard,
+  revenueImpactCopy,
+} from "../app/[locale]/audit/[jobId]/components/revenue-impact-card";
 
 describe("고객 입력 기반 유입 시나리오", () => {
+  it("기본값 복원에도 고객이 입력한 월 노출 수와 객단가를 보존한다", () => {
+    const assumptions = initialRevenueAssumptions("small", {
+      monthlyAiQueries: 1234,
+      revenuePerConversion: 91_000,
+    });
+
+    expect(assumptions.monthlyAiQueries).toBe(1234);
+    expect(assumptions.revenuePerConversion).toBe(91_000);
+  });
+
+  it.each([
+    true,
+    false,
+  ])("접힌 패널의 문구도 손실 실측·회복 약속을 하지 않는다 (한국어: %s)", (isKo) => {
+    const copy = Object.values(revenueImpactCopy(isKo)).join(" ");
+
+    expect(copy).not.toContain("Pew Research 실측 8%");
+    expect(copy).not.toContain("8% answer CTR (Pew)");
+    expect(copy).not.toContain("회복 가능 매출");
+    expect(copy).not.toContain("Recoverable revenue");
+    expect(copy).not.toContain("/ 월 (추정)");
+    expect(copy).not.toContain("/ mo (est.)");
+    expect(copy).toContain(isKo ? "임의 시작값" : "arbitrary starting value");
+  });
+
+  it("입력 전 안내는 나머지 계수가 기본 가정이며 실측 손실이 아님을 밝힌다", () => {
+    const html = renderToStaticMarkup(
+      <RevenueImpactOptIn
+        attemptedEngines={3}
+        isKo
+        measuredEngines={3}
+        sov={20}
+      />
+    );
+
+    expect(html).toContain("클릭률·전환율 등은 기본 가정이 남으며");
+    expect(html).toContain("실제 손실 측정값은 아닙니다");
+    expect(html).not.toContain("놓치는 유입이 궁금하다면");
+  });
+
   it.each([
     true,
     false,

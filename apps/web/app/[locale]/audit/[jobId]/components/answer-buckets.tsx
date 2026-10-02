@@ -593,19 +593,19 @@ export function RevenueImpactOptIn({
         data-testid="revenue-opt-in"
       >
         {isKo
-          ? "놓치는 유입이 궁금하다면 — 직접 입력하면 계산해 드려요"
-          : "Curious about missed traffic? Enter your own numbers to calculate"}
+          ? "가정한 유입 규모를 보고 싶다면 — 숫자를 입력해 보세요"
+          : "Explore an assumed traffic scenario — enter your numbers"}
       </summary>
       <p className="mt-3 break-keep text-xs text-zinc-400 leading-relaxed">
         {isKo
-          ? "우리 숫자 없이 기본 가정으로 만든 추정은 보여드리지 않아요. 내 검색량과 고객당 매출을 넣으면 그 값으로만 계산해요."
-          : "We don't show estimates built only on default assumptions. Enter your search volume and revenue per customer to calculate."}
+          ? "월 AI 답변 노출 수와 고객당 매출을 입력하면 시나리오를 계산합니다. 클릭률·전환율 등은 기본 가정이 남으며 아래에서 바꿀 수 있어요. 실제 손실 측정값은 아닙니다."
+          : "Enter monthly AI answer views and revenue per customer for a what-if scenario. Click and conversion rates still use editable defaults below. This is not measured loss."}
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block text-xs text-zinc-300">
           {isKo
-            ? "월 AI 답변 노출 수(내 브랜드 관련 검색량)"
-            : "Monthly AI answer views (your search volume)"}
+            ? "가정할 월 AI 답변 노출 수"
+            : "Assumed monthly AI answer views"}
           <input
             className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 tabular-nums"
             inputMode="numeric"
