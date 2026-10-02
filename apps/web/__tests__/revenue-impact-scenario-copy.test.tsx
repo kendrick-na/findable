@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { RevenueImpactOptIn } from "../app/[locale]/audit/[jobId]/components/answer-buckets";
@@ -16,6 +18,16 @@ describe("고객 입력 기반 유입 시나리오", () => {
 
     expect(assumptions.monthlyAiQueries).toBe(1234);
     expect(assumptions.revenuePerConversion).toBe(91_000);
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        "app/[locale]/audit/[jobId]/components/revenue-impact-card.tsx"
+      ),
+      "utf8"
+    );
+    expect(source).toContain(
+      "setAssumptions(initialRevenueAssumptions(defaultSizeKey, customerInput))"
+    );
   });
 
   it.each([
@@ -33,19 +45,30 @@ describe("고객 입력 기반 유입 시나리오", () => {
     expect(copy).toContain(isKo ? "임의 시작값" : "arbitrary starting value");
   });
 
-  it("입력 전 안내는 나머지 계수가 기본 가정이며 실측 손실이 아님을 밝힌다", () => {
+  it.each([
+    true,
+    false,
+  ])("입력 전 안내는 가정이며 계산 카드는 숨긴다 (한국어: %s)", (isKo) => {
     const html = renderToStaticMarkup(
       <RevenueImpactOptIn
         attemptedEngines={3}
-        isKo
+        isKo={isKo}
         measuredEngines={3}
         sov={20}
       />
     );
 
-    expect(html).toContain("클릭률·전환율 등은 기본 가정이 남으며");
-    expect(html).toContain("실제 손실 측정값은 아닙니다");
+    expect(html).toContain(
+      isKo
+        ? "클릭률·전환율 등은 기본 가정이 남으며"
+        : "Click and conversion rates still use editable defaults"
+    );
+    expect(html).toContain(
+      isKo ? "실제 손실 측정값은 아닙니다" : "This is not measured loss"
+    );
     expect(html).not.toContain("놓치는 유입이 궁금하다면");
+    expect(html).not.toContain("가정 기반 시나리오");
+    expect(html).not.toContain("Assumption-based scenario");
   });
 
   it.each([

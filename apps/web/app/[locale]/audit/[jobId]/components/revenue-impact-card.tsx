@@ -44,8 +44,8 @@ export const revenueImpactCopy = (isKo: boolean) => ({
   // KPI 프레이밍(시뮬 병목: "이게 내 이번 분기 문제인지 인식"에 직결).
   // 해요체 + 주 숫자(세션)와 같은 층위로 — 금액은 아래 토글에서만 말한다(감사 5번).
   kpiFraming: isKo
-    ? "입력한 월 AI 노출 수 × (1 − 이번 회차의 AI·검색 등장률) × 가정 클릭률로 계산해요. 등장률에는 검색 결과도 섞일 수 있어 실제 놓친 방문이나 매출을 측정한 값은 아닙니다."
-    : "Monthly AI views you enter × (1 − this run's AI/search appearance rate) × an assumed click rate. Search results may be mixed into that rate; this is not measured lost visits or revenue.",
+    ? "입력한 월 AI 노출 수 × (1 − 이번 회차의 AI·검색 등장률) × 가정 클릭률로 계산해요. 측정 질문의 등장률이 전체 월 AI 노출을 대표한다고 가정하지만, 검색 결과와 브랜드명 질문도 섞일 수 있어 실제 놓친 방문이나 매출을 측정한 값은 아닙니다."
+    : "Monthly AI views you enter × (1 − this run's AI/search appearance rate) × an assumed click rate. This assumes the measured questions represent all monthly AI views, although search results and branded questions may be mixed in. It is not measured lost visits or revenue.",
   perMonth: isKo ? "/ 월 (가정)" : "/ mo (scenario)",
   directLoss: isKo ? "직접 유입 가정액" : "Assumed direct referral value",
   directHint: isKo
@@ -66,7 +66,7 @@ export const revenueImpactCopy = (isKo: boolean) => ({
     : "The default 8% click rate is an arbitrary starting value, not a validated AI-answer CTR. Conversion and zero-click factors are editable assumptions, not measured for your brand. Pew's 8% concerns clicks on ordinary search results when a Google AI summary appeared in a U.S. study, not clicks on AI-answer links. This is not measured traffic, loss, or lift.",
   sizeLabel: isKo ? "브랜드 규모" : "Brand size",
   adjust: isKo ? "가정 조정" : "Adjust assumptions",
-  queries: isKo ? "월 AI 답변 노출(추정)" : "Monthly AI answer views (est.)",
+  queries: isKo ? "월 AI 답변 노출(가정)" : "Monthly AI answer views (assumed)",
   ctr: isKo ? "답변→클릭률" : "Answer→click rate",
   conv: isKo ? "AI 방문→고객 전환율" : "AI visitor→customer rate",
   influenceRate: isKo ? "제로클릭 영향률" : "Zero-click influence rate",
@@ -90,8 +90,8 @@ export const revenueImpactCopy = (isKo: boolean) => ({
     ? "클릭 없이 영향을 받는다는 가정입니다. 이 브랜드에서 측정한 비율은 아니에요."
     : "Assumed influence without a click; not measured for your brand.",
   hInfluenceConv: isKo
-    ? "위에서 영향받은 사람이 매장·직접방문·지명검색으로 사는 비율"
-    : "Of those influenced, the share converting via store, direct, or branded search",
+    ? "영향받았다고 가정한 사람이 매장·직접방문·지명검색으로 산다고 가정한 비율"
+    : "Assumed share buying via store, direct, or branded search after assumed influence",
   hCpc: isKo
     ? "광고비 비교를 위한 가정 단가예요. 실제 입찰가가 있으면 바꿔주세요."
     : "Assumed ad cost for comparison. Replace it with your actual bid if available.",
