@@ -15,7 +15,7 @@ import {
   NextResponse,
 } from "next/server";
 import { env } from "@/env";
-import { isPreviewStubAuditRequest } from "./lib/preview-audit-stub-proxy";
+import { isPreviewStubPublicRequest } from "./lib/preview-audit-stub-proxy";
 
 const SEARCH_CRAWLER_USER_AGENT =
   /Googlebot|Google-InspectionTool|AdsBot-Google|Bingbot|NaverBot|Yeti|Daumoa/i;
@@ -233,7 +233,7 @@ export default function previewAwareProxy(
   request: NextRequest,
   event: NextFetchEvent
 ) {
-  if (isPreviewStubAuditRequest(request.nextUrl.pathname)) {
+  if (isPreviewStubPublicRequest(request.nextUrl.pathname)) {
     return securityHeaders();
   }
 

@@ -1,15 +1,16 @@
 /**
  * The public free-audit entry point deliberately works without a Clerk session.
  * A stub-only Preview has no server Clerk secret, so the proxy must not invoke
- * Clerk before those two public routes run. Keep this narrowly scoped: every
- * other API, admin, auth, and mail route still passes through Clerk.
+ * Clerk before explicitly public routes run. This includes the read-only,
+ * capability-URL client report. Keep this narrowly scoped: every other API,
+ * admin, auth, and mail route still passes through Clerk.
  */
 type PreviewStubEnvironment = Readonly<{
   VERCEL_ENV?: string;
   FINDABLE_AUDIT_STUB_MODE?: string;
 }>;
 
-export function isPreviewStubAuditRequest(
+export function isPreviewStubPublicRequest(
   pathname: string,
   environment: PreviewStubEnvironment = {
     VERCEL_ENV: process.env.VERCEL_ENV,
@@ -27,6 +28,7 @@ export function isPreviewStubAuditRequest(
     pathname === "/api/audit" ||
     /^\/api\/audit\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
       pathname
-    )
+    ) ||
+    /^\/r\/[A-Za-z0-9_-]{1,128}\/?$/.test(pathname)
   );
 }
