@@ -63,7 +63,7 @@ export interface PersistAuditTrackingInput {
  */
 export async function persistAuditTracking(
   input: PersistAuditTrackingInput
-): Promise<void> {
+): Promise<"completed" | "failed"> {
   const {
     organizationId,
     brandId,
@@ -81,7 +81,7 @@ export async function persistAuditTracking(
     });
     if (!org) {
       log.error("audit.tracking.org_missing", { organizationId, brandId });
-      return;
+      return "failed";
     }
 
     // 보강4: DB에 실재하는 Engine id 집합. Tracking.engineId는 Engine FK(Restrict)라
@@ -98,7 +98,7 @@ export async function persistAuditTracking(
         brandId,
         totalTagged: tagged.length,
       });
-      return;
+      return "failed";
     }
 
     // 적재 대상 프롬프트(중복 제거: 같은 text가 여러 엔진에 걸쳐 반복됨).
@@ -174,6 +174,7 @@ export async function persistAuditTracking(
       prompts: promptByText.size,
       trackingRows: usable.length,
     });
+    return "completed";
   } catch (error) {
     // best-effort: audit은 이미 completed. Tracking 실패가 사용자 결과를 깨지 않게 log만.
     log.error("audit.tracking.failed", {
@@ -181,5 +182,6 @@ export async function persistAuditTracking(
       brandId,
       error: error instanceof Error ? error.message : String(error),
     });
+    return "failed";
   }
 }

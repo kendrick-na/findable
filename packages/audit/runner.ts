@@ -53,7 +53,11 @@ import {
 } from "./audit-prompts";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
 import { runBriefingForAuditJob } from "./briefing-runner";
-import { makeAuditCheckpoint, readAuditCheckpoint } from "./checkpoint";
+import {
+  assertCheckpointProvenance,
+  makeAuditCheckpoint,
+  readAuditCheckpoint,
+} from "./checkpoint";
 import {
   type KnownCompetitor,
   parseKnownCompetitors,
@@ -78,9 +82,10 @@ import {
 } from "./official-site-identity";
 import { generateAuditPdf } from "./pdf-generator";
 import type { AuditPdfData } from "./pdf-template";
+import type { AuditPostprocessing } from "./postprocessing";
 import { RUNNER_PROMPT_LIMIT } from "./prompt-limits";
-import { queryPromptsSequentially } from "./prompt-query-scheduler";
 import { pickRotatingPrompts } from "./prompt-rotation";
+import { runCheckpointedQuestions } from "./run-checkpointed-questions";
 import { createRunTiming } from "./run-timing";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
 
@@ -392,9 +397,36 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     }
     const savedJob = await database.auditJob.findUnique({
       where: { id: input.jobId },
-      select: { checkpoint: true },
+      select: {
+        checkpoint: true,
+        createdAt: true,
+        brandId: true,
+        domain: true,
+        email: true,
+      },
     });
     const savedCheckpoint = readAuditCheckpoint(savedJob?.checkpoint, input);
+    if (!savedJob) {
+      throw new Error("Audit job disappeared after claim");
+    }
+    if (savedCheckpoint) {
+      assertCheckpointProvenance(savedCheckpoint, savedJob.createdAt);
+      const newerCompleted = await database.auditJob.findFirst({
+        select: { id: true },
+        where: {
+          brandId: savedJob.brandId,
+          domain: savedJob.domain,
+          email: savedJob.email,
+          status: "completed",
+          createdAt: { gt: savedJob.createdAt },
+        },
+      });
+      if (newerCompleted) {
+        throw new Error(
+          "Checkpoint superseded by a newer completed measurement"
+        );
+      }
+    }
 
     // 브랜드명 해석 (P0-b): 폼입력→정적사전→LLM→영문 폴백 체인으로 한/영 변형 확보.
     // 도메인만 입력돼도 한국어 답변의 "설화수"를 판정이 잡도록 variants에 한글명 포함.
@@ -484,13 +516,11 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       makeAuditCheckpoint(
         input,
         { brandName, brandVariants, identityGrounded, officialSiteIdentity },
-        prompts
+        prompts,
+        savedJob.createdAt.toISOString()
       );
     if (!savedCheckpoint) {
-      await database.auditJob.update({
-        where: { id: input.jobId },
-        data: { checkpoint: checkpoint as never },
-      });
+      await saveQuestionCheckpoint(input.jobId, leaseToken, checkpoint);
     }
 
     // D-058 (2026-05-09) 분리 운영 구조:
@@ -502,18 +532,6 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // ⛔ 2026-09-29: hyperclova 제외(클로바X·Cue: 서비스 종료 2026-04-09 · 👤 대표 결정).
     //   naver·daum 은 AI 답이 아니라 **검색 노출**로 잰다(answer-buckets: search 그룹).
     //   이름은 옛 호출부 호환으로 DEFAULT_7 을 유지한다(실제 6개).
-    const DEFAULT_7 = [
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "gemini",
-      "naver",
-      "daum",
-    ] as const;
-
-    // 영어 질의용 — 한국 검색엔진(naver·daum)을 뺀다.
-    const GLOBAL_4 = ["chatgpt", "claude", "perplexity", "gemini"] as const;
-
     // ⚠️ F5 수정(2026-08-03) — 프롬프트 언어에 맞는 엔진에만 보낸다.
     //   기존엔 언어와 무관하게 7 엔진 전부에 보내서, **영어 질문이 네이버·다음 검색창에
     //   그대로 들어갔다.** 실측(Tracking): daum 은 한국어 질문 71% 언급인데
@@ -522,9 +540,6 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //
     //   한국어 질문 → 7 엔진 전부(한국인은 ChatGPT 도 한국어로 쓴다).
     //   영어 질문   → 글로벌 4 엔진만(한국 검색엔진에 영어 질의는 무의미).
-    const enginesForLang = (lang: "ko" | "en") =>
-      lang === "en" ? GLOBAL_4 : DEFAULT_7;
-
     const engineFinishers = new Map<
       string,
       (status?: "fulfilled" | "rejected") => void
@@ -532,23 +547,23 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     const sevenEngineResponses = await timed(
       "prompt_query",
       () =>
-        queryPromptsSequentially(
-          prompts,
-          async (p, promptIndex) =>
+        runCheckpointedQuestions(
+          checkpoint,
+          async (promptIndex) =>
             timed(
               "prompt_query",
               () =>
                 queryAllEngines(
                   {
-                    prompt: p.text,
-                    language: p.lang,
+                    prompt: prompts[promptIndex].text,
+                    language: prompts[promptIndex].lang,
                     brandName,
                     brandVariants,
                     // 🔴 N-47 — 자사 도메인을 엔진에 넘겨 **본문 URL 폴백에서 자사를 제외**한다.
                     //   안 넘기면 AI 가 답변에 적은 자기 홈페이지가 「인용 출처」로 잡힌다.
                     brandDomain: input.domain,
                   },
-                  enginesForLang(p.lang) as unknown as Parameters<
+                  checkpoint.enginePlan[promptIndex] as unknown as Parameters<
                     typeof queryAllEngines
                   >[1],
                   ({ engineId, phase, status }) => {
@@ -564,21 +579,22 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
                     }
                   }
                 ),
-              { promptIndex, engineCount: enginesForLang(p.lang).length }
+              {
+                promptIndex,
+                engineCount: checkpoint.enginePlan[promptIndex].length,
+              }
             ),
-          {
-            completed: checkpoint.responses,
-            onCompleted: async (responses) => {
-              await saveQuestionCheckpoint(input.jobId, leaseToken, {
-                ...checkpoint,
-                responses: [...responses],
-              });
-              log.info("audit.question.checkpoint_saved", {
-                jobId: input.jobId,
-                completedQuestions: responses.length,
-                totalQuestions: prompts.length,
-              });
-            },
+          async (updatedCheckpoint) => {
+            await saveQuestionCheckpoint(
+              input.jobId,
+              leaseToken,
+              updatedCheckpoint
+            );
+            log.info("audit.question.checkpoint_saved", {
+              jobId: input.jobId,
+              completedQuestions: updatedCheckpoint.responses.length,
+              totalQuestions: prompts.length,
+            });
           }
         ),
       { promptCount: prompts.length }
@@ -787,6 +803,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       brandName,
       domain: input.domain,
       measurementContext: {
+        resume: {
+          originCreatedAt: checkpoint.originCreatedAt,
+          attempt: checkpoint.retry.attempt,
+        },
         officialSiteIdentity,
         // A customer-confirmed organisation brand may run when its public site
         // serves a bot challenge/empty shell to our serverless fetcher. Do not
@@ -921,12 +941,38 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // 응답까지 통째로 잃고 job이 영원히 processing에 남는다.
     finishAggregate();
     const completedAt = new Date();
+    const dualWriteEnabled = keys().AUDIT_DUAL_WRITE_ENABLED;
+    const trackingExpected = Boolean(
+      dualWriteEnabled && input.organizationId && input.brandId
+    );
+    const pdfExpected = isPublishableAuditResult(result);
+    const briefingExpected = Boolean(
+      keys().AUDIT_BRIEFING_IN_MAIN_ENABLED &&
+        input.organizationId &&
+        input.brandId
+    );
+    let postprocessing: AuditPostprocessing = {
+      tracking: trackingExpected ? "pending" : "skipped",
+      pdf: pdfExpected ? "pending" : "skipped",
+      briefing: briefingExpected ? "pending" : "skipped",
+    };
+    const updatePostprocessing = async (
+      stage: keyof AuditPostprocessing,
+      status: AuditPostprocessing[keyof AuditPostprocessing]
+    ) => {
+      postprocessing = { ...postprocessing, [stage]: status };
+      await database.auditJob.updateMany({
+        where: { id: input.jobId, status: "completed" },
+        data: { postprocessing: postprocessing as never },
+      });
+    };
     const committed = await timed("db_commit", () =>
       database.auditJob.updateMany({
         where: { id: input.jobId, status: "processing", leaseToken },
         data: {
           status: "completed",
           result: result as never,
+          postprocessing: postprocessing as never,
           checkpoint: Prisma.DbNull,
           completedAt,
           leaseToken: null,
@@ -960,15 +1006,15 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   24회분 시계열이 사라진 것을 **3주 동안 아무도 몰랐다**(측정은 completed,
     //   화면도 정상이라 볼 단서가 없었다). 로그 한 줄이 있었으면 첫날 잡혔다.
     //   → 이제 모든 실측정이 스스로 검증한다: 이 줄이 안 보이면 적재가 안 된 것이다.
-    const dualWriteEnabled = keys().AUDIT_DUAL_WRITE_ENABLED;
-    if (dualWriteEnabled && input.organizationId && input.brandId) {
-      await persistAuditTracking({
+    if (trackingExpected && input.organizationId && input.brandId) {
+      const trackingStatus = await persistAuditTracking({
         organizationId: input.organizationId,
         brandId: input.brandId,
         // 이름 없는 질문의 응답은 시계열에 넣지 않는다(위 brandFlat 주석).
         tagged: tagged.filter((row) => !isDiscoveryAnswer(row)),
         completedAt,
       });
+      await updatePostprocessing("tracking", trackingStatus);
     } else {
       log.warn("audit.tracking.skipped", {
         jobId: input.jobId,
@@ -982,7 +1028,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
 
     // PDF 생성 — 핵심 결과와 Tracking을 저장한 뒤 실행하는 best-effort 부가 산출물.
     // 이 단계에서 함수 시간이 끝나도 고객은 측정 결과를 즉시 볼 수 있다.
-    if (isPublishableAuditResult(result)) {
+    if (pdfExpected) {
       try {
         const pdfData: AuditPdfData = {
           ...result,
@@ -998,11 +1044,13 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           jobId: input.jobId,
           sizeKB: Math.round(pdf.pdfSize / 1024),
         });
+        await updatePostprocessing("pdf", "completed");
       } catch (pdfError) {
         log.error("audit.pdf.failed", {
           jobId: input.jobId,
           error: parseError(pdfError),
         });
+        await updatePostprocessing("pdf", "failed");
       }
     } else {
       log.warn("audit.pdf.skipped_unverified", { jobId: input.jobId });
@@ -1031,19 +1079,19 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
      * ⚠️ 크레딧이 마르면 402 로 즉시 중단되고(N-39) 화면은 「측정하지 못했어요」로
      *   정직하게 말하며(N-45), 일일 다이제스트가 👤 에게 알린다(B-6).
      */
-    if (
-      keys().AUDIT_BRIEFING_IN_MAIN_ENABLED &&
-      input.organizationId &&
-      input.brandId
-    ) {
+    if (briefingExpected) {
       try {
-        await runBriefingForAuditJob({ jobId: input.jobId });
+        const briefingStatus = await runBriefingForAuditJob({
+          jobId: input.jobId,
+        });
+        await updatePostprocessing("briefing", briefingStatus);
       } catch (briefingError) {
         // 여기서 throw 하면 **이미 완료된 측정**이 실패로 뒤집힌다.
         log.warn("audit.briefing.main_flow_failed", {
           jobId: input.jobId,
           error: parseError(briefingError),
         });
+        await updatePostprocessing("briefing", "failed");
       }
     }
 

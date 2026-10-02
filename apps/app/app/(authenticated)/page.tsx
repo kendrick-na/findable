@@ -3,6 +3,7 @@ import {
   MIN_VERIFIED_ANSWERS,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { auditPostprocessingWarning } from "@repo/audit/postprocessing";
 import { isUsableRun } from "@repo/audit/run-quality";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { hasPlan, isPaid } from "@repo/auth/plan";
@@ -194,6 +195,7 @@ const App = async ({ searchParams }: AppProperties) => {
           email: true,
           domain: true,
           status: true,
+          postprocessing: true,
           createdAt: true,
           completedAt: true,
           brandId: true,
@@ -284,7 +286,9 @@ const App = async ({ searchParams }: AppProperties) => {
       latestJobForTracking.completedAt > initialTrackingData.latestMeasuredAt
   );
   const jobsWithResult =
-    (trackingData === null || trackingIsStale) && jobsLite.length > 0 && JOB_WHERE
+    (trackingData === null || trackingIsStale) &&
+    jobsLite.length > 0 &&
+    JOB_WHERE
       ? await database.auditJob.findMany({
           where: JOB_WHERE,
           orderBy: { createdAt: "desc" },
@@ -389,6 +393,10 @@ const App = async ({ searchParams }: AppProperties) => {
     : jobsLite.find((job) => job.status === "failed");
   const hasData =
     trackingData !== null || jobsLite.some((job) => job.status === "completed");
+  const postprocessingJob = jobsLite.find((job) => job.status === "completed");
+  const postprocessingWarning = auditPostprocessingWarning(
+    postprocessingJob?.postprocessing
+  );
 
   // 추세 주석(감사 D2) — 화면이 보고 있는 브랜드 것만. 브랜드가 없으면(AuditJob 폴백) 빈 배열.
   const annotations = data.latestBrandId
@@ -444,6 +452,20 @@ const App = async ({ searchParams }: AppProperties) => {
             >
               최신 측정과 리포트 보기 →
             </Link>
+          </section>
+        ) : null}
+
+        {postprocessingWarning && !newerJobWithoutTracking ? (
+          <section aria-live="polite" className="findable-card p-4 text-sm">
+            <p className="font-medium">측정 결과와 후처리 상태가 다릅니다</p>
+            <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)]">
+              {postprocessingWarning}
+            </p>
+            {postprocessingJob ? (
+              <Link href={`/history/${postprocessingJob.id}`}>
+                결과 자세히 보기 →
+              </Link>
+            ) : null}
           </section>
         ) : null}
 

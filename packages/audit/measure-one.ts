@@ -28,7 +28,12 @@
 
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
-import { readAuditCheckpoint } from "./checkpoint";
+import {
+  assertCheckpointProvenance,
+  MAX_CHECKPOINT_AGE_MS,
+  nextAuditCheckpointAttempt,
+  readAuditCheckpoint,
+} from "./checkpoint";
 import { runAuditJob } from "./runner";
 import { reconcileStaleAuditJob } from "./stale-job";
 
@@ -123,7 +128,7 @@ export async function startMeasureOne(
   // failure; those require a new measurement rather than silent reuse.
   const failed = await database.auditJob.findFirst({
     orderBy: { createdAt: "desc" },
-    select: { id: true, checkpoint: true, errorMessage: true },
+    select: { id: true, checkpoint: true, errorMessage: true, createdAt: true },
     where: {
       brandId: brand.id,
       domain: brand.domain,
@@ -134,6 +139,7 @@ export async function startMeasureOne(
   let resumedCheckpoint: ReturnType<typeof readAuditCheckpoint> = null;
   if (
     failed?.checkpoint &&
+    Date.now() - failed.createdAt.getTime() <= MAX_CHECKPOINT_AGE_MS &&
     RESUMABLE_TIMEOUT_RE.test(failed.errorMessage ?? "")
   ) {
     try {
@@ -143,6 +149,9 @@ export async function startMeasureOne(
         language: "both",
         organizationId,
       });
+      if (resumedCheckpoint) {
+        assertCheckpointProvenance(resumedCheckpoint, failed.createdAt);
+      }
     } catch (error) {
       log.warn("admin.measure_one.checkpoint_ignored", {
         jobId: failed.id,
@@ -151,42 +160,69 @@ export async function startMeasureOne(
     }
   }
   if (resumedCheckpoint && failed) {
-    const resumedAt = new Date();
-    const requeued = await database.auditJob.updateMany({
+    const newerCompleted = await database.auditJob.findFirst({
+      select: { id: true },
       where: {
-        id: failed.id,
         brandId: brand.id,
         domain: brand.domain,
         email: `org:${organizationId}`,
-        status: "failed",
+        status: "completed",
+        createdAt: { gt: failed.createdAt },
       },
-      data: {
-        status: "queued",
-        errorMessage: null,
-        completedAt: null,
-        attemptStartedAt: resumedAt,
-        leaseToken: null,
-        leaseUntil: null,
-      },
+      orderBy: { createdAt: "desc" },
     });
-    if (requeued.count !== 1) {
-      // A concurrent click already claimed the failed Job. Never create a
-      // second paid run from the same checkpoint.
-      throw new Error("Measurement was already resumed; refresh its status");
+    if (newerCompleted) {
+      log.warn("admin.measure_one.old_checkpoint_superseded", {
+        jobId: failed.id,
+        newerJobId: newerCompleted.id,
+      });
+    } else {
+      const nextCheckpoint = nextAuditCheckpointAttempt(resumedCheckpoint);
+      if (!nextCheckpoint) {
+        throw new Error(
+          "Checkpoint retry limit or no-progress stop reached; start a fresh measurement after review"
+        );
+      }
+      const resumedAt = new Date();
+      const requeued = await database.auditJob.updateMany({
+        where: {
+          id: failed.id,
+          createdAt: failed.createdAt,
+          brandId: brand.id,
+          domain: brand.domain,
+          email: `org:${organizationId}`,
+          status: "failed",
+        },
+        data: {
+          status: "queued",
+          errorMessage: null,
+          completedAt: null,
+          attemptStartedAt: resumedAt,
+          leaseToken: null,
+          leaseUntil: null,
+          checkpoint: nextCheckpoint as never,
+        },
+      });
+      if (requeued.count !== 1) {
+        // A concurrent click already claimed the failed Job. Never create a
+        // second paid run from the same checkpoint.
+        throw new Error("Measurement was already resumed; refresh its status");
+      }
+      log.info("admin.measure_one.resumed", {
+        brandId: brand.id,
+        jobId: failed.id,
+        completedQuestions: resumedCheckpoint.responses.length,
+        attempt: nextCheckpoint.retry.attempt,
+      });
+      return {
+        brandId: brand.id,
+        brandName: brand.name,
+        domain: brand.domain,
+        jobId: failed.id,
+        organizationId,
+        trackingBefore,
+      };
     }
-    log.info("admin.measure_one.resumed", {
-      brandId: brand.id,
-      jobId: failed.id,
-      completedQuestions: resumedCheckpoint.responses.length,
-    });
-    return {
-      brandId: brand.id,
-      brandName: brand.name,
-      domain: brand.domain,
-      jobId: failed.id,
-      organizationId,
-      trackingBefore,
-    };
   }
 
   const job = await database.auditJob.create({

@@ -14,7 +14,7 @@
 
 import { resolveBrandIdentity } from "@repo/ai/lib/brand-identity";
 import type { CitedSource, EngineResponse } from "@repo/ai/lib/engines";
-import { aggregateAudit, queryAllEngines } from "@repo/ai/lib/engines";
+import { type aggregateAudit, queryAllEngines } from "@repo/ai/lib/engines";
 import { BRIEFING_FAIL_PREFIX } from "@repo/ai/lib/engines/naver-briefing-adapter";
 import { verifyMentions } from "@repo/ai/lib/mention-verdict";
 import { database } from "@repo/database";
@@ -54,6 +54,8 @@ function isUnrecoverableBriefingFailure(
 // runner.ts의 result 형태 (JSON deserialize 후). EngineId 브랜딩은 소실됨.
 interface StoredEngineResponse {
   brandMentioned: boolean;
+  /** crew-runner가 심층 출처 분석에 쓰는 측정 원본. 구 리포트에는 없다. */
+  citedSources?: CitedSource[];
   durationMs: number;
   engineId: string;
   errorMessage: string | null;
@@ -69,8 +71,6 @@ interface StoredEngineResponse {
   /** 판정이 제외된 이유. 공개 리포트가 "모름"이라고 단정하지 않게 보존한다. */
   verdictReason?: "official_evidence_missing" | "judge_failed";
   verdictVia?: "rule" | "llm" | "skipped";
-  /** crew-runner가 심층 출처 분석에 쓰는 측정 원본. 구 리포트에는 없다. */
-  citedSources?: CitedSource[];
 }
 
 interface StoredResult {
@@ -80,7 +80,6 @@ interface StoredResult {
   briefingStatus?: "not_requested" | "processing" | "completed" | "failed";
   domain: string;
   engineResponses: StoredEngineResponse[];
-  metrics: ReturnType<typeof aggregateAudit>;
   measurementContext?: {
     identityGrounded: boolean;
     officialSiteIdentity: {
@@ -91,6 +90,7 @@ interface StoredResult {
       title?: string | null;
     } | null;
   };
+  metrics: ReturnType<typeof aggregateAudit>;
   promptsCount: number;
   topRecommendations: string[];
 }
@@ -101,7 +101,9 @@ type VerifiedBriefingResponse = EngineResponse & {
   verdictVia?: "rule" | "llm" | "skipped";
 };
 
-function toStoredEngineResponse(r: VerifiedBriefingResponse): StoredEngineResponse {
+function toStoredEngineResponse(
+  r: VerifiedBriefingResponse
+): StoredEngineResponse {
   return {
     engineId: r.engineId,
     brandMentioned: r.brandMentioned,
@@ -170,13 +172,7 @@ async function persistBriefingTracking(
     completedAt && briefing && !(briefing.isStub || briefing.errorMessage)
   );
 
-  if (
-    dualWriteEnabled &&
-    organizationId &&
-    brandId &&
-    completedAt &&
-    usable
-  ) {
+  if (dualWriteEnabled && organizationId && brandId && completedAt && usable) {
     await persistAuditTracking({
       organizationId,
       brandId,
@@ -215,7 +211,7 @@ async function persistBriefingTracking(
  */
 export async function runBriefingForAuditJob(
   input: BriefingRunInput
-): Promise<void> {
+): Promise<"completed" | "failed"> {
   const { jobId } = input;
 
   try {
@@ -379,6 +375,9 @@ export async function runBriefingForAuditJob(
       adoptedPrompt,
       language,
     });
+    return briefing && !briefing.isStub && !briefing.errorMessage
+      ? "completed"
+      : "failed";
   } catch (error) {
     log.error("audit.briefing.failed", {
       jobId,
@@ -403,5 +402,6 @@ export async function runBriefingForAuditJob(
         error: parseError(mergeErr),
       });
     }
+    return "failed";
   }
 }

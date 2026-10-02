@@ -16,7 +16,9 @@
 // maxDuration: vercel.json에서 300s (Audit 백그라운드 처리 마진).
 
 import { maskEmail } from "@repo/audit/mask";
+import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { runAuditJob } from "@repo/audit/runner";
+import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { resolveTier, type UsageTier } from "@repo/audit/usage-tier";
 import { database, Prisma } from "@repo/database";
 import { parseError } from "@repo/observability/error";
@@ -89,7 +91,6 @@ function toIndustryEnum(value?: string): IndustryEnum | undefined {
 
 // 사용량 티어 (원가전략 2026-07-27 — 파트너 진입 대응). 판정은 공용 usage-tier로 이관:
 //   - admin: 무제한 / 승인 파트너: 이메일 기준 하루 1회 / 일반 리드: 이메일+도메인 24h.
-const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ──────────────────────────────────────────────────────────────────
@@ -112,7 +113,12 @@ const DOMAIN_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — Observatory 준용
 // (차단 429 가 아니라 "기존 결과 보여주기"라서 게이트 결과 타입에 넣지 않았다).
 type GateResult =
   | { blocked: false }
-  | { blocked: true; existingJobId: string; isPartner: boolean };
+  | {
+      blocked: true;
+      existingJobId: string;
+      isPartner: boolean;
+      retryStop?: string;
+    };
 
 // ──────────────────────────────────────────────────────────────────
 // 전역 일일 상한 (리서치 §7-2) — 어뷰저가 로테이션으로 우회할 수 없는 유일한 통제.
@@ -271,6 +277,25 @@ async function checkUsageGate(
     return { blocked: false };
   }
   const isPartner = tier === "partner";
+  const recentFailures = await database.auditJob.findMany({
+    where: {
+      email,
+      ...(isPartner ? {} : { domain }),
+      createdAt: { gte: new Date(Date.now() - DAY_MS) },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 4,
+    select: { id: true, status: true, checkpoint: true },
+  });
+  const retryStop = newAuditAttemptBlockReason(recentFailures);
+  if (retryStop) {
+    return {
+      blocked: true,
+      existingJobId: recentFailures[0].id,
+      isPartner,
+      retryStop,
+    };
+  }
   const recent = await database.auditJob.findFirst({
     where: {
       email,
@@ -283,26 +308,13 @@ async function checkUsageGate(
   if (!recent || recent.status === "failed") {
     return { blocked: false };
   }
-  const isStaleProcessing =
-    (recent.status === "processing" || recent.status === "queued") &&
-    Date.now() - recent.createdAt.getTime() > STALE_THRESHOLD_MS;
-  if (isStaleProcessing) {
-    // 좀비 정리 — 새 audit 생성 흐름으로 통과.
-    await database.auditJob
-      .update({
-        where: { id: recent.id },
-        data: {
-          status: "failed",
-          errorMessage: "측정이 5분 넘게 진행되어 자동 종료됨 (좀비 정리)",
-          completedAt: new Date(),
-        },
-      })
-      .catch((err) => {
-        log.warn("audit.stale.fail_failed", {
-          jobId: recent.id,
-          error: parseError(err),
-        });
-      });
+  if (isStaleAuditJob(recent)) {
+    // The shared lease predicate fences a resumed worker; never overwrite a
+    // newer completion with an unconditional update.
+    const status = await reconcileStaleAuditJob(recent);
+    if (status !== "failed") {
+      return { blocked: true, existingJobId: recent.id, isPartner };
+    }
     log.info("audit.stale.recovered", {
       email: maskEmail(email),
       staleJobId: recent.id,
@@ -449,15 +461,22 @@ export async function POST(request: NextRequest) {
 
     const gate = await checkUsageGate(payload.email, payload.domain, tier);
     if (gate.blocked) {
+      let gateError = "이미 24시간 내 이 도메인의 무료 진단을 받으셨습니다.";
+      if (gate.retryStop) {
+        gateError = gate.isPartner
+          ? "반복 실패로 추가 과금을 멈췄습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요."
+          : "진단이 반복 실패해 재시도를 멈췄습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요.";
+      } else if (gate.isPartner) {
+        gateError =
+          "파트너 계정은 하루 1회 측정할 수 있습니다. 내일 다시 측정하거나 심층 분석을 이용해 주세요.";
+      }
       log.info("audit.request.rate_limited", {
         email: maskEmail(payload.email),
         existingJobId: gate.existingJobId,
       });
       return NextResponse.json(
         {
-          error: gate.isPartner
-            ? "파트너 계정은 하루 1회 측정할 수 있습니다. 내일 다시 측정하거나 심층 분석을 이용해 주세요."
-            : "이미 24시간 내 이 도메인의 무료 진단을 받으셨습니다.",
+          error: gateError,
           existingJobId: gate.existingJobId,
         },
         { status: 429 }

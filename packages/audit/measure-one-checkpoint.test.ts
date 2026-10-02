@@ -36,6 +36,8 @@ const brand = {
   domain: "example.com",
   organizationId: "org-1",
 };
+const recentDate = new Date(Date.now() - 60_000);
+const recentCreatedAt = () => recentDate;
 const checkpoint = makeAuditCheckpoint(
   {
     brandId: brand.id,
@@ -55,7 +57,8 @@ const checkpoint = makeAuditCheckpoint(
       siteName: null,
     },
   },
-  [{ text: "Question", lang: "ko" }]
+  [{ text: "Question", lang: "ko" }],
+  recentDate.toISOString()
 );
 
 describe("admin re-measure checkpoint", () => {
@@ -70,6 +73,7 @@ describe("admin re-measure checkpoint", () => {
   it("atomically requeues only a matching timed-out checkpoint", async () => {
     mocks.jobFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
       id: "old-job",
+      createdAt: recentCreatedAt(),
       checkpoint,
       errorMessage: "FUNCTION_INVOCATION_TIMEOUT",
     });
@@ -87,6 +91,7 @@ describe("admin re-measure checkpoint", () => {
   it("does not resume a checkpoint from a different organization", async () => {
     mocks.jobFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
       id: "old-job",
+      createdAt: recentCreatedAt(),
       checkpoint: {
         ...checkpoint,
         scope: { ...checkpoint.scope, organizationId: "other-org" },
@@ -101,6 +106,7 @@ describe("admin re-measure checkpoint", () => {
   it("does not resume a non-timeout failure", async () => {
     mocks.jobFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
       id: "old-job",
+      createdAt: recentCreatedAt(),
       checkpoint,
       errorMessage: "invalid official site",
     });
@@ -112,11 +118,62 @@ describe("admin re-measure checkpoint", () => {
   it("does not fork a second paid run when another click wins the requeue", async () => {
     mocks.jobFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
       id: "old-job",
+      createdAt: recentCreatedAt(),
       checkpoint,
       errorMessage: "FUNCTION_INVOCATION_TIMEOUT",
     });
     mocks.jobUpdateMany.mockResolvedValue({ count: 0 });
     await expect(startMeasureOne(brand.id)).rejects.toThrow("already resumed");
     expect(mocks.jobCreate).not.toHaveBeenCalled();
+  });
+
+  it("never resumes an old checkpoint after a newer completed run", async () => {
+    const failedAt = recentCreatedAt();
+    mocks.jobFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "old-job",
+        createdAt: failedAt,
+        checkpoint,
+        errorMessage: "FUNCTION_INVOCATION_TIMEOUT",
+      })
+      .mockResolvedValueOnce({ id: "newer-completed" });
+    const result = await startMeasureOne(brand.id);
+    expect(result.jobId).toBe("new-job");
+    expect(mocks.jobUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.jobFindFirst).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: "completed",
+          createdAt: { gt: failedAt },
+        }),
+      })
+    );
+  });
+
+  it("starts fresh when the checkpoint is older than 24 hours", async () => {
+    mocks.jobFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: "old-job",
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+      checkpoint,
+      errorMessage: "FUNCTION_INVOCATION_TIMEOUT",
+    });
+    expect((await startMeasureOne(brand.id)).jobId).toBe("new-job");
+    expect(mocks.jobUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("stops after repeated attempts with no saved question progress", async () => {
+    mocks.jobFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: "old-job",
+      createdAt: recentCreatedAt(),
+      checkpoint: {
+        ...checkpoint,
+        retry: { attempt: 2, attemptStartResponses: 0, noProgressFailures: 1 },
+      },
+      errorMessage: "FUNCTION_INVOCATION_TIMEOUT",
+    });
+    await expect(startMeasureOne(brand.id)).rejects.toThrow("no-progress stop");
+    expect(mocks.jobCreate).not.toHaveBeenCalled();
+    expect(mocks.jobUpdateMany).not.toHaveBeenCalled();
   });
 });

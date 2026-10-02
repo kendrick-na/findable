@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { makeAuditCheckpoint, readAuditCheckpoint } from "./checkpoint";
+import {
+  assertCheckpointProvenance,
+  makeAuditCheckpoint,
+  readAuditCheckpoint,
+} from "./checkpoint";
 
 const scope = {
   brandId: "brand-1",
@@ -39,5 +43,36 @@ describe("audit question checkpoint", () => {
     expect(() =>
       readAuditCheckpoint({ ...checkpoint, responses: [[], []] }, scope)
     ).toThrow("invalid audit checkpoint");
+  });
+
+  it("binds a checkpoint to its original job and expires it after 24 hours", () => {
+    const createdAt = new Date("2026-10-01T00:00:00.000Z");
+    const checkpoint = makeAuditCheckpoint(
+      scope,
+      context,
+      [],
+      createdAt.toISOString()
+    );
+    expect(() =>
+      assertCheckpointProvenance(
+        checkpoint,
+        createdAt,
+        createdAt.getTime() + 60_000
+      )
+    ).not.toThrow();
+    expect(() =>
+      assertCheckpointProvenance(
+        checkpoint,
+        new Date(createdAt.getTime() + 1),
+        createdAt.getTime() + 60_000
+      )
+    ).toThrow("provenance");
+    expect(() =>
+      assertCheckpointProvenance(
+        checkpoint,
+        createdAt,
+        createdAt.getTime() + 25 * 60 * 60 * 1000
+      )
+    ).toThrow("age");
   });
 });

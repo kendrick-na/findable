@@ -1,9 +1,12 @@
 import { type AuditStatus, database } from "@repo/database";
 
 export const AUDIT_JOB_STALE_AFTER_MS = 6 * 60 * 1000;
+export const AUDIT_JOB_QUEUE_STALE_AFTER_MS = 30 * 60 * 1000;
 
 export const AUDIT_JOB_STALE_ERROR =
   "FUNCTION_INVOCATION_TIMEOUT: 측정 처리 시간이 6분을 초과해 자동 종료했습니다. 다시 측정해 주세요.";
+export const AUDIT_JOB_QUEUE_STALE_ERROR =
+  "QUEUE_START_TIMEOUT: 측정 실행이 시작되지 않아 자동 종료했습니다. 다시 측정해 주세요.";
 
 export type PendingAuditStatus = "queued" | "processing";
 
@@ -16,11 +19,14 @@ export const isStaleAuditJob = (
   },
   now = Date.now()
 ): boolean =>
-  (job.status === "queued" || job.status === "processing") &&
-  (job.leaseUntil
-    ? job.leaseUntil.getTime() < now
-    : (job.attemptStartedAt ?? job.createdAt).getTime() <
-      now - AUDIT_JOB_STALE_AFTER_MS);
+  job.status === "queued"
+    ? (job.attemptStartedAt ?? job.createdAt).getTime() <
+      now - AUDIT_JOB_QUEUE_STALE_AFTER_MS
+    : job.status === "processing" &&
+      (job.leaseUntil
+        ? job.leaseUntil.getTime() < now
+        : (job.attemptStartedAt ?? job.createdAt).getTime() <
+          now - AUDIT_JOB_STALE_AFTER_MS);
 
 /** Finalize jobs killed by the serverless time limit before runner catch ran. */
 export async function reconcileStaleAuditJob(job: {
@@ -35,7 +41,12 @@ export async function reconcileStaleAuditJob(job: {
     return job.status;
   }
   const expiredAt = new Date();
-  const staleBefore = new Date(expiredAt.getTime() - AUDIT_JOB_STALE_AFTER_MS);
+  const staleBefore = new Date(
+    expiredAt.getTime() -
+      (job.status === "queued"
+        ? AUDIT_JOB_QUEUE_STALE_AFTER_MS
+        : AUDIT_JOB_STALE_AFTER_MS)
+  );
   const staleWhere = (() => {
     if (job.leaseUntil) {
       return { leaseUntil: { lt: expiredAt } };
@@ -53,12 +64,15 @@ export async function reconcileStaleAuditJob(job: {
     where: {
       id: job.id,
       email: job.email,
-      status: { in: ["queued", "processing"] },
+      status: job.status,
       ...staleWhere,
     },
     data: {
       status: "failed",
-      errorMessage: AUDIT_JOB_STALE_ERROR,
+      errorMessage:
+        job.status === "queued"
+          ? AUDIT_JOB_QUEUE_STALE_ERROR
+          : AUDIT_JOB_STALE_ERROR,
       completedAt: new Date(),
       leaseToken: null,
       leaseUntil: null,

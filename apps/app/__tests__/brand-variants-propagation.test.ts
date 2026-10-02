@@ -43,7 +43,7 @@ describe("브랜드 별칭과 운영자 리포트 경로", () => {
   });
 
   it("저장 별칭과 도메인 기반 추론 별칭을 함께 사용한다", () => {
-    expect(RUNNER).toContain("...identity.brandVariants");
+    expect(RUNNER).toContain("...(identity?.brandVariants ?? [])");
     expect(RUNNER).toContain("...(input.brandVariants ?? [])");
   });
 
