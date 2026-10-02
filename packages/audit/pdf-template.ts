@@ -272,7 +272,7 @@ ${
     <div class="why-col">
       <div class="why-label">Why Findable</div>
       <ul class="why-list">
-        <li>한국 AI 엔진 독점 추적: HyperCLOVA X · Naver · Daum 직접 통합</li>
+        <li>한국 채널 함께 측정: HyperCLOVA X 답변 + 네이버·다음 검색 노출(별도 집계)</li>
         <li>Korean Entity Grounding: 한국어 표기 변형 통합 추적 (Ahrefs 한국어판)</li>
         <li>GEO 연구(Princeton KDD'24 등)는 참고 근거로만 쓰고, 효과는 같은 조건의 재측정으로 확인</li>
       </ul>

@@ -130,6 +130,13 @@ describe("③ 신규 생성 템플릿·프롬프트의 과장 문구", () => {
     expect(pdf).not.toMatch(/알고리즘 한국어 적용/);
   });
 
+  it("PDF: 한국 엔진 추적을 「독점」이라 하지 않는다 — 경쟁 제품도 네이버 AI 브리핑을 추적한다", () => {
+    const pdf = code("packages/audit/pdf-template.ts");
+    expect(pdf).not.toMatch(/독점|유일|exclusive/i);
+    // 네이버·다음은 AI 답변이 아니라 검색 노출로 집계한다 — AI 엔진으로 묶지 않는다.
+    expect(pdf).not.toMatch(/한국 AI 엔진[^<]*Naver/);
+  });
+
   it("crew: +40%·Reddit 40% 를 LLM 에 필수 사실로 지시하지 않는다", () => {
     const prompts =
       code("packages/ai/lib/crew/agents.ts") +
