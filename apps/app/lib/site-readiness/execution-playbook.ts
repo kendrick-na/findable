@@ -557,17 +557,20 @@ function performanceTasks(report: SiteReadinessReport): SiteReadinessTask[] {
     if (!["poor", "needs-improvement"].includes(item.metric.rating)) {
       continue;
     }
+    let evidence = "측정값 없음";
+    if (item.metric.value != null) {
+      if (item.id === "cls") {
+        evidence = item.metric.value.toFixed(3);
+      } else if (item.id === "lcp") {
+        evidence = `${(item.metric.value / 1000).toFixed(1)}초`;
+      } else {
+        evidence = `${Math.round(item.metric.value)}ms`;
+      }
+    }
     tasks.push({
       affectedCount: 1,
       code: item.id,
-      evidence:
-        item.metric.value == null
-          ? "측정값 없음"
-          : item.id === "cls"
-            ? item.metric.value.toFixed(3)
-            : item.id === "lcp"
-              ? `${(item.metric.value / 1000).toFixed(1)}초`
-              : `${Math.round(item.metric.value)}ms`,
+      evidence,
       id: `performance:${item.id}`,
       location: `${originOf(report)}의 모바일 렌더링 경로`,
       sampleUrls: [report.finalUrl],
