@@ -37,21 +37,21 @@ interface RevenueImpactCardProps {
 const T = (isKo: boolean) => ({
   // 🔴 감사 5번(2026-08-07 세션N-8): 주 숫자를 금액→세션으로 바꾸면서 제목도 맞춘다.
   //   제목이 "매출"인데 큰 숫자가 세션이면 둘이 어긋나 보인다.
-  eyebrow: isKo ? "놓치는 유입 (추정)" : "Missed Traffic (Estimate)",
+  eyebrow: isKo ? "가정 기반 시나리오" : "Assumption-based scenario",
   headline: isKo
-    ? "AI 답변에서 놓치고 있는 방문"
-    : "Visits you may be missing in AI answers",
+    ? "입력한 조건에서의 방문 규모"
+    : "Visits under your chosen assumptions",
   // KPI 프레이밍(시뮬 병목: "이게 내 이번 분기 문제인지 인식"에 직결).
   // 해요체 + 주 숫자(세션)와 같은 층위로 — 금액은 아래 토글에서만 말한다(감사 5번).
   kpiFraming: isKo
-    ? "지금 이 순간에도 AI에게 브랜드를 묻는 잠재고객이 다른 답을 받고 있어요. 그 중 우리에게 올 수 있었던 방문을 세어봤어요."
-    : "Right now, prospects asking AI about your category are getting someone else's answer. Here's how many visits that costs you.",
+    ? "입력한 월 노출 수와 가정한 클릭률을 적용한 시나리오예요. 실제 놓친 방문이나 매출을 측정한 값은 아닙니다."
+    : "A what-if scenario using your monthly exposure input and assumed click rate, not measured lost visits or revenue.",
   perMonth: isKo ? "/ 월 (추정)" : "/ mo (est.)",
-  directLoss: isKo ? "직접 유입 손실" : "Direct referral loss",
+  directLoss: isKo ? "직접 유입 가정액" : "Assumed direct referral value",
   directHint: isKo
-    ? "답변에서 클릭해 들어올 방문의 매출"
-    : "Revenue from clicks you'd receive",
-  influenceLoss: isKo ? "제로클릭 영향 손실" : "Zero-click influence loss",
+    ? "가정한 클릭·전환이 발생할 경우의 금액"
+    : "Value if assumed clicks and conversions occurred",
+  influenceLoss: isKo ? "제로클릭 영향 가정액" : "Assumed zero-click value",
   influenceHint: isKo
     ? "클릭 없이 답변만 보고 결정이 바뀌는 몫"
     : "Decisions shaped by the answer without a click",
@@ -59,12 +59,11 @@ const T = (isKo: boolean) => ({
   adHint: isKo
     ? "이 노출을 검색광고로 사면 드는 월 비용 (매출과 별도)"
     : "What buying this exposure as search ads would cost (separate from revenue)",
-  missedSessions: isKo ? "놓치는 유입(추정)" : "Missed sessions (est.)",
-  recoverable: isKo ? "회복 가능 매출(추정)" : "Recoverable revenue (est.)",
+  missedSessions: isKo ? "가정상 방문" : "Scenario sessions",
   sessionsUnit: isKo ? "세션 / 월" : "sessions / mo",
   disclaimer: isKo
-    ? "2025-2026 공개 실측 연구 기반 추정입니다 — 클릭률 8%(Pew Research), AI 방문자 전환가치 2.5배(Semrush 4.4배·Adobe +54%의 보수 반영), 제로클릭 영향 20%(Bain: 검색 60%가 클릭 없이 종료). 실제 값은 업종·객단가에 따라 다르니 규모 선택과 가정 조정으로 맞춰 보세요."
-    : "Based on published 2025-2026 studies — 8% answer CTR (Pew), 2.5x AI-visitor conversion (conservative vs Semrush 4.4x / Adobe +54%), 20% zero-click influence (Bain: 60% of searches end without a click). Adjust size and assumptions to fit your brand.",
+    ? "계산에 쓰인 클릭률 8%, 전환율·제로클릭 영향률 등은 이 브랜드에서 검증된 값이 아닌 편집 가능한 가정입니다. Pew의 8%는 미국 Google AI 요약이 있는 검색에서 일반 검색결과 링크를 클릭한 비율이며, AI 답변 링크 클릭률이 아닙니다. 이 결과를 실제 유입·손실·효과로 해석하지 마세요."
+    : "The 8% click rate, conversion rate, and zero-click factors are editable assumptions, not verified for your brand. Pew's 8% refers to clicks on ordinary search results when a Google AI summary appeared in a U.S. study, not clicks on links in AI answers. This is not measured traffic, loss, or lift.",
   sizeLabel: isKo ? "브랜드 규모" : "Brand size",
   adjust: isKo ? "가정 조정" : "Adjust assumptions",
   queries: isKo ? "월 AI 답변 노출(추정)" : "Monthly AI answer views (est.)",
@@ -82,27 +81,27 @@ const T = (isKo: boolean) => ({
     ? "선택한 브랜드 규모에서 자동으로 잡혀요. 내 검색량을 알면 직접 넣어주세요."
     : "Set by the brand size you picked. Enter your own if you know it.",
   hCtr: isKo
-    ? "Pew Research 실측 8% — AI 요약을 본 사람이 링크를 누르는 비율"
-    : "8% measured by Pew Research — link clicks after seeing an AI summary",
+    ? "편집 가능한 시나리오 가정입니다. Pew의 8%는 AI 답변 링크 클릭률이 아닙니다."
+    : "Editable scenario assumption. Pew's 8% is not the click rate for AI-answer links.",
   hConv: isKo
-    ? "일반 방문의 2.5배로 잡았어요(Semrush 4.4배·Adobe +54%를 보수적으로 반영)"
-    : "2.5x normal visitors — conservative vs Semrush 4.4x / Adobe +54%",
+    ? "브랜드 실측값이 아닌 가정이에요. 실제 전환율을 알면 바꿔주세요."
+    : "An assumption, not your measured rate. Replace it if you know your conversion rate.",
   hInfluenceRate: isKo
-    ? "클릭 없이 답변만 보고 영향받는 비율. Bain 조사(검색 60%가 클릭 없이 끝남) 기반 보수치"
-    : "Influenced without clicking. Conservative, based on Bain (60% of searches end click-free)",
+    ? "클릭 없이 영향을 받는다는 가정입니다. 이 브랜드에서 측정한 비율은 아니에요."
+    : "Assumed influence without a click; not measured for your brand.",
   hInfluenceConv: isKo
     ? "위에서 영향받은 사람이 매장·직접방문·지명검색으로 사는 비율"
     : "Of those influenced, the share converting via store, direct, or branded search",
   hCpc: isKo
-    ? "같은 노출을 광고로 사면 얼마인지 환산할 때 써요. 네이버 검색광고 단가 밴드 기준"
-    : "Used to price the same exposure as ads. Based on Naver search-ad CPC bands",
+    ? "광고비 비교를 위한 가정 단가예요. 실제 입찰가가 있으면 바꿔주세요."
+    : "Assumed ad cost for comparison. Replace it with your actual bid if available.",
   hAov: isKo
     ? "고객 1명이 한 번에 사는 평균 금액(객단가). 내 값으로 바꾸면 추정이 크게 정확해져요."
     : "Average revenue per customer. Replacing this with your own sharpens the estimate most.",
   reset: isKo ? "기본값으로" : "Reset",
-  range: isKo ? "추정 범위" : "Estimate range",
-  showMoney: isKo ? "금액으로 환산해 보기" : "Convert to revenue",
-  hideMoney: isKo ? "금액 추정 접기" : "Hide revenue estimate",
+  range: isKo ? "고정 ±40% 시나리오 폭(통계적 신뢰구간 아님)" : "Fixed ±40% scenario band (not a confidence interval)",
+  showMoney: isKo ? "가정 금액으로 환산해 보기" : "View assumed revenue scenario",
+  hideMoney: isKo ? "가정 금액 접기" : "Hide assumed revenue scenario",
 });
 
 export function RevenueImpactCard({
@@ -208,13 +207,13 @@ export function RevenueImpactCard({
           {est.missedSessionsPerMonth.toLocaleString()}
         </span>
         <span className="pb-1 text-sm text-zinc-400">
-          {isKo ? "세션 / 월 (추정)" : "sessions / mo (est.)"}
+          {isKo ? "세션 / 월 (가정)" : "sessions / mo (scenario)"}
         </span>
       </div>
       <p className="mt-1 text-xs text-zinc-400">
         {isKo
-          ? "AI 답변에서 우리를 못 봐서 놓치는 방문이에요."
-          : "Visits you miss because AI answers don't surface you."}
+          ? "실제 방문 손실을 측정한 값이 아닌 가정상 규모예요."
+          : "This is an assumed scale, not a measurement of lost visits."}
       </p>
 
       {!readOnly && <button
@@ -272,21 +271,6 @@ export function RevenueImpactCard({
             muted
             value={formatKrwCompact(est.adEquivalentKrwPerMonth)}
           />
-        </div>
-      )}
-
-      {/* 보조 지표 — "놓치는 유입"은 위 주 숫자와 **같은 값**이라 중복 제거(감사 5번).
-          "회복 가능 매출"도 금액이므로 금액 토글 안으로 들어간다 — 밖에 두면
-          금액을 접어도 초록색 금액이 그대로 남아 강등이 무의미해진다. */}
-      {showMoney && (
-        <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-          <p className="text-xs text-zinc-400">{t.recoverable}</p>
-          <p className="mt-1 font-semibold text-emerald-300 text-lg tabular-nums">
-            +{formatKrwCompact(est.recoverableRevenuePerMonth)}
-            <span className="ml-1 font-normal text-xs text-zinc-400">
-              SoV {sov}% → {est.targetSov}%
-            </span>
-          </p>
         </div>
       )}
 
