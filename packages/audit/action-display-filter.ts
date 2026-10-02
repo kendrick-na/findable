@@ -15,9 +15,13 @@
 //     「하지 마세요」(avoid)는 효과를 약속하지 않으므로 남긴다.
 
 interface StoredActionLike {
+  evidence?: unknown;
+  how?: unknown;
   kind?: unknown;
   source?: unknown;
   title?: unknown;
+  verification?: unknown;
+  where?: unknown;
 }
 
 const PRINCETON_RE = /Princeton|프린스턴/i;
@@ -26,9 +30,53 @@ const TOP_RECOMMENDATION_FORTY_RE = /40(?:\.\d+)?\s*%/;
 const TOP_RECOMMENDATION_SCOPE_RE = /모든|전체|업계|all\s|overall|across/i;
 const TOP_RECOMMENDATION_PRINCETON_RE = /princeton|프린스턴/i;
 const TOP_RECOMMENDATION_PERCENT_RE = /[+−-]?\s*\d+(?:\.\d+)?\s*%/;
+const LEGACY_CAUSAL_CLAIM_RE =
+  /AI가 인용하기 좋습니다|그대로 쓰는 것이 핵심|채택할 확률이 올라갑니다|인용하기 좋다는/i;
+const LEGACY_NAVER_EXTRAPOLATION_RE =
+  /(?:49\.3\s*%|272건)[\s\S]*(?:매주|주\s*1회)|(?:매주|주\s*1회)[\s\S]*(?:49\.3\s*%|272건)/i;
+const LEGACY_BING_PREREQUISITE_RE =
+  /(?:필수|필요조건|안 잡히면[\s\S]*(?:나오기|노출)[\s\S]*(?:어렵|불가))/i;
+const BING_RE = /Bing/i;
+const CHATGPT_RE = /ChatGPT/i;
+const LEGACY_LLMS_BAN_RE =
+  /llms\.txt[\s\S]*(?:파일 만들기|밝힌 적이 없고)|(?:파일 만들기|밝힌 적이 없고)[\s\S]*llms\.txt/i;
+
+function actionText(action: StoredActionLike): string {
+  return [
+    action.title,
+    action.source,
+    action.evidence,
+    action.how,
+    action.verification,
+    action.where,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n");
+}
 
 function isUnsupportedStoredAction(action: StoredActionLike): boolean {
   if (action.kind === "rank_strategy" || action.kind === "source_portfolio") {
+    return true;
+  }
+  const text = actionText(action);
+  if (LEGACY_CAUSAL_CLAIM_RE.test(text)) {
+    return true;
+  }
+  if (
+    action.kind === "naver_blog" &&
+    LEGACY_NAVER_EXTRAPOLATION_RE.test(text)
+  ) {
+    return true;
+  }
+  if (
+    action.kind === "bing_webmaster" &&
+    BING_RE.test(text) &&
+    CHATGPT_RE.test(text) &&
+    LEGACY_BING_PREREQUISITE_RE.test(text)
+  ) {
+    return true;
+  }
+  if (action.kind === "avoid" && LEGACY_LLMS_BAN_RE.test(text)) {
     return true;
   }
   if (action.kind === "avoid") {
