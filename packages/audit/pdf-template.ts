@@ -217,7 +217,7 @@ ${
 </div>
 
 <div class="section">
-  <h2>Top 3 개선 추천 (Princeton GEO 알고리즘 기반)</h2>
+  <h2>Top 3 개선 추천 (이번 측정 결과 기반 · 효과는 재측정으로 확인)</h2>
   <div class="recs">
     ${data.topRecommendations
       .map(
@@ -274,7 +274,7 @@ ${
       <ul class="why-list">
         <li>한국 AI 엔진 독점 추적: HyperCLOVA X · Naver · Daum 직접 통합</li>
         <li>Korean Entity Grounding: 한국어 표기 변형 통합 추적 (Ahrefs 한국어판)</li>
-        <li>Princeton KDD'24 GEO + ICLR'26 AutoGEO 알고리즘 한국어 적용</li>
+        <li>GEO 연구(Princeton KDD'24 등)는 참고 근거로만 쓰고, 효과는 같은 조건의 재측정으로 확인</li>
       </ul>
     </div>
     <div class="why-col">

@@ -429,7 +429,7 @@ ${allSources
   )
   .join("\n")}
 
-위 데이터로 도메인 권위·신호 분석을 JSON 스키마에 맞춰 반환하세요. Reddit이 모든 LLM 인용의 약 40%를 차지한다는 점을 명시적으로 언급. 마크다운·이모지 금지.`;
+위 데이터로 도메인 권위·신호 분석을 JSON 스키마에 맞춰 반환하세요. 위 데이터에 실제로 나온 도메인·건수만 근거로 쓰고, 외부 업계 통계(특정 플랫폼의 인용 비중 등)를 이 브랜드의 수치처럼 쓰지 마세요. 마크다운·이모지 금지.`;
 
   const { output, rawText, errorMessage } = await generateAnalyst(
     "sujin",
@@ -470,7 +470,7 @@ ${priorSummary}
 
 핵심 요구사항:
 1. **mondayActionOne**: 이번 주 월요일 09:00에 시작할 단 1개 액션 (Findable 시그니처 deliverable). 가장 임팩트 큰 1개만 선택.
-2. **topActions**: Princeton 8 strategies 룰셋 매핑된 3~7개 액션, 우선순위 정렬 (impact 높고 effort 낮은 것 먼저).
+2. **topActions**: 3~7개 액션, 우선순위 정렬 (impact 높고 effort 낮은 것 먼저). princetonStrategy 는 기법 분류 라벨일 뿐 — 논문 상승률을 기대효과로 쓰지 말 것.
 3. 각 액션은 "월요일 회의 직후 시작 가능" 수준의 구체성. 추상 표현 금지.
 4. 마크다운·이모지·테이블 금지.`;
 

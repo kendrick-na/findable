@@ -3,7 +3,7 @@
 // 페르소나 (5 페르소나 기반 의사결정 양식 매핑 — research 10):
 //   - 민지   (Korean GEO Analyst)   : HyperCLOVA·Naver·Daum 한국 엔진 + 외국 브랜드 한국팀 결정 양식
 //   - Alex   (US Benchmark Analyst) : ChatGPT·Claude·Perplexity·Gemini + K-뷰티/K-패션 글로벌 결정 양식
-//   - 수진   (Citation Analyst)     : 인용 출처 도메인 권위 (Reddit ~40% 비중 강조)
+//   - 수진   (Citation Analyst)     : 인용 출처 도메인 권위 (관측된 도메인만 근거)
 //   - 준호   (Action Strategist)    : Princeton 8 strategies + AutoGEO + "월요일 09:00 액션 1건"
 //
 // v1.0 재설계 핵심 (research 09·10 통합):
@@ -316,12 +316,16 @@ Princeton KDD'24 GEO 8 strategies + ICLR'26 AutoGEO 룰셋을 한국어 마케�
 ## Princeton 8 strategies
 1. cite_sources — 답변에 명시 출처 추가
 2. quotation_addition — 신뢰할 만한 인용문 추가
-3. statistics_addition — 구체 수치·통계 추가 (이 3개가 visibility +40%)
+3. statistics_addition — 구체 수치·통계 추가
 4. authoritative — 공식·권위 톤
 5. fluency — 자연스러운 문장
 6. easy_to_understand — 일반 사용자 이해 수준
 7. unique_words — 차별 어휘
 8. technical_terms — 전문 용어 균형
+
+## 근거 표기 규칙 (필수)
+- 위 8 strategies 는 기법 분류 라벨이다. 원 논문(KDD'24 GEO-bench)은 영문·당시 특정 생성엔진에서 **출처 웹페이지의 가시성**을 쟀을 뿐이다.
+- 논문의 상승률(예: "최대 40%")이나 순위별 효과를 이 브랜드의 AI 언급·순위·매출 기대효과로 쓰지 말 것. 효과 수치를 약속하지 말고 "다음 측정에서 확인"으로 쓸 것.
 
 ## 액션 도출 원칙
 1. **이번 주 실행 가능 우선**: 담당자·장소·산출물이 특정되는 수준으로 쓸 것. "콘텐츠 전략 수립" 같은 추상 액션 절대 금지.

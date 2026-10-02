@@ -1,3 +1,4 @@
+import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
 import {
   actionTargetKey,
   buildGeoActions,
@@ -86,11 +87,13 @@ async function findEmailAuditActions(): Promise<{
     geoActions?: GeoAction[];
     metrics?: { sov?: number; unverifiedCount?: number };
   } | null;
-  if (!(isPublishableAuditResult(result) && result?.geoActions?.length)) {
+  // 저장된 과거 처방 중 근거 없는 카드는 표시 시점에 뺀다(`action-display-filter.ts`).
+  const actions = filterStoredGeoActions(result?.geoActions);
+  if (!(result && isPublishableAuditResult(result) && actions.length)) {
     return null;
   }
   return {
-    actions: result.geoActions,
+    actions,
     brandLabel: result.brandName || job?.domain || "",
     brandName: result.brandName,
     domain: job?.domain ?? null,
@@ -357,8 +360,10 @@ async function ActionsPage({
   // 리포트와 대시보드가 서로 다른 처방을 만들면 고객은 어느 쪽을 믿어야 할지
   // 알 수 없다. 확정된 최신 측정은 러너가 순위·시장·실패 엔진 범위까지 반영해
   // 저장한 geoActions를 그대로 사용한다. Tracking 재계산은 구버전 데이터 폴백만 맡긴다.
-  const storedActions = (latestResult as { geoActions?: GeoAction[] } | null)
-    ?.geoActions;
+  // 단, 근거 없는 저장 카드(순위별 효과·자사 100% 단정·논문 효과 수치)는 뺀다.
+  const storedActions = filterStoredGeoActions(
+    (latestResult as { geoActions?: GeoAction[] } | null)?.geoActions
+  );
 
   // 프롬프트별 언급 여부 — 갭 액션의 핵심 입력. Tracking 행을 프롬프트 단위로 접는다.
   const byPrompt = new Map<string, { hit: number; total: number }>();
@@ -404,7 +409,7 @@ async function ActionsPage({
   );
 
   const geoActions =
-    storedActions && storedActions.length > 0
+    storedActions.length > 0
       ? storedActions
       : buildGeoActions({
           brandName: first.brand.name || first.brand.domain,

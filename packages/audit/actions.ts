@@ -83,20 +83,9 @@ export const GEO_METHOD_LIFT = {
   keywordStuffing: { label: "키워드 반복", score: 17.7, liftPct: -8 },
 } as const;
 
-/**
- * 논문 Table 2 — 순위별 상대 개선율(%). GEO 최적화가 상위 노출 브랜드에는 **역효과**다.
- * Cite Sources 기준: Rank1 −30.3 / Rank2 +2.5 / Rank4 +15.5 / Rank5 +115.1
- * → 이 사실을 액션에 반영한 경쟁사는 확인된 바 없다(최대 차별화 지점).
- */
-const RANK_LIFT_TABLE = [
-  { maxRank: 1.5, lift: -30, tone: "risk" as const },
-  { maxRank: 2.5, lift: 3, tone: "flat" as const },
-  { maxRank: 4.5, lift: 16, tone: "gain" as const },
-  { maxRank: Number.POSITIVE_INFINITY, lift: 115, tone: "gain" as const },
-];
-
 export type ActionPriority = 1 | 2 | 3;
 export type ActionKind =
+  // 2026-10-03 이후 생성하지 않는다 — 저장된 과거 결과·완료 기록 호환용으로만 남긴다.
   | "rank_strategy"
   | "prompt_gap"
   | "source_portfolio"
@@ -214,92 +203,15 @@ function measurementEvidenceLabel(input: ActionInput): string {
 }
 
 // ──────────────────────────────────────────────────
-// ① 순위별 기대효과 — 논문 Table 2
+// ① 순위별 기대효과 — 제거 (2026-10-03 AG-0)
 // ──────────────────────────────────────────────────
-
-/**
- * 1순위권 처방의 제목 — **상수로 뺀 이유**(N-46):
- * `buildGeoActions` 가 *"지금은 방어 국면인가"* 를 이 값으로 판단한다.
- * 문자열을 두 곳에 복제하면 제목만 고쳐도 **모순 차단이 조용히 풀린다**
- * (📕 이 저장소는 도메인 정규식이 세 번 복제돼 갈라진 사고를 이미 겪었다).
- */
-const DEFEND_TITLE = "이미 1순위 — 지금은 '더 밀어붙이기'보다 방어가 낫습니다";
-
-function rankStrategyAction(input: ActionInput): GeoAction | null {
-  const pos = input.averageMentionPosition;
-  if (pos === null || pos <= 0) {
-    return null;
-  }
-  const band = RANK_LIFT_TABLE.find((b) => pos <= b.maxRank);
-  if (!band) {
-    return null;
-  }
-
-  // "2개 중 1위"는 추천 경쟁에서 우세하다는 근거가 아니라, 얕은 목록에 이름이
-  // 한 번 나온 것에 가깝다. 특히 동명이사 오분류가 이 숫자를 만들 수 있으므로
-  // 목록 크기를 기록한 새 측정에서는 최소 3개 후보가 확인되기 전까지
-  // "이미 1순위/방어"라는 강한 처방을 만들지 않는다. 과거 회차(undefined)는
-  // 소급으로 데이터를 지어내지 않기 위해 기존 경로를 유지한다.
-  if (
-    band.tone === "risk" &&
-    input.averageMentionListSize !== null &&
-    input.averageMentionListSize !== undefined &&
-    input.averageMentionListSize < 3
-  ) {
-    return null;
-  }
-
-  if (band.tone === "risk") {
-    return {
-      kind: "rank_strategy",
-      priority: 2,
-      title: DEFEND_TITLE,
-      evidence: `AI 답변에서 평균 ${pos}번째로 언급됩니다(사실상 1순위).`,
-      how:
-        "이 구간에서는 통계·인용문을 더 넣는 최적화가 오히려 노출을 떨어뜨린다는 실험 결과가 있습니다" +
-        "(1위 사이트 −30%). 지금은 새 최적화보다 ①경쟁사가 치고 올라오는지 추세 감시 " +
-        "②기존에 인용되는 페이지가 사라지거나 낡지 않게 유지하는 쪽이 안전합니다.",
-      source: "Princeton GEO 논문(KDD 2024) Table 2 — Rank1 −30.3%",
-      where: primaryOwnedPage(input),
-      verification:
-        "다음 측정에서 평균 언급 위치와 인용된 자사 페이지가 유지되는지 비교하세요.",
-    };
-  }
-
-  if (band.tone === "flat") {
-    return {
-      kind: "rank_strategy",
-      priority: 2,
-      title: "상위권 — 최적화 효과가 크지 않은 구간입니다",
-      evidence: `AI 답변에서 평균 ${pos}번째로 언급됩니다.`,
-      how:
-        "이 구간은 콘텐츠 최적화만으로 얻는 이득이 작습니다(+3% 내외). " +
-        "순위를 더 올리기보다, 아직 언급되지 않는 다른 질문(프롬프트)으로 노출 면적을 넓히는 쪽이 효율적입니다.",
-      source: "Princeton GEO 논문 Table 2 — Rank2 +2.5%",
-      where: primaryOwnedPage(input),
-      verification:
-        "다음 측정에서 현재 상위권 질문의 위치와 아직 놓치는 질문의 언급률을 함께 비교하세요.",
-    };
-  }
-
-  // 🔴 감사 6번 동일 적용: 제목 "기대 +115%" vs 출처 "최대 +115.1%" — **최댓값을 기댓값으로**
-  //   팔고 있었다(115는 Table 2에서 Rank5 한 구간의 값이다).
-  //   지키지 못할 약속은 토스 심사 탈락 기준이자 다크패턴 자가진단 항목 →
-  //   숫자는 **최댓값이라고 정직하게** 말하고, 제목은 숫자 없이 방향만 말한다.
-  return {
-    kind: "rank_strategy",
-    priority: 3,
-    title: "지금이 최적화 효과가 가장 큰 구간입니다",
-    evidence: `AI 답변에서 평균 ${pos}번째로 언급됩니다(하위권).`,
-    how:
-      "하위 노출 브랜드일수록 콘텐츠 최적화 효과가 큽니다. 아래 '콘텐츠 보강' 액션부터 실행하세요. " +
-      "같은 작업을 1위 브랜드가 하면 오히려 손해라, 지금이 격차를 좁힐 기회입니다.",
-    source: `Princeton GEO 논문 Table 2 — 하위 순위 최대 +${band.lift}%`,
-    where: primaryOwnedPage(input),
-    verification:
-      "수정 전후 같은 질문·엔진 구성으로 평균 언급 위치와 확인률을 비교하세요.",
-  };
-}
+//
+// 🔴 `rank_strategy` 카드를 더 만들지 않는다. 논문(arXiv 2311.09735) Table 2 의 Rank 는
+//   검색결과(SERP)에 나온 **출처 웹사이트의 위치**다. AI 답변에서 **브랜드가 몇 번째로
+//   언급됐는지**와 다른 변수라, 그 표의 −30.3%·+2.5%·+115.1% 를 우리 순위에 붙일 근거가 없다.
+//   올바른 입력 지표와 현 엔진 재현 실험이 생기기 전에는 순위별 효과를 말하지 않는다.
+//   (같은 근거로 1순위권에서 공식 페이지 보강 카드를 숨기던 규칙도 지웠다.)
+//   이미 저장된 카드는 `action-display-filter.ts` 가 화면에서 걸러낸다.
 
 // ──────────────────────────────────────────────────
 // ② 프롬프트 갭 — 어떤 질문에서 놓치는가
@@ -423,13 +335,22 @@ function sourcePortfolioAction(input: ActionInput): GeoAction | null {
     .reduce((sum, d) => sum + d.count, 0);
   const topExternal = external[0];
 
-  // 자사 편중 = 남이 우리를 얘기해주지 않는 상태.
+  // 🔴 외부 출처가 0건이면 「자사 편중」을 판정할 수 없다 (2026-10-03 AG-0).
+  //   러너는 혼합 답변의 외부 URL 을 브랜드에 잘못 붙이지 않으려고 집계에서 뺀다
+  //   (`partitionCitedSources`). 그래서 이 경로로 들어온 출처는 늘 자사 100% 다 —
+  //   「제3자 출처가 없다」가 아니라 「외부 출처 비중을 재지 않았다」는 뜻이다.
+  if (total - mix.owned === 0) {
+    return null;
+  }
+
+  // 자사 편중 = 확인된 인용이 자사 도메인 쪽에 몰린 상태.
   if (pct(mix.owned) >= OWNED_HEAVY_PCT) {
     return {
       kind: "source_portfolio",
       priority: 3,
-      title: "AI가 우리 사이트만 보고 있습니다 — 제3자 언급이 필요합니다",
-      evidence: `인용 출처의 ${pct(mix.owned)}%가 자사 도메인입니다(외부 ${100 - pct(mix.owned)}%). AI가 우리 주장만 근거로 삼는 상태입니다.`,
+      title:
+        "확인된 인용이 자사 사이트에 몰려 있습니다 — 제3자 언급을 늘려 보세요",
+      evidence: `브랜드로 확인된 답변의 인용 ${total}건 중 ${pct(mix.owned)}%가 자사 도메인입니다(외부 ${100 - pct(mix.owned)}%).`,
       how:
         "AI는 여러 출처가 같은 말을 할 때 더 확신을 갖고 인용합니다. 우선순위대로: " +
         "①업계 매체 기고·보도자료(가장 빠르게 잡힘) " +
@@ -511,11 +432,6 @@ function ruleSignals(input: ActionInput): RuleSignals {
 // 기존 kind 에도 근거 등급을 붙인다 — 카드마다 6칸이 비지 않게
 // ──────────────────────────────────────────────────
 
-const PRINCETON_SOURCE = {
-  label: "Princeton GEO 논문(KDD 2024) — GPT-3.5 기반 실험, 재현 부족",
-  url: "https://arxiv.org/abs/2311.09735",
-};
-
 function legacyGuide(action: GeoAction): ActionGuide | undefined {
   if (action.kind === "prompt_gap") {
     return {
@@ -527,18 +443,6 @@ function legacyGuide(action: GeoAction): ActionGuide | undefined {
       remeasureMetric: "이 질문에서 우리를 알아본 답변 수",
       failCondition:
         "페이지를 만든 뒤 두 번 재도 이 질문에서 계속 0건이면, 페이지가 색인됐는지와 제목이 질문 문구 그대로인지 확인하세요.",
-    };
-  }
-  if (action.kind === "rank_strategy") {
-    return {
-      evidenceGrade: "weak",
-      sources: [PRINCETON_SOURCE],
-      engines: [],
-      effortHours: { min: 1, max: 2, per: "total" },
-      effectLag: "다음 측정부터 순위 변화를 봅니다.",
-      remeasureMetric: "답변 속 평균 언급 순위",
-      failCondition:
-        "다음 두 번의 측정에서 평균 순위가 떨어지면 방향을 다시 보세요.",
     };
   }
   if (action.kind === "source_portfolio") {
@@ -591,13 +495,6 @@ export function buildGeoActions(input: ActionInput): GeoAction[] {
   const actions: GeoAction[] = [];
   const sig = ruleSignals(input);
 
-  const rank = rankStrategyAction(input);
-
-  // 🔴🔴 **1순위권에는 「콘텐츠 보강」을 내지 않는다** (N-46 전수조사 · 1,024조합 중 144건).
-  //   `rank_strategy`(1순위권) = *"더 밀어붙이지 마라"* 와 `content_fix` 는 정반대 처방이라
-  //   한 화면에 공존하면 고객이 헷갈린다(👤 A안) → 발행 자체를 막는다.
-  const rankSaysDefend = rank?.title === DEFEND_TITLE;
-
   // 삽입 순서 = 같은 우선순위 안에서의 표시 순서(정렬은 안정 정렬).
   //   동명 오인이 제일 먼저다 — 다른 회사로 알려진 상태에서 노출을 늘리면 오해도 같이 는다.
   const entity = entityClarityAction(sig);
@@ -609,17 +506,12 @@ export function buildGeoActions(input: ActionInput): GeoAction[] {
     actions.push(crawl);
   }
   actions.push(...awarenessActions(sig));
-  if (!rankSaysDefend) {
-    actions.push(ownedPageAction(sig, primaryOwnedPage(input)));
-  }
+  actions.push(ownedPageAction(sig, primaryOwnedPage(input)));
   actions.push(...promptGapActions(input));
 
   const portfolio = sourcePortfolioAction(input);
   if (portfolio) {
     actions.push(portfolio);
-  }
-  if (rank) {
-    actions.push(rank);
   }
 
   // 🔴 **「하지 마세요」는 상한에서 제외한다** (N-46 · 1,024조합 중 352건이 상한 도달).

@@ -22,6 +22,7 @@ import {
   trackCrewTriggered,
   trackReportViewed,
 } from "@repo/analytics/funnel";
+import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
 import { objectParticle } from "@repo/audit/actions";
 import {
   type AnswerBucketSummary,
@@ -4382,7 +4383,9 @@ function ActionTeaser({
   locale: string;
   result: JobResult;
 }) {
-  const storedActions = result.geoActions ?? [];
+  // 저장된 과거 처방 중 근거 없는 카드(순위별 효과·자사 100% 단정·논문 효과 수치)는
+  // 표시 시점에 뺀다 — 저장 데이터는 그대로 둔다(`action-display-filter.ts`).
+  const storedActions = filterStoredGeoActions(result.geoActions);
   const mentionedEngines = new Set(result.metrics.enginesWithMention).size;
   // 구 진단 일부는 언급 품질 검증에서 false positive가 제외된 뒤에도, 검증 전
   // 순위로 만든 `rank_strategy`/부분 언급 처방을 JSON에 보존하고 있다. 최신 지표가
