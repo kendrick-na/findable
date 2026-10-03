@@ -45,8 +45,8 @@ function safeAccuracyHeadline(
 
 function safeCoverSubtitle(custom: string, engineCount: number, answerCount: number): string {
   return custom.replace(
-    /AI\s+\d+개\s+엔진,\s+\d+개\s+답변/g,
-    `AI·검색 등 ${engineCount}개 측정 채널, 전체 측정 ${answerCount}건`
+    /ChatGPT·Claude·Gemini\s+등\s+AI\s+\d+개\s+엔진,\s+\d+개\s+답변/g,
+    `ChatGPT·Claude·Gemini와 검색을 포함한 ${engineCount}개 측정 채널, 전체 측정 ${answerCount}건`
   );
 }
 

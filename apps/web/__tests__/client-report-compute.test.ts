@@ -327,6 +327,8 @@ describe("고객 리포트 공개 고지", () => {
       })
     );
     expect(html).not.toContain("AI 7개 엔진, 22개 답변");
-    expect(html).toContain("AI·검색 등 7개 측정 채널, 전체 측정 22건");
+    expect(html).toContain(
+      "ChatGPT·Claude·Gemini와 검색을 포함한 7개 측정 채널, 전체 측정 22건"
+    );
   });
 });
