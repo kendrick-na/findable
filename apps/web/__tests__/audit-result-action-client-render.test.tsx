@@ -4,6 +4,8 @@ import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 vi.mock("@repo/analytics", () => ({
   analytics: { capture: vi.fn() },
 }));
@@ -13,7 +15,11 @@ vi.mock("@repo/analytics/funnel", () => ({
   trackReportViewed: vi.fn(),
 }));
 vi.mock("@repo/design-system/components/ui/button", () => ({
-  Button: ({ children, ...props }: { children?: ReactNode }) =>
+  Button: ({
+    asChild: _asChild,
+    children,
+    ...props
+  }: { asChild?: boolean; children?: ReactNode }) =>
     <button {...props}>{children}</button>,
 }));
 vi.mock(
@@ -160,8 +166,22 @@ const response = {
 
 let root: ReturnType<typeof createRoot> | undefined;
 
-afterEach(() => {
-  root?.unmount();
+async function waitForText(container: HTMLElement, text: string) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (container.textContent?.includes(text)) {
+      return;
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+  throw new Error(`Timed out waiting for text: ${text}`);
+}
+
+afterEach(async () => {
+  await act(async () => {
+    root?.unmount();
+  });
   root = undefined;
   vi.restoreAllMocks();
 });
@@ -190,8 +210,8 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
       root = createRoot(container);
       await act(async () => {
         root?.render(<AuditResultView jobId="fixture-job" locale={locale} />);
-        await new Promise((resolve) => setTimeout(resolve, 20));
       });
+      await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
       const html = container.textContent ?? "";
       const actionSection = Array.from(container.querySelectorAll("section")).find(
         (section) =>
