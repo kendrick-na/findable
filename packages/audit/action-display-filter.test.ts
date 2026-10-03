@@ -35,15 +35,25 @@ describe("저장된 네이버 카드 표시 보존", () => {
       title: "네이버 블로그에 한 주제로 꾸준히 글을 올리세요",
       evidence: "기존 측정 근거",
       how: "기존 실행 방법",
-      verification: "네이버·네이버 AI 브리핑·HyperCLOVA X 답변을 확인",
+      verification:
+        "다음 측정에서 네이버·네이버 AI 브리핑·HyperCLOVA X 답변이 우리를 알아봤는지 보세요.",
       source: "근거 약함 · 기존 출처",
       guide: {
         engines: ["naver", "naver-briefing", "hyperclova"],
         effectLag: "게시 후 몇 주~몇 달",
-        failCondition: "기존 조건",
+        remeasureMetric: "AI가 제대로 알아본 답변 수 (지금 22건 중 5건)",
+        failCondition:
+          "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 계열 답변에서 알아본 답변이 0건이면, 주제를 더 좁히거나 질문 문구를 고객 표현으로 바꾸세요.",
       },
     };
 
-    expect(filterStoredGeoActions([legacy])).toEqual([legacy]);
+    const filtered = filterStoredGeoActions([legacy]);
+    expect(filtered[0]?.verification).toContain("네이버 검색에 회사명·서비스 설명");
+    expect(filtered[0]?.guide).toMatchObject({
+      remeasureMetric: "네이버 검색 노출에서 회사명·서비스 설명이 확인된 결과 수",
+      failCondition: expect.stringContaining("네이버 검색에서"),
+    });
+    expect(legacy.verification).toContain("HyperCLOVA");
+    expect(legacy.guide.remeasureMetric).toContain("AI가 제대로 알아본");
   });
 });

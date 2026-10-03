@@ -555,7 +555,7 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
             "한 사례 분석(네이버 AI 브리핑 인용 272건)에서는 검색 상위 10위 밖 문서도 인용됐습니다. 그 분석은 기업 블로그 게시의 효과를 잰 것이 아니어서, 이 카드는 Findable의 실행 가설입니다.",
           where: "네이버 블로그(회사 공식 계정)",
           verification:
-            "다음 측정에서 네이버 검색 노출과 우리를 알아본 답변 수가 함께 달라졌는지 보세요.",
+            "다음 측정에서 네이버 검색에 회사명·서비스 설명이 실제로 노출되는지 확인하세요. AI 답변 변화는 보조 관찰로만 기록하세요.",
         },
         {
           evidenceGrade: "weak",
@@ -569,9 +569,10 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
           effortHours: { min: 2, max: 4, per: "week" },
           effectLag:
             "게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
-          remeasureMetric: remeasure,
+          remeasureMetric:
+            "네이버 검색 노출에서 회사명·서비스 설명이 확인된 결과 수",
           failCondition:
-            "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 계열 답변에서 알아본 답변이 0건이면, 주제를 더 좁히거나 질문 문구를 고객 표현으로 바꾸세요.",
+            "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 검색에서 회사명·서비스 설명이 확인되지 않으면, 주제를 더 좁히거나 제목·첫 문장을 고객 표현으로 바꾸세요.",
         }
       )
     );

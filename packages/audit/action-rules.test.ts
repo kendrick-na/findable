@@ -144,6 +144,9 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
     );
     expect(naver?.guide?.engines).toEqual(["naver"]);
     expect(naver?.verification).not.toContain("HyperCLOVA");
+    expect(naver?.verification).toContain("네이버 검색에 회사명·서비스 설명");
+    expect(naver?.guide?.remeasureMetric).toContain("네이버 검색 노출");
+    expect(naver?.guide?.failCondition).toContain("네이버 검색에서");
   });
 
   it("해외 시장이면 네이버 카드를 내지 않는다", () => {

@@ -69,6 +69,17 @@ const LEGACY_CRAWL_FAIL_CONDITION =
   "소스 보기에 본문이 없거나 robots.txt 가 봇을 막고 있으면 실패입니다 — 고칠 때까지 다른 처방보다 먼저 하세요.";
 const CURRENT_CRAWL_FAIL_CONDITION =
   "소스 보기에 본문이 없거나 robots.txt 가 봇을 막고 있으면 접근성 수정이 아직 확인되지 않은 상태입니다. 수정 후에도 인용은 다음 측정으로 확인하세요.";
+const LEGACY_NAVER_VERIFICATION =
+  "다음 측정에서 네이버·네이버 AI 브리핑·HyperCLOVA X 답변이 우리를 알아봤는지 보세요.";
+const CURRENT_NAVER_VERIFICATION =
+  "다음 측정에서 네이버 검색에 회사명·서비스 설명이 실제로 노출되는지 확인하세요. AI 답변 변화는 보조 관찰로만 기록하세요.";
+const LEGACY_NAVER_REMEASURE_RE = /^AI가 제대로 알아본 답변 수(?:\s|\()/;
+const CURRENT_NAVER_REMEASURE =
+  "네이버 검색 노출에서 회사명·서비스 설명이 확인된 결과 수";
+const LEGACY_NAVER_FAIL_CONDITION =
+  "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 계열 답변에서 알아본 답변이 0건이면, 주제를 더 좁히거나 질문 문구를 고객 표현으로 바꾸세요.";
+const CURRENT_NAVER_FAIL_CONDITION =
+  "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 검색에서 회사명·서비스 설명이 확인되지 않으면, 주제를 더 좁히거나 제목·첫 문장을 고객 표현으로 바꾸세요.";
 
 function actionText(action: StoredActionLike): string {
   return [
@@ -115,6 +126,33 @@ function projectStoredAction<T extends StoredActionLike>(action: T): T {
               ...((guide as Record<string, unknown>).failCondition ===
               LEGACY_CRAWL_FAIL_CONDITION
                 ? { failCondition: CURRENT_CRAWL_FAIL_CONDITION }
+                : {}),
+            },
+          }
+        : {}),
+    } as T;
+  }
+  if (action.kind === "naver_blog") {
+    const guide = action.guide;
+    projected = {
+      ...projected,
+      ...(action.verification === LEGACY_NAVER_VERIFICATION
+        ? { verification: CURRENT_NAVER_VERIFICATION }
+        : {}),
+      ...(guide && typeof guide === "object"
+        ? {
+            guide: {
+              ...(guide as Record<string, unknown>),
+              ...(typeof (guide as Record<string, unknown>).remeasureMetric ===
+              "string" &&
+              LEGACY_NAVER_REMEASURE_RE.test(
+                (guide as Record<string, unknown>).remeasureMetric as string
+              )
+                ? { remeasureMetric: CURRENT_NAVER_REMEASURE }
+                : {}),
+              ...((guide as Record<string, unknown>).failCondition ===
+              LEGACY_NAVER_FAIL_CONDITION
+                ? { failCondition: CURRENT_NAVER_FAIL_CONDITION }
                 : {}),
             },
           }
