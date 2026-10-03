@@ -19,6 +19,7 @@ const guide: ActionGuide = {
   remeasureMetric: "공식 사이트 인용 수",
   failCondition: "다음 측정으로 확인",
 };
+const naverGuide = { ...guide, engines: ["naver"] };
 const action = {
   evidence: "측정 근거",
   guide,
@@ -73,6 +74,20 @@ describe("웹 ActionEvidenceGuide", () => {
     expect(html).toContain("about 2-4 hours");
     expect(html).toContain("Stored Korean rule: 며칠~몇 주");
     expect(html).not.toContain("예상 작업 시간");
+  });
+
+  it("네이버를 AI가 아닌 검색 노출 채널로 실제 렌더한다", () => {
+    const ko = renderToStaticMarkup(
+      createElement(ActionEvidenceGuide, { guide: naverGuide })
+    );
+    const en = renderToStaticMarkup(
+      createElement(ActionEvidenceGuide, { guide: naverGuide, isKo: false })
+    );
+    expect(ko).toContain("적용 채널");
+    expect(ko).toContain("네이버 검색 노출");
+    expect(ko).not.toContain("적용되는 AI");
+    expect(en).toContain("Measurement channels");
+    expect(en).toContain("Naver search exposure");
   });
 
   it("실제 lead/rest 컴포넌트가 ko/en 모두 위치·검증·가이드를 렌더한다", () => {

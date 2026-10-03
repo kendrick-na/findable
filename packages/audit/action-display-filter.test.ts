@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filterStoredGeoActions } from "./action-display-filter";
+import { engineDisplayName } from "./engine-labels";
 
 describe("저장된 crawl_access 카드 표시 투영", () => {
   it("옛 절대 문구를 표시 시점에만 교정하고 원본 객체는 바꾸지 않는다", () => {
@@ -57,6 +58,9 @@ describe("저장된 네이버 카드 표시 보존", () => {
       remeasureMetric: "같은 질문에서 네이버 검색 노출이 확인된 질문 수",
       failCondition: expect.stringContaining("노출이 확인된 질문 수"),
     });
+    expect(engineDisplayName(filtered[0]?.guide?.engines[0] ?? "")).toBe(
+      "네이버 검색 노출"
+    );
     expect(legacy.verification).toContain("HyperCLOVA");
     expect(legacy.guide.remeasureMetric).toContain("AI가 제대로 알아본");
     expect(legacy.guide.notGuaranteed).toContain("네이버 AI 브리핑");

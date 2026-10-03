@@ -41,9 +41,9 @@ function effortLabel(effort: ActionGuide["effortHours"]): string {
   return effort.per === "week" ? `매주 약 ${range}` : `약 ${range}`;
 }
 
-function enginesLabel(engines: string[]): string {
+function channelsLabel(engines: string[]): string {
   return engines.length === 0
-    ? "측정한 AI 전체"
+    ? "측정 채널 전체"
     : engines.map(engineDisplayName).join(", ");
 }
 
@@ -58,7 +58,7 @@ const Row = ({ label, children }: { children: string; label: string }) => (
   </div>
 );
 
-/** 카드 6칸 — 근거 등급·출처 / 적용 AI / 예상 작업 시간 / 재측정 권장 시점 / 다시 잴 숫자 / 재점검 조건. */
+/** 카드 6칸 — 근거 등급·출처 / 적용 채널 / 예상 작업 시간 / 재측정 권장 시점 / 다시 잴 숫자 / 재점검 조건. */
 export const ActionEvidenceGuide = ({ guide }: { guide: ActionGuide }) => (
   <div className="flex flex-col gap-3 rounded border border-white/6 bg-white/[0.02] p-3">
     <div className="flex flex-wrap items-center gap-2">
@@ -68,7 +68,7 @@ export const ActionEvidenceGuide = ({ guide }: { guide: ActionGuide }) => (
       </span>
     </div>
     <dl className="flex flex-col gap-2">
-      <Row label="적용되는 AI">{enginesLabel(guide.engines)}</Row>
+      <Row label="적용 채널">{channelsLabel(guide.engines)}</Row>
       <Row label="예상 작업 시간">{effortLabel(guide.effortHours)}</Row>
       <Row label="재측정 권장 시점">{guide.effectLag}</Row>
       <Row label="다시 잴 숫자">{guide.remeasureMetric}</Row>

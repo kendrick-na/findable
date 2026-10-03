@@ -11,8 +11,8 @@ import {
   type DontItem,
   EVIDENCE_GRADE_LABEL,
   type EvidenceGrade,
-  engineDisplayName,
 } from "@repo/audit/action-rules";
+import { engineDisplayName } from "@repo/audit/engine-labels";
 
 const GRADE_MEANING_EN: Record<EvidenceGrade, string> = {
   strong: "An official platform document confirms this prerequisite.",
@@ -20,18 +20,6 @@ const GRADE_MEANING_EN: Record<EvidenceGrade, string> = {
   weak: "Only a small experiment or limited replication supports this.",
   none: "No effect is established, or there is a policy or downside risk.",
 };
-const ENGINE_NAME_EN: Record<string, string> = {
-  chatgpt: "ChatGPT",
-  claude: "Claude",
-  gemini: "Gemini",
-  google: "Google Search (AI features)",
-  hyperclova: "HyperCLOVA X",
-  naver: "Naver Search",
-  "naver-briefing": "Naver AI Briefing",
-  perplexity: "Perplexity",
-  daum: "Daum Search",
-};
-
 const GRADE_TONE: Record<EvidenceGrade, string> = {
   strong: "border-[var(--brand-3)]/40 text-[var(--brand-3)]",
   medium: "border-sky-300/30 text-sky-300",
@@ -108,14 +96,14 @@ export function ActionEvidenceGuide({
   isKo?: boolean;
 }) {
   const engineLabel = (engine: string) =>
-    isKo ? engineDisplayName(engine) : (ENGINE_NAME_EN[engine] ?? engine);
+    engineDisplayName(engine, isKo);
   const storedRuleValue = (value: string) =>
     isKo ? value : `Stored Korean rule: ${value}`;
   const rows: [string, string][] = [
     [
-      isKo ? "적용되는 AI" : "Applies to",
+      isKo ? "적용 채널" : "Measurement channels",
       guide.engines.length === 0
-        ? isKo ? "측정한 AI 전체" : "All measured AI systems"
+        ? isKo ? "측정 채널 전체" : "All measured channels"
         : guide.engines.map(engineLabel).join(", "),
     ],
     [isKo ? "예상 작업 시간" : "Estimated work time", effortLabel(guide.effortHours, isKo)],

@@ -28,6 +28,7 @@ const guide: ActionGuide = {
   failCondition: "두 번 재도 20% 이상이면 실패",
   quotes: [{ engineId: "chatgpt", excerpt: "노우버스는 에듀테크 브랜드로…" }],
 };
+const naverGuide = { ...guide, engines: ["naver"] };
 
 describe("ActionEvidenceGuide", () => {
   it("6칸과 착각 인용, 출처 링크가 모두 보인다", () => {
@@ -50,7 +51,14 @@ describe("ActionEvidenceGuide", () => {
     expect(link?.getAttribute("rel")).toContain("noopener");
   });
 
-  it("엔진 목록이 비면 '측정한 AI 전체', 주간 작업은 '매주'", () => {
+  it("네이버는 AI가 아니라 검색 노출 채널로 표시한다", () => {
+    const { container } = render(<ActionEvidenceGuide guide={naverGuide} />);
+    expect(container.textContent).toContain("적용 채널");
+    expect(container.textContent).toContain("네이버 검색 노출");
+    expect(container.textContent).not.toContain("적용되는 AI");
+  });
+
+  it("채널 목록이 비면 '측정 채널 전체', 주간 작업은 '매주'", () => {
     const { container } = render(
       <ActionEvidenceGuide
         guide={{
@@ -60,7 +68,7 @@ describe("ActionEvidenceGuide", () => {
         }}
       />
     );
-    expect(container.textContent).toContain("측정한 AI 전체");
+    expect(container.textContent).toContain("측정 채널 전체");
     expect(container.textContent).toContain("매주 약 2~4시간");
   });
 });

@@ -15,6 +15,7 @@
 // 순수 함수 모듈 — DB·네트워크 의존 0. `actions.ts` 가 여기의 규칙을 호출한다.
 
 import type { ActionKind, ActionPriority, GeoAction } from "./actions";
+import { engineDisplayName as officialEngineDisplayName } from "./engine-labels";
 import type { MarketScope } from "./market-scope";
 import { stripMarkdown } from "./strip-markdown";
 
@@ -81,7 +82,7 @@ export interface ActionGuide {
   effectLag: string;
   /** 대략의 작업 시간. `per: "week"` 이면 매주 드는 시간이다. */
   effortHours: { max: number; min: number; per: "total" | "week" };
-  /** 적용되는 AI(엔진 id). 빈 배열 = 측정한 AI 전체. */
+  /** 적용 채널(엔진 id). 빈 배열 = 측정 채널 전체. */
   engines: string[];
   /** 근거 종류. 2026-10-03 이전 저장분에는 없다. */
   evidenceBasis?: EvidenceBasis;
@@ -364,21 +365,8 @@ export function verdictRates(counts: VerdictCounts): {
 // 엔진 이름
 // ──────────────────────────────────────────────────
 
-const ENGINE_LABEL: Record<string, string> = {
-  chatgpt: "ChatGPT",
-  claude: "Claude",
-  perplexity: "Perplexity",
-  gemini: "Gemini",
-  google: "Google 검색(AI 개요)",
-  naver: "네이버",
-  "naver-briefing": "네이버 AI 브리핑",
-  hyperclova: "HyperCLOVA X",
-  daum: "다음",
-  bing: "Bing",
-};
-
 export function engineDisplayName(engineId: string): string {
-  return ENGINE_LABEL[engineId] ?? engineId;
+  return officialEngineDisplayName(engineId);
 }
 
 // ──────────────────────────────────────────────────
