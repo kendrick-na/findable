@@ -735,7 +735,7 @@ export function ownedPageAction(sig: RuleSignals, where: string): GeoAction {
   );
 }
 
-/** 인용 0 일 때만 — 봇이 페이지를 못 읽으면 다른 처방은 전부 소용없다(전제 조건). */
+/** 인용 0 일 때만 — 봇 접근성은 인용을 위한 전제 조건으로 점검한다. */
 export function crawlAccessAction(sig: RuleSignals): GeoAction | null {
   if (sig.ownedCitations !== 0) {
     return null;
@@ -767,10 +767,10 @@ export function crawlAccessAction(sig: RuleSignals): GeoAction | null {
       engines: [],
       effortHours: { min: 1, max: 3, per: "total" },
       effectLag:
-        "고친 즉시 봇이 읽을 수 있게 됩니다. 인용은 그 뒤 재수집 시점에 따라 다릅니다.",
+        "수정 후 공개 페이지·robots.txt 반영을 확인하세요. 봇의 재수집 시점과 인용 반영은 보장되지 않습니다.",
       remeasureMetric: "공식 사이트가 출처로 인용된 수 (지금 0건)",
       failCondition:
-        "소스 보기에 본문이 없거나 robots.txt 가 봇을 막고 있으면 실패입니다 — 고칠 때까지 다른 처방보다 먼저 하세요.",
+        "소스 보기에 본문이 없거나 robots.txt 가 봇을 막고 있으면 접근성 수정이 아직 확인되지 않은 상태입니다. 수정 후에도 인용은 다음 측정으로 확인하세요.",
     }
   );
 }

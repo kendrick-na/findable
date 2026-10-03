@@ -169,6 +169,9 @@ describe("크롤 접근성 카드 — 전제조건과 효과 보장을 분리한
     expect(action?.evidence).toContain("인용의 전제 조건");
     expect(action?.evidence).not.toContain("다른 처방은 효과가 없습니다");
     expect(action?.guide?.notGuaranteed).toContain("인용이 생긴다는 보장은 없");
+    expect(action?.guide?.effectLag).toContain("보장되지 않습니다");
+    expect(action?.guide?.failCondition).toContain("다음 측정으로 확인");
+    expect(action?.guide?.failCondition).not.toContain("다른 처방보다 먼저");
   });
 });
 

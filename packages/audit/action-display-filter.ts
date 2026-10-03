@@ -57,6 +57,18 @@ const LEGACY_EFFECT_LAG_COPY: Record<string, string> = {
   "몇 달. 가장 느리지만 오래 갑니다.":
     "외부 언급 후 몇 달 이상. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
 };
+const LEGACY_CRAWL_EVIDENCE =
+  "공식 사이트가 출처로 인용된 적이 한 번도 없습니다. 봇이 페이지를 못 읽는 상태라면 다른 처방은 효과가 없습니다.";
+const CURRENT_CRAWL_EVIDENCE =
+  "공식 사이트가 출처로 인용된 적이 한 번도 없습니다. 봇이 페이지를 읽을 수 있는지는 인용의 전제 조건이지만, 이것만으로 다른 처방의 효과를 판단할 수는 없습니다.";
+const LEGACY_CRAWL_EFFECT_LAG =
+  "고친 즉시 봇이 읽을 수 있게 됩니다. 인용은 그 뒤 재수집 시점에 따라 다릅니다.";
+const CURRENT_CRAWL_EFFECT_LAG =
+  "수정 후 공개 페이지·robots.txt 반영을 확인하세요. 봇의 재수집 시점과 인용 반영은 보장되지 않습니다.";
+const LEGACY_CRAWL_FAIL_CONDITION =
+  "소스 보기에 본문이 없거나 robots.txt 가 봇을 막고 있으면 실패입니다 — 고칠 때까지 다른 처방보다 먼저 하세요.";
+const CURRENT_CRAWL_FAIL_CONDITION =
+  "소스 보기에 본문이 없거나 robots.txt 가 봇을 막고 있으면 접근성 수정이 아직 확인되지 않은 상태입니다. 수정 후에도 인용은 다음 측정으로 확인하세요.";
 
 function actionText(action: StoredActionLike): string {
   return [
@@ -84,18 +96,43 @@ function hasUnnegatedLegacySentence(
 }
 
 function projectStoredAction<T extends StoredActionLike>(action: T): T {
-  if (!action.guide || typeof action.guide !== "object") {
-    return action;
+  let projected = action;
+  if (action.kind === "crawl_access") {
+    const guide = action.guide;
+    projected = {
+      ...projected,
+      ...(action.evidence === LEGACY_CRAWL_EVIDENCE
+        ? { evidence: CURRENT_CRAWL_EVIDENCE }
+        : {}),
+      ...(guide && typeof guide === "object"
+        ? {
+            guide: {
+              ...(guide as Record<string, unknown>),
+              ...((guide as Record<string, unknown>).effectLag ===
+              LEGACY_CRAWL_EFFECT_LAG
+                ? { effectLag: CURRENT_CRAWL_EFFECT_LAG }
+                : {}),
+              ...((guide as Record<string, unknown>).failCondition ===
+              LEGACY_CRAWL_FAIL_CONDITION
+                ? { failCondition: CURRENT_CRAWL_FAIL_CONDITION }
+                : {}),
+            },
+          }
+        : {}),
+    } as T;
   }
-  const guide = action.guide as Record<string, unknown>;
+  if (!projected.guide || typeof projected.guide !== "object") {
+    return projected;
+  }
+  const guide = projected.guide as Record<string, unknown>;
   if (
     typeof guide.effectLag !== "string" ||
     !LEGACY_EFFECT_LAG_COPY[guide.effectLag]
   ) {
-    return action;
+    return projected;
   }
   return {
-    ...action,
+    ...projected,
     guide: {
       ...guide,
       effectLag: LEGACY_EFFECT_LAG_COPY[guide.effectLag],
