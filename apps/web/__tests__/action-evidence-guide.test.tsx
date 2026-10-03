@@ -1,4 +1,6 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ActionGuide } from "@repo/audit/action-rules";
@@ -25,5 +27,24 @@ describe("웹 ActionEvidenceGuide", () => {
       "Findable 내부 운영 기준·추정이며 효과를 입증하지 않습니다"
     );
     expect(html).toContain("며칠~몇 주");
+  });
+
+  it("무료 결과의 lead/rest 모두 한국어일 때만 가이드를 노출한다", () => {
+    const resultSource = readFileSync(
+      fileURLToPath(
+        new URL(
+          "../app/[locale]/audit/[jobId]/components/audit-result.tsx",
+          import.meta.url
+        )
+      ),
+      "utf8"
+    );
+    expect(resultSource).toContain(
+      "{isKo && lead.guide && <ActionEvidenceGuide guide={lead.guide} />}"
+    );
+    expect(resultSource).toContain(
+      "{isKo && action.guide && <ActionEvidenceGuide guide={action.guide} />}"
+    );
+    expect(resultSource).toContain("isKo ? \"이 처방이 나온 근거 (실측)\"");
   });
 });
