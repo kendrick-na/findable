@@ -80,7 +80,6 @@ import {
   AnswerBucketPill,
   BrandNameMismatchNotice,
   QuestionEngineMatrix,
-  RevenueImpactOptIn,
 } from "./answer-buckets";
 import { CompetitorBenchmark } from "./competitor-benchmark";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
@@ -1544,10 +1543,6 @@ function CompletedView({
           result={result}
         />
 
-        {/* 🔴 「놓치는 유입(추정)」 카드는 여기(2번째)에 있었다(2026-09-29 이동).
-            고객 숫자 없이 기본 가정만으로 만든 추정을 측정 결과처럼 크게 보여줬다.
-            → 맨 아래 「직접 입력하면 계산」 링크로 접었다(RevenueImpactOptIn). */}
-
         <CompetitorBenchmark
           brandName={result.brandName}
           brandVariants={result.brandVariants}
@@ -1618,14 +1613,6 @@ function CompletedView({
           <UpsellCard isKo={isKo} job={job} locale={locale} result={result} />
         )}
 
-        {provisional ? null : (
-          <RevenueImpactOptIn
-            attemptedEngines={attempted}
-            isKo={isKo}
-            measuredEngines={measured}
-            sov={result.metrics.sov}
-          />
-        )}
       </div>
     </div>
   );

@@ -10,6 +10,19 @@ import {
 } from "../app/[locale]/audit/[jobId]/components/revenue-impact-card";
 
 describe("고객 입력 기반 유입 시나리오", () => {
+  it("무료 진단 결과에서는 가정 계산기를 제공하지 않는다", () => {
+    const resultPage = readFileSync(
+      join(
+        process.cwd(),
+        "app/[locale]/audit/[jobId]/components/audit-result.tsx"
+      ),
+      "utf8"
+    );
+
+    expect(resultPage).not.toContain("<RevenueImpactOptIn");
+    expect(resultPage).not.toContain('from "./revenue-impact-card"');
+  });
+
   it("기본값 복원에도 고객이 입력한 월 노출 수와 객단가를 보존한다", () => {
     const assumptions = initialRevenueAssumptions("small", {
       monthlyAiQueries: 1234,
