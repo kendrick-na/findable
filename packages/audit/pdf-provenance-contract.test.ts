@@ -51,12 +51,16 @@ describe("audit PDF provenance contract", () => {
     }));
 
     const { generateAuditPdf } = await import("./pdf-generator");
-    const result = await generateAuditPdf("job-123", pdfData);
+    const controller = new AbortController();
+    const result = await generateAuditPdf("job-123", pdfData, controller.signal);
 
     expect(mocks.put).toHaveBeenCalledWith(
       expect.stringMatching(/^audits\/audit-v3-job-123-\d+\.pdf$/),
       expect.any(Buffer),
-      expect.objectContaining({ access: "public" })
+      expect.objectContaining({
+        access: "public",
+        abortSignal: controller.signal,
+      })
     );
     expect(isCurrentAuditPdfUrl(result.pdfUrl)).toBe(true);
     expect(browser.close).toHaveBeenCalledOnce();

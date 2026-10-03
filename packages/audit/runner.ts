@@ -100,6 +100,29 @@ export interface AuditRunInput {
   organizationId?: string;
 }
 
+const AUDIT_PDF_TIMEOUT_MS = 30_000;
+
+async function awaitWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => void
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          onTimeout();
+          reject(new Error("Audit PDF generation timed out"));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // 도메인→브랜드명(한/영 변형) 해석은 @repo/ai/lib/brand-identity의
 // resolveBrandIdentity로 이관 (P0-b, 2026-07-27). 폼입력→사전→LLM→영문 폴백 체인.
 
@@ -854,12 +877,20 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // 이 단계에서 함수 시간이 끝나도 고객은 측정 결과를 즉시 볼 수 있다.
     if (isPublishableAuditResult(result)) {
       try {
+        const pdfController = new AbortController();
         const pdfData: AuditPdfData = {
           ...result,
           language: input.language,
           generatedAt: new Date().toISOString().replace("T", " ").slice(0, 16),
         };
-        const pdf = await generateAuditPdf(input.jobId, pdfData);
+        const pdf = await awaitWithTimeout(
+          generateAuditPdf(input.jobId, pdfData, pdfController.signal),
+          AUDIT_PDF_TIMEOUT_MS,
+          () =>
+            pdfController.abort(
+              new DOMException("Audit PDF generation timed out", "AbortError")
+            )
+        );
         await database.auditJob.update({
           where: { id: input.jobId },
           data: { pdfUrl: pdf.pdfUrl },
