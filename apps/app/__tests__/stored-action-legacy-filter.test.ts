@@ -77,6 +77,16 @@ describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
     expect(filterStoredGeoActions([current, naver])).toEqual([current, naver]);
   });
 
+  it("인용형 부정문은 구형 Naver 긍정 서명으로 오인하지 않는다", () => {
+    const honest = action({
+      kind: "naver_blog",
+      source: "[사례 분석] 네이버 AI 브리핑 인용 272건 · 49.3%가 검색 상위 10위 밖",
+      how: "매주 올리면 AI 브리핑이 절반 가까이 인용합니다라는 주장은 근거가 없습니다.",
+    });
+
+    expect(filterStoredGeoActions([honest])).toEqual([honest]);
+  });
+
   it("다른 문장의 부정문이 구형 긍정 지시를 살리지 않는다", () => {
     const content = action({
       kind: "content_fix",
