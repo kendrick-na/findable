@@ -1,6 +1,6 @@
 import { isUsableRun } from "@repo/audit/run-quality";
 import {
-  isPublishableAuditResult,
+  auditPublicationStatus,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import type { AuditJob } from "@repo/database";
@@ -86,10 +86,11 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
           responses?.some(
             (response) => !response.errorMessage && !response.isStub
           ) ?? false;
+        const publicationStatus = auditPublicationStatus(result);
         const isPartial =
           job.status === "completed" &&
           hasCollectedAnswer &&
-          !isPublishableAuditResult(result);
+          publicationStatus === "provisional";
         const isUnavailable =
           job.status === "completed" && !isUsableRun(result);
         const sov = isUnavailable ? null : extractSov(result);

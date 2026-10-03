@@ -172,6 +172,40 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
       "/history/job-empty"
     );
   });
+
+  test("검색 응답만 있는 보류 회차를 잠정 결과로 표시하지 않는다", () => {
+    const result = {
+      brandName: "Example",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {
+        answerBuckets: {
+          ai: { adjudicated: 0, unverified: 0 },
+          search: { adjudicated: 10, unverified: 0 },
+        },
+        citationAttribution: "none_observed",
+        enginesCovered: Array.from({ length: 10 }, () => "naver"),
+        enginesWithMention: [],
+        sov: 0,
+        unverifiedCount: 0,
+      },
+      engineResponses: Array.from({ length: 10 }, () => ({
+        engineId: "naver",
+        brandMentioned: false,
+        isStub: false,
+        errorMessage: null,
+      })),
+    };
+    const { container } = render(
+      <AuditHistoryList
+        jobs={[{ ...jobFixture("completed", "job-search-only"), result }]}
+      />
+    );
+    expect(container.textContent).toContain("측정 불가");
+    expect(container.textContent).not.toContain("잠정 결과");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe(
+      "/history/job-search-only"
+    );
+  });
 });
 
 describe("AuditHistoryList 빈 상태 가드", () => {
