@@ -282,4 +282,27 @@ describe("고객 리포트 공개 고지", () => {
     expect(html).not.toContain("AI 답변 22개");
     expect(html).toContain("전체 측정 22건");
   });
+
+  it("저장된 H.p4의 구형 AI 답변 headline도 화면에서 과장하지 않는다", () => {
+    const data = parseClientReportData(read("knowverse.report.json"));
+    expect(data).not.toBeNull();
+    if (!data) return;
+
+    const withOldHeadline = {
+      ...data,
+      config: {
+        ...data.config,
+        headlines: { p4: "AI 답변 22개 중 14개만 정확했습니다" },
+      },
+    };
+    const html = renderToStaticMarkup(
+      createElement(ClientReport, {
+        data: withOldHeadline,
+        legacySyntheticEngineIds: ["naver"],
+        webUrl: null,
+      })
+    );
+    expect(html).not.toContain("AI 답변 22개 중 14개");
+    expect(html).toContain("전체 측정 22건 중 5건");
+  });
 });

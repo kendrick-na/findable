@@ -26,6 +26,19 @@ const ASSET = {
   fMark: "/report-assets/F_mark.png",
 };
 
+function safeAccuracyHeadline(
+  custom: string | undefined,
+  total: number,
+  accurate: number,
+  brand: string
+): string {
+  const plain = custom?.replace(/<[^>]*>/g, "");
+  if (custom && plain && !plain.includes("AI 답변")) {
+    return custom;
+  }
+  return `전체 측정 ${total}건 중 ${accurate}건이 저장된 판별에서 ${brand}를 정확히 설명했습니다`;
+}
+
 /**
  * config 문구는 운영자가 쓴 짧은 HTML(`<b>`·`<em>`·`<br>`)을 담는다. 템플릿은 그대로 찍지만
  * 여기선 DB 에서 오는 값이라 **허용한 태그만** 살리고 나머지는 글자로 보이게 한다.
@@ -122,6 +135,7 @@ export function ClientReport({
   const { answers, engines, per_q: perQ, channels, top, s } = data.computed;
   const H = c.headlines ?? {};
   const officialPct = formatOfficialPct(s);
+  const accuracyHeadline = safeAccuracyHeadline(H.p4, s.n, s.ok_n, c.brand);
 
   const noteBase = `측정 Findable ${c.measured_at} · 질문 ${s.nq}종(한국어·영어) × AI·검색 엔진 ${s.engines_total}곳 · 전체 측정 답변 ${s.n}건 · 질문당 1회 측정(시점에 따라 답이 달라질 수 있음). 판별: 답변 원문을 사람이 한 건씩 읽고 공식 사이트 내용과 대조.`;
 
@@ -310,8 +324,7 @@ export function ClientReport({
         <h1 className="sec">
           <span
             {...rich(
-              H.p4 ??
-                `전체 측정 ${s.n}건 중 ${s.ok_n}건이 저장된 판별에서 ${c.brand}를 정확히 설명했습니다`
+              accuracyHeadline
             )}
           />
           <span className="dot">.</span>
