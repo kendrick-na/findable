@@ -128,6 +128,32 @@ export interface ClientReportData {
   version: number;
 }
 
+export interface ClientReportDisclosure {
+  /** Report.data is a point-in-time snapshot, not a live remeasurement. */
+  isFrozenSnapshot: true;
+  /** Historical engine rows that must not be read as current measurements. */
+  retiredEngineIds: string[];
+}
+
+const RETIRED_ENGINE_IDS = new Set(["hyperclova"]);
+
+/**
+ * Public, policy-neutral disclosure for an already-issued report.
+ * This deliberately does not invalidate the snapshot or its PDF URL.
+ */
+export function clientReportDisclosure(
+  data: Pick<ClientReportData, "computed">
+): ClientReportDisclosure {
+  const engineIds = new Set<string>([
+    ...data.computed.answers.map((answer) => answer.engine),
+    ...data.computed.engines.map((engine) => engine.id),
+  ]);
+  return {
+    isFrozenSnapshot: true,
+    retiredEngineIds: [...RETIRED_ENGINE_IDS].filter((id) => engineIds.has(id)),
+  };
+}
+
 /** 저장된 JSON → 타입. 형식이 다르면 null(페이지는 404 로 처리). */
 export function parseClientReportData(json: unknown): ClientReportData | null {
   const r = clientReportDataSchema.safeParse(json);

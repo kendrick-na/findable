@@ -19,6 +19,7 @@ import { renderStrings } from "@repo/audit/client-report/render-strings";
 import {
   buildClientReportData,
   clientReportPdfFilename,
+  clientReportDisclosure,
   parseClientReportData,
 } from "@repo/audit/client-report/report-data";
 import { describe, expect, it } from "vitest";
@@ -125,4 +126,41 @@ it("PDF 파일명 규칙: 회사명_AI검색진단_v버전_날짜.pdf", () => {
       "노우버스_AI검색진단_v3_20260928.pdf"
     );
   }
+});
+
+describe("고객 리포트 공개 고지", () => {
+  it("기존 동결 fixture를 현재 측정값으로 과장하지 않고 과거 엔진을 표시한다", () => {
+    const data = parseClientReportData(read("knowverse.report.json"));
+    expect(data).not.toBeNull();
+    if (!data) return;
+
+    expect(clientReportDisclosure(data)).toEqual({
+      isFrozenSnapshot: true,
+      retiredEngineIds: ["hyperclova"],
+    });
+  });
+
+  it("현재 엔진만 있는 동결 리포트는 과거 엔진 경고를 만들지 않는다", () => {
+    const data = parseClientReportData(read("knowverse.report.json"));
+    expect(data).not.toBeNull();
+    if (!data) return;
+
+    const currentOnly = {
+      ...data,
+      computed: {
+        ...data.computed,
+        answers: data.computed.answers.filter(
+          (answer) => answer.engine !== "hyperclova"
+        ),
+        engines: data.computed.engines.filter(
+          (engine) => engine.id !== "hyperclova"
+        ),
+      },
+    };
+
+    expect(clientReportDisclosure(currentOnly)).toEqual({
+      isFrozenSnapshot: true,
+      retiredEngineIds: [],
+    });
+  });
 });
