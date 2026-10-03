@@ -1336,8 +1336,8 @@ function VerificationPartialView({
         </h1>
         <p className="mt-4 max-w-2xl text-sm text-zinc-300 leading-relaxed">
           {isKo
-            ? "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
-            : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
+            ? "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
+            : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, and recommendations for this run."}
         </p>
         {result.metrics.errors.length > 0 && (
           <p className="mt-3 max-w-2xl text-amber-200 text-sm leading-relaxed">
@@ -1514,8 +1514,8 @@ function CompletedView({
 
   // 🔴 2026-09-28 — 예전엔 게이트에 걸리면 이 화면 전체를 경고 화면으로 **통째로
   //   교체**했다. 이제는 확정 답변이 하나도 없을 때만 교체하고, 잠정 회차는 원래
-  //   섹션을 그대로 보여주되 점수 옆 경고 띠 + 확인 안 된 파생 수치(놓치는 유입
-  //   금액·개선 처방)만 가린다. 판별 불가 답변은 분모에서 이미 빠져 있다.
+  //   섹션을 그대로 보여주되 점수 옆 경고 띠와 미확정 개선 처방을 보여준다.
+  //   판별 불가 답변은 분모에서 이미 빠져 있다.
   const publicationStatus = auditPublicationStatus(result);
   if (publicationStatus === "withheld") {
     return <VerificationPartialView isKo={isKo} job={job} result={result} />;
@@ -1562,11 +1562,10 @@ function CompletedView({
             기존엔 페이지 맨 아래라 crew 액션과 뒤섞여 "추가 액션이랑 오늘 할일이랑
             무슨 관계냐"는 혼란을 만들었다. 측정 처방 먼저, 심층 분석은 그 다음. */}
         {provisional ? (
-          <ProvisionalMaskNotice isKo={isKo} subject="actions" />
+          <ProvisionalMaskNotice isKo={isKo} />
         ) : (
           <ActionTeaser isKo={isKo} locale={locale} result={result} />
         )}
-
         <NaverBriefingReadOnlyCard
           briefingPrompt={result.briefingPrompt}
           briefingStatus={result.briefingStatus ?? "not_requested"}
@@ -1621,19 +1620,12 @@ function CompletedView({
 /** 잠정 회차에서 확정 판별이 필요한 파생 수치 자리를 가린다(섹션 자체는 유지). */
 function ProvisionalMaskNotice({
   isKo,
-  subject,
 }: {
   isKo: boolean;
-  subject: "impact" | "actions";
 }) {
-  const copy =
-    subject === "impact"
-      ? isKo
-        ? "놓치는 유입 추정 — 이번 회차는 잠정 결과라 금액을 표시하지 않습니다. 판별이 충분한 다음 측정에서 제공됩니다."
-        : "Missed-visit estimate — hidden because this run is provisional. It appears once a run is final."
-      : isKo
-        ? "개선 처방 — 이번 회차는 잠정 결과라 처방을 확정하지 않습니다. 아래 엔진별 답변 원문은 그대로 확인할 수 있습니다."
-        : "Recommendations — withheld because this run is provisional. Engine answers below remain available.";
+  const copy = isKo
+    ? "개선 처방 — 이번 회차는 잠정 결과라 처방을 확정하지 않습니다. 아래 엔진별 답변 원문은 그대로 확인할 수 있습니다."
+    : "Recommendations — withheld because this run is provisional. Engine answers below remain available.";
   return (
     <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-200 text-sm">
       {copy}
@@ -1864,8 +1856,8 @@ function HeroSection({
           role="status"
         >
           {isKo
-            ? `잠정 결과 — 브랜드 판별 불가 ${result.metrics.unverifiedCount ?? 0}건은 제외하고 확정 답변 ${result.metrics.verifiedCount ?? 0}건으로 계산했습니다. 판별 불가가 ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}%를 넘거나 확정 답변이 ${MIN_VERIFIED_ANSWERS}건 미만이면 점수를 확정하지 않습니다. 놓치는 유입 추정·개선 처방·PDF·공유는 확정된 회차에서만 제공합니다.`
-            : `Provisional — ${result.metrics.unverifiedCount ?? 0} unverified answers were excluded; figures use ${result.metrics.verifiedCount ?? 0} verified answers. A run is not final when more than ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}% of answers are unverified or fewer than ${MIN_VERIFIED_ANSWERS} are verified. Missed-visit estimates, recommendations, PDF and sharing are available only for final runs.`}
+            ? `잠정 결과 — 브랜드 판별 불가 ${result.metrics.unverifiedCount ?? 0}건은 제외하고 확정 답변 ${result.metrics.verifiedCount ?? 0}건으로 계산했습니다. 판별 불가가 ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}%를 넘거나 확정 답변이 ${MIN_VERIFIED_ANSWERS}건 미만이면 점수를 확정하지 않습니다. 개선 처방·PDF·공유는 확정된 회차에서만 제공합니다.`
+            : `Provisional — ${result.metrics.unverifiedCount ?? 0} unverified answers were excluded; figures use ${result.metrics.verifiedCount ?? 0} verified answers. A run is not final when more than ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}% of answers are unverified or fewer than ${MIN_VERIFIED_ANSWERS} are verified. Recommendations, PDF and sharing are available only for final runs.`}
         </p>
       ) : (
         (result.metrics.unverifiedCount ?? 0) > 0 && (

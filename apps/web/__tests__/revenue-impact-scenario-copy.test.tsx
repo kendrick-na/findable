@@ -19,8 +19,10 @@ describe("고객 입력 기반 유입 시나리오", () => {
       "utf8"
     );
 
-    expect(resultPage).not.toContain("<RevenueImpactOptIn");
-    expect(resultPage).not.toContain('from "./revenue-impact-card"');
+    expect(resultPage).not.toContain("RevenueImpactOptIn");
+    expect(resultPage).not.toContain("RevenueImpactCard");
+    expect(resultPage).not.toContain("놓치는 유입 추정 —");
+    expect(resultPage).not.toContain("Missed-visit estimates,");
   });
 
   it("기본값 복원에도 고객이 입력한 월 노출 수와 객단가를 보존한다", () => {
