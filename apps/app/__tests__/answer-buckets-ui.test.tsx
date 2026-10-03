@@ -164,7 +164,7 @@ describe("RevenueImpactOptIn — 고객 숫자 없이는 추정하지 않는다"
         sov={26}
       />
     );
-    expect(container.textContent).toContain("직접 입력하면 계산");
+    expect(container.textContent).toContain("가정한 유입 규모를 보고 싶다면");
     expect(container.textContent).not.toContain("세션 / 월");
     const inputs = container.querySelectorAll("input");
     fireEvent.change(inputs[0] as HTMLInputElement, {
