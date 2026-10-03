@@ -8,6 +8,7 @@
  * Usage:
  *   node scripts/generate-audit-action-fixtures.mjs \
  *     --source-dir /tmp/findable-37088 \
+ *     --repository /path/to/findable \
  *     --commit 37088ab82dc98330fb2a6747a4afae292fbcf210 \
  *     --out packages/audit/__fixtures__/action-generators/37088ab.json
  */
@@ -26,10 +27,35 @@ for (let i = 2; i < process.argv.length; i += 1) {
 }
 
 const sourceDir = resolve(args.get("source-dir") ?? "");
+const repository = resolve(args.get("repository") ?? "");
 const commit = args.get("commit");
 const output = resolve(args.get("out") ?? "");
-if (!sourceDir || !commit || !output) {
-  throw new Error("--source-dir, --commit, and --out are required");
+if (!args.get("source-dir") || !args.get("repository") || !commit || !args.get("out")) {
+  throw new Error("--source-dir, --repository, --commit, and --out are required");
+}
+
+const sourceFiles = ["packages/audit/actions.ts", "packages/audit/action-rules.ts"];
+const resolvedCommit = execFileSync(
+  "git",
+  ["-C", repository, "rev-parse", "--verify", `${commit}^{commit}`],
+  { encoding: "utf8" }
+).trim();
+for (const sourceFile of sourceFiles) {
+  const expectedBlob = execFileSync(
+    "git",
+    ["-C", repository, "rev-parse", `${resolvedCommit}:${sourceFile}`],
+    { encoding: "utf8" }
+  ).trim();
+  const actualBlob = execFileSync(
+    "git",
+    ["-C", repository, "hash-object", resolve(sourceDir, sourceFile)],
+    { encoding: "utf8" }
+  ).trim();
+  if (actualBlob !== expectedBlob) {
+    throw new Error(
+      `source file does not match ${resolvedCommit}:${sourceFile}: ${actualBlob} !== ${expectedBlob}`
+    );
+  }
 }
 
 const scenarios = [
@@ -150,8 +176,8 @@ try {
     `${JSON.stringify(
       {
         provenance: {
-          commit,
-          sourceFiles: ["packages/audit/actions.ts", "packages/audit/action-rules.ts"],
+          commit: resolvedCommit,
+          sourceFiles,
           inputSha256: inputHash,
           generatorScript: "scripts/generate-audit-action-fixtures.mjs",
           generatorScriptSha256: scriptHash,

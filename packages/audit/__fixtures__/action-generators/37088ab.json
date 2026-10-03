@@ -7,7 +7,7 @@
     ],
     "inputSha256": "f92186b9d15aa41d9d68e4b4f8e308d316899e4fb921d2efeaa8e50b901956b0",
     "generatorScript": "scripts/generate-audit-action-fixtures.mjs",
-    "generatorScriptSha256": "31637c9e869abb8652176ceadd02eab93c851bbbe2a33caea6ec4bb3d444429e",
+    "generatorScriptSha256": "503b4c40405ca5f1e3977f286bfbd49aa664601aa5061e665e6ed4f021a54f9d",
     "projection": [
       "kind",
       "title",

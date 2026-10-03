@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { filterStoredGeoActions } from "./action-display-filter";
@@ -17,8 +18,30 @@ type Fixture = {
   }>;
 };
 
+type Manifest = {
+  generatorScript: string;
+  generatorScriptSha256: string;
+  inputSha256: string;
+  sourceFiles: string[];
+  commits: Array<{
+    commit: string;
+    fixture: string;
+    sourceBlobs: Record<string, string>;
+  }>;
+};
+
 const fixtureDir = new URL("./__fixtures__/action-generators/", import.meta.url);
 const fixtureNames = ["37088ab.json", "3618c25.json", "0dce32e.json"];
+const manifest = JSON.parse(
+  readFileSync(new URL("manifest.json", fixtureDir), "utf8")
+) as Manifest;
+const generatorScriptSha256 = createHash("sha256")
+  .update(
+    readFileSync(
+      new URL("../../scripts/generate-audit-action-fixtures.mjs", import.meta.url)
+    )
+  )
+  .digest("hex");
 
 function readFixture(name: string): Fixture {
   return JSON.parse(
@@ -28,8 +51,27 @@ function readFixture(name: string): Fixture {
 
 describe("historical audit action generator fixtures", () => {
   it("keep committed provenance and scenario coverage stable", () => {
+    expect(manifest.generatorScript).toBe(
+      "scripts/generate-audit-action-fixtures.mjs"
+    );
+    expect(manifest.generatorScriptSha256).toBe(generatorScriptSha256);
+    expect(manifest.sourceFiles).toEqual([
+      "packages/audit/actions.ts",
+      "packages/audit/action-rules.ts",
+    ]);
+
     for (const name of fixtureNames) {
       const fixture = readFixture(name);
+      const manifestEntry = manifest.commits.find(
+        ({ fixture: fixtureName }) => fixtureName === name
+      );
+      expect(manifestEntry).toBeDefined();
+      expect(fixture.provenance.commit).toBe(manifestEntry?.commit);
+      expect(fixture.provenance.inputSha256).toBe(manifest.inputSha256);
+      expect(fixture.provenance.generatorScript).toBe(manifest.generatorScript);
+      expect(fixture.provenance.generatorScriptSha256).toBe(
+        manifest.generatorScriptSha256
+      );
       expect(fixture.provenance.commit).toMatch(/^[0-9a-f]{40}$/);
       expect(fixture.provenance.sourceFiles).toEqual([
         "packages/audit/actions.ts",
