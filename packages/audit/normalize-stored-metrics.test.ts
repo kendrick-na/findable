@@ -36,6 +36,15 @@ function unverifiedRows(n: number): Record<string, unknown>[] {
 }
 
 describe("saved audit metric normalization", () => {
+  it("refuses current-version metrics-only totals without AI channel evidence", () => {
+    const result = {
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { verifiedCount: 14, unverifiedCount: 0, sov: 50 },
+    };
+    expect(auditPublicationIssue(result)).toBe("brand_verification");
+    expect(publicAuditResult(result).metrics.sov).toBeNull();
+  });
+
   it("withholds scores, cited domains and prescriptions when nothing was adjudicated", () => {
     const result = publicAuditResult({
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
@@ -151,7 +160,7 @@ describe("saved audit metric normalization", () => {
     expect(auditPublicationIssue(ten)).toBeNull();
   });
 
-  it("shows provisional metrics from verified answers but withholds derived advice", () => {
+  it("keeps provisional evidence but withholds its mixed score and derived advice", () => {
     const result = withRecomputedAuditMetrics({
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
       metrics: {},
@@ -164,8 +173,12 @@ describe("saved audit metric normalization", () => {
     expect(isPublishableAuditResult(result)).toBe(false);
     const publicResult = publicAuditResult(result);
     const publicMetrics = publicResult.metrics as Record<string, unknown>;
-    expect(publicMetrics.sov).toBe(Math.round((4 / 15) * 100));
-    expect(publicMetrics.enginesWithMention).toHaveLength(4);
+    expect(publicMetrics.sov).toBeNull();
+    expect(publicMetrics.enginesWithMention).toEqual([]);
+    expect(publicMetrics.answerBuckets).toMatchObject({
+      ai: { adjudicated: 15, unverified: 7 },
+    });
+    expect(publicResult.engineResponses).toHaveLength(22);
     expect(publicResult.geoActions).toEqual([]);
     expect(publicResult.topRecommendations).toEqual([]);
     expect(publicResult.regions).toBeUndefined();

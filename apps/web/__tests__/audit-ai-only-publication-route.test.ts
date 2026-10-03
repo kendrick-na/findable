@@ -1,4 +1,5 @@
 import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
+import { generateAuditPrompts } from "@repo/audit/audit-prompts";
 import { expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -90,4 +91,128 @@ it("withholds PDF and crew output on the real poll route while retaining search 
   expect(body.result.engineResponses).toHaveLength(42);
   expect(body.result.geoActions).toEqual([]);
   expect(body.result.topRecommendations).toEqual([]);
+});
+
+it("does not expose a blended provisional score for eight brand AI answers plus search", async () => {
+  const jobId = "22222222-2222-4222-8222-222222222222";
+  const aiRows = Array.from({ length: 8 }, (_, index) => ({
+    engineId: "chatgpt",
+    promptText: `brand-${index}`,
+    promptKind: "brand",
+    rawResponse: "synthetic AI answer",
+    brandMentioned: false,
+    mentionQuality: "absent",
+    errorMessage: null,
+    isStub: false,
+  }));
+  const searchRows = Array.from({ length: 7 }, (_, index) =>
+    ["naver", "daum"].map((engineId) => ({
+      engineId,
+      promptText: `brand-${index}`,
+      promptKind: "brand",
+      rawResponse: "synthetic search result",
+      brandMentioned: false,
+      mentionQuality: "absent",
+      errorMessage: null,
+      isStub: false,
+    }))
+  ).flat();
+  mocks.findUnique.mockResolvedValue({
+    id: jobId,
+    email: "synthetic@example.test",
+    organizationId: null,
+    status: "completed",
+    domain: "example.test",
+    language: "ko",
+    pdfUrl: "https://example.test/old-report.pdf",
+    result: {
+      brandName: "Synthetic",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 50 },
+      engineResponses: [...aiRows, ...searchRows],
+      geoActions: [{ title: "unsafe advice" }],
+    },
+    crewStatus: "completed",
+    crewResult: { analysts: [{ text: "unsafe" }] },
+    createdAt: new Date("2026-10-03T00:00:00Z"),
+    completedAt: new Date("2026-10-03T00:01:00Z"),
+    errorMessage: null,
+  });
+  mocks.findMany.mockResolvedValue([]);
+
+  const response = await GET(
+    new Request(`https://findable.example/api/audit/${jobId}`) as never,
+    { params: Promise.resolve({ jobId }) }
+  );
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body.pdfUrl).toBeNull();
+  expect(body.crewResult).toBeNull();
+  expect(body.result.metrics.sov).toBeNull();
+  expect(body.result.metrics.answerBuckets.ai.adjudicated).toBe(8);
+  expect(body.result.metrics.answerBuckets.search.adjudicated).toBe(14);
+  expect(body.result.engineResponses).toHaveLength(22);
+  expect(body.result.geoActions).toEqual([]);
+});
+
+it("keeps a fully answered free fallback run publishable on the poll route", async () => {
+  const jobId = "33333333-3333-4333-8333-333333333333";
+  const prompts = generateAuditPrompts({ ko: "샘플", en: "Sample" }, "both");
+  const engineResponses = prompts.flatMap((prompt) => [
+    ...["chatgpt", "claude", "perplexity", "gemini"].map((engineId) => ({
+      engineId,
+      promptText: prompt.text,
+      promptKind: "brand",
+      rawResponse: "synthetic AI answer",
+      brandMentioned: false,
+      mentionQuality: "absent",
+      errorMessage: null,
+      isStub: false,
+    })),
+    ...(prompt.lang === "ko"
+      ? ["naver", "daum"].map((engineId) => ({
+          engineId,
+          promptText: prompt.text,
+          promptKind: "brand",
+          rawResponse: "synthetic search result",
+          brandMentioned: false,
+          mentionQuality: "absent",
+          errorMessage: null,
+          isStub: false,
+        }))
+      : []),
+  ]);
+  mocks.findUnique.mockResolvedValue({
+    id: jobId,
+    email: "synthetic@example.test",
+    organizationId: null,
+    status: "completed",
+    domain: "example.test",
+    language: "both",
+    pdfUrl: null,
+    result: {
+      brandName: "샘플",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 0 },
+      engineResponses,
+    },
+    crewStatus: "not_requested",
+    crewResult: null,
+    createdAt: new Date("2026-10-03T00:00:00Z"),
+    completedAt: new Date("2026-10-03T00:01:00Z"),
+    errorMessage: null,
+  });
+  mocks.findMany.mockResolvedValue([]);
+
+  const response = await GET(
+    new Request(`https://findable.example/api/audit/${jobId}`) as never,
+    { params: Promise.resolve({ jobId }) }
+  );
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body.result.metrics.answerBuckets.ai.adjudicated).toBe(16);
+  expect(body.result.metrics.sov).toBeTypeOf("number");
+  expect(body.result.engineResponses).toHaveLength(20);
 });

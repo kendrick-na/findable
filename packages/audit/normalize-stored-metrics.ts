@@ -132,13 +132,9 @@ function publicationAnswerCounts(
     const ai = summarizeAnswerBuckets(rows).ai;
     return { verified: ai.adjudicated, unverified: ai.unverified };
   }
-  // Metrics-only legacy callers cannot be split by channel. Retain their
-  // existing contract; saved product runs with rows use the path above.
-  const verified = countOf(metrics.verifiedCount);
-  const unverified = countOf(metrics.unverifiedCount);
-  return verified === null || unverified === null
-    ? null
-    : { verified, unverified };
+  // A version stamp and mixed totals are not proof of any brand AI answer.
+  // Current product runs carry rows; metrics-only snapshots fail closed.
+  return null;
 }
 
 /** Brand-question AI verdicts only; search/discovery rows never inflate the label. */
@@ -162,8 +158,8 @@ export function auditPublicationIssue(
     return "brand_verification";
   }
   const counts = publicationAnswerCounts(result);
-  // Metrics without the counters predate verification accounting: we cannot
-  // tell how many answers were adjudicated, so do not guess (fail closed).
+  // Without a trustworthy AI bucket or complete rows, mixed counters cannot
+  // prove how many brand AI answers were adjudicated (fail closed).
   if (counts === null) {
     return "brand_verification";
   }
@@ -184,9 +180,9 @@ export function auditPublicationIssue(
 
 /**
  * published   — authoritative score, prescriptions, PDF, sharing.
- * provisional — score/metrics computed from adjudicated answers only, shown
- *               with a warning; derivatives (prescriptions, missed-visit
- *               estimate, PDF, trends, alerts) are withheld.
+ * provisional — some brand AI answers were adjudicated, but the run is not
+ *               publishable. Evidence remains visible; mixed aggregate score
+ *               and derivatives are withheld.
  * withheld    — nothing adjudicated (legacy run or zero verified answers).
  */
 export type AuditPublicationStatus = "published" | "provisional" | "withheld";
@@ -251,11 +247,9 @@ export function publicAuditResult<T>(input: T): T {
     topRecommendations: [],
     regions: undefined,
   };
-  if (status === "provisional") {
-    // Metrics already exclude unverified answers from the denominator. They
-    // are shown labelled 잠정; advice built on them is not.
-    return { ...result, ...withheldDerivatives } as T;
-  }
+  // Provisional runs can have a brand-AI sample but their aggregate may still
+  // blend search exposure. Never offer that number as a provisional AI score.
+  // Keep answerBuckets and raw rows so AI verdicts and search remain distinct.
   const metrics = isRecord(result.metrics) ? result.metrics : {};
   return {
     ...result,

@@ -83,6 +83,7 @@ import {
 } from "./answer-buckets";
 import { CompetitorBenchmark } from "./competitor-benchmark";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
+import { ProvisionalEvidenceView } from "./provisional-evidence-view";
 import { TruthMirror } from "./truth-mirror";
 
 interface Props {
@@ -1548,7 +1549,33 @@ function CompletedView({
   if (publicationStatus === "withheld") {
     return <VerificationPartialView isKo={isKo} job={job} result={result} />;
   }
-  const provisional = publicationStatus === "provisional";
+  if (publicationStatus === "provisional") {
+    const summary =
+      result.metrics.answerBuckets ??
+      summarizeAnswerBuckets(result.engineResponses, {
+        brandDomain: result.domain,
+      });
+    return (
+      <div className="space-y-8">
+        <MeasuredAtNotice isKo={isKo} job={job} />
+        <BrandNameMismatchNotice
+          check={result.measurementContext?.brandNameCheck}
+          isKo={isKo}
+        />
+        <ProvisionalEvidenceView
+          brandName={result.brandName}
+          discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
+          domain={result.domain}
+          isKo={isKo}
+          rows={coreResponses}
+          summary={summary}
+        />
+      </div>
+    );
+  }
+  // Provisional and withheld runs returned above; the original hero is
+  // published-only, so its blended GEO score never receives a masked value.
+  const provisional = false;
 
   return (
     <div className="mx-auto max-w-5xl">
