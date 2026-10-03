@@ -305,4 +305,28 @@ describe("고객 리포트 공개 고지", () => {
     expect(html).not.toContain("AI 답변 22개 중 14개");
     expect(html).toContain("전체 측정 22건 중 5건");
   });
+
+  it("저장된 표지 subtitle의 AI 엔진/답변 과장도 화면에서 혼합 채널로 교정한다", () => {
+    const data = parseClientReportData(read("knowverse.report.json"));
+    expect(data).not.toBeNull();
+    if (!data) return;
+
+    const withOldSubtitle = {
+      ...data,
+      config: {
+        ...data.config,
+        cover_sub:
+          "ChatGPT·Claude·Gemini 등 AI 7개 엔진, 22개 답변으로 분석한<br/>노우버스 AI 검색 진단 리포트",
+      },
+    };
+    const html = renderToStaticMarkup(
+      createElement(ClientReport, {
+        data: withOldSubtitle,
+        legacySyntheticEngineIds: ["naver"],
+        webUrl: null,
+      })
+    );
+    expect(html).not.toContain("AI 7개 엔진, 22개 답변");
+    expect(html).toContain("AI·검색 등 7개 측정 채널, 전체 측정 22건");
+  });
 });

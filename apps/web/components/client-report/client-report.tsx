@@ -43,6 +43,13 @@ function safeAccuracyHeadline(
   return `전체 측정 ${total}건 중 ${accurate}건이 저장된 판별에서 ${brand}를 정확히 설명했습니다`;
 }
 
+function safeCoverSubtitle(custom: string, engineCount: number, answerCount: number): string {
+  return custom.replace(
+    /AI\s+\d+개\s+엔진,\s+\d+개\s+답변/g,
+    `AI·검색 등 ${engineCount}개 측정 채널, 전체 측정 ${answerCount}건`
+  );
+}
+
 /**
  * config 문구는 운영자가 쓴 짧은 HTML(`<b>`·`<em>`·`<br>`)을 담는다. 템플릿은 그대로 찍지만
  * 여기선 DB 에서 오는 값이라 **허용한 태그만** 살리고 나머지는 글자로 보이게 한다.
@@ -142,6 +149,7 @@ export function ClientReport({
   const H = c.headlines ?? {};
   const officialPct = formatOfficialPct(s);
   const accuracyHeadline = safeAccuracyHeadline(H.p4, s.n, s.ok_n, c.brand);
+  const coverSubtitle = safeCoverSubtitle(c.cover_sub, s.engines_total, s.n);
 
   const noteBase = `측정 Findable ${c.measured_at} · 질문 ${s.nq}종(한국어·영어) × AI·검색 엔진 ${s.engines_total}곳 · 전체 측정 답변 ${s.n}건 · 질문당 1회 측정(시점에 따라 답이 달라질 수 있음). 판별: 답변 원문을 사람이 한 건씩 읽고 공식 사이트 내용과 대조.`;
 
@@ -178,7 +186,7 @@ export function ClientReport({
           AI 검색 진단 리포트 · {c.issued_at.slice(0, 4)}
         </div>
         <h1 {...rich(c.cover_title)} />
-        <div className="csub" {...rich(c.cover_sub)} />
+        <div className="csub" {...rich(coverSubtitle)} />
         <div className="verdict">
           <div className="l">한 줄 결론</div>
           <div className="s">
