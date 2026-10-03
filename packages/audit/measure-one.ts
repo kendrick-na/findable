@@ -28,7 +28,16 @@
 
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
+import {
+  assertCheckpointProvenance,
+  MAX_CHECKPOINT_AGE_MS,
+  nextAuditCheckpointAttempt,
+  readAuditCheckpoint,
+} from "./checkpoint";
 import { runAuditJob } from "./runner";
+import { reconcileStaleAuditJob } from "./stale-job";
+
+const RESUMABLE_TIMEOUT_RE = /FUNCTION_INVOCATION_TIMEOUT|stuck-swept/i;
 
 /** 측정 1건의 결과 — 화면·API 가 그대로 보여준다. */
 export interface MeasureOneResult {
@@ -83,14 +92,25 @@ export async function startMeasureOne(
   });
 
   const running = await database.auditJob.findFirst({
-    select: { id: true },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+      createdAt: true,
+      attemptStartedAt: true,
+      leaseUntil: true,
+    },
     where: {
       domain: brand.domain,
       email: `org:${organizationId}`,
       status: { in: ["queued", "processing"] },
     },
   });
-  if (running) {
+  const runningStatus = running ? await reconcileStaleAuditJob(running) : null;
+  if (
+    running &&
+    (runningStatus === "queued" || runningStatus === "processing")
+  ) {
     return {
       brandId: brand.id,
       brandName: brand.name,
@@ -100,6 +120,109 @@ export async function startMeasureOne(
       skipped: "already_running",
       trackingBefore,
     };
+  }
+
+  // A timed-out attempt keeps its whole-question checkpoint. An explicit
+  // admin re-measure atomically requeues that same Job, preserving the plan.
+  // Never copy a checkpoint from a different brand/org/domain or a non-timeout
+  // failure; those require a new measurement rather than silent reuse.
+  const failed = await database.auditJob.findFirst({
+    orderBy: { createdAt: "desc" },
+    select: { id: true, checkpoint: true, errorMessage: true, createdAt: true },
+    where: {
+      brandId: brand.id,
+      domain: brand.domain,
+      email: `org:${organizationId}`,
+      status: "failed",
+    },
+  });
+  let resumedCheckpoint: ReturnType<typeof readAuditCheckpoint> = null;
+  if (
+    failed?.checkpoint &&
+    Date.now() - failed.createdAt.getTime() <= MAX_CHECKPOINT_AGE_MS &&
+    RESUMABLE_TIMEOUT_RE.test(failed.errorMessage ?? "")
+  ) {
+    try {
+      resumedCheckpoint = readAuditCheckpoint(failed.checkpoint, {
+        brandId: brand.id,
+        domain: brand.domain,
+        language: "both",
+        organizationId,
+      });
+      if (resumedCheckpoint) {
+        assertCheckpointProvenance(resumedCheckpoint, failed.createdAt);
+      }
+    } catch (error) {
+      log.warn("admin.measure_one.checkpoint_ignored", {
+        jobId: failed.id,
+        error: String(error),
+      });
+    }
+  }
+  if (resumedCheckpoint && failed) {
+    const newerCompleted = await database.auditJob.findFirst({
+      select: { id: true },
+      where: {
+        brandId: brand.id,
+        domain: brand.domain,
+        email: `org:${organizationId}`,
+        status: "completed",
+        createdAt: { gt: failed.createdAt },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (newerCompleted) {
+      log.warn("admin.measure_one.old_checkpoint_superseded", {
+        jobId: failed.id,
+        newerJobId: newerCompleted.id,
+      });
+    } else {
+      const nextCheckpoint = nextAuditCheckpointAttempt(resumedCheckpoint);
+      if (!nextCheckpoint) {
+        throw new Error(
+          "Checkpoint retry limit or no-progress stop reached; start a fresh measurement after review"
+        );
+      }
+      const resumedAt = new Date();
+      const requeued = await database.auditJob.updateMany({
+        where: {
+          id: failed.id,
+          createdAt: failed.createdAt,
+          brandId: brand.id,
+          domain: brand.domain,
+          email: `org:${organizationId}`,
+          status: "failed",
+        },
+        data: {
+          status: "queued",
+          errorMessage: null,
+          completedAt: null,
+          attemptStartedAt: resumedAt,
+          leaseToken: null,
+          leaseUntil: null,
+          checkpoint: nextCheckpoint as never,
+        },
+      });
+      if (requeued.count !== 1) {
+        // A concurrent click already claimed the failed Job. Never create a
+        // second paid run from the same checkpoint.
+        throw new Error("Measurement was already resumed; refresh its status");
+      }
+      log.info("admin.measure_one.resumed", {
+        brandId: brand.id,
+        jobId: failed.id,
+        completedQuestions: resumedCheckpoint.responses.length,
+        attempt: nextCheckpoint.retry.attempt,
+      });
+      return {
+        brandId: brand.id,
+        brandName: brand.name,
+        domain: brand.domain,
+        jobId: failed.id,
+        organizationId,
+        trackingBefore,
+      };
+    }
   }
 
   const job = await database.auditJob.create({
@@ -141,13 +264,23 @@ export async function checkMeasureOne(
   trackingNow: number;
 }> {
   const job = await database.auditJob.findUnique({
-    select: { brandId: true, status: true },
+    select: {
+      id: true,
+      email: true,
+      createdAt: true,
+      attemptStartedAt: true,
+      leaseUntil: true,
+      brandId: true,
+      status: true,
+    },
     where: { id: jobId },
   });
   const trackingNow = job?.brandId
     ? await database.tracking.count({ where: { brandId: job.brandId } })
     : trackingBefore;
-  const status = job?.status ?? "unknown";
+  const status = job
+    ? ((await reconcileStaleAuditJob(job)) ?? "unknown")
+    : "unknown";
   return {
     done: status === "completed" || status === "failed",
     status,
@@ -169,6 +302,7 @@ export async function checkMeasureOne(
 export async function measureOneBrand(
   brandId: string
 ): Promise<MeasureOneResult> {
+  const invocationStartedAtMs = Date.now();
   const brand = await database.brand.findUnique({
     where: { id: brandId },
     select: { id: true, name: true, domain: true, organizationId: true },
@@ -232,6 +366,7 @@ export async function measureOneBrand(
   });
 
   await runAuditJob({
+    invocationStartedAtMs,
     brandId: brand.id,
     brandName: brand.name,
     domain: brand.domain,

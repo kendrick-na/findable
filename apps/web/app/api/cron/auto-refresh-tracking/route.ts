@@ -39,6 +39,7 @@ import {
   selectDigestEntries,
 } from "@repo/audit/digest-filter";
 import { buildAuditHistory } from "@repo/audit/history";
+import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
 import { type Plan, planCapabilities } from "@repo/auth/plan";
@@ -276,6 +277,7 @@ async function sendDigests(digestByOrg: DigestByOrg): Promise<number> {
 }
 
 export const GET = async (request: NextRequest) => {
+  const invocationStartedAtMs = Date.now();
   // 🔒 원가가 나가기 전에 먼저 막는다(측정 1건 ~87원).
   const denied = denyIfNotCron(request);
   if (denied) {
@@ -341,6 +343,28 @@ export const GET = async (request: NextRequest) => {
       continue;
     }
 
+    // Cron never auto-resumes a timed-out paid call. Stop retrying a brand
+    // after repeated failed/no-progress runs in the last 24 hours.
+    const recentFailures = await database.auditJob.findMany({
+      where: {
+        email: `org:${item.orgId}`,
+        brandId: item.brandId,
+        domain: item.domain,
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+      select: { status: true, checkpoint: true },
+    });
+    const retryStop = newAuditAttemptBlockReason(recentFailures);
+    if (retryStop) {
+      log.warn("cron.auto-refresh.retry_stopped", {
+        brandId: item.brandId,
+        reason: retryStop,
+      });
+      continue;
+    }
+
     // AuditJob 생성(FK forward-fill) 후 러너 직접 실행(start-tracking 6~7 단계의 cron 판).
     const job = await database.auditJob.create({
       data: {
@@ -354,6 +378,7 @@ export const GET = async (request: NextRequest) => {
     });
     try {
       await runAuditJob({
+        invocationStartedAtMs,
         jobId: job.id,
         domain: item.domain,
         language: "both",
@@ -362,6 +387,14 @@ export const GET = async (request: NextRequest) => {
         organizationId: item.orgId,
         brandId: item.brandId,
       });
+      const finalized = await database.auditJob.findUnique({
+        where: { id: job.id },
+        select: { status: true },
+      });
+      if (finalized?.status !== "completed") {
+        log.warn("cron.auto-refresh.job_not_completed", { jobId: job.id });
+        continue;
+      }
       triggered += 1;
 
       // 알림 후보 수집 — 스위치가 꺼져 있으면 비교 쿼리조차 돌리지 않는다(불필요한 부하 0).

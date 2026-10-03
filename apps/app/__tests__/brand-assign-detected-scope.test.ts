@@ -40,6 +40,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { enginesForAuditPrompt } from "@repo/audit/checkpoint";
 import { inferMarketScope } from "@repo/audit/market-scope";
 import { describe, expect, it } from "vitest";
 
@@ -105,9 +106,15 @@ const RENDERS_SCOPE = /detected\.scope/;
  */
 const RUNNER = join(process.cwd(), "../../packages/audit/runner.ts");
 const runnerCode = stripToCode(readFileSync(RUNNER, "utf8"));
+const checkpointCode = stripToCode(
+  readFileSync(
+    join(process.cwd(), "../../packages/audit/checkpoint.ts"),
+    "utf8"
+  )
+);
 
 /** 엔진 선택 함수의 시그니처 — 인자에 시장값이 끼어들면 잡는다. */
-const ENGINE_PICKER = /const\s+enginesForLang\s*=\s*\(([^)]*)\)/;
+const ENGINE_PICKER = /const\s+enginesForAuditPrompt\s*=\s*\(([^)]*)\)/;
 /** 절대 분모에서 빠지면 안 되는 엔진(👤 2026-08-19). */
 const NEVER_EXCLUDED = ["chatgpt", "claude", "perplexity"] as const;
 
@@ -178,7 +185,7 @@ describe("추정 엔진 계약 — 화면이 기대는 모양", () => {
  */
 describe("측정 엔진 분모 불변 — 시장 선택이 엔진을 줄이지 않는다", () => {
   it("엔진 선택 함수는 **언어만** 받는다 (시장값이 인자로 끼어들지 않는다)", () => {
-    const m = runnerCode.match(ENGINE_PICKER);
+    const m = checkpointCode.match(ENGINE_PICKER);
     // 함수 자체가 사라졌다면 엔진 선택 규칙이 옮겨간 것 → 이 가드를 옮겨 붙여야 한다.
     expect(m).not.toBeNull();
     const params = m?.[1] ?? "";
@@ -191,27 +198,35 @@ describe("측정 엔진 분모 불변 — 시장 선택이 엔진을 줄이지 �
     // 🔴 뮤테이션으로 잡은 함정(N-44): `indexOf("DEFAULT_7")` 부터 **파일 끝까지** 자르면
     //   바로 아래 `GLOBAL_4` 가 같은 이름들을 갖고 있어 **DEFAULT_7 에서 chatgpt 를 지워도
     //   통과**한다. 배열의 **자기 구간만** 잘라서 각각 검사한다.
-    for (const listName of ["DEFAULT_7", "GLOBAL_4"] as const) {
-      const start = runnerCode.indexOf(`const ${listName}`);
+    for (const listName of ["KOREAN_ENGINES", "GLOBAL_ENGINES"] as const) {
+      const start = checkpointCode.indexOf(`const ${listName}`);
       expect(start).toBeGreaterThan(-1);
       // 선언 끝(`] as const`)까지가 그 배열의 구간이다.
-      const end = runnerCode.indexOf("as const", start);
+      const end = checkpointCode.indexOf("as const", start);
       expect(end).toBeGreaterThan(start);
-      const block = runnerCode.slice(start, end);
+      const block = checkpointCode.slice(start, end);
       for (const engine of NEVER_EXCLUDED) {
         expect(block, `${listName} 에 ${engine} 이 없다`).toContain(
           `"${engine}"`
         );
       }
     }
+    for (const lang of ["ko", "en"] as const) {
+      for (const engine of NEVER_EXCLUDED) {
+        expect(enginesForAuditPrompt(lang)).toContain(engine);
+      }
+    }
   });
 
   it("⛔ 엔진 선택이 시장값을 읽지 않는다 (분모를 흔드는 유일한 경로 차단)", () => {
-    // `enginesForLang` 선언부터 호출까지의 구간에 시장값이 등장하면 안 된다.
-    const start = runnerCode.indexOf("const enginesForLang");
-    const end = runnerCode.indexOf("sevenEngineResponses");
+    // The saved engine plan, not marketScope, is the runner's only selector.
+    const start = runnerCode.indexOf("const checkpoint =");
+    const end = runnerCode.indexOf("const sevenEngineResponses");
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     expect(/marketScope/.test(runnerCode.slice(start, end))).toBe(false);
+    expect(checkpointCode.match(ENGINE_PICKER)?.[1]).not.toMatch(
+      /marketScope|region|scope/i
+    );
   });
 });

@@ -11,6 +11,7 @@
 //
 // PDF 생성은 v1.0에서 일단 JSON 결과만 보여주고 PDF는 Day 4에 @vercel/og + Puppeteer.
 
+import { randomUUID } from "node:crypto";
 import {
   englishPromptName,
   officialSiteAliases,
@@ -27,7 +28,7 @@ import {
   MENTION_VERDICT_VERSION,
   verifyMentions,
 } from "@repo/ai/lib/mention-verdict";
-import { database } from "@repo/database";
+import { database, Prisma } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { summarizeVerdicts } from "./action-rules";
@@ -39,6 +40,10 @@ import {
   summarizeAnswerBuckets,
 } from "./answer-buckets";
 import {
+  claimAuditExecution,
+  saveQuestionCheckpoint,
+} from "./audit-execution-lease";
+import {
   classifySavedPromptKind,
   type DiscoverySiteIdentity,
   generateAuditPrompts,
@@ -48,6 +53,11 @@ import {
 } from "./audit-prompts";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
 import { runBriefingForAuditJob } from "./briefing-runner";
+import {
+  assertCheckpointProvenance,
+  makeAuditCheckpoint,
+  readAuditCheckpoint,
+} from "./checkpoint";
 import {
   type KnownCompetitor,
   parseKnownCompetitors,
@@ -62,7 +72,6 @@ import {
   REGION_LABEL,
 } from "./market-scope";
 import {
-  assertPromptExecutionStarted,
   countMeasurementCoverage,
   isMeasurementFailure,
 } from "./measurement-coverage";
@@ -73,12 +82,32 @@ import {
 } from "./official-site-identity";
 import { generateAuditPdf } from "./pdf-generator";
 import type { AuditPdfData } from "./pdf-template";
+import type { AuditPostprocessing } from "./postprocessing";
 import { RUNNER_PROMPT_LIMIT } from "./prompt-limits";
-import { queryPromptsSequentially } from "./prompt-query-scheduler";
 import { pickRotatingPrompts } from "./prompt-rotation";
-import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
+import { runCheckpointedQuestions } from "./run-checkpointed-questions";
+import { createRunTiming } from "./run-timing";
+import {
+  persistAuditTracking,
+  tagCoreResponses,
+  type TaggedEngineResponse,
+} from "./tracking";
+import { commitAuditResult } from "./commit-audit-result";
+import {
+  AUDIT_BRIEFING_WORST_CASE_MS,
+  AUDIT_PDF_WORST_CASE_MS,
+  AUDIT_POST_PROCESSING_RESERVE_MS,
+  AUDIT_RUN_TIME_BUDGET_MS,
+  createAuditRunBudget,
+} from "./run-budget";
+
+// A derived-stage write must not consume the remaining invocation deadline.
+// The database operation may still settle later; callers treat that outcome as
+// unknown and never attempt a compensating delete.
+const AUDIT_DERIVED_WRITE_TIMEOUT_MS = 5_000;
 
 export interface AuditRunInput {
+  invocationStartedAtMs?: number;
   brandId?: string;
   brandName?: string;
   brandVariants?: string[];
@@ -100,12 +129,10 @@ export interface AuditRunInput {
   organizationId?: string;
 }
 
-const AUDIT_PDF_TIMEOUT_MS = 30_000;
-
 async function awaitWithTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
-  onTimeout: () => void
+  onTimeout?: () => void
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -113,9 +140,10 @@ async function awaitWithTimeout<T>(
       promise,
       new Promise<T>((_, reject) => {
         timer = setTimeout(() => {
-          onTimeout();
-          reject(new Error("Audit PDF generation timed out"));
+          onTimeout?.();
+          reject(new Error(`Timed out after ${timeoutMs}ms`));
         }, timeoutMs);
+        timer.unref?.();
       }),
     ]);
   } finally {
@@ -380,34 +408,102 @@ function buildRegionBreakdown(
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Audit orchestration combines engine, storage, PDF and briefing lifecycle guards.
 export async function runAuditJob(input: AuditRunInput): Promise<void> {
+  const leaseToken = randomUUID();
+  const budget = createAuditRunBudget(input.invocationStartedAtMs);
+  const timing = createRunTiming(input.jobId, log.info);
+  const finishJob = timing.start("job");
+  const timed = async <T>(
+    stage: Parameters<typeof timing.start>[0],
+    action: () => Promise<T>,
+    detail?: Parameters<typeof timing.start>[1]
+  ): Promise<T> => {
+    const finish = timing.start(stage, detail);
+    try {
+      const value = await action();
+      finish();
+      return value;
+    } catch (error) {
+      finish("rejected");
+      throw error;
+    }
+  };
   try {
-    await database.auditJob.update({
+    const claimedToken = await timed("mark_processing", () =>
+      claimAuditExecution(input.jobId, new Date(), leaseToken)
+    );
+    if (!claimedToken) {
+      log.warn("audit.job.claim_skipped", { jobId: input.jobId });
+      finishJob();
+      return;
+    }
+    const savedJob = await database.auditJob.findUnique({
       where: { id: input.jobId },
-      data: { status: "processing" },
+      select: {
+        checkpoint: true,
+        createdAt: true,
+        brandId: true,
+        domain: true,
+        email: true,
+      },
     });
+    const savedCheckpoint = readAuditCheckpoint(savedJob?.checkpoint, input);
+    if (!savedJob) {
+      throw new Error("Audit job disappeared after claim");
+    }
+    if (savedCheckpoint) {
+      assertCheckpointProvenance(savedCheckpoint, savedJob.createdAt);
+      const newerCompleted = await database.auditJob.findFirst({
+        select: { id: true },
+        where: {
+          brandId: savedJob.brandId,
+          domain: savedJob.domain,
+          email: savedJob.email,
+          status: "completed",
+          createdAt: { gt: savedJob.createdAt },
+        },
+      });
+      if (newerCompleted) {
+        throw new Error(
+          "Checkpoint superseded by a newer completed measurement"
+        );
+      }
+    }
 
     // 브랜드명 해석 (P0-b): 폼입력→정적사전→LLM→영문 폴백 체인으로 한/영 변형 확보.
     // 도메인만 입력돼도 한국어 답변의 "설화수"를 판정이 잡도록 variants에 한글명 포함.
     // 가입 단계의 저장 별칭과 도메인 기반 추론 별칭을 합친다. 전자만 쓰면 빈/불완전한
     // 저장값이 후자를 덮어쓰고, 후자만 쓰면 고객이 등록한 공식 영문·한글 표기를 잃는다.
-    const identity = await resolveBrandIdentity(input.domain, input.brandName);
-    const brandName = identity.brandName;
+    const identity = savedCheckpoint
+      ? null
+      : await timed("brand_identity", () =>
+          resolveBrandIdentity(input.domain, input.brandName)
+        );
+    const brandName = savedCheckpoint?.context.brandName ?? identity?.brandName;
+    if (!brandName) {
+      throw new Error("Audit brand identity is missing");
+    }
 
     // 응답 생성 모델에는 주입하지 않는다(실제 AI 인지도를 재야 하므로). 대신 판정기가
     // 동명의 다른 대상을 확정 언급으로 세지 않도록 공식 홈페이지의 제목·설명·H1을
     // 한 번만 읽어 엔티티 기준 사실로 고정한다. 근거를 확보하지 못하면 AI 호출 전에
     // 중단한다. 수치는 없는 편이 다른 엔티티를 자사 언급으로 공개하는 것보다 정확하다.
-    const resolvedOfficialSiteIdentity = await resolveOfficialSiteIdentity(
-      input.domain
-    );
+    const resolvedOfficialSiteIdentity = savedCheckpoint
+      ? null
+      : await timed("official_site", () =>
+          resolveOfficialSiteIdentity(input.domain)
+        );
     const officialSiteIdentity =
-      resolvedOfficialSiteIdentity ?? registeredBrandIdentityFallback(input);
+      savedCheckpoint?.context.officialSiteIdentity ??
+      resolvedOfficialSiteIdentity ??
+      registeredBrandIdentityFallback(input);
     if (!officialSiteIdentity) {
       throw new Error(
         "공식 사이트에서 브랜드 식별 근거(title, description, H1)를 확인하지 못했습니다. 사이트 접근 설정을 확인한 뒤 다시 측정해 주세요."
       );
     }
-    const identityGrounded = Boolean(resolvedOfficialSiteIdentity);
+    const identityGrounded =
+      savedCheckpoint?.context.identityGrounded ??
+      Boolean(resolvedOfficialSiteIdentity);
     if (!identityGrounded) {
       log.warn("audit.official_site_identity.registration_fallback", {
         brandId: input.brandId,
@@ -419,10 +515,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   별칭에 더한다(2026-09-28). knowverse.net 은 사이트명이 "KNOWVERSE" 인데
     //   별칭이 비어 영어 답변의 "KNOWVERSE" 가 언급 후보조차 되지 못했다.
     //   도메인 이름과 글자가 같은 표기만 채택한다(추측·번역 없음).
-    const brandVariants = [
+    const brandVariants = savedCheckpoint?.context.brandVariants ?? [
       ...new Set(
         [
-          ...identity.brandVariants,
+          ...(identity?.brandVariants ?? []),
           ...(input.brandVariants ?? []),
           ...officialSiteAliases(input.domain, officialSiteIdentity),
         ].filter((name) => name.toLowerCase() !== brandName.toLowerCase())
@@ -438,20 +534,38 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
      *
      * ⚠️ 무료 진단은 `brandId` 가 없다 → 조회 없이 빈 배열(기존 동작 그대로 · 회귀 0).
      */
-    const registeredCompetitors = await resolveRegisteredCompetitors(
-      input.brandId
+    const registeredCompetitors = await timed("competitors", () =>
+      resolveRegisteredCompetitors(input.brandId)
     );
 
     // 프롬프트 소스: 마법사가 저장한 프롬프트가 있으면 우선(백로그 1, 2026-07-30),
     //   없으면 기존 고정 4개 폴백. org 브랜드(brandId)일 때만 조회 — 무료 email 진단은
     //   brandId가 없어 항상 폴백(회귀 0). 원가·429 보호로 상한(RUNNER_PROMPT_LIMIT)까지만.
-    const prompts = await resolveRunPrompts(
-      input.brandId,
-      { ko: brandName, en: englishPromptName(brandName, brandVariants) },
-      input.language,
-      officialSiteIdentity,
-      brandVariants
-    );
+    const prompts =
+      savedCheckpoint?.prompts ??
+      (await timed("resolve_prompts", () =>
+        resolveRunPrompts(
+          input.brandId,
+          { ko: brandName, en: englishPromptName(brandName, brandVariants) },
+          input.language,
+          officialSiteIdentity,
+          brandVariants
+        )
+      ));
+    if (prompts.length === 0) {
+      throw new Error("Audit run has no prompts");
+    }
+    const checkpoint =
+      savedCheckpoint ??
+      makeAuditCheckpoint(
+        input,
+        { brandName, brandVariants, identityGrounded, officialSiteIdentity },
+        prompts,
+        savedJob.createdAt.toISOString()
+      );
+    if (!savedCheckpoint) {
+      await saveQuestionCheckpoint(input.jobId, leaseToken, checkpoint);
+    }
 
     // D-058 (2026-05-09) 분리 운영 구조:
     //   - 광고주 audit: 7 엔진 × 4 프롬프트 + AI 브리핑 1 프롬프트만 (베타)
@@ -462,18 +576,6 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // ⛔ 2026-09-29: hyperclova 제외(클로바X·Cue: 서비스 종료 2026-04-09 · 👤 대표 결정).
     //   naver·daum 은 AI 답이 아니라 **검색 노출**로 잰다(answer-buckets: search 그룹).
     //   이름은 옛 호출부 호환으로 DEFAULT_7 을 유지한다(실제 6개).
-    const DEFAULT_7 = [
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "gemini",
-      "naver",
-      "daum",
-    ] as const;
-
-    // 영어 질의용 — 한국 검색엔진(naver·daum)을 뺀다.
-    const GLOBAL_4 = ["chatgpt", "claude", "perplexity", "gemini"] as const;
-
     // ⚠️ F5 수정(2026-08-03) — 프롬프트 언어에 맞는 엔진에만 보낸다.
     //   기존엔 언어와 무관하게 7 엔진 전부에 보내서, **영어 질문이 네이버·다음 검색창에
     //   그대로 들어갔다.** 실측(Tracking): daum 은 한국어 질문 71% 언급인데
@@ -482,47 +584,74 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //
     //   한국어 질문 → 7 엔진 전부(한국인은 ChatGPT 도 한국어로 쓴다).
     //   영어 질문   → 글로벌 4 엔진만(한국 검색엔진에 영어 질의는 무의미).
-    const enginesForLang = (lang: "ko" | "en") =>
-      lang === "en" ? GLOBAL_4 : DEFAULT_7;
-
-    const sevenEngineResponses = await queryPromptsSequentially(
-      prompts,
-      async (p) =>
-        queryAllEngines(
-          {
-            prompt: p.text,
-            language: p.lang,
-            brandName,
-            brandVariants,
-            // 🔴 N-47 — 자사 도메인을 엔진에 넘겨 **본문 URL 폴백에서 자사를 제외**한다.
-            //   안 넘기면 AI 가 답변에 적은 자기 홈페이지가 「인용 출처」로 잡힌다.
-            brandDomain: input.domain,
-          },
-          enginesForLang(p.lang) as unknown as Parameters<
-            typeof queryAllEngines
-          >[1]
-        )
+    const engineFinishers = new Map<
+      string,
+      (status?: "fulfilled" | "rejected") => void
+    >();
+    const sevenEngineResponses = await timed(
+      "prompt_query",
+      () =>
+        runCheckpointedQuestions(
+          checkpoint,
+          async (promptIndex) =>
+            timed(
+              "prompt_query",
+              () =>
+                queryAllEngines(
+                  {
+                    prompt: prompts[promptIndex].text,
+                    language: prompts[promptIndex].lang,
+                    brandName,
+                    brandVariants,
+                    // 🔴 N-47 — 자사 도메인을 엔진에 넘겨 **본문 URL 폴백에서 자사를 제외**한다.
+                    //   안 넘기면 AI 가 답변에 적은 자기 홈페이지가 「인용 출처」로 잡힌다.
+                    brandDomain: input.domain,
+                  },
+                  checkpoint.enginePlan[promptIndex] as unknown as Parameters<
+                    typeof queryAllEngines
+                  >[1],
+                  ({ engineId, phase, status }) => {
+                    const key = `${promptIndex}:${engineId}`;
+                    if (phase === "started") {
+                      engineFinishers.set(
+                        key,
+                        timing.start("engine_query", { promptIndex, engineId })
+                      );
+                    } else {
+                      engineFinishers.get(key)?.(status);
+                      engineFinishers.delete(key);
+                    }
+                  }
+                ),
+              {
+                promptIndex,
+                engineCount: checkpoint.enginePlan[promptIndex].length,
+              }
+            ),
+          async (updatedCheckpoint) => {
+            await saveQuestionCheckpoint(
+              input.jobId,
+              leaseToken,
+              updatedCheckpoint
+            );
+            log.info("audit.question.checkpoint_saved", {
+              jobId: input.jobId,
+              completedQuestions: updatedCheckpoint.responses.length,
+              totalQuestions: prompts.length,
+            });
+          }
+        ),
+      { promptCount: prompts.length }
     );
-    // A future time-budget stop may return zero batches before an engine is
-    // attempted. Do not commit that empty run as a completed audit.
-    assertPromptExecutionStarted(sevenEngineResponses.length);
 
     // 20번(dual-write): flat() 하면 각 응답이 어느 프롬프트에서 나왔는지 소실된다.
     //   Tracking은 promptId(=프롬프트별)로 정규화 저장하므로, flat 이전에 프롬프트 원문/언어를
     //   각 응답에 태깅해 둔다. sevenEngineResponses[i]는 prompts[i]에 1:1 대응.
     //   ⚠️ 태깅은 **검증 전 원본** 순서를 기준으로 만들고, 아래에서 검증 결과를 덮어쓴다
     //   (flat 과 tagged 가 같은 순서를 공유해야 Tracking 에도 교정된 판정이 들어간다).
-    const tagged: TaggedEngineResponse[] = sevenEngineResponses.flatMap(
-      (responses, i) => {
-        const p = prompts[i];
-        return responses.map((r) => ({
-          ...r,
-          promptIndex: i,
-          promptText: p?.text ?? "",
-          promptLang: p?.lang ?? "ko",
-          promptKind: p?.kind ?? "brand",
-        }));
-      }
+    const tagged: TaggedEngineResponse[] = tagCoreResponses(
+      sevenEngineResponses,
+      prompts
     );
 
     // D-060 (2026-05-10) → D-2026-07-22 AI 브리핑 완전 분리 (on-demand 버튼):
@@ -536,12 +665,38 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   되물음("무슨 의미의 기아를 원하시나요?"). 상세=docs/_적용/측정정확도_전면진단_2026-07-31.md
     //   ⚠️ 모호한 경우에만 LLM 판정 → 명확한 브랜드는 추가 원가 0.
     const rawFlat = sevenEngineResponses.flat();
-    const flat = await verifyMentions(rawFlat, {
-      brandName,
-      brandVariants,
-      brandDomain: input.domain,
-      industry: input.industry ?? undefined,
-      officialSite: officialSiteIdentity,
+    const chunkFinishers = new Map<
+      number,
+      (status?: "fulfilled" | "rejected") => void
+    >();
+    const flat = await timed(
+      "verify_mentions",
+      () =>
+        verifyMentions(
+          rawFlat,
+          {
+            brandName,
+            brandVariants,
+            brandDomain: input.domain,
+            industry: input.industry ?? undefined,
+            officialSite: officialSiteIdentity,
+          },
+          ({ chunkIndex, responseCount, phase }) => {
+            if (phase === "started") {
+              chunkFinishers.set(
+                chunkIndex,
+                timing.start("verdict_chunk", { chunkIndex, responseCount })
+              );
+            } else {
+              chunkFinishers.get(chunkIndex)?.();
+              chunkFinishers.delete(chunkIndex);
+            }
+          }
+        ),
+      { responseCount: rawFlat.length }
+    );
+    const finishAggregate = timing.start("aggregate", {
+      responseCount: flat.length,
     });
     const measurementCoverage = countMeasurementCoverage(flat);
     if (isMeasurementFailure(measurementCoverage)) {
@@ -622,7 +777,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       const slice = flat.slice(offset, offset + width);
       offset += width;
       const usable = slice.filter(
-        (r) => !(r.errorMessage || r.isStub) && !isSearchResponse(r)
+        (r) => !(r.errorMessage || r.isStub || isSearchResponse(r))
       );
       return {
         text: p.text,
@@ -685,6 +840,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       brandName,
       domain: input.domain,
       measurementContext: {
+        resume: {
+          originCreatedAt: checkpoint.originCreatedAt,
+          attempt: checkpoint.retry.attempt,
+        },
         officialSiteIdentity,
         // A customer-confirmed organisation brand may run when its public site
         // serves a bot challenge/empty shell to our serverless fetcher. Do not
@@ -714,8 +873,13 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           brandVariants
         ).mentioned,
         promptText: tagged[index]?.promptText,
-        promptIndex: tagged[index]?.promptIndex,
         promptLang: tagged[index]?.promptLang,
+        promptIndex: tagged[index]?.promptIndex,
+        // Tracking reconciliation must use the original provider inputs, not
+        // the display-only `sov` value derived after entity adjudication.
+        shareOfVoice: r.shareOfVoice,
+        usage: r.usage,
+        trackingInputCaptured: true,
         // 이름 없는 질문인지(2026-09-29) — 화면이 「이름 없이 물었을 때 추천됨」을 따로 센다.
         promptKind: tagged[index]?.promptKind ?? "brand",
         // 답변 4분류(+판정 보류) — 저장해 두면 화면·API 가 같은 판정을 읽는다.
@@ -818,19 +982,104 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // 결과와 시계열을 PDF보다 먼저 커밋한다. PDF의 Chromium 시작·폰트 대기·Blob
     // 업로드는 부가 작업인데, 이를 앞에 두면 300초 함수 상한에서 이미 수집한 AI
     // 응답까지 통째로 잃고 job이 영원히 processing에 남는다.
+    finishAggregate();
     const completedAt = new Date();
-    await database.auditJob.update({
-      where: { id: input.jobId },
-      data: {
-        status: "completed",
-        result: result as never,
-        // A retry replaces the result before PDF generation. Clear any PDF
-        // from the previous attempt so a failed/skipped render cannot leave
-        // an unrelated artifact linked to the new result.
-        pdfUrl: null,
-        completedAt,
-      },
-    });
+    const dualWriteEnabled = keys().AUDIT_DUAL_WRITE_ENABLED;
+    const trackingExpected = Boolean(
+      dualWriteEnabled && input.organizationId && input.brandId
+    );
+    const pdfExpected = isPublishableAuditResult(result);
+    const briefingExpected = Boolean(
+      keys().AUDIT_BRIEFING_IN_MAIN_ENABLED &&
+        input.organizationId &&
+        input.brandId
+    );
+    let postprocessing: AuditPostprocessing = {
+      tracking: trackingExpected ? "pending" : "skipped",
+      pdf: pdfExpected ? "pending" : "skipped",
+      briefing: briefingExpected ? "pending" : "skipped",
+    };
+    const updatePostprocessing = async (
+      stage: keyof AuditPostprocessing,
+      status: AuditPostprocessing[keyof AuditPostprocessing]
+    ): Promise<boolean> => {
+      const previousStatus = postprocessing[stage];
+      postprocessing = { ...postprocessing, [stage]: status };
+      try {
+        const write = await awaitWithTimeout(
+          database.$executeRawUnsafe(
+            `UPDATE "AuditJob"
+             SET "postprocessing" = jsonb_set(
+               COALESCE("postprocessing", '{}'::jsonb),
+               ARRAY[$1::text],
+               to_jsonb($2::text),
+               true
+             )
+             WHERE "id" = $3
+               AND "status" = 'completed'
+               AND COALESCE("postprocessing"->>$1, $4) = $4`,
+            stage,
+            status,
+            input.jobId,
+            previousStatus
+          ),
+          AUDIT_DERIVED_WRITE_TIMEOUT_MS
+        );
+        if (write !== 1) {
+          log.warn("audit.postprocessing.not_committed", {
+            jobId: input.jobId,
+            stage,
+            status,
+            count: write,
+          });
+          return false;
+        }
+        return true;
+      } catch (error) {
+        log.warn("audit.postprocessing.commit_unknown", {
+          jobId: input.jobId,
+          stage,
+          status,
+          error: parseError(error),
+        });
+        return false;
+      }
+    };
+    let completionCommitTimedOut = false;
+    let committed: boolean;
+    try {
+      committed = await timed("db_commit", () =>
+        awaitWithTimeout(
+          commitAuditResult(
+            database as never,
+            input.jobId,
+            leaseToken,
+            result,
+            postprocessing,
+            completedAt
+          ),
+          Math.min(
+            AUDIT_RUN_TIME_BUDGET_MS,
+            Math.max(1, budget.stopStartingAtMs - Date.now())
+          ),
+          () => {
+            completionCommitTimedOut = true;
+          }
+        )
+      );
+    } catch (commitError) {
+      if (!completionCommitTimedOut) throw commitError;
+      log.warn("audit.job.commit_unknown", {
+        jobId: input.jobId,
+        error: parseError(commitError),
+      });
+      return;
+    }
+    if (!committed) {
+      log.warn("audit.job.commit_not_committed", { jobId: input.jobId });
+      return;
+    }
+    finishJob();
     // 원가계기(유닛이코노믹스): 진단 1건 실비용을 로그로도 실측 축적(result.cost 와 동일).
     log.info("audit.job.completed", {
       jobId: input.jobId,
@@ -853,15 +1102,28 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   24회분 시계열이 사라진 것을 **3주 동안 아무도 몰랐다**(측정은 completed,
     //   화면도 정상이라 볼 단서가 없었다). 로그 한 줄이 있었으면 첫날 잡혔다.
     //   → 이제 모든 실측정이 스스로 검증한다: 이 줄이 안 보이면 적재가 안 된 것이다.
-    const dualWriteEnabled = keys().AUDIT_DUAL_WRITE_ENABLED;
-    if (dualWriteEnabled && input.organizationId && input.brandId) {
-      await persistAuditTracking({
-        organizationId: input.organizationId,
-        brandId: input.brandId,
-        // 이름 없는 질문의 응답은 시계열에 넣지 않는다(위 brandFlat 주석).
-        tagged: tagged.filter((row) => !isDiscoveryAnswer(row)),
-        completedAt,
-      });
+    if (trackingExpected && input.organizationId && input.brandId) {
+      try {
+        const trackingStatus = await awaitWithTimeout(
+          persistAuditTracking({
+            auditJobId: input.jobId,
+            organizationId: input.organizationId,
+            brandId: input.brandId,
+            trackingAxis: "core",
+            // 이름 없는 질문의 응답은 시계열에 넣지 않는다(위 brandFlat 주석).
+            tagged: tagged.filter((row) => !isDiscoveryAnswer(row)),
+            completedAt,
+          }),
+          AUDIT_DERIVED_WRITE_TIMEOUT_MS
+        );
+        await updatePostprocessing("tracking", trackingStatus);
+      } catch (trackingError) {
+        log.warn("audit.tracking.commit_unknown", {
+          jobId: input.jobId,
+          error: parseError(trackingError),
+        });
+        await updatePostprocessing("tracking", "unknown");
+      }
     } else {
       log.warn("audit.tracking.skipped", {
         jobId: input.jobId,
@@ -875,9 +1137,14 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
 
     // PDF 생성 — 핵심 결과와 Tracking을 저장한 뒤 실행하는 best-effort 부가 산출물.
     // 이 단계에서 함수 시간이 끝나도 고객은 측정 결과를 즉시 볼 수 있다.
-    if (isPublishableAuditResult(result)) {
+    if (pdfExpected && budget.hasBudgetFor(AUDIT_PDF_WORST_CASE_MS)) {
+      const pdfController = new AbortController();
+      const abortPdf = () =>
+        pdfController.abort(
+          budget.signal.reason ?? new DOMException("PDF budget exceeded", "AbortError")
+        );
+      budget.signal.addEventListener("abort", abortPdf, { once: true });
       try {
-        const pdfController = new AbortController();
         const pdfData: AuditPdfData = {
           ...result,
           language: input.language,
@@ -885,28 +1152,36 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         };
         const pdf = await awaitWithTimeout(
           generateAuditPdf(input.jobId, pdfData, pdfController.signal),
-          AUDIT_PDF_TIMEOUT_MS,
-          () =>
-            pdfController.abort(
-              new DOMException("Audit PDF generation timed out", "AbortError")
-            )
+          AUDIT_PDF_WORST_CASE_MS,
+          abortPdf
         );
-        await database.auditJob.update({
-          where: { id: input.jobId },
-          data: { pdfUrl: pdf.pdfUrl },
-        });
+        // The blob already exists if this write times out. Never delete it: the
+        // outcome is ambiguous and a later reconciliation can safely adopt it.
+        await awaitWithTimeout(
+          database.auditJob.update({
+            where: { id: input.jobId },
+            data: { pdfUrl: pdf.pdfUrl },
+          }),
+          Math.max(1, Math.min(AUDIT_POST_PROCESSING_RESERVE_MS, budget.stopStartingAtMs - Date.now()))
+        );
         log.info("audit.pdf.generated", {
           jobId: input.jobId,
           sizeKB: Math.round(pdf.pdfSize / 1024),
         });
+        await updatePostprocessing("pdf", "completed");
       } catch (pdfError) {
         log.error("audit.pdf.failed", {
           jobId: input.jobId,
           error: parseError(pdfError),
         });
+        await updatePostprocessing("pdf", "failed");
+      } finally {
+        budget.signal.removeEventListener("abort", abortPdf);
       }
     } else {
-      log.warn("audit.pdf.skipped_unverified", { jobId: input.jobId });
+      const pdfStatus = pdfExpected ? "deferred" : "skipped";
+      log.warn("audit.pdf.skipped_unverified", { jobId: input.jobId, status: pdfStatus });
+      await updatePostprocessing("pdf", pdfStatus);
     }
 
     /**
@@ -931,21 +1206,38 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
      *
      * ⚠️ 크레딧이 마르면 402 로 즉시 중단되고(N-39) 화면은 「측정하지 못했어요」로
      *   정직하게 말하며(N-45), 일일 다이제스트가 👤 에게 알린다(B-6).
-     */
-    if (
-      keys().AUDIT_BRIEFING_IN_MAIN_ENABLED &&
-      input.organizationId &&
-      input.brandId
-    ) {
+    */
+    if (briefingExpected && budget.hasBudgetFor(AUDIT_BRIEFING_WORST_CASE_MS)) {
+      const briefingController = new AbortController();
+      const abortBriefing = () =>
+        briefingController.abort(
+          budget.signal.reason ??
+            new DOMException("Briefing budget exceeded", "AbortError")
+        );
+      budget.signal.addEventListener("abort", abortBriefing, { once: true });
       try {
-        await runBriefingForAuditJob({ jobId: input.jobId });
+        const briefingStatus = await awaitWithTimeout(
+          runBriefingForAuditJob({
+            jobId: input.jobId,
+            signal: briefingController.signal,
+          }),
+          AUDIT_BRIEFING_WORST_CASE_MS,
+          abortBriefing
+        );
+        await updatePostprocessing("briefing", briefingStatus);
       } catch (briefingError) {
         // 여기서 throw 하면 **이미 완료된 측정**이 실패로 뒤집힌다.
         log.warn("audit.briefing.main_flow_failed", {
           jobId: input.jobId,
           error: parseError(briefingError),
         });
+        await updatePostprocessing("briefing", "failed");
+      } finally {
+        budget.signal.removeEventListener("abort", abortBriefing);
       }
+    } else if (briefingExpected) {
+      log.warn("audit.briefing.deferred_budget", { jobId: input.jobId });
+      await updatePostprocessing("briefing", "deferred");
     }
 
     // CrewAI 4 에이전트 심층분석은 여기서 자동 실행하지 않는다 (원가전략, 2026-07-27).
@@ -956,18 +1248,23 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   (POST /api/audit/[jobId]/crew → runCrewForAuditJob). crewStatus는 기본값
     //   "not_requested"로 남아 UI가 트리거 카드를 표시한다.
   } catch (error) {
+    finishJob("rejected");
     log.error("audit.job.failed", {
       jobId: input.jobId,
       error: parseError(error),
     });
-    await database.auditJob.update({
-      where: { id: input.jobId },
+    await database.auditJob.updateMany({
+      where: { id: input.jobId, status: "processing", leaseToken },
       data: {
         status: "failed",
         errorMessage: error instanceof Error ? error.message : String(error),
         completedAt: new Date(),
+        leaseToken: null,
+        leaseUntil: null,
       },
     });
+  } finally {
+    budget.dispose();
   }
 }
 

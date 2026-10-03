@@ -80,16 +80,15 @@ describe("B-4 본류 편입 — 붙이는 방식이 안전한가", () => {
     //   무료 진단은 누구나 돌릴 수 있어 크레딧 소진 예측이 무너진다.
     // ⚠️ 호출 앞 N자를 훑으면 **다른 곳의 `input.organizationId`** 가 통과시킨다
     //   (첫 작성에서 실제로 새어나갔다) → 브리핑을 감싸는 **그 `if` 조건문**만 본다.
-    expect(
-      briefingGuardCondition(),
-      "브리핑이 org·brand 없이도 돈다 — 무료 진단까지 크레딧을 쓴다"
-    ).toMatch(/input\.organizationId[\s\S]*input\.brandId/);
+    expect(briefingGuardCondition()).toContain("briefingExpected");
+    expect(RUNNER).toMatch(
+      /const briefingExpected = Boolean\([\s\S]*?AUDIT_BRIEFING_IN_MAIN_ENABLED[\s\S]*?input\.organizationId[\s\S]*?input\.brandId[\s\S]*?\);/
+    );
   });
 
   it("🔴 **플래그로 끌 수 있다** · 기본 off (크레딧은 되돌릴 수 없다)", () => {
-    expect(briefingGuardCondition()).toContain(
-      "AUDIT_BRIEFING_IN_MAIN_ENABLED"
-    );
+    expect(briefingGuardCondition()).toContain("briefingExpected");
+    expect(RUNNER).toContain("keys().AUDIT_BRIEFING_IN_MAIN_ENABLED");
     // 기본 off: 값이 정확히 "true" 일 때만 켜진다(미설정·"false"·"1" 모두 off).
     const keyAt = KEYS.indexOf("AUDIT_BRIEFING_IN_MAIN_ENABLED");
     expect(keyAt).toBeGreaterThan(-1);

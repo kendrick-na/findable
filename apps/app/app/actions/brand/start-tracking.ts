@@ -1,9 +1,10 @@
 "use server";
 
+import { auditLanguageForMarketScope } from "@repo/audit/market-scope";
+import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { isUsableRun } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
-import { AUDIT_JOB_STALE_AFTER_MS } from "@repo/audit/stale-job";
-import { auditLanguageForMarketScope } from "@repo/audit/market-scope";
+import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { hasPlan } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth, clerkClient } from "@repo/auth/server";
@@ -40,7 +41,6 @@ import { isValidDomain, normalizeDomain } from "@/lib/domain";
 //   **동기 함수를 export 할 수 없다** — 하면 tsc·lint 는 통과하고 빌드에서만 터진다).
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const STALE_THRESHOLD_MS = AUDIT_JOB_STALE_AFTER_MS;
 
 /** DB JSON 필드에 저장된 별칭만 안전하게 러너 입력으로 넘긴다. */
 const stringList = (value: unknown): string[] =>
@@ -171,6 +171,26 @@ async function checkRemeasurePolicy(
   orgId: string,
   domain: string
 ): Promise<StartTrackingResult | null> {
+  const recentFailures = await database.auditJob.findMany({
+    where: {
+      email: `org:${orgId}`,
+      domain,
+      createdAt: { gte: new Date(Date.now() - DAY_MS) },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 4,
+    select: { status: true, checkpoint: true },
+  });
+  const retryBlock = newAuditAttemptBlockReason(recentFailures);
+  if (retryBlock) {
+    return {
+      error:
+        retryBlock === "no_progress"
+          ? "연속 두 번 응답을 저장하지 못해 자동 재시도를 멈췄어요. 운영팀에 문의해 주세요."
+          : "오늘 측정 실패가 세 번 발생해 추가 과금을 막았습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요.",
+      code: "rate_limited",
+    };
+  }
   const recent = await database.auditJob.findFirst({
     where: {
       email: `org:${orgId}`,
@@ -187,10 +207,9 @@ async function checkRemeasurePolicy(
     return null;
   }
 
-  const age = Date.now() - recent.createdAt.getTime();
   const isRunning =
     recent.status === "processing" || recent.status === "queued";
-  if (isRunning && age <= STALE_THRESHOLD_MS) {
+  if (isRunning && !isStaleAuditJob(recent)) {
     return {
       error:
         "이 도메인은 지금 측정이 진행 중이에요. 1~3분 뒤 대시보드에서 결과를 확인해 주세요.",
@@ -198,7 +217,14 @@ async function checkRemeasurePolicy(
     };
   }
   if (isRunning) {
-    // stale → 재측정 허용.
+    // Atomically mark the abandoned attempt failed before a fresh explicit run.
+    const status = await reconcileStaleAuditJob(recent);
+    if (status !== "failed") {
+      return {
+        error: "측정 상태가 갱신됐어요. 잠시 후 다시 확인해 주세요.",
+        code: "rate_limited",
+      };
+    }
     return null;
   }
 
@@ -221,6 +247,7 @@ async function checkRemeasurePolicy(
 export const startOrgTracking = async (
   input: StartTrackingInput
 ): Promise<StartTrackingResult> => {
+  const invocationStartedAtMs = Date.now();
   // 1) 인증 — orgId·userId를 app 자기 세션에서 재도출(입력 아님). 없으면 unauthorized.
   const { userId } = await auth();
   let orgId: string;
@@ -330,6 +357,7 @@ export const startOrgTracking = async (
     after(async () => {
       try {
         await runAuditJob({
+          invocationStartedAtMs,
           jobId: job.id,
           domain,
           language,

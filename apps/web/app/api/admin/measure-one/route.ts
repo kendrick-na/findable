@@ -92,6 +92,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
 /** 측정 1건 실행(약 87원). body: `{ brandId }` 또는 `{ brand: "아누아" }`. */
 export async function POST(request: NextRequest): Promise<Response> {
+  const invocationStartedAtMs = Date.now();
   const denied = denyIfNotCron(request);
   if (denied) {
     return denied;
@@ -138,6 +139,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     after(async () => {
       try {
         await runAuditJob({
+          invocationStartedAtMs,
           brandId: started.brandId,
           brandName: started.brandName,
           domain: started.domain,

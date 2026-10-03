@@ -1,40 +1,112 @@
-import { database, type AuditStatus } from "@repo/database";
+import { type AuditStatus, database } from "@repo/database";
 
 export const AUDIT_JOB_STALE_AFTER_MS = 6 * 60 * 1000;
+export const AUDIT_JOB_QUEUE_STALE_AFTER_MS = 30 * 60 * 1000;
 
 export const AUDIT_JOB_STALE_ERROR =
   "FUNCTION_INVOCATION_TIMEOUT: 측정 처리 시간이 6분을 초과해 자동 종료했습니다. 다시 측정해 주세요.";
+export const AUDIT_JOB_QUEUE_STALE_ERROR =
+  "QUEUE_START_TIMEOUT: 측정 실행이 시작되지 않아 자동 종료했습니다. 다시 측정해 주세요.";
 
 export type PendingAuditStatus = "queued" | "processing";
 
 export const isStaleAuditJob = (
-  job: { createdAt: Date; status: string },
+  job: {
+    createdAt: Date;
+    attemptStartedAt?: Date | null;
+    leaseUntil?: Date | null;
+    status: string;
+  },
   now = Date.now()
 ): boolean =>
-  (job.status === "queued" || job.status === "processing") &&
-  job.createdAt.getTime() < now - AUDIT_JOB_STALE_AFTER_MS;
+  job.status === "queued"
+    ? (job.attemptStartedAt ?? job.createdAt).getTime() <
+      now - AUDIT_JOB_QUEUE_STALE_AFTER_MS
+    : job.status === "processing" &&
+      (job.leaseUntil
+        ? job.leaseUntil.getTime() < now
+        : (job.attemptStartedAt ?? job.createdAt).getTime() <
+          now - AUDIT_JOB_STALE_AFTER_MS);
+
+/**
+ * Bulk form of `isStaleAuditJob` for the sweep cron: same thresholds and the
+ * same lease rule, so the cron never fails a job the per-job check still
+ * treats as alive (e.g. a queued job younger than the queue limit).
+ */
+export const staleAuditJobsWhere = (
+  status: PendingAuditStatus,
+  now = new Date()
+) => {
+  const before = new Date(
+    now.getTime() -
+      (status === "queued"
+        ? AUDIT_JOB_QUEUE_STALE_AFTER_MS
+        : AUDIT_JOB_STALE_AFTER_MS)
+  );
+  const aged = [
+    { attemptStartedAt: { lt: before } },
+    { attemptStartedAt: null, createdAt: { lt: before } },
+  ];
+  if (status === "queued") {
+    return { status, OR: aged };
+  }
+  return {
+    status,
+    OR: [
+      { leaseUntil: { lt: now } },
+      ...aged.map((clause) => ({ leaseUntil: null, ...clause })),
+    ],
+  };
+};
 
 /** Finalize jobs killed by the serverless time limit before runner catch ran. */
 export async function reconcileStaleAuditJob(job: {
   id: string;
   email: string;
   createdAt: Date;
+  attemptStartedAt?: Date | null;
+  leaseUntil?: Date | null;
   status: AuditStatus;
 }): Promise<AuditStatus | null> {
   if (!isStaleAuditJob(job)) {
     return job.status;
   }
+  const expiredAt = new Date();
+  const staleBefore = new Date(
+    expiredAt.getTime() -
+      (job.status === "queued"
+        ? AUDIT_JOB_QUEUE_STALE_AFTER_MS
+        : AUDIT_JOB_STALE_AFTER_MS)
+  );
+  const staleWhere = (() => {
+    if (job.leaseUntil) {
+      return { leaseUntil: { lt: expiredAt } };
+    }
+    if (job.attemptStartedAt) {
+      return { leaseUntil: null, attemptStartedAt: { lt: staleBefore } };
+    }
+    return {
+      leaseUntil: null,
+      attemptStartedAt: null,
+      createdAt: { lt: staleBefore },
+    };
+  })();
   const expired = await database.auditJob.updateMany({
     where: {
       id: job.id,
       email: job.email,
-      status: { in: ["queued", "processing"] },
-      createdAt: { lt: new Date(Date.now() - AUDIT_JOB_STALE_AFTER_MS) },
+      status: job.status,
+      ...staleWhere,
     },
     data: {
       status: "failed",
-      errorMessage: AUDIT_JOB_STALE_ERROR,
+      errorMessage:
+        job.status === "queued"
+          ? AUDIT_JOB_QUEUE_STALE_ERROR
+          : AUDIT_JOB_STALE_ERROR,
       completedAt: new Date(),
+      leaseToken: null,
+      leaseUntil: null,
     },
   });
   if (expired.count > 0) {

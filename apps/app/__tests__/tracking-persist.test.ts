@@ -182,7 +182,7 @@ describe("persistAuditTracking — 적재 규칙 (원가 0원)", () => {
   test("적재 실패해도 throw 하지 않는다 — 측정 결과를 깨지 않는다", async () => {
     state.throwOnCreateMany = true;
 
-    await expect(run([row()])).resolves.toBeUndefined();
+    await expect(run([row()])).resolves.toBe("failed");
   });
 
   test("엔진 응답 값이 손실 없이 옮겨진다", async () => {

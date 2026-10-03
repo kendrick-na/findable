@@ -731,7 +731,12 @@ export async function verifyMentions<T extends VerifiableResponse>(
     industry?: string;
     officialSite?: VerifyInput["officialSite"];
     signal?: AbortSignal;
-  }
+  },
+  onChunkEvent?: (event: {
+    chunkIndex: number;
+    responseCount: number;
+    phase: "started" | "finished";
+  }) => void
 ): Promise<
   Array<
     T & {
@@ -752,6 +757,15 @@ export async function verifyMentions<T extends VerifiableResponse>(
   // 인덱스를 청크로 끊어 동시 실행 상한을 지킨다.
   for (let start = 0; start < responses.length; start += VERDICT_CONCURRENCY) {
     const slice = responses.slice(start, start + VERDICT_CONCURRENCY);
+    const event = {
+      chunkIndex: start / VERDICT_CONCURRENCY,
+      responseCount: slice.length,
+    };
+    try {
+      onChunkEvent?.({ ...event, phase: "started" });
+    } catch {
+      /* logging is best-effort */
+    }
     const verdicts = await Promise.all(
       slice.map((r): Promise<MentionVerdict> => {
         // 측정 실패/stub 은 판정 대상 아님 — 원본 유지.
@@ -806,6 +820,11 @@ export async function verifyMentions<T extends VerifiableResponse>(
         verdictVia: verdict.via,
         ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
       };
+    }
+    try {
+      onChunkEvent?.({ ...event, phase: "finished" });
+    } catch {
+      /* logging is best-effort */
     }
   }
 

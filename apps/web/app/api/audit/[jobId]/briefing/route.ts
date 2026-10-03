@@ -3,14 +3,16 @@
 // 무료 Audit 빠른 모드(7 엔진) 완료 후 사용자가 "네이버 AI 브리핑 측정" 클릭 시 호출.
 // after()로 백그라운드 실행, result.briefingStatus를 업데이트.
 //
-// 같은 jobId에 대해 이미 processing/completed면 409 반환 (중복 트리거 방지).
+// 같은 jobId에 대해 유효한 processing lease/completed면 409 반환 (중복 트리거 방지).
 // Runtime: Node.js, maxDuration 300s (Browserbase 클라우드 크롬은 느림).
 
 import { runBriefingForAuditJob } from "@repo/audit/briefing-runner";
+import { createAuditRunBudget } from "@repo/audit/run-budget";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { checkBotId } from "botid/server";
+import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { after, NextResponse } from "next/server";
 import { resolveIsOwner } from "../../_lib/owner";
@@ -24,6 +26,10 @@ interface RouteParams {
 }
 
 type BriefingStatus = "not_requested" | "processing" | "completed" | "failed";
+
+// A process that disappears after claiming must not hold the customer-visible
+// state forever. This is a recovery lease, not a provider idempotency promise.
+const BRIEFING_LEASE_MS = 5 * 60 * 1000;
 
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   // BotID — 브리핑은 Browserbase 세션(분당 과금)을 쓰므로 자동화 요청을 먼저 막는다.
@@ -87,7 +93,15 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const briefingStatus = ((job.result as { briefingStatus?: BriefingStatus })
       .briefingStatus ?? "not_requested") as BriefingStatus;
 
-    if (briefingStatus === "processing") {
+    const briefingStartedAt = (job.result as { briefingStartedAt?: string })
+      .briefingStartedAt;
+    const staleProcessing =
+      briefingStatus === "processing" &&
+      typeof briefingStartedAt === "string" &&
+      Number.isFinite(Date.parse(briefingStartedAt)) &&
+      Date.now() - Date.parse(briefingStartedAt) >= BRIEFING_LEASE_MS;
+
+    if (briefingStatus === "processing" && !staleProcessing) {
       return NextResponse.json(
         { error: "이미 측정이 진행 중입니다.", briefingStatus },
         { status: 409 }
@@ -101,28 +115,68 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 중복 트리거 방지: after() 예약 전에 processing을 먼저 커밋한다.
-    // (crew route와 동일 패턴 — 백그라운드 러너 내부 세팅만으로는 응답 시점까지
-    //  상태가 not_requested로 남아 동시 2요청이 둘 다 통과, Browserbase 중복 호출됨.)
-    // result JSON은 공유되므로 최신 값 위에 briefingStatus만 병합.
-    await database.auditJob.update({
-      where: { id: jobId },
-      data: {
-        result: {
-          ...(job.result as Record<string, unknown>),
-          briefingStatus: "processing",
-        } as never,
-      },
-    });
+    // 중복 트리거 방지: result 전체를 read-modify-write하지 않고 상태 leaf만
+    // 조건부로 원자 갱신한다. Tracking/crew/revalidation이 같은 JSON을 바꿔도
+    // 예약 획득 시점의 오래된 snapshot이 다른 필드를 지우지 않는다.
+    const attemptId = randomUUID();
+    const leaseStartedAt = new Date().toISOString();
+    const staleBefore = new Date(Date.now() - BRIEFING_LEASE_MS).toISOString();
+    const claimed = await database.$executeRawUnsafe(
+      `UPDATE "AuditJob"
+       SET "result" = jsonb_set(
+         jsonb_set(
+           jsonb_set(
+             COALESCE("result", '{}'::jsonb),
+             '{briefingStatus}',
+             to_jsonb('processing'::text),
+             true
+           ),
+           '{briefingStartedAt}',
+           to_jsonb($2::text),
+           true
+         ),
+         '{briefingAttemptId}',
+         to_jsonb($3::text),
+         true
+       )
+       WHERE "id" = $1
+         AND "status" = 'completed'
+         AND (
+           COALESCE("result"->>'briefingStatus', 'not_requested')
+             IN ('not_requested', 'failed')
+           OR (
+             "result"->>'briefingStatus' = 'processing'
+             AND "result"->>'briefingStartedAt' IS NOT NULL
+             AND "result"->>'briefingStartedAt' <= $4
+           )
+         )`,
+      jobId,
+      leaseStartedAt,
+      attemptId,
+      staleBefore
+    );
+    if (claimed !== 1) {
+      return NextResponse.json(
+        { error: "이미 측정이 진행 중이거나 완료되었습니다." },
+        { status: 409 }
+      );
+    }
 
     after(async () => {
+      const budget = createAuditRunBudget();
       try {
-        await runBriefingForAuditJob({ jobId });
+        await runBriefingForAuditJob({
+          jobId,
+          attemptId,
+          signal: budget.signal,
+        });
       } catch (error) {
         log.error("audit.briefing.uncaught", {
           jobId,
           error: parseError(error),
         });
+      } finally {
+        budget.dispose();
       }
     });
 

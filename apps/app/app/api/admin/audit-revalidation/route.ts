@@ -64,13 +64,80 @@ export async function POST(request: Request) {
         continue;
       }
       if (apply) {
-        await database.auditJob.update({
-          where: { id: jobId },
-          // Revalidation replaces the action-bearing result, so the immutable
-          // PDF link must be quarantined too. The Blob is intentionally kept;
-          // only the stale link is removed from the job projection.
-          data: { result: outcome.result as never, pdfUrl: null },
-        });
+        const next = outcome.result as Record<string, unknown>;
+        const revalidatedCoreRows = Array.isArray(next.engineResponses)
+          ? next.engineResponses.filter(
+              (row) =>
+                !row ||
+                typeof row !== "object" ||
+                (row as { engineId?: unknown }).engineId !== "naver-briefing"
+            )
+          : [];
+        // Revalidation owns only its verdict-derived leaves. A briefing claim
+        // or completion may mutate the same JSON concurrently; replacing the
+        // snapshot would erase that state and can resurrect processing.
+        const applied = await database.$executeRawUnsafe(
+          `UPDATE "AuditJob"
+           SET "result" =
+             jsonb_set(
+               jsonb_set(
+                 jsonb_set(
+                   jsonb_set(
+                     jsonb_set(
+                       jsonb_set(
+                         jsonb_set(
+                           jsonb_set(
+                             (COALESCE("result", '{}'::jsonb)
+                               - 'verificationState' - 'regions'),
+                             '{engineResponses}',
+                             $1::jsonb || (
+                               SELECT COALESCE(jsonb_agg(row ORDER BY ord), '[]'::jsonb)
+                               FROM jsonb_array_elements(
+                                 COALESCE("result"->'engineResponses', '[]'::jsonb)
+                               ) WITH ORDINALITY AS items(row, ord)
+                               WHERE row->>'engineId' = 'naver-briefing'
+                             ),
+                             true
+                           ),
+                           '{metrics}', $2::jsonb, true
+                         ),
+                         '{mentionVerdictVersion}', to_jsonb($3::int), true
+                       ),
+                       '{revalidation}', $4::jsonb, true
+                     ),
+                     '{geoActions}', $5::jsonb, true
+                   ),
+                   '{topRecommendations}', $6::jsonb, true
+                 ),
+                 '{regionScoresOutdated}', to_jsonb($7::boolean), true
+               ),
+               '{actionsOutdated}', to_jsonb($8::boolean), true
+             )
+           WHERE "id" = $9
+             AND "status" = 'completed'
+             AND COALESCE("result"->>'briefingStatus', 'not_requested')
+               IS DISTINCT FROM 'processing'
+             AND "result" = $10::jsonb
+             AND jsonb_typeof(COALESCE("result"->'engineResponses', '[]'::jsonb)) = 'array'`,
+          JSON.stringify(revalidatedCoreRows),
+          JSON.stringify(next.metrics ?? {}),
+          next.mentionVerdictVersion,
+          JSON.stringify(next.revalidation ?? null),
+          JSON.stringify(next.geoActions ?? []),
+          JSON.stringify(next.topRecommendations ?? []),
+          next.regionScoresOutdated === true,
+          next.actionsOutdated === true,
+          jobId,
+          JSON.stringify(job.result)
+        );
+        if (applied !== 1) {
+          outcomes.push({
+            jobId,
+            status: "skipped",
+            reason: "briefing_in_progress",
+          });
+          continue;
+        }
       }
       const metrics = outcome.result.metrics as
         | Record<string, unknown>
