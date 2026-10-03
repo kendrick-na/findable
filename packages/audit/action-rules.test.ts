@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   DONT_LIST,
   EVIDENCE_GRADE_LABEL,
+  crawlAccessAction,
   entityClarityAction,
   RULE_THRESHOLDS,
   summarizeVerdicts,
@@ -149,6 +150,25 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
       marketScope: "global",
     });
     expect(global.some((a) => a.kind === "naver_blog")).toBe(false);
+  });
+});
+
+describe("크롤 접근성 카드 — 전제조건과 효과 보장을 분리한다", () => {
+  it("봇 접근성은 인용의 전제조건일 뿐, 다른 처방의 효과를 단정하지 않는다", () => {
+    const action = crawlAccessAction({
+      brandDomain: "example.com",
+      brandName: "예시회사",
+      enginesMeasured: 7,
+      enginesMentioned: 0,
+      marketScope: "global",
+      measuredLabel: "측정한 AI 7곳",
+      ownedCitations: 0,
+    });
+
+    expect(action).toBeTruthy();
+    expect(action?.evidence).toContain("인용의 전제 조건");
+    expect(action?.evidence).not.toContain("다른 처방은 효과가 없습니다");
+    expect(action?.guide?.notGuaranteed).toContain("인용이 생긴다는 보장은 없");
   });
 });
 
