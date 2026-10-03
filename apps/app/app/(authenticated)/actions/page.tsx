@@ -336,7 +336,7 @@ async function ActionsPage({
         <main className="flex flex-1 flex-col gap-4 p-6 pt-2">
           {brandPicker}
           <h1 className="font-semibold text-xl">
-            {first.brand.name || first.brand.domain} · 지금 할 일 · 잠정 결과
+            {first.brand.name || first.brand.domain} · 지금 할 일 · 결과 보류
           </h1>
           <p className="text-muted-foreground text-sm">
             {publicationIssue === "insufficient_sample"

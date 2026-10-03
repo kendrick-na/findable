@@ -90,6 +90,64 @@ function countOf(value: unknown): number | null {
     : null;
 }
 
+/** Publication is about brand-question AI answers, not search exposure or discovery. */
+function publicationAnswerCounts(
+  result: Record<string, unknown>
+): { verified: number; unverified: number } | null {
+  const metrics = result.metrics;
+  if (!isRecord(metrics)) {
+    return null;
+  }
+  const buckets = metrics.answerBuckets;
+  if (isRecord(buckets)) {
+    const ai = buckets.ai;
+    if (!isRecord(ai)) {
+      return null;
+    }
+    const verified = countOf(ai.adjudicated);
+    const unverified = countOf(ai.unverified);
+    return verified === null || unverified === null
+      ? null
+      : { verified, unverified };
+  }
+  // Some stored snapshots predate answerBuckets. Prefer their immutable rows
+  // over the mixed AI/search aggregate whenever those rows are available.
+  if (Array.isArray(result.engineResponses)) {
+    // Incomplete legacy rows cannot prove a successful answer. In particular,
+    // an excerpt alone must not override stored zero-verdict counters.
+    if (
+      result.engineResponses.some(
+        (row) =>
+          !isRecord(row) ||
+          typeof row.engineId !== "string" ||
+          !("errorMessage" in row) ||
+          !("isStub" in row)
+      )
+    ) {
+      return null;
+    }
+    const rows = result.engineResponses as Array<
+      Record<string, unknown> & BucketableAnswer
+    >;
+    const ai = summarizeAnswerBuckets(rows).ai;
+    return { verified: ai.adjudicated, unverified: ai.unverified };
+  }
+  // Metrics-only legacy callers cannot be split by channel. Retain their
+  // existing contract; saved product runs with rows use the path above.
+  const verified = countOf(metrics.verifiedCount);
+  const unverified = countOf(metrics.unverifiedCount);
+  return verified === null || unverified === null
+    ? null
+    : { verified, unverified };
+}
+
+/** Brand-question AI verdicts only; search/discovery rows never inflate the label. */
+export function publicationVerifiedAnswerCount(result: unknown): number | null {
+  return isRecord(result)
+    ? (publicationAnswerCounts(result)?.verified ?? null)
+    : null;
+}
+
 /** Why a run cannot be presented as an authoritative score or prescription. */
 export function auditPublicationIssue(
   result: unknown
@@ -103,13 +161,13 @@ export function auditPublicationIssue(
   ) {
     return "brand_verification";
   }
-  const unverified = countOf(result.metrics.unverifiedCount);
-  const verified = countOf(result.metrics.verifiedCount);
+  const counts = publicationAnswerCounts(result);
   // Metrics without the counters predate verification accounting: we cannot
   // tell how many answers were adjudicated, so do not guess (fail closed).
-  if (unverified === null || verified === null) {
+  if (counts === null) {
     return "brand_verification";
   }
+  const { unverified, verified } = counts;
   const answers = verified + unverified;
   if (answers > 0 && unverified / answers > PROVISIONAL_MAX_UNVERIFIED_SHARE) {
     return "unverified_share";
@@ -143,8 +201,7 @@ export function auditPublicationStatus(
   if (
     (issue === "unverified_share" || issue === "insufficient_sample") &&
     isRecord(result) &&
-    isRecord(result.metrics) &&
-    (countOf(result.metrics.verifiedCount) ?? 0) > 0
+    (publicationAnswerCounts(result)?.verified ?? 0) > 0
   ) {
     return "provisional";
   }

@@ -1312,9 +1312,21 @@ function VerificationPartialView({
   const coreResponses = result.engineResponses.filter(
     (response) => response.engineId !== "naver-briefing"
   );
-  const answerCount = coreResponses.filter(
-    (response) => !(response.errorMessage || response.isStub)
-  ).length;
+  const brandAiResponses = coreResponses.filter(
+    (response) =>
+      answerGroup(response.engineId) === "ai" &&
+      !isDiscoveryAnswer(response)
+  );
+  const searchResponses = coreResponses.filter(
+    (response) => answerGroup(response.engineId) === "search"
+  );
+  const aiAnswers = result.metrics.answerBuckets?.ai;
+  const searchAnswers = result.metrics.answerBuckets?.search;
+  const answerCount = aiAnswers
+    ? aiAnswers.adjudicated + aiAnswers.unverified
+    : brandAiResponses.filter(
+        (response) => !(response.errorMessage || response.isStub)
+      ).length;
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr";
   // 이 화면은 이제 「확정 답변이 0건」이거나 판정 계약 이전 회차(재검증 필요)일
@@ -1326,8 +1338,8 @@ function VerificationPartialView({
       <section className="rounded-2xl border border-amber-400/30 bg-zinc-900/80 p-6 md:p-10">
         <div className="font-medium text-amber-300 text-xs uppercase tracking-[0.16em]">
           {isKo
-            ? "판별 미완료 · 잠정 결과"
-            : "Verification incomplete · provisional result"}
+            ? "AI 측정·판별 미완료 · 결과 보류"
+            : "AI measurement or verification incomplete · result withheld"}
         </div>
         <h1 className="mt-3 max-w-3xl font-semibold text-2xl text-zinc-50 leading-tight md:text-4xl">
           {isKo
@@ -1336,27 +1348,43 @@ function VerificationPartialView({
         </h1>
         <p className="mt-4 max-w-2xl text-sm text-zinc-300 leading-relaxed">
           {isKo
-            ? "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
-            : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, and recommendations for this run."}
+            ? "이번 회차의 브랜드 AI 답변을 확정 근거로 사용할 수 없어 점수·미노출 주장·개선 처방을 공개하지 않습니다. 검색 노출 결과는 별도로 보존하며, 검색 성공을 AI 성공으로 간주하지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
+            : "Brand AI answers cannot be used as conclusive evidence for this run, so scores, absence claims and recommendations are withheld. Search exposure is preserved separately and does not count as AI success."}
         </p>
         {result.metrics.errors.length > 0 && (
           <p className="mt-3 max-w-2xl text-amber-200 text-sm leading-relaxed">
             {isKo
-              ? `별도로 AI 엔진 호출 ${result.metrics.errors.length}건이 실패했습니다. 이는 고객 사이트의 오류가 아니며 Findable 운영팀이 제공업체 연결 상태를 복구해야 합니다.`
-              : `Separately, ${result.metrics.errors.length} AI engine calls failed. This is not a problem with your site; Findable must restore the provider connection.`}
+              ? `별도로 응답 수집 ${result.metrics.errors.length}건이 실패했습니다. 이는 고객 사이트의 오류가 아니며 Findable 운영팀이 제공업체 연결 상태를 확인해야 합니다.`
+              : `Separately, ${result.metrics.errors.length} response collections failed. This is not a problem with your site; Findable must check the provider connection.`}
           </p>
         )}
         <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            [isKo ? "측정 시도" : "Attempts", coreResponses.length],
-            [isKo ? "수집된 답변" : "Answers collected", answerCount],
             [
-              isKo ? "엔진 오류" : "Engine errors",
-              result.metrics.errors.length,
+              isKo ? "브랜드 AI 시도" : "Brand AI attempts",
+              aiAnswers?.total ?? brandAiResponses.length,
+            ],
+            [
+              isKo ? "수집된 브랜드 AI 답변" : "Brand AI answers collected",
+              answerCount,
+            ],
+            [
+              isKo ? "브랜드 AI 오류" : "Brand AI errors",
+              aiAnswers?.engineError ??
+                brandAiResponses.filter(
+                  (response) => response.errorMessage || response.isStub
+                ).length,
             ],
             [
               isKo ? "브랜드 판별 불가" : "Unverified matches",
-              result.metrics.unverifiedCount ?? 0,
+              aiAnswers?.unverified ?? result.metrics.unverifiedCount ?? 0,
+            ],
+            [
+              isKo ? "검색 노출 수집" : "Search results collected",
+              searchAnswers?.adjudicated ??
+                searchResponses.filter(
+                  (response) => !(response.errorMessage || response.isStub)
+                ).length,
             ],
           ].map(([label, value]) => (
             <div
@@ -1389,12 +1417,12 @@ function VerificationPartialView({
 
       <section aria-label={isKo ? "수집된 답변" : "Collected answers"}>
         <h2 className="font-semibold text-xl text-zinc-100">
-          {isKo ? "AI가 실제로 준 답변" : "Answers actually returned"}
+          {isKo ? "AI 답변·검색 결과 원문" : "Saved AI answers and search results"}
         </h2>
         <p className="mt-2 text-sm text-zinc-400">
           {isKo
-            ? "아래는 판정 결과가 아닌 저장된 답변 내용입니다. 긴 답변은 저장 길이 제한으로 일부만 보일 수 있습니다."
-            : "These are saved answer excerpts, not verified brand mentions. Long answers may be truncated."}
+            ? "아래는 판정 결과가 아닌 저장된 AI 답변과 검색 결과입니다. 긴 내용은 저장 길이 제한으로 일부만 보일 수 있습니다."
+            : "These are saved AI answers and search results, not verified brand mentions. Long content may be truncated."}
         </p>
         <div className="mt-4 space-y-2">
           {coreResponses.map((response, index) => (
