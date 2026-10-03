@@ -567,7 +567,8 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
           sources: [RULE_SOURCES.naverBriefing],
           engines: ["naver", "naver-briefing", "hyperclova"],
           effortHours: { min: 2, max: 4, per: "week" },
-          effectLag: "몇 주~몇 달. 글이 쌓여야 보입니다.",
+          effectLag:
+            "몇 주~몇 달 걸릴 수 있습니다. 실제 반영 시점과 변화는 같은 질문으로 재측정해 확인하세요.",
           remeasureMetric: remeasure,
           failCondition:
             "3개월(글 12편 안팎) 뒤에도 네이버 계열 답변에서 알아본 답변이 0건이면, 주제를 더 좁히거나 질문 문구를 고객 표현으로 바꾸세요.",
@@ -667,7 +668,8 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
         sources: [RULE_SOURCES.ahrefsVisibility],
         engines: ["chatgpt", "google"],
         effortHours: { min: 8, max: 20, per: "total" },
-        effectLag: "몇 달. 가장 느리지만 오래 갑니다.",
+        effectLag:
+            "몇 달 이상 걸릴 수 있습니다. 실제 반영 시점과 변화는 같은 질문으로 재측정해 확인하세요.",
         remeasureMetric: remeasure,
         failCondition:
           "외부 언급을 여러 건 만든 뒤에도 알아본 답변이 늘지 않으면, 그 글·영상이 회사 이름을 정확히 쓰고 있는지(오타·다른 표기)부터 확인하세요.",
@@ -701,8 +703,8 @@ export function ownedPageAction(sig: RuleSignals, where: string): GeoAction {
     noOwned ? 3 : 2,
     {
       title: noOwned
-        ? "공식 사이트가 한 번도 인용되지 않았습니다 — 페이지 제목·주소를 고객 질문에 맞추세요"
-        : "인용되는 공식 페이지의 제목·주소를 고객 질문에 맞추세요",
+        ? "공식 사이트가 한 번도 인용되지 않았습니다 — 기존 페이지를 보강하고 필요할 때만 새 페이지를 검토하세요"
+        : "인용되는 공식 페이지를 보강하고 필요할 때만 새 페이지를 검토하세요",
       evidence: `${mentionLine}${ownedLine}`,
       how:
         "고객이 AI에 실제로 묻는 질문(예: '○○는 어떤 회사야?', '○○ 추천')과 겹치는 기존 페이지가 있다면 먼저 그 페이지를 보강하세요. 내용이 충분히 다를 때만 별도 페이지를 검토하고, 같은 문구의 페이지를 질문마다 복제하지 마세요. " +

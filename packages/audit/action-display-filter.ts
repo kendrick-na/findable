@@ -34,6 +34,8 @@ const LEGACY_CAUSAL_CLAIM_RE =
   /AI가 인용하기 좋습니다|그대로 쓰는 것이 핵심|채택할 확률이 올라갑니다|인용하기 좋다는/i;
 const LEGACY_NAVER_EXTRAPOLATION_RE =
   /(?:49\.3\s*%|272건)[\s\S]*(?:매주|주\s*1회)[\s\S]*(?:인용될 수|언급될 수|인용합니다|언급합니다)|(?:매주|주\s*1회)[\s\S]*(?:인용될 수|언급될 수|인용합니다|언급합니다)[\s\S]*(?:49\.3\s*%|272건)/i;
+const LEGACY_CONTENT_FIX_TEMPLATE_RE =
+  /(?:질문\s*마다[^.\n]{0,40}(?:페이지|문서)[^.\n]{0,20}(?:하나씩|한\s*개씩)|(?:제목|URL|주소)[^.\n]{0,20}(?:질문|질문 문구)[^.\n]{0,20}(?:그대로|복사)|(?:질문|질문 문구)[^.\n]{0,20}(?:제목|URL|주소)[^.\n]{0,20}(?:그대로|복사))/i;
 const LEGACY_BING_PREREQUISITE_RE =
   /(?:필수|필요조건|안 잡히면[\s\S]*(?:나오기|노출)[\s\S]*(?:어렵|불가))/i;
 const BING_RE = /Bing/i;
@@ -65,6 +67,12 @@ function isUnsupportedStoredAction(action: StoredActionLike): boolean {
   if (
     action.kind === "naver_blog" &&
     LEGACY_NAVER_EXTRAPOLATION_RE.test(text)
+  ) {
+    return true;
+  }
+  if (
+    action.kind === "content_fix" &&
+    LEGACY_CONTENT_FIX_TEMPLATE_RE.test(text)
   ) {
     return true;
   }

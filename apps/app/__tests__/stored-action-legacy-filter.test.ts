@@ -49,6 +49,19 @@ describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
     expect(filterStoredGeoActions([safe])).toEqual([safe]);
   });
 
+  it("구형 content_fix 템플릿 지시는 제거하지만 조건부 안내는 보존한다", () => {
+    const legacy = action({
+      kind: "content_fix",
+      how: "질문마다 답하는 페이지를 하나씩 만들고, 질문을 제목·URL에 그대로 넣으세요.",
+    });
+    const current = action({
+      kind: "content_fix",
+      how: "기존 페이지를 먼저 보강하고, 내용이 충분히 다를 때만 별도 페이지를 검토하세요. 같은 문구의 페이지를 질문마다 복제하지 마세요.",
+    });
+
+    expect(filterStoredGeoActions([legacy, current])).toEqual([current]);
+  });
+
   it("Bing 등록을 ChatGPT 노출의 필요조건으로 말하는 카드를 제거한다", () => {
     const result = filterStoredGeoActions([
       action({
