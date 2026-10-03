@@ -93,6 +93,7 @@ export default async function ClientReportPage({
       {disclosure.isFrozenSnapshot ? (
         <ClientReportDisclosureNotice
           legacySyntheticEngineIds={disclosure.legacySyntheticEngineIds}
+          measurementMix={disclosure.measurementMix}
           print={print}
           retiredEngineIds={disclosure.retiredEngineIds}
         />

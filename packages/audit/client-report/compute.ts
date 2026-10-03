@@ -37,7 +37,7 @@ export function currentEngineDisplayName(
   legacySyntheticEngineIds: readonly string[] = []
 ): string {
   if (engineId === "naver" && legacySyntheticEngineIds.includes("naver")) {
-    return "네이버 검색 노출 (Findable 재현)";
+    return "네이버 Cue 재현 (Findable 합성)";
   }
   return ENGINE_NAMES[engineId as EngineId] ?? fallback ?? engineId;
 }
@@ -51,7 +51,7 @@ export function currentEngineDisplayText(
   }
   return text.replace(
     /(^|[·,]\s*)네이버 AI(?=\s*(?:$|[·,]))/g,
-    "$1네이버 검색 노출 (Findable 재현)"
+    "$1네이버 Cue 재현 (Findable 합성)"
   );
 }
 

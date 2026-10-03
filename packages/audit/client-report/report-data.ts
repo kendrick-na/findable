@@ -135,6 +135,12 @@ export interface ClientReportDisclosure {
   retiredEngineIds: string[];
   /** Pre-cutover Naver rows were Findable's synthetic summary, not Naver AI. */
   legacySyntheticEngineIds: string[];
+  measurementMix: {
+    directAiAnswers: number;
+    retiredAnswers: number;
+    legacySyntheticAnswers: number;
+    searchExposureAnswers: number;
+  };
 }
 
 const RETIRED_ENGINE_IDS = new Set(["hyperclova"]);
@@ -150,15 +156,38 @@ export function clientReportDisclosure(
     ...data.computed.answers.map((answer) => answer.engine),
     ...data.computed.engines.map((engine) => engine.id),
   ]);
-  const naverEngine = data.computed.engines.find((engine) => engine.id === "naver");
-  const measuredAt = data.config.measured_at.replaceAll(".", "-");
+  const measuredAtMatch = /^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/.exec(
+    data.config.measured_at
+  );
+  const measuredAt = measuredAtMatch
+    ? `${measuredAtMatch[1]}-${measuredAtMatch[2].padStart(2, "0")}-${measuredAtMatch[3].padStart(2, "0")}`
+    : null;
   const legacyNaver =
     engineIds.has("naver") &&
-    (naverEngine?.name === "네이버 AI" || measuredAt < "2026-09-29");
+    measuredAt !== null &&
+    measuredAt < "2026-09-29";
+  const measurementMix = {
+    directAiAnswers: 0,
+    retiredAnswers: 0,
+    legacySyntheticAnswers: 0,
+    searchExposureAnswers: 0,
+  };
+  for (const answer of data.computed.answers) {
+    if (answer.engine === "hyperclova") {
+      measurementMix.retiredAnswers += 1;
+    } else if (answer.engine === "naver" && legacyNaver) {
+      measurementMix.legacySyntheticAnswers += 1;
+    } else if (answer.engine === "naver" || answer.engine === "daum") {
+      measurementMix.searchExposureAnswers += 1;
+    } else {
+      measurementMix.directAiAnswers += 1;
+    }
+  }
   return {
     isFrozenSnapshot: true,
     retiredEngineIds: [...RETIRED_ENGINE_IDS].filter((id) => engineIds.has(id)),
     legacySyntheticEngineIds: legacyNaver ? ["naver"] : [],
+    measurementMix,
   };
 }
 

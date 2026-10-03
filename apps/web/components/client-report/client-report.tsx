@@ -123,7 +123,7 @@ export function ClientReport({
   const H = c.headlines ?? {};
   const officialPct = formatOfficialPct(s);
 
-  const noteBase = `측정 Findable ${c.measured_at} · 질문 ${s.nq}종(한국어·영어) × AI·검색 엔진 ${s.engines_total}곳 · 유효 답변 ${s.n}건 · 질문당 1회 측정(시점에 따라 답이 달라질 수 있음). 판별: 답변 원문을 사람이 한 건씩 읽고 공식 사이트 내용과 대조.`;
+  const noteBase = `측정 Findable ${c.measured_at} · 질문 ${s.nq}종(한국어·영어) × AI·검색 엔진 ${s.engines_total}곳 · 전체 측정 답변 ${s.n}건 · 질문당 1회 측정(시점에 따라 답이 달라질 수 있음). 판별: 답변 원문을 사람이 한 건씩 읽고 공식 사이트 내용과 대조.`;
 
   const picks = (["chatgpt", "claude", "naver", "gemini"] as const).flatMap(
     (e) => answers.filter((a) => a.engine === e && a.q === 0)
@@ -154,7 +154,7 @@ export function ClientReport({
         <div className="verdict">
           <div className="l">한 줄 결론</div>
           <div className="s">
-            AI 답변 {s.n}개 중 {s.ok_n}개만 {c.brand}를 정확히 설명했습니다.
+            전체 측정 {s.n}건 중 {s.ok_n}건이 저장된 판별에서 {c.brand}를 정확히 설명했습니다.
           </div>
           <div className="nums">
             <div>
@@ -203,7 +203,7 @@ export function ClientReport({
           <div>
             분석 답변
             <b>
-              {s.engines_total}개 엔진 · {s.n}건
+                {s.engines_total}개 엔진 · 전체 측정 {s.n}건
             </b>
           </div>
         </div>
@@ -311,7 +311,7 @@ export function ClientReport({
           <span
             {...rich(
               H.p4 ??
-                `AI 답변 ${s.n}개 중 ${s.ok_n}개만 ${c.brand}를 정확히 설명했습니다`
+                `전체 측정 ${s.n}건 중 ${s.ok_n}건이 저장된 판별에서 ${c.brand}를 정확히 설명했습니다`
             )}
           />
           <span className="dot">.</span>
@@ -896,7 +896,7 @@ export function ClientReport({
         <div className="give">
           <div>
             <h4>원문·판별 근거</h4>
-            <p>모든 AI 답변 원문과 판별 사유, 인용 출처를 표로 공유합니다.</p>
+            <p>모든 측정 답변 원문과 판별 사유, 인용 출처를 표로 공유합니다.</p>
           </div>
           <div>
             <h4>수정안과 문구 초안</h4>

@@ -1,11 +1,18 @@
 interface ClientReportDisclosureNoticeProps {
   readonly legacySyntheticEngineIds: readonly string[];
+  readonly measurementMix: {
+    directAiAnswers: number;
+    retiredAnswers: number;
+    legacySyntheticAnswers: number;
+    searchExposureAnswers: number;
+  };
   readonly print: boolean;
   readonly retiredEngineIds: readonly string[];
 }
 
 export function ClientReportDisclosureNotice({
   legacySyntheticEngineIds,
+  measurementMix,
   print,
   retiredEngineIds,
 }: ClientReportDisclosureNoticeProps) {
@@ -28,6 +35,12 @@ export function ClientReportDisclosureNotice({
       <div>
         이 리포트는 발행 시점에 저장된 동결 스냅숏입니다. 현재 측정값이나 현재 엔진
         상태를 보증하지 않습니다.
+      </div>
+      <div>
+        혼합 측정 내역: 직접 AI 답변 {measurementMix.directAiAnswers}건 · 검색 노출{" "}
+        {measurementMix.searchExposureAnswers}건 · 네이버 Cue 재현{" "}
+        {measurementMix.legacySyntheticAnswers}건 · 종료 엔진{" "}
+        {measurementMix.retiredAnswers}건
       </div>
       {retiredEngineIds.length > 0 ? (
         <div>
