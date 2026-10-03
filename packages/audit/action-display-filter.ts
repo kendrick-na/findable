@@ -37,6 +37,8 @@ const LEGACY_NAVER_EXTRAPOLATION_RE =
   /(?:49\.3\s*%|272건)[\s\S]*(?:매주|주\s*1회)[\s\S]*(?:인용될 수|언급될 수|인용합니다|언급합니다)|(?:매주|주\s*1회)[\s\S]*(?:인용될 수|언급될 수|인용합니다|언급합니다)[\s\S]*(?:49\.3\s*%|272건)/i;
 const LEGACY_NAVER_POSITIVE_SENTENCE_RE =
   /(?:49\.3\s*%|272건|매주|주\s*1회)[^\.\n]*(?:인용될 수|언급될 수|인용합니다|언급합니다)|(?:인용될 수|언급될 수|인용합니다|언급합니다)[^\.\n]*(?:49\.3\s*%|272건|매주|주\s*1회)/i;
+const LEGACY_NAVER_POSITIVE_HOW_RE =
+  /(?:매주|주\s*1회)[\s\S]{0,220}(?:절반\s*가까이|49\.3\s*%)[\s\S]{0,80}(?:인용|언급)/i;
 const LEGACY_CONTENT_FIX_TEMPLATE_RE =
   /(?:질문\s*마다[^.\n]{0,40}(?:페이지|문서)[^.\n]{0,20}(?:하나씩|한\s*개씩)|(?:제목|URL|주소)[^.\n]{0,20}(?:질문|질문 문구)[^.\n]{0,20}(?:그대로|복사)|(?:질문|질문 문구)[^.\n]{0,20}(?:제목|URL|주소)[^.\n]{0,20}(?:그대로|복사))/i;
 const LEGACY_BING_PREREQUISITE_RE =
@@ -110,7 +112,8 @@ function isUnsupportedStoredAction(action: StoredActionLike): boolean {
   if (
     action.kind === "naver_blog" &&
     LEGACY_NAVER_EXTRAPOLATION_RE.test(text) &&
-    hasUnnegatedLegacySentence(text, LEGACY_NAVER_POSITIVE_SENTENCE_RE)
+    (hasUnnegatedLegacySentence(text, LEGACY_NAVER_POSITIVE_SENTENCE_RE) ||
+      LEGACY_NAVER_POSITIVE_HOW_RE.test(text))
   ) {
     return true;
   }

@@ -160,6 +160,61 @@ describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
     expect(filterStoredGeoActions(restoredLegacyCards)).toEqual([]);
   });
 
+  it("37088ab 생성기 형태의 구형 Naver 카드 4개를 source/how 분리 상태에서도 제거한다", () => {
+    const base = {
+      brandName: "설화수",
+      brandDomain: "sulwhasoo.com",
+      averageMentionPosition: null,
+      enginesMeasured: 4,
+      enginesMentioned: 1,
+      marketScope: "both" as const,
+      prompts: [{ hit: 0, text: "설화수 추천해줘", total: 4 }],
+      verdicts: {
+        confusedQuotes: [],
+        counts: {
+          absent: 0,
+          answered: 10,
+          confirmed: 1,
+          differentEntity: 0,
+          engineError: 0,
+          total: 10,
+          unclassified: 0,
+          unknownBrand: 6,
+          unverified: 0,
+        },
+        differentEntityEngines: [],
+        ownedCitationCount: 0,
+      },
+    };
+    const scenarios = [
+      base,
+      { ...base, marketScope: "korea" as const },
+      { ...base, enginesMentioned: 0 },
+      {
+        ...base,
+        verdicts: { ...base.verdicts, ownedCitationCount: 2 },
+      },
+    ];
+    const restoredLegacyCards = scenarios.flatMap((scenario) =>
+      buildGeoActions(scenario).flatMap((generated) =>
+        generated.kind === "naver_blog"
+          ? [
+              JSON.parse(
+                JSON.stringify({
+                  ...generated,
+                  how:
+                    "우리 업종의 한 주제를 정해, 고객이 실제로 묻는 질문을 제목으로 삼아 매주 올리세요. 첫 문단에 답을 먼저 쓰고, 회사 이름을 정확히 적습니다. 분석에 따르면 네이버 AI 브리핑은 검색 상위 10위 밖 문서도 절반 가까이 인용합니다 — 순위보다 질문에 맞게 정리된 글이 뽑힐 여지가 있습니다.",
+                })
+              ),
+            ]
+          : []
+      )
+    );
+
+    expect(restoredLegacyCards).toHaveLength(4);
+    expect(filterStoredGeoActions(restoredLegacyCards)).toEqual([]);
+  });
+
   it("Bing 등록을 ChatGPT 노출의 필요조건으로 말하는 카드를 제거한다", () => {
     const result = filterStoredGeoActions([
       action({
