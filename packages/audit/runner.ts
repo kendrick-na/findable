@@ -62,6 +62,7 @@ import {
   REGION_LABEL,
 } from "./market-scope";
 import {
+  assertPromptExecutionStarted,
   countMeasurementCoverage,
   isMeasurementFailure,
 } from "./measurement-coverage";
@@ -479,6 +480,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           >[1]
         )
     );
+    // A future time-budget stop may return zero batches before an engine is
+    // attempted. Do not commit that empty run as a completed audit.
+    assertPromptExecutionStarted(sevenEngineResponses.length);
 
     // 20번(dual-write): flat() 하면 각 응답이 어느 프롬프트에서 나왔는지 소실된다.
     //   Tracking은 promptId(=프롬프트별)로 정규화 저장하므로, flat 이전에 프롬프트 원문/언어를
