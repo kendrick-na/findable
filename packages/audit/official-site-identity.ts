@@ -129,7 +129,10 @@ function metaContent(html: string, key: string): string | null {
 }
 
 /** Read only enough of a potentially large homepage to identify its brand. */
-export async function readIdentityHtml(response: Response): Promise<string> {
+export async function readIdentityHtml(
+  response: Response,
+  signal?: AbortSignal
+): Promise<string> {
   if (!response.body) {
     return "";
   }
@@ -137,6 +140,10 @@ export async function readIdentityHtml(response: Response): Promise<string> {
   const decoder = new TextDecoder();
   let bytes = 0;
   let text = "";
+  const cancel = () => {
+    void reader.cancel().catch(() => undefined);
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
   while (true) {
     const { done, value } = await reader.read();
     if (done) {
@@ -165,16 +172,27 @@ export async function readIdentityHtml(response: Response): Promise<string> {
       throw new Error("RESPONSE_TOO_LARGE");
     }
   }
+  signal?.removeEventListener("abort", cancel);
   return text + decoder.decode();
 }
 
 async function fetchHomepage(
-  initialUrl: URL
+  initialUrl: URL,
+  parentSignal?: AbortSignal
 ): Promise<{ html: string; finalUrl: URL }> {
   let current = new URL(initialUrl);
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
     await assertPublicUrl(current);
     const controller = new AbortController();
+    const abortFromParent = () =>
+      controller.abort(
+        parentSignal?.reason ?? new DOMException("Aborted", "AbortError")
+      );
+    if (parentSignal?.aborted) {
+      abortFromParent();
+    } else {
+      parentSignal?.addEventListener("abort", abortFromParent, { once: true });
+    }
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     let response: Response;
     try {
@@ -208,9 +226,13 @@ async function fetchHomepage(
       if (!contentType.includes("text/html")) {
         throw new Error("NOT_HTML");
       }
-      return { html: await readIdentityHtml(response), finalUrl: current };
+      return {
+        html: await readIdentityHtml(response, controller.signal),
+        finalUrl: current,
+      };
     } finally {
       clearTimeout(timeout);
+      parentSignal?.removeEventListener("abort", abortFromParent);
     }
   }
   throw new Error("REDIRECT_FAILED");
@@ -221,16 +243,26 @@ async function fetchHomepage(
  * 실패 시 null을 반환한다. 호출자는 식별 근거 없이는 측정을 중단한다.
  */
 export async function resolveOfficialSiteIdentity(
-  domain: string
+  domain: string,
+  signal?: AbortSignal
 ): Promise<OfficialSiteIdentity | null> {
   try {
-    const { html, finalUrl } = await fetchHomepage(normalizePublicUrl(domain));
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
+    const { html, finalUrl } = await fetchHomepage(
+      normalizePublicUrl(domain),
+      signal
+    );
     const identity = extractOfficialSiteIdentity(html, finalUrl.toString());
     if (!identity) {
       throw new Error("IDENTITY_EMPTY");
     }
     return identity;
   } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason ?? error;
+    }
     log.warn("audit.official_site_identity.failed", {
       domain,
       error: error instanceof Error ? error.message : String(error),

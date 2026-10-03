@@ -10,6 +10,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { isAbortError } from "./engines/provider-error";
 import { models } from "./models";
 
 // LLM 추론 모델 — Letsur 키 우선(결함감사 §20-보강, 2026-07-30).
@@ -131,7 +132,8 @@ const brandLlmSchema = z.object({
  * confident=false거나 콜 실패 시 null 반환 (폴백에 맡김) — 환각 방지.
  */
 async function inferBrandViaLlm(
-  domain: string
+  domain: string,
+  signal?: AbortSignal
 ): Promise<{ brandName: string; variants: string[] } | null> {
   try {
     const host = normalizeHost(domain);
@@ -139,6 +141,7 @@ async function inferBrandViaLlm(
       model: brandInferModel(),
       schema: brandLlmSchema,
       prompt: `다음 웹사이트 도메인의 브랜드명을 한국어와 영어로 알려줘. 실제로 아는 브랜드일 때만 답하고, 모르면 confident=false로 표시해. 도메인: ${host}`,
+      abortSignal: signal,
     });
     if (!out.confident) {
       return null;
@@ -156,6 +159,9 @@ async function inferBrandViaLlm(
       .filter((v) => v !== brandName);
     return { brandName, variants: dedupe(variants) };
   } catch (error) {
+    if (signal?.aborted || isAbortError(error)) {
+      throw signal?.reason ?? error;
+    }
     log.warn("brand.llm_infer.failed", { domain, error: String(error) });
     return null;
   }
@@ -183,8 +189,12 @@ function dedupe(items: string[]): string[] {
  */
 export async function resolveBrandIdentity(
   domain: string,
-  formBrandName?: string
+  formBrandName?: string,
+  signal?: AbortSignal
 ): Promise<BrandIdentity> {
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException("Aborted", "AbortError");
+  }
   const host = normalizeHost(domain);
   const dict = STATIC_BRAND_DICTIONARY[host];
 
@@ -202,7 +212,7 @@ export async function resolveBrandIdentity(
         ),
       };
     }
-    const llm = await inferBrandViaLlm(domain);
+    const llm = await inferBrandViaLlm(domain, signal);
     const merged = llm
       ? dedupe([llm.brandName, ...llm.variants].filter((v) => v !== formName))
       : [];
@@ -215,7 +225,7 @@ export async function resolveBrandIdentity(
   }
 
   // 3. LLM 추론.
-  const llm = await inferBrandViaLlm(domain);
+  const llm = await inferBrandViaLlm(domain, signal);
   if (llm) {
     return { brandName: llm.brandName, brandVariants: llm.variants };
   }

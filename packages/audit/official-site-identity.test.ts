@@ -6,6 +6,17 @@ import {
 } from "./official-site-identity";
 
 describe("official site identity response", () => {
+  it("propagates a caller abort instead of converting it to registration fallback", async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException("deadline", "AbortError"));
+
+    await expect(
+      import("./official-site-identity").then(({ resolveOfficialSiteIdentity }) =>
+        resolveOfficialSiteIdentity("https://example.com", controller.signal)
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   it("falls back only for a confirmed organisation brand and does not invent site evidence", () => {
     expect(
       registeredBrandIdentityFallback({

@@ -25,6 +25,7 @@
 //    → 편입 설계 = `docs/_적용/브리핑_본류편입_기획_2026-08-17.md`(질의 축을 따로 둔다).
 
 import { BRIEFING_FAIL_PREFIX } from "./briefing-failure";
+import { isAbortError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type { CitedSource, EngineAdapter, EngineResponse } from "./types";
 import {
@@ -283,6 +284,7 @@ export const naverBriefingAdapter: EngineAdapter = async (query) => {
         proxy: "auto", // basic 실패 시 enhanced 재시도(네이버 캡차 대응).
         timeout: 60_000,
       }),
+      signal: query.signal,
     });
 
     if (!res.ok) {
@@ -354,6 +356,9 @@ export const naverBriefingAdapter: EngineAdapter = async (query) => {
       usage: { inputTokens: null, outputTokens: null, costModel: "browser" },
     };
   } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw query.signal?.reason ?? error;
+    }
     return makeErrorResponse(
       error instanceof Error ? error.message : String(error),
       Date.now() - start
