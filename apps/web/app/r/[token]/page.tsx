@@ -98,7 +98,11 @@ export default async function ClientReportPage({
         />
       ) : null}
       <main className="fr fr-stack">
-        <ClientReport data={data} webUrl={webUrl} />
+        <ClientReport
+          data={data}
+          legacySyntheticEngineIds={disclosure.legacySyntheticEngineIds}
+          webUrl={webUrl}
+        />
       </main>
     </div>
   );

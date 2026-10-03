@@ -9,7 +9,6 @@
 
 import {
   ENGINE_MONO,
-  ENGINE_NAMES,
   currentEngineDisplayName,
   currentEngineDisplayText,
   type EngineId,
@@ -109,11 +108,16 @@ function Foot({
 
 export interface ClientReportProps {
   readonly data: ClientReportData;
+  readonly legacySyntheticEngineIds?: readonly string[];
   /** 표지에 작게 찍는 웹 리포트 주소(PDF 에서 웹으로 돌아오는 길). */
   readonly webUrl: string | null;
 }
 
-export function ClientReport({ data, webUrl }: ClientReportProps) {
+export function ClientReport({
+  data,
+  legacySyntheticEngineIds = [],
+  webUrl,
+}: ClientReportProps) {
   const c = data.config;
   const { answers, engines, per_q: perQ, channels, top, s } = data.computed;
   const H = c.headlines ?? {};
@@ -179,7 +183,7 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
             >
               <div className="eg">
                 <Mono engine={a.engine} />
-                {ENGINE_NAMES[a.engine]}
+                {currentEngineDisplayName(a.engine, undefined, legacySyntheticEngineIds)}
               </div>
               <div className="qt" {...rich(a.who)} />
               <div className="mk">{a.label === "ok" ? "정확" : "틀림"}</div>
@@ -234,7 +238,11 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
             {engines.map((e) => (
               <span key={e.id}>
                 <Mono engine={e.id} />
-                {currentEngineDisplayName(e.id, e.name)}
+                {currentEngineDisplayName(
+                  e.id,
+                  e.name,
+                  legacySyntheticEngineIds
+                )}
               </span>
             ))}
           </div>
@@ -339,7 +347,12 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
               {s.engines_correct}
               <small>/ {s.engines_total}곳</small>
             </div>
-            <div className="f">{currentEngineDisplayText(s.correct_engine_names)}</div>
+            <div className="f">
+              {currentEngineDisplayText(
+                s.correct_engine_names,
+                legacySyntheticEngineIds
+              )}
+            </div>
           </div>
           <div>
             <div className="t">공식 사이트 인용</div>
@@ -378,7 +391,11 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
                 <td>
                   <span className="eng">
                     <Mono engine={e.id} />
-                    {currentEngineDisplayName(e.id, e.name)}
+                    {currentEngineDisplayName(
+                      e.id,
+                      e.name,
+                      legacySyntheticEngineIds
+                    )}
                   </span>
                 </td>
                 <td>
@@ -461,7 +478,11 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
                 <td>
                   <span className="eng">
                     <Mono engine={e.id} />
-                    {currentEngineDisplayName(e.id, e.name)}
+                    {currentEngineDisplayName(
+                      e.id,
+                      e.name,
+                      legacySyntheticEngineIds
+                    )}
                   </span>
                 </td>
                 {perQ.map((q) => {
@@ -571,7 +592,11 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
                   <div className="e">
                     <Mono engine={a.engine} />
                     <span>
-                      {ENGINE_NAMES[a.engine]}
+                      {currentEngineDisplayName(
+                        a.engine,
+                        undefined,
+                        legacySyntheticEngineIds
+                      )}
                       <br />
                       <span
                         style={{
@@ -696,7 +721,10 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
                   </div>
                 </td>
                 <td style={{ fontSize: "8pt", color: "var(--ink2)" }}>
-                  {currentEngineDisplayText(t.engines)}
+                  {currentEngineDisplayText(
+                    t.engines,
+                    legacySyntheticEngineIds
+                  )}
                 </td>
                 <td className="c">
                   {t.in_ok ? (

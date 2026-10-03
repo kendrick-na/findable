@@ -23,11 +23,13 @@ import {
   parseClientReportData,
 } from "@repo/audit/client-report/report-data";
 import {
+  currentEngineDisplayName,
   currentEngineDisplayText,
   ENGINE_NAMES,
 } from "@repo/audit/client-report/compute";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ClientReport } from "../components/client-report/client-report";
 import { ClientReportDisclosureNotice } from "../components/client-report/client-report-disclosure";
 import { describe, expect, it } from "vitest";
 
@@ -187,9 +189,18 @@ describe("고객 리포트 공개 고지", () => {
 
   it("Naver는 현재 생성본에서 AI 답변으로 과장하지 않는다", () => {
     expect(ENGINE_NAMES.naver).toBe("네이버 검색 노출");
-    expect(currentEngineDisplayText("Perplexity, 네이버 AI, 다음 검색")).toBe(
-      "Perplexity, 네이버 검색 노출, 다음 검색"
-    );
+    expect(
+      currentEngineDisplayText("네이버 AI 브리핑 · 네이버 AI · 다음 검색", ["naver"])
+    ).toBe("네이버 AI 브리핑 · 네이버 검색 노출 (Findable 재현) · 다음 검색");
+    expect(
+      currentEngineDisplayText("네이버 AI 브리핑 · 네이버 AI", [])
+    ).toBe("네이버 AI 브리핑 · 네이버 AI");
+    expect(
+      currentEngineDisplayName("naver", "네이버 AI", ["naver"])
+    ).toBe("네이버 검색 노출 (Findable 재현)");
+    expect(
+      currentEngineDisplayName("naver", "네이버 AI", [])
+    ).toBe("네이버 검색 노출");
   });
 
   it("동일한 고지가 screen과 print 렌더 모두에 포함된다", () => {
@@ -214,5 +225,20 @@ describe("고객 리포트 공개 고지", () => {
     expect(print).toContain("현재 측정값이나 현재 엔진 상태를 보증하지 않습니다");
     expect(print).toContain("과거 네이버 합성 측정");
     expect(print).toContain('data-report-disclosure="print"');
+  });
+
+  it("공유된 Report 본문도 legacy Naver를 재현 방식으로 표시한다", () => {
+    const data = parseClientReportData(read("knowverse.report.json"));
+    expect(data).not.toBeNull();
+    if (!data) return;
+
+    const html = renderToStaticMarkup(
+      createElement(ClientReport, {
+        data,
+        legacySyntheticEngineIds: ["naver"],
+        webUrl: null,
+      })
+    );
+    expect(html).toContain("네이버 검색 노출 (Findable 재현)");
   });
 });

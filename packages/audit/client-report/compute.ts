@@ -33,13 +33,26 @@ export const ENGINE_MONO: Record<EngineId, string> = {
 /** Current display labels also normalize labels stored by older snapshots. */
 export function currentEngineDisplayName(
   engineId: string,
-  fallback?: string
+  fallback?: string,
+  legacySyntheticEngineIds: readonly string[] = []
 ): string {
+  if (engineId === "naver" && legacySyntheticEngineIds.includes("naver")) {
+    return "네이버 검색 노출 (Findable 재현)";
+  }
   return ENGINE_NAMES[engineId as EngineId] ?? fallback ?? engineId;
 }
 
-export function currentEngineDisplayText(text: string): string {
-  return text.replaceAll("네이버 AI", ENGINE_NAMES.naver);
+export function currentEngineDisplayText(
+  text: string,
+  legacySyntheticEngineIds: readonly string[] = []
+): string {
+  if (!legacySyntheticEngineIds.includes("naver")) {
+    return text;
+  }
+  return text.replace(
+    /(^|[·,]\s*)네이버 AI(?=\s*(?:$|[·,]))/g,
+    "$1네이버 검색 노출 (Findable 재현)"
+  );
 }
 
 export const LABELS = {
