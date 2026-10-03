@@ -33,10 +33,11 @@
 
 코드 rollout보다 먼저, 해당 애플리케이션 DB에서 다음을 순서대로 확인한다.
 
-1. `packages/database/prisma/migrations/20261004_tracking_row_key/migration.sql`을 적용한다.
-2. `Tracking.trackingRowKey` 컬럼과 `Tracking_trackingRowKey_key` unique index가 존재하는지 확인한다. 기존 legacy row의 `NULL` key는 보존되어야 한다.
-3. migration 후 Prisma client/schema drift가 없는지 확인한다.
-4. 아래 테스트를 통과시킨 뒤에만 reconciler/cron 코드를 RELEASE 후보로 올린다.
+1. W0-0 대조로 웹·앱 런타임 DB와 migration CLI가 가리키는 실제 프로젝트·브랜치를 확인한다. 서로 다르면 적용을 중단한다.
+2. 기존 적용 이력과 **전체 미적용 migration 목록**을 확인한다. `migrate deploy`는 미적용 항목을 모두 실행하므로 예상 밖 migration이 있으면 중단한다. 이 세 변경의 의존 순서는 `20261001_audit_question_checkpoint` → `20261002_audit_postprocessing_state` → `20261004_tracking_row_key`이며, 이 문서만으로 운영 적용을 승인하지 않는다.
+3. checkpoint/postprocessing 필드, `Tracking.trackingRowKey` 컬럼 및 `Tracking_trackingRowKey_key` unique index를 확인한다. 기존 legacy row의 `NULL` key는 보존되어야 한다.
+4. migration 후 Prisma client/schema drift가 없는지 확인한다.
+5. 아래 테스트를 통과시킨 뒤에만 reconciler/cron 코드를 RELEASE 후보로 올린다.
    - `apps/app/__tests__/tracking-prisma-replay.test.ts`
    - `packages/audit/reconcile-audit-tracking.test.ts`
    - `packages/audit/sweep-audit-tracking.test.ts`
