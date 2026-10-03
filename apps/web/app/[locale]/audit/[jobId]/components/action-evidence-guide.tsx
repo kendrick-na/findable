@@ -56,12 +56,23 @@ function GradeBadge({
   );
 }
 
-function effortLabel(effort: ActionGuide["effortHours"]): string {
+function effortLabel(
+  effort: ActionGuide["effortHours"],
+  isKo: boolean
+): string {
   const range =
     effort.min === effort.max
-      ? `${effort.min}시간`
-      : `${effort.min}~${effort.max}시간`;
-  return effort.per === "week" ? `매주 약 ${range}` : `약 ${range}`;
+      ? isKo ? `${effort.min}시간` : `${effort.min} hours`
+      : isKo
+        ? `${effort.min}~${effort.max}시간`
+        : `${effort.min}-${effort.max} hours`;
+  return effort.per === "week"
+    ? isKo
+      ? `매주 약 ${range}`
+      : `about ${range} per week`
+    : isKo
+      ? `약 ${range}`
+      : `about ${range}`;
 }
 
 function Sources({
@@ -98,6 +109,8 @@ export function ActionEvidenceGuide({
 }) {
   const engineLabel = (engine: string) =>
     isKo ? engineDisplayName(engine) : (ENGINE_NAME_EN[engine] ?? engine);
+  const storedRuleValue = (value: string) =>
+    isKo ? value : `Stored Korean rule: ${value}`;
   const rows: [string, string][] = [
     [
       isKo ? "적용되는 AI" : "Applies to",
@@ -105,10 +118,10 @@ export function ActionEvidenceGuide({
         ? isKo ? "측정한 AI 전체" : "All measured AI systems"
         : guide.engines.map(engineLabel).join(", "),
     ],
-    [isKo ? "예상 작업 시간" : "Estimated work time", effortLabel(guide.effortHours)],
-    [isKo ? "재측정 권장 시점" : "Suggested remeasurement timing", guide.effectLag],
-    [isKo ? "다시 잴 숫자" : "Metric to remeasure", guide.remeasureMetric],
-    [isKo ? "재점검 조건" : "Recheck condition", guide.failCondition],
+    [isKo ? "예상 작업 시간" : "Estimated work time", effortLabel(guide.effortHours, isKo)],
+    [isKo ? "재측정 권장 시점" : "Suggested remeasurement timing", storedRuleValue(guide.effectLag)],
+    [isKo ? "다시 잴 숫자" : "Metric to remeasure", storedRuleValue(guide.remeasureMetric)],
+    [isKo ? "재점검 조건" : "Recheck condition", storedRuleValue(guide.failCondition)],
   ];
   return (
     <div className="mt-4 space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">

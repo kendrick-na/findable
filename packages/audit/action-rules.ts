@@ -548,24 +548,24 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
         "naver_blog",
         3,
         {
-          title: "네이버 블로그에 한 주제로 꾸준히 글을 올리세요",
+          title: "네이버 검색에 잡힐 한 주제의 글을 꾸준히 올리세요",
           evidence,
           how:
             "우리 업종의 한 주제만 정해, 고객이 실제로 묻는 질문에 도움이 되는 글을 꾸준히 올리세요. 첫 문단에 답을 먼저 쓰고, 회사 이름을 정확히 적습니다. " +
             "한 사례 분석(네이버 AI 브리핑 인용 272건)에서는 검색 상위 10위 밖 문서도 인용됐습니다. 그 분석은 기업 블로그 게시의 효과를 잰 것이 아니어서, 이 카드는 Findable의 실행 가설입니다.",
           where: "네이버 블로그(회사 공식 계정)",
           verification:
-            "다음 측정에서 네이버·네이버 AI 브리핑·HyperCLOVA X 답변이 우리를 알아봤는지 보세요.",
+            "다음 측정에서 네이버 검색 노출과 우리를 알아본 답변 수가 함께 달라졌는지 보세요.",
         },
         {
           evidenceGrade: "weak",
           evidenceBasis: "internal_hypothesis",
           notGuaranteed:
-            "매주(주 1회) 올리면 네이버 AI 브리핑이나 HyperCLOVA X 가 우리를 인용·언급한다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.",
+            "매주(주 1회) 올리면 네이버 검색 노출이나 AI 답변의 언급이 늘어난다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.",
           publishCheck:
             "올린 글이 네이버 검색에서 회사 이름이나 글 제목으로 검색되는지(색인) 확인하세요.",
           sources: [RULE_SOURCES.naverBriefing],
-          engines: ["naver", "naver-briefing", "hyperclova"],
+          engines: ["naver"],
           effortHours: { min: 2, max: 4, per: "week" },
           effectLag:
             "게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",

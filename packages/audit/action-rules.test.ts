@@ -142,6 +142,8 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
     expect(naver?.guide?.sources[0]?.url).toBe(
       "https://seonews.co.kr/naver-ai-briefing-geo-202605/"
     );
+    expect(naver?.guide?.engines).toEqual(["naver"]);
+    expect(naver?.verification).not.toContain("HyperCLOVA");
   });
 
   it("해외 시장이면 네이버 카드를 내지 않는다", () => {

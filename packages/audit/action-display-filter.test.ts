@@ -27,3 +27,23 @@ describe("저장된 crawl_access 카드 표시 투영", () => {
     expect(legacy.guide.effectLag).toContain("고친 즉시");
   });
 });
+
+describe("저장된 네이버 카드 표시 보존", () => {
+  it("옛 네이버·브리핑·HyperCLOVA 범위는 저장 카드에서 소급 변경하지 않는다", () => {
+    const legacy = {
+      kind: "naver_blog",
+      title: "네이버 블로그에 한 주제로 꾸준히 글을 올리세요",
+      evidence: "기존 측정 근거",
+      how: "기존 실행 방법",
+      verification: "네이버·네이버 AI 브리핑·HyperCLOVA X 답변을 확인",
+      source: "근거 약함 · 기존 출처",
+      guide: {
+        engines: ["naver", "naver-briefing", "hyperclova"],
+        effectLag: "게시 후 몇 주~몇 달",
+        failCondition: "기존 조건",
+      },
+    };
+
+    expect(filterStoredGeoActions([legacy])).toEqual([legacy]);
+  });
+});

@@ -56,6 +56,8 @@ describe("웹 ActionEvidenceGuide", () => {
     expect(html).toContain("Recheck condition");
     expect(html).toContain("Work time, remeasurement timing");
     expect(html).toContain("Google Search (AI features)");
+    expect(html).toContain("about 2-4 hours");
+    expect(html).toContain("Stored Korean rule: 며칠~몇 주");
     expect(html).not.toContain("예상 작업 시간");
   });
 });
