@@ -72,14 +72,14 @@ const CURRENT_CRAWL_FAIL_CONDITION =
 const LEGACY_NAVER_VERIFICATION =
   "다음 측정에서 네이버·네이버 AI 브리핑·HyperCLOVA X 답변이 우리를 알아봤는지 보세요.";
 const CURRENT_NAVER_VERIFICATION =
-  "다음 측정에서 네이버 검색에 회사명·서비스 설명이 실제로 노출되는지 확인하세요. AI 답변 변화는 보조 관찰로만 기록하세요.";
+  "다음 측정에서 같은 질문에 네이버 검색 노출이 있었는지 확인하세요. AI 답변 변화는 보조 관찰로만 기록하세요.";
 const LEGACY_NAVER_REMEASURE_RE = /^AI가 제대로 알아본 답변 수(?:\s|\()/;
 const CURRENT_NAVER_REMEASURE =
-  "네이버 검색 노출에서 회사명·서비스 설명이 확인된 결과 수";
+  "같은 질문에서 네이버 검색 노출이 확인된 질문 수";
 const LEGACY_NAVER_FAIL_CONDITION =
   "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 계열 답변에서 알아본 답변이 0건이면, 주제를 더 좁히거나 질문 문구를 고객 표현으로 바꾸세요.";
 const CURRENT_NAVER_FAIL_CONDITION =
-  "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 검색에서 회사명·서비스 설명이 확인되지 않으면, 주제를 더 좁히거나 제목·첫 문장을 고객 표현으로 바꾸세요.";
+  "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 검색 노출이 확인된 질문 수가 늘지 않으면, 주제를 더 좁히거나 제목·첫 문장을 고객 표현으로 바꾸세요.";
 
 function actionText(action: StoredActionLike): string {
   return [

@@ -48,10 +48,10 @@ describe("저장된 네이버 카드 표시 보존", () => {
     };
 
     const filtered = filterStoredGeoActions([legacy]);
-    expect(filtered[0]?.verification).toContain("네이버 검색에 회사명·서비스 설명");
+    expect(filtered[0]?.verification).toContain("같은 질문에 네이버 검색 노출");
     expect(filtered[0]?.guide).toMatchObject({
-      remeasureMetric: "네이버 검색 노출에서 회사명·서비스 설명이 확인된 결과 수",
-      failCondition: expect.stringContaining("네이버 검색에서"),
+      remeasureMetric: "같은 질문에서 네이버 검색 노출이 확인된 질문 수",
+      failCondition: expect.stringContaining("노출이 확인된 질문 수"),
     });
     expect(legacy.verification).toContain("HyperCLOVA");
     expect(legacy.guide.remeasureMetric).toContain("AI가 제대로 알아본");
