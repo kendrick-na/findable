@@ -39,6 +39,16 @@ describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
     expect(result).toEqual([]);
   });
 
+  it("새 네이버 카드의 면책 문구는 구형 외삽 카드로 오인하지 않는다", () => {
+    const safe = action({
+      kind: "naver_blog",
+      evidence: "한 사례 분석(네이버 AI 브리핑 인용 272건)의 분포",
+      how: "그 분석은 기업 블로그 게시의 효과를 잰 것이 아닙니다. 보장하지 않는 것: 매주 올리면 네이버 AI 브리핑에 인용·언급된다는 근거는 없습니다. 인용 272건은 한 사례의 분포일 뿐입니다.",
+    });
+
+    expect(filterStoredGeoActions([safe])).toEqual([safe]);
+  });
+
   it("Bing 등록을 ChatGPT 노출의 필요조건으로 말하는 카드를 제거한다", () => {
     const result = filterStoredGeoActions([
       action({

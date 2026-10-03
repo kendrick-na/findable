@@ -14,6 +14,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
 import {
   DONT_LIST,
   EVIDENCE_BASIS_LABEL,
@@ -145,6 +146,25 @@ describe("AG-1 과장·혼동 문구 정정", () => {
     const gap = byKind("prompt_gap");
     expect(gap.how).toMatch(/기존/);
     expect(gap.how).toMatch(/관찰/);
+  });
+
+  it("공식 페이지 액션은 기존 보강을 우선하고 질문별 복제를 명령하지 않는다", () => {
+    const content = byKind("content_fix");
+    expect(content.how).toMatch(/기존 페이지.*보강/);
+    expect(content.how).toMatch(/내용이 충분히 다를 때만.*별도 페이지/);
+    expect(content.how).toMatch(/복제하지 마세요/);
+    expect(content.how).not.toMatch(/질문.*마다 답하는 페이지를 하나씩/);
+  });
+
+  it("근거 등급이 있는 신규 카드는 JSON 왕복 뒤에도 모두 보존한다", () => {
+    const generated = cards().filter((action) => action.guide?.evidenceBasis);
+    const restored = filterStoredGeoActions(
+      JSON.parse(JSON.stringify(generated))
+    );
+
+    expect(restored.map((action) => action.title)).toEqual(
+      generated.map((action) => action.title)
+    );
   });
 
   it("네이버 블로그: 272건 사례 분석을 주간 블로그 효과로 외삽하지 않는다", () => {
