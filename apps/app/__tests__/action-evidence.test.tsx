@@ -35,11 +35,16 @@ describe("ActionEvidenceGuide", () => {
     const view = within(container);
     expect(view.getByText(EVIDENCE_GRADE_LABEL.medium.label)).toBeTruthy();
     expect(view.getByText("Google 검색(AI 개요), Gemini")).toBeTruthy();
+    expect(view.getByText("예상 작업 시간")).toBeTruthy();
     expect(view.getByText("약 2~4시간")).toBeTruthy();
     expect(view.getByText("재측정 권장 시점")).toBeTruthy();
     expect(view.getByText(guide.effectLag)).toBeTruthy();
     expect(view.getByText(guide.remeasureMetric)).toBeTruthy();
+    expect(view.getByText("재점검 조건")).toBeTruthy();
     expect(view.getByText(guide.failCondition)).toBeTruthy();
+    expect(container.textContent).toContain(
+      "Findable 내부 운영 기준이며 효과를 입증하지 않습니다"
+    );
     expect(container.textContent).toContain("노우버스는 에듀테크");
     const link = container.querySelector("a[href='https://example.com/a']");
     expect(link?.getAttribute("rel")).toContain("noopener");

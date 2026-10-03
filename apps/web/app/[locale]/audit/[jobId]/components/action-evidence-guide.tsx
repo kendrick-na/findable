@@ -67,10 +67,10 @@ export function ActionEvidenceGuide({ guide }: { guide: ActionGuide }) {
         ? "측정한 AI 전체"
         : guide.engines.map(engineDisplayName).join(", "),
     ],
-    ["작업 시간", effortLabel(guide.effortHours)],
+    ["예상 작업 시간", effortLabel(guide.effortHours)],
     ["재측정 권장 시점", guide.effectLag],
     ["다시 잴 숫자", guide.remeasureMetric],
-    ["실패로 볼 조건", guide.failCondition],
+    ["재점검 조건", guide.failCondition],
   ];
   return (
     <div className="mt-4 space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
@@ -91,6 +91,9 @@ export function ActionEvidenceGuide({ guide }: { guide: ActionGuide }) {
           </div>
         ))}
       </dl>
+      <p className="text-xs text-zinc-500 leading-relaxed">
+        작업 시간과 재점검 조건은 Findable 내부 운영 기준이며 효과를 입증하지 않습니다.
+      </p>
       {guide.quotes && guide.quotes.length > 0 && (
         <div className="space-y-2">
           <p className="font-medium text-xs text-zinc-400">

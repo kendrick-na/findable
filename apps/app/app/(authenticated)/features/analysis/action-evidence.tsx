@@ -58,7 +58,7 @@ const Row = ({ label, children }: { children: string; label: string }) => (
   </div>
 );
 
-/** 카드 6칸 — 근거 등급·출처 / 적용 AI / 작업 시간 / 재측정 권장 시점 / 다시 잴 숫자 / 실패로 볼 조건. */
+/** 카드 6칸 — 근거 등급·출처 / 적용 AI / 예상 작업 시간 / 재측정 권장 시점 / 다시 잴 숫자 / 재점검 조건. */
 export const ActionEvidenceGuide = ({ guide }: { guide: ActionGuide }) => (
   <div className="flex flex-col gap-3 rounded border border-white/6 bg-white/[0.02] p-3">
     <div className="flex flex-wrap items-center gap-2">
@@ -69,11 +69,14 @@ export const ActionEvidenceGuide = ({ guide }: { guide: ActionGuide }) => (
     </div>
     <dl className="flex flex-col gap-2">
       <Row label="적용되는 AI">{enginesLabel(guide.engines)}</Row>
-      <Row label="작업 시간">{effortLabel(guide.effortHours)}</Row>
+      <Row label="예상 작업 시간">{effortLabel(guide.effortHours)}</Row>
       <Row label="재측정 권장 시점">{guide.effectLag}</Row>
       <Row label="다시 잴 숫자">{guide.remeasureMetric}</Row>
-      <Row label="실패로 볼 조건">{guide.failCondition}</Row>
+      <Row label="재점검 조건">{guide.failCondition}</Row>
     </dl>
+    <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
+      작업 시간과 재점검 조건은 Findable 내부 운영 기준이며 효과를 입증하지 않습니다.
+    </p>
     {guide.quotes && guide.quotes.length > 0 && (
       <div className="flex flex-col gap-2">
         <p className="font-medium text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
