@@ -111,6 +111,17 @@ describe("historical audit action generator fixtures", () => {
                   .map(({ kind }) => kind as string)
               : scenario.cards.map(({ kind }) => kind as string);
         expect(filtered.map(({ kind }) => kind)).toEqual(expectedKinds);
+        if (fixture.provenance.commit === "3618c25b618c23de43b138530fc8ffa50399341f") {
+          const naver = filtered.find(({ kind }) => kind === "naver_blog");
+          if (expectedKinds.includes("naver_blog")) {
+            expect(naver).toBeDefined();
+            expect(naver?.verification).toContain("같은 질문에 네이버 검색 노출");
+            expect((naver?.guide as Record<string, unknown>)?.engines).toEqual([
+              "naver",
+            ]);
+            expect(naver?.verification).not.toContain("HyperCLOVA");
+          }
+        }
       }
     }
   });

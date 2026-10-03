@@ -73,6 +73,10 @@ const LEGACY_NAVER_VERIFICATION =
   "다음 측정에서 네이버·네이버 AI 브리핑·HyperCLOVA X 답변이 우리를 알아봤는지 보세요.";
 const CURRENT_NAVER_VERIFICATION =
   "다음 측정에서 같은 질문에 네이버 검색 노출이 있었는지 확인하세요. AI 답변 변화는 보조 관찰로만 기록하세요.";
+const LEGACY_NAVER_NOT_GUARANTEED_RE =
+  /매주\(주 1회\) 올리면 네이버 AI 브리핑이나 HyperCLOVA X 가 우리를 인용·언급한다는 근거는 없습니다\. 인용 272건 한 사례의 분포일 뿐입니다\./;
+const CURRENT_NAVER_NOT_GUARANTEED =
+  "매주(주 1회) 올리면 네이버 검색 노출이나 AI 답변의 언급이 늘어난다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.";
 const LEGACY_NAVER_REMEASURE_RE = /^AI가 제대로 알아본 답변 수(?:\s|\()/;
 const CURRENT_NAVER_REMEASURE =
   "같은 질문에서 네이버 검색 노출이 확인된 질문 수";
@@ -134,15 +138,37 @@ function projectStoredAction<T extends StoredActionLike>(action: T): T {
   }
   if (action.kind === "naver_blog") {
     const guide = action.guide;
+    const legacyNotGuaranteed =
+      typeof guide === "object" && guide
+        ? (guide as Record<string, unknown>).notGuaranteed
+        : null;
+    const shouldProjectNaverGuide =
+      guide &&
+      typeof guide === "object" &&
+      Array.isArray((guide as Record<string, unknown>).engines) &&
+      ((guide as Record<string, unknown>).engines as unknown[]).some((engine) =>
+        ["naver-briefing", "hyperclova"].includes(String(engine))
+      );
     projected = {
       ...projected,
-      ...(action.verification === LEGACY_NAVER_VERIFICATION
-        ? { verification: CURRENT_NAVER_VERIFICATION }
+      ...(typeof action.how === "string" &&
+      LEGACY_NAVER_NOT_GUARANTEED_RE.test(action.how)
+        ? { how: action.how.replace(LEGACY_NAVER_NOT_GUARANTEED_RE, CURRENT_NAVER_NOT_GUARANTEED) }
+        : {}),
+      ...(typeof action.verification === "string" &&
+      action.verification.includes(LEGACY_NAVER_VERIFICATION)
+        ? {
+            verification: action.verification.replace(
+              LEGACY_NAVER_VERIFICATION,
+              CURRENT_NAVER_VERIFICATION
+            ),
+          }
         : {}),
       ...(guide && typeof guide === "object"
         ? {
             guide: {
               ...(guide as Record<string, unknown>),
+              ...(shouldProjectNaverGuide ? { engines: ["naver"] } : {}),
               ...(typeof (guide as Record<string, unknown>).remeasureMetric ===
               "string" &&
               LEGACY_NAVER_REMEASURE_RE.test(
@@ -150,9 +176,18 @@ function projectStoredAction<T extends StoredActionLike>(action: T): T {
               )
                 ? { remeasureMetric: CURRENT_NAVER_REMEASURE }
                 : {}),
-              ...((guide as Record<string, unknown>).failCondition ===
-              LEGACY_NAVER_FAIL_CONDITION
+              ...(typeof (guide as Record<string, unknown>).failCondition ===
+              "string" &&
+              ((guide as Record<string, unknown>).failCondition as string).includes(
+                "네이버 계열 답변에서 알아본 답변이 0건이면"
+              )
                 ? { failCondition: CURRENT_NAVER_FAIL_CONDITION }
+                : {}),
+              ...(typeof legacyNotGuaranteed === "string" &&
+              LEGACY_NAVER_NOT_GUARANTEED_RE.test(
+                (guide as Record<string, unknown>).notGuaranteed as string
+              )
+                ? { notGuaranteed: CURRENT_NAVER_NOT_GUARANTEED }
                 : {}),
             },
           }

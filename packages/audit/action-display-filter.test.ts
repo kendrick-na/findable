@@ -40,6 +40,8 @@ describe("저장된 네이버 카드 표시 보존", () => {
       source: "근거 약함 · 기존 출처",
       guide: {
         engines: ["naver", "naver-briefing", "hyperclova"],
+        notGuaranteed:
+          "매주(주 1회) 올리면 네이버 AI 브리핑이나 HyperCLOVA X 가 우리를 인용·언급한다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.",
         effectLag: "게시 후 몇 주~몇 달",
         remeasureMetric: "AI가 제대로 알아본 답변 수 (지금 22건 중 5건)",
         failCondition:
@@ -50,10 +52,13 @@ describe("저장된 네이버 카드 표시 보존", () => {
     const filtered = filterStoredGeoActions([legacy]);
     expect(filtered[0]?.verification).toContain("같은 질문에 네이버 검색 노출");
     expect(filtered[0]?.guide).toMatchObject({
+      engines: ["naver"],
+      notGuaranteed: expect.stringContaining("네이버 검색 노출이나 AI 답변"),
       remeasureMetric: "같은 질문에서 네이버 검색 노출이 확인된 질문 수",
       failCondition: expect.stringContaining("노출이 확인된 질문 수"),
     });
     expect(legacy.verification).toContain("HyperCLOVA");
     expect(legacy.guide.remeasureMetric).toContain("AI가 제대로 알아본");
+    expect(legacy.guide.notGuaranteed).toContain("네이버 AI 브리핑");
   });
 });
