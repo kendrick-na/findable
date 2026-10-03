@@ -31,6 +31,8 @@ const TOP_RECOMMENDATION_FORTY_RE = /40(?:\.\d+)?\s*%/;
 const TOP_RECOMMENDATION_SCOPE_RE = /모든|전체|업계|all\s|overall|across/i;
 const TOP_RECOMMENDATION_PRINCETON_RE = /princeton|프린스턴/i;
 const TOP_RECOMMENDATION_PERCENT_RE = /[+−-]?\s*\d+(?:\.\d+)?\s*%/;
+const TOP_RECOMMENDATION_CONTENT_FIX_RE =
+  /(?:질문\s*마다[^.\n]{0,40}(?:페이지|문서)[^.\n]{0,20}(?:하나씩|한\s*개씩)|(?:제목|URL|주소)[^.\n]{0,20}(?:질문|질문 문구)[^.\n]{0,20}(?:그대로|복사)|(?:질문|질문 문구)[^.\n]{0,20}(?:제목|URL|주소)[^.\n]{0,20}(?:그대로|복사))/i;
 const LEGACY_CAUSAL_CLAIM_RE =
   /AI가 인용하기 좋습니다|그대로 쓰는 것이 핵심|채택할 확률이 올라갑니다|인용하기 좋다는/i;
 const LEGACY_NAVER_EXTRAPOLATION_RE =
@@ -180,6 +182,16 @@ export function filterStoredTopRecommendations(
     const unsupportedLift =
       TOP_RECOMMENDATION_PRINCETON_RE.test(recommendation) &&
       TOP_RECOMMENDATION_PERCENT_RE.test(recommendation);
-    return !(industryRedditClaim || unsupportedLift);
+    const unsupportedContentTemplate =
+      TOP_RECOMMENDATION_CONTENT_FIX_RE.test(recommendation) &&
+      hasUnnegatedLegacySentence(
+        recommendation,
+        TOP_RECOMMENDATION_CONTENT_FIX_RE
+      );
+    return !(
+      industryRedditClaim ||
+      unsupportedLift ||
+      unsupportedContentTemplate
+    );
   });
 }

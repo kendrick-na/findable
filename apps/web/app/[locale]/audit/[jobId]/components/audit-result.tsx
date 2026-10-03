@@ -1402,8 +1402,8 @@ function VerificationPartialView({
         {job.pdfOutdated && (
           <p className="mt-5 text-amber-200 text-xs">
             {isKo
-              ? "이전 PDF는 이번 판별·출처 귀속 상태를 반영하지 않아 제공하지 않습니다."
-              : "The previous PDF does not reflect the current verification or citation attribution status and is unavailable."}
+              ? "이전 PDF는 현재 검증·권고 기준을 확인할 수 없어 제공하지 않습니다. 최신 결과는 이 페이지에서 확인하세요."
+              : "The previous PDF cannot be verified against the current verification and recommendation rules. Use this page for the latest result."}
           </p>
         )}
         <a
@@ -1860,8 +1860,8 @@ function HeroSection({
         {job.pdfOutdated && (
           <span className="text-xs text-zinc-400">
             {isKo
-              ? "이전 PDF는 현재 재계산된 수치와 달라 제공하지 않습니다. 최신 결과는 이 페이지에서 확인하세요."
-              : "The old PDF differs from recalculated metrics. Use this page for the corrected result."}
+              ? "이전 PDF는 현재 검증·권고 기준과 달라 제공하지 않습니다. 최신 결과는 이 페이지에서 확인하세요."
+              : "The old PDF does not match the current verification and recommendation rules. Use this page for the latest result."}
           </span>
         )}
       </div>

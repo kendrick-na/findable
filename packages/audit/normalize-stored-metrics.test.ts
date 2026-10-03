@@ -6,6 +6,7 @@ import {
   auditPublicationStatus,
   citationPrescriptionsRestricted,
   hasStaleAuditPdf,
+  isCurrentAuditPdfUrl,
   isPublishableAuditResult,
   publicAuditResult,
   withRecomputedAuditMetrics,
@@ -36,6 +37,19 @@ function unverifiedRows(n: number): Record<string, unknown>[] {
 }
 
 describe("saved audit metric normalization", () => {
+  it("recognizes only current versioned audit PDF URLs", () => {
+    expect(
+      isCurrentAuditPdfUrl(
+        "https://blob.test/audits/audit-v3-11111111-1111-4111-8111-111111111111-1.pdf"
+      )
+    ).toBe(true);
+    expect(
+      isCurrentAuditPdfUrl(
+        "https://blob.test/audits/audit-v2-11111111-1111-4111-8111-111111111111-1.pdf"
+      )
+    ).toBe(false);
+  });
+
   it("refuses current-version metrics-only totals without AI channel evidence", () => {
     const result = {
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
@@ -377,6 +391,43 @@ describe("saved audit metric normalization", () => {
     expect(hasStaleAuditPdf(original, corrected)).toBe(false);
     expect(corrected.regions).toEqual(original.regions);
     expect(corrected).not.toHaveProperty("regionScoresOutdated");
+  });
+
+  it("marks an old PDF stale when its stored recommendations are removed by the current filter", () => {
+    const corrected = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+      geoActions: [],
+      topRecommendations: ["Safe recommendation"],
+    });
+    const original = {
+      ...corrected,
+      geoActions: [
+        {
+          kind: "rank_strategy",
+          title: "Legacy ranking advice",
+          source: "Princeton Table 2 +115%",
+        },
+      ],
+      topRecommendations: [
+        "질문마다 답하는 페이지를 하나씩 만들고, 질문을 제목·URL에 그대로 넣으세요.",
+        "Safe recommendation",
+      ],
+    };
+
+    expect(hasStaleAuditPdf(original, corrected)).toBe(true);
+  });
+
+  it("keeps an honest PDF fresh when all stored recommendations survive the filter", () => {
+    const result = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+      topRecommendations: ["Safe recommendation"],
+    });
+
+    expect(hasStaleAuditPdf(result, result)).toBe(false);
   });
 
   it("quarantines legacy verdicts instead of exposing their stale scores or actions", () => {

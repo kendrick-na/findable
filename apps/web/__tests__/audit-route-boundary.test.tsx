@@ -75,6 +75,7 @@ vi.mock("@repo/audit/normalize-stored-metrics", () => ({
   auditPublicationIssue: () => null,
   publicAuditResult: (result: unknown) => result,
   hasStaleAuditPdf: () => false,
+  isCurrentAuditPdfUrl: () => true,
 }));
 vi.mock("next/og", () => ({
   ImageResponse: class {

@@ -17,6 +17,7 @@ import {
 import { maskEmail } from "@repo/audit/mask";
 import {
   hasStaleAuditPdf,
+  isCurrentAuditPdfUrl,
   isPublishableAuditResult,
   publicAuditResult,
   withRecomputedAuditMetrics,
@@ -211,7 +212,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const publishable = isPublishableAuditResult(result);
     const safeResult = sanitizePublicAuditResult(result);
     const pdfOutdated = Boolean(
-      job.pdfUrl && hasStaleAuditPdf(job.result, result)
+      job.pdfUrl &&
+        (!isCurrentAuditPdfUrl(job.pdfUrl) ||
+          hasStaleAuditPdf(job.result, result))
     );
     return NextResponse.json({
       jobId: job.id,

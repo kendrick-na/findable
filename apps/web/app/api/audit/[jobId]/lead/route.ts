@@ -7,6 +7,7 @@ import { geoAxisScores, scoreTier, TIER_LABEL_KO } from "@repo/audit/geo-score";
 import { maskEmail } from "@repo/audit/mask";
 import {
   hasStaleAuditPdf,
+  isCurrentAuditPdfUrl,
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
@@ -215,7 +216,9 @@ export async function POST(
         enginesTotal,
         resultUrl: `${baseUrl}/ko/audit/${jobId}`,
         pdfUrl:
-          job.pdfUrl && !hasStaleAuditPdf(job.result, result)
+          job.pdfUrl &&
+          isCurrentAuditPdfUrl(job.pdfUrl) &&
+          !hasStaleAuditPdf(job.result, result)
             ? job.pdfUrl
             : undefined,
         topActions,

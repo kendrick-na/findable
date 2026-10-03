@@ -302,27 +302,26 @@ ${
   <h2>Why Findable</h2>
   <div class="why-grid">
     <div class="why-col">
-      <div class="why-label">Why Now</div>
-      <ul class="why-list">
-        <li>2024.11 ChatGPT Search 출시로 검색의 정의가 답변으로 바뀜</li>
-        <li>2026.02 Profound, $96M Series C / $1B 유니콘 (Lightspeed)</li>
-        <li>GEO 시장 CAGR 45.5%, $1.48B(2026) → $17.02B(2034)</li>
-      </ul>
+    <div class="why-label">Why Now</div>
+    <ul class="why-list">
+        <li>AI 답변에서 브랜드가 어떻게 설명되는지 직접 확인할 수 있습니다.</li>
+        <li>같은 질문을 다시 측정해 관찰된 변화를 비교할 수 있습니다.</li>
+    </ul>
     </div>
     <div class="why-col">
       <div class="why-label">Why Findable</div>
       <ul class="why-list">
-        <li>한국 채널 함께 측정: HyperCLOVA X 답변 + 네이버·다음 검색 노출(별도 집계)</li>
-        <li>Korean Entity Grounding: 한국어 표기 변형 통합 추적 (Ahrefs 한국어판)</li>
+        <li>AI 답변과 검색 노출은 서로 다른 채널로 구분해 표시합니다.</li>
+        <li>측정 언어는 이 리포트 하단에 표시합니다.</li>
         <li>GEO 연구(Princeton KDD'24 등)는 참고 근거로만 쓰고, 효과는 같은 조건의 재측정으로 확인</li>
       </ul>
     </div>
     <div class="why-col">
       <div class="why-label">Why Now (Team)</div>
       <ul class="why-list">
-        <li>인디고차일드: 6년 K-콘텐츠·IP 마케팅 (서울시 · 남양주시 · 워터밤)</li>
-        <li>2024 노동부 생성형 AI 활용 경진대회 최우수상</li>
-        <li>대표 나현덕: 동국대 핀테크블록체인학과 대학원생</li>
+        <li>이 리포트의 수치와 권고는 입력한 브랜드의 측정 결과에 한정됩니다.</li>
+        <li>권고의 효과는 같은 조건의 후속 측정으로 확인해야 합니다.</li>
+        <li>측정되지 않은 시장 규모나 성과를 이 리포트가 보증하지 않습니다.</li>
       </ul>
     </div>
   </div>
@@ -330,7 +329,7 @@ ${
 
 <div class="footer">
   <span>Findable · AI 답변 가시성 추적 플랫폼 (이 리포트 측정 언어: ${LANGUAGE_LABEL[data.language]})</span>
-  <span><a href="https://findable.co.kr">findable.co.kr</a> · 무료 진단 무제한</span>
+  <span><a href="https://findable.co.kr">findable.co.kr</a></span>
 </div>
 </body>
 </html>`;

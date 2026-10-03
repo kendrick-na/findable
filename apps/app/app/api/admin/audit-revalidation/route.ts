@@ -66,7 +66,10 @@ export async function POST(request: Request) {
       if (apply) {
         await database.auditJob.update({
           where: { id: jobId },
-          data: { result: outcome.result as never },
+          // Revalidation replaces the action-bearing result, so the immutable
+          // PDF link must be quarantined too. The Blob is intentionally kept;
+          // only the stale link is removed from the job projection.
+          data: { result: outcome.result as never, pdfUrl: null },
         });
       }
       const metrics = outcome.result.metrics as

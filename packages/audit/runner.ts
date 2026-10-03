@@ -801,6 +801,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       data: {
         status: "completed",
         result: result as never,
+        // A retry replaces the result before PDF generation. Clear any PDF
+        // from the previous attempt so a failed/skipped render cannot leave
+        // an unrelated artifact linked to the new result.
+        pdfUrl: null,
         completedAt,
       },
     });

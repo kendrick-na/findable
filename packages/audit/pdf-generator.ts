@@ -85,7 +85,9 @@ export async function generateAuditPdf(
     });
 
     // Vercel Blob 업로드. Public access — Audit 결과는 비밀 아님 (jobId secret).
-    const filename = `audit-${jobId}-${Date.now()}.pdf`;
+    // Version the artifact URL so readers can distinguish PDFs generated
+    // before the current verification/action-display contract existed.
+    const filename = `audit-v3-${jobId}-${Date.now()}.pdf`;
     const uploaded = await put(`audits/${filename}`, buffer as Buffer, {
       access: "public",
       contentType: "application/pdf",

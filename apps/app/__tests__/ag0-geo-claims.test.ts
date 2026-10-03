@@ -137,6 +137,27 @@ describe("③ 신규 생성 템플릿·프롬프트의 과장 문구", () => {
     expect(pdf).not.toMatch(/한국 AI 엔진[^<]*Naver/);
   });
 
+  it("PDF: 검증되지 않은 시장·투자·팀 성과 주장을 싣지 않는다", () => {
+    const pdf = code("packages/audit/pdf-template.ts");
+    expect(pdf).not.toMatch(
+      /Profound|\$96M|\$1B|CAGR|1\.48B|17\.02B|Ahrefs 75K|6년 K-콘텐츠|노동부|동국대|무료 진단 무제한/
+    );
+  });
+
+  it("PDF: 현재 기본 측정에서 제외된 HyperCLOVA를 지원 엔진으로 약속하지 않는다", () => {
+    const pdf = code("packages/audit/pdf-template.ts");
+    expect(pdf).not.toMatch(/HyperCLOVA|하이퍼클로바/);
+    expect(pdf).toMatch(/AI 답변과 검색 노출은 서로 다른 채널/);
+    expect(pdf).toMatch(/측정 언어는 이 리포트 하단에 표시/);
+  });
+
+  it("runner: 결과 교체 시 이전 PDF 링크를 먼저 지운다", () => {
+    const runner = code("packages/audit/runner.ts");
+    expect(runner).toMatch(
+      /status:\s*"completed"[\s\S]*result:\s*result as never,[\s\S]*pdfUrl:\s*null/
+    );
+  });
+
   it("crew: +40%·Reddit 40% 를 LLM 에 필수 사실로 지시하지 않는다", () => {
     const prompts =
       code("packages/ai/lib/crew/agents.ts") +

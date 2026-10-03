@@ -1,5 +1,6 @@
 import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
 import { generateAuditPrompts } from "@repo/audit/audit-prompts";
+import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -26,6 +27,59 @@ vi.mock("../app/api/audit/_lib/owner", () => ({
 }));
 
 import { GET } from "../app/api/audit/[jobId]/route";
+
+it("withholds an old PDF when only its stored recommendations are now filtered", async () => {
+  const jobId = "44444444-4444-4444-8444-444444444444";
+  const result = withRecomputedAuditMetrics({
+    brandName: "Synthetic",
+    domain: "example.test",
+    mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    metrics: { sov: 100 },
+    engineResponses: Array.from({ length: 10 }, (_, index) => ({
+      engineId: ["chatgpt", "claude", "perplexity", "gemini"][index % 4],
+      brandMentioned: true,
+      mentionQuality: "confirmed",
+      isStub: false,
+      errorMessage: null,
+    })),
+    geoActions: [
+      {
+        kind: "rank_strategy",
+        title: "Legacy ranking advice",
+        source: "Princeton Table 2 +115%",
+      },
+    ],
+    topRecommendations: ["Princeton Table 2 +115% expected lift"],
+  });
+  mocks.findUnique.mockResolvedValue({
+    id: jobId,
+    email: "synthetic@example.test",
+    organizationId: null,
+    status: "completed",
+    domain: "example.test",
+    language: "ko",
+    pdfUrl: "https://example.test/old-report.pdf",
+    result,
+    crewStatus: "not_requested",
+    crewResult: null,
+    createdAt: new Date("2026-10-03T00:00:00Z"),
+    completedAt: new Date("2026-10-03T00:01:00Z"),
+    errorMessage: null,
+  });
+  mocks.findMany.mockResolvedValue([]);
+
+  const response = await GET(
+    new Request(`https://findable.example/api/audit/${jobId}`) as never,
+    { params: Promise.resolve({ jobId }) }
+  );
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body.pdfUrl).toBeNull();
+  expect(body.pdfOutdated).toBe(true);
+  expect(body.result.geoActions).toEqual([]);
+  expect(body.result.topRecommendations).toEqual([]);
+});
 
 it("withholds PDF and crew output on the real poll route while retaining search evidence", async () => {
   const jobId = "11111111-1111-4111-8111-111111111111";
@@ -190,13 +244,14 @@ it("keeps a fully answered free fallback run publishable on the poll route", asy
     status: "completed",
     domain: "example.test",
     language: "both",
-    pdfUrl: null,
-    result: {
+    pdfUrl:
+      "https://example.test/audits/audit-v3-33333333-3333-4333-8333-333333333333-1.pdf",
+    result: withRecomputedAuditMetrics({
       brandName: "샘플",
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
       metrics: { sov: 0 },
       engineResponses,
-    },
+    }),
     crewStatus: "not_requested",
     crewResult: null,
     createdAt: new Date("2026-10-03T00:00:00Z"),
@@ -212,6 +267,7 @@ it("keeps a fully answered free fallback run publishable on the poll route", asy
   const body = await response.json();
 
   expect(response.status).toBe(200);
+  expect(body.pdfUrl).toContain("/audits/audit-v3-");
   expect(body.result.metrics.answerBuckets.ai.adjudicated).toBe(16);
   expect(body.result.metrics.sov).toBeTypeOf("number");
   expect(body.result.engineResponses).toHaveLength(20);
