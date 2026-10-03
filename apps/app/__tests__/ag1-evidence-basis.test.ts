@@ -174,13 +174,13 @@ describe("AG-1 과장·혼동 문구 정정", () => {
     expect(naver.how).toMatch(/272건/);
     expect(naver.how).not.toMatch(/절반 가까이 인용합니다 —/);
     expect(naver.guide?.notGuaranteed).toMatch(/주 1회|매주/);
-    expect(naver.guide?.effectLag).toMatch(/재측정해 확인/);
+    expect(naver.guide?.effectLag).toMatch(/재측정 권장 시점/);
     expect(naver.guide?.effectLag).not.toMatch(/글이 쌓여야 보입니다/);
   });
 
   it("외부 언급의 반영 시점은 단정하지 않고 재측정으로 확인한다", () => {
     const mentions = byKind("web_mentions");
-    expect(mentions.guide?.effectLag).toMatch(/재측정해 확인/);
+    expect(mentions.guide?.effectLag).toMatch(/재측정 권장 시점/);
     expect(mentions.guide?.effectLag).not.toMatch(/가장 느리지만 오래 갑니다/);
   });
 

@@ -68,7 +68,7 @@ export function ActionEvidenceGuide({ guide }: { guide: ActionGuide }) {
         : guide.engines.map(engineDisplayName).join(", "),
     ],
     ["작업 시간", effortLabel(guide.effortHours)],
-    ["효과가 보이기까지", guide.effectLag],
+    ["재측정 권장 시점", guide.effectLag],
     ["다시 잴 숫자", guide.remeasureMetric],
     ["실패로 볼 조건", guide.failCondition],
   ];

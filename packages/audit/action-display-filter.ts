@@ -16,6 +16,7 @@
 
 interface StoredActionLike {
   evidence?: unknown;
+  guide?: unknown;
   how?: unknown;
   kind?: unknown;
   source?: unknown;
@@ -42,6 +43,12 @@ const BING_RE = /Bing/i;
 const CHATGPT_RE = /ChatGPT/i;
 const LEGACY_LLMS_BAN_RE =
   /llms\.txt[\s\S]*(?:파일 만들기|밝힌 적이 없고)|(?:파일 만들기|밝힌 적이 없고)[\s\S]*llms\.txt/i;
+const EVIDENCE_BASES = new Set([
+  "official_requirement",
+  "controlled_experiment",
+  "observational",
+  "internal_hypothesis",
+]);
 
 function actionText(action: StoredActionLike): string {
   return [
@@ -56,6 +63,31 @@ function actionText(action: StoredActionLike): string {
     .join("\n");
 }
 
+/**
+ * 새 가이드 스키마가 완성된 카드인지 확인한다.
+ * evidenceBasis 하나만 붙인 구형 저장값은 신뢰하지 않는다 — 아래 legacy
+ * 필터는 계속 적용해 fail-closed로 남긴다.
+ */
+function hasCompleteEvidenceGuide(action: StoredActionLike): boolean {
+  if (!action.guide || typeof action.guide !== "object") {
+    return false;
+  }
+  const guide = action.guide as Record<string, unknown>;
+  return (
+    EVIDENCE_BASES.has(String(guide.evidenceBasis)) &&
+    typeof guide.evidenceGrade === "string" &&
+    typeof guide.notGuaranteed === "string" &&
+    typeof guide.publishCheck === "string" &&
+    typeof guide.effectLag === "string" &&
+    typeof guide.remeasureMetric === "string" &&
+    typeof guide.failCondition === "string" &&
+    Array.isArray(guide.sources) &&
+    Array.isArray(guide.engines) &&
+    typeof guide.effortHours === "object" &&
+    guide.effortHours !== null
+  );
+}
+
 function isUnsupportedStoredAction(action: StoredActionLike): boolean {
   if (action.kind === "rank_strategy" || action.kind === "source_portfolio") {
     return true;
@@ -66,12 +98,14 @@ function isUnsupportedStoredAction(action: StoredActionLike): boolean {
   }
   if (
     action.kind === "naver_blog" &&
+    !hasCompleteEvidenceGuide(action) &&
     LEGACY_NAVER_EXTRAPOLATION_RE.test(text)
   ) {
     return true;
   }
   if (
     action.kind === "content_fix" &&
+    !hasCompleteEvidenceGuide(action) &&
     LEGACY_CONTENT_FIX_TEMPLATE_RE.test(text)
   ) {
     return true;

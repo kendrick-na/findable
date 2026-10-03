@@ -7,7 +7,7 @@
 //
 // 이 파일의 원칙:
 //   1. 규칙은 **관측값**으로만 켜진다(우리가 잰 답변 수). 추정으로 켜지 않는다.
-//   2. 카드마다 6칸을 채운다 — 근거 등급+출처 · 적용 AI · 작업 시간 · 효과가 보이기까지 ·
+//   2. 카드마다 6칸을 채운다 — 근거 등급+출처 · 적용 AI · 작업 시간 · 재측정 권장 시점 ·
 //      다시 잴 숫자 · 실패로 볼 조건. 등급은 **연구의 강도**이지 효과 크기가 아니다.
 //   3. 출처 URL 은 원문을 직접 확인한 것만 둔다(2026-09-28 확인). 요약 수치도 원문 그대로.
 //   4. 임계값 중 연구 근거가 없는 것은 "제품 규칙"이라고 밝힌다(`RULE_THRESHOLDS`).
@@ -568,10 +568,10 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
           engines: ["naver", "naver-briefing", "hyperclova"],
           effortHours: { min: 2, max: 4, per: "week" },
           effectLag:
-            "몇 주~몇 달 걸릴 수 있습니다. 실제 반영 시점과 변화는 같은 질문으로 재측정해 확인하세요.",
+            "재측정 권장 시점: 게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
           remeasureMetric: remeasure,
           failCondition:
-            "3개월(글 12편 안팎) 뒤에도 네이버 계열 답변에서 알아본 답변이 0건이면, 주제를 더 좁히거나 질문 문구를 고객 표현으로 바꾸세요.",
+            "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 계열 답변에서 알아본 답변이 0건이면, 주제를 더 좁히거나 질문 문구를 고객 표현으로 바꾸세요.",
         }
       )
     );
@@ -669,7 +669,7 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
         engines: ["chatgpt", "google"],
         effortHours: { min: 8, max: 20, per: "total" },
         effectLag:
-            "몇 달 이상 걸릴 수 있습니다. 실제 반영 시점과 변화는 같은 질문으로 재측정해 확인하세요.",
+          "재측정 권장 시점: 외부 언급 후 몇 달 이상. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
         remeasureMetric: remeasure,
         failCondition:
           "외부 언급을 여러 건 만든 뒤에도 알아본 답변이 늘지 않으면, 그 글·영상이 회사 이름을 정확히 쓰고 있는지(오타·다른 표기)부터 확인하세요.",

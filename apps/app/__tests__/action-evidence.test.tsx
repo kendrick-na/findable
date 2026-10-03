@@ -36,6 +36,7 @@ describe("ActionEvidenceGuide", () => {
     expect(view.getByText(EVIDENCE_GRADE_LABEL.medium.label)).toBeTruthy();
     expect(view.getByText("Google 검색(AI 개요), Gemini")).toBeTruthy();
     expect(view.getByText("약 2~4시간")).toBeTruthy();
+    expect(view.getByText("재측정 권장 시점")).toBeTruthy();
     expect(view.getByText(guide.effectLag)).toBeTruthy();
     expect(view.getByText(guide.remeasureMetric)).toBeTruthy();
     expect(view.getByText(guide.failCondition)).toBeTruthy();
