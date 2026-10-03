@@ -1,5 +1,12 @@
 /** Return only allowlisted diagnostic fields; provider bodies can contain user data. */
 const SECONDS_PATTERN = /^\d+$/;
+export function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (isRecord(error) &&
+      (error.name === "AbortError" || error.code === "ABORT_ERR"))
+  );
+}
 
 export function describeProviderError(error: unknown): {
   statusCode: number | null;

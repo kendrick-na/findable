@@ -11,6 +11,7 @@
 //
 // ⚠️ OpenAI ToS 회색지대: 자동화는 약관 위반 소지. 베타 단계 트래픽 제한 권장.
 
+import { isAbortError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type { CitedSource, EngineAdapter, EngineResponse } from "./types";
 import {
@@ -124,6 +125,9 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
   );
 
   try {
+    if (query.signal?.aborted) {
+      throw query.signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
     await stagehand.init();
     const page = stagehand.context.pages()[0];
 
@@ -212,6 +216,9 @@ export const chatgptWebAdapter: EngineAdapter = async (query) => {
       isStub: false,
     };
   } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw error;
+    }
     return {
       engineId: "chatgpt-web",
       rawResponse: "",

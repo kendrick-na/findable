@@ -16,7 +16,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateText, type LanguageModel } from "ai";
-import { describeProviderError } from "./provider-error";
+import { describeProviderError, isAbortError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type {
   EngineAdapter,
@@ -388,6 +388,7 @@ async function runClaudeWithWebSearch(
           },
         ],
       }),
+      signal: query.signal,
     });
     if (!res.ok) {
       return null;
@@ -427,7 +428,10 @@ async function runClaudeWithWebSearch(
         costModel: "token",
       },
     };
-  } catch {
+  } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw error;
+    }
     return null;
   }
 }
@@ -551,6 +555,7 @@ async function runPerplexityAgent(
         "content-type": "application/json",
       },
       body: JSON.stringify({ preset: PERPLEXITY_PRESET, input: query.prompt }),
+      signal: query.signal,
     });
     if (!response.ok) {
       const detail = (await response.text())
@@ -597,6 +602,9 @@ async function runPerplexityAgent(
       },
     };
   } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw error;
+    }
     logProviderFailure("perplexity", true, error);
     return makePerplexityFailure(
       error instanceof Error ? error.message : String(error),
@@ -629,6 +637,7 @@ async function tryDirectEngine(
 }
 
 function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: provider routing and failure handling stay at one adapter boundary.
   return async (query) => {
     const start = Date.now();
 
@@ -644,6 +653,9 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
     const { model, useDirectProvider, tools } = resolved;
 
     try {
+      if (query.signal?.aborted) {
+        throw query.signal.reason ?? new DOMException("Aborted", "AbortError");
+      }
       const {
         response: providerResponse,
         text: rawText,
@@ -658,6 +670,7 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
             ? "당신은 한국어 사용자를 위한 검색 어시스턴트입니다. 사실 기반으로 답하고, 구체적인 브랜드와 출처를 명시하세요."
             : "You are a search assistant. Provide factual, brand-aware answers with concrete recommendations and sources when available.",
         prompt: query.prompt,
+        abortSignal: query.signal,
         // Vercel Gateway 경로에서만 태그 부착(Letsur·Google 직접 호출은 미해당).
         ...(useDirectProvider
           ? {}
@@ -732,6 +745,9 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
         },
       };
     } catch (error) {
+      if (isAbortError(error) || query.signal?.aborted) {
+        throw error;
+      }
       logProviderFailure(engineId, useDirectProvider, error);
       return {
         engineId,

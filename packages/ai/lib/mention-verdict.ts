@@ -25,7 +25,7 @@ import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { getDomain } from "tldts";
 import { z } from "zod";
-import { describeProviderError } from "./engines/provider-error";
+import { describeProviderError, isAbortError } from "./engines/provider-error";
 import { detectBrandMention } from "./engines/utils";
 
 export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
@@ -70,10 +70,10 @@ export interface MentionVerdict {
   /** 점수·SoV에 실제로 반영할 최종 판정. confirmed 만 true. */
   counted: boolean;
   quality: MentionQuality;
-  /** 판정 경로(관측용). rule=규칙만으로 확정, llm=모호해서 LLM 판정, skipped=검증 미실행. */
-  via: "rule" | "llm" | "skipped";
   /** 비집계 판정의 사유(관측·재검증용). 없으면 quality 자체가 사유다. */
   reason?: MentionVerdictReason;
+  /** 판정 경로(관측용). rule=규칙만으로 확정, llm=모호해서 LLM 판정, skipped=검증 미실행. */
+  via: "rule" | "llm" | "skipped";
 }
 
 export type MentionVerdictReason =
@@ -329,7 +329,7 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
         // 조사 제거 과정에서 고유명사 끝 글자까지 떨어져 나올 수 있다
         // (예: `멜트헤일로` → `멜트헤일`). 등록명/별칭의 일부는 독립적인
         // 공식 사실이 아니므로, 그 자체로는 엔티티 근거가 될 수 없다.
-        return (
+  return (
           compact !== brandToken &&
           !isRegisteredNameFragment(token, input)
         );
@@ -434,6 +434,7 @@ interface VerifyInput {
     siteName?: string | null;
     title?: string | null;
   } | null;
+  signal?: AbortSignal;
   text: string;
 }
 
@@ -512,6 +513,7 @@ ${text.slice(0, VERDICT_TEXT_LIMIT)}
 판정하세요. 언급 방식(주제/비교대상/스쳐지나감)은 상관없습니다.`;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: retry and fallback policy must preserve one provider boundary.
 async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
   const prompt = buildVerdictPrompt(input);
 
@@ -521,18 +523,23 @@ async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
       schema: VerdictSchema,
       prompt,
       temperature: 0,
+      abortSignal: input.signal,
     });
     return object.quality;
-  } catch (error) {
-    const primaryError = describeProviderError(error);
+  } catch (primaryError) {
+    if (isAbortError(primaryError) || input.signal?.aborted) {
+      throw primaryError;
+    }
+    let error: unknown = primaryError;
+    const primaryFailure = describeProviderError(primaryError);
 
     // 일시적인 5xx/연결 오류 한 번으로 실제 브랜드 판별을 포기하면, 고객은
     // "잠정 결과"만 보게 된다. 같은 입력을 한 번만 즉시 재시도한다. 429는
     // 재시도해도 악화될 수 있어 독립 Google 판정기로 바로 넘긴다.
     if (
-      primaryError.statusCode === null ||
-      primaryError.statusCode === 408 ||
-      primaryError.statusCode >= 500
+      primaryFailure.statusCode === null ||
+      primaryFailure.statusCode === 408 ||
+      primaryFailure.statusCode >= 500
     ) {
       try {
         const { object } = await generateObject({
@@ -540,12 +547,16 @@ async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
           schema: VerdictSchema,
           prompt,
           temperature: 0,
+          abortSignal: input.signal,
         });
         log.info("mention.verdict.primary_retry_succeeded", {
           brandName: input.brandName,
         });
         return object.quality;
       } catch (retryError) {
+        if (isAbortError(retryError) || input.signal?.aborted) {
+          throw retryError;
+        }
         error = retryError;
       }
     }
@@ -562,12 +573,16 @@ async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
           schema: VerdictSchema,
           prompt,
           temperature: 0,
+          abortSignal: input.signal,
         });
         log.info("mention.verdict.google_fallback", {
           brandName: input.brandName,
         });
         return object.quality;
       } catch (fallbackError) {
+        if (isAbortError(fallbackError) || input.signal?.aborted) {
+          throw fallbackError;
+        }
         log.warn("mention.verdict.google_fallback_failed", {
           brandName: input.brandName,
           ...describeProviderError(fallbackError),
@@ -626,6 +641,12 @@ export async function verifyMention(
 
   if (!needsVerification(input.brandName, input.text)) {
     return { counted: true, quality: "confirmed", via: "rule" };
+  }
+
+  // Rule-only decisions are free and deterministic; an invocation deadline
+  // must not turn a completed rule result into an unverified row.
+  if (input.signal?.aborted) {
+    throw input.signal.reason ?? new DOMException("Aborted", "AbortError");
   }
 
   const quality = await llmVerdict(input);
@@ -709,6 +730,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
     brandDomain?: string;
     industry?: string;
     officialSite?: VerifyInput["officialSite"];
+    signal?: AbortSignal;
   }
 ): Promise<
   Array<
@@ -749,6 +771,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
             .filter(Boolean),
           industry: brand.industry,
           officialSite: brand.officialSite,
+          signal: brand.signal,
           text: r.rawResponse ?? "",
           // Adapter flags are an optimization hint, not the source of truth.
           // A live Naver AI Briefing response started with the brand name while
@@ -759,6 +782,16 @@ export async function verifyMentions<T extends VerifiableResponse>(
             brand.brandName,
             brand.brandVariants
           ).mentioned,
+        }).catch((error) => {
+          if (isAbortError(error) || brand.signal?.aborted) {
+            return {
+              counted: false,
+              quality: "unverified" as MentionQuality,
+              via: "skipped" as const,
+              reason: "judge_failed" as const,
+            };
+          }
+          throw error;
         });
       })
     );

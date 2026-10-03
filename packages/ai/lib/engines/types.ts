@@ -102,6 +102,8 @@ export interface EngineQuery {
   engineId: EngineId;
   language: "ko" | "en";
   prompt: string;
+  /** Propagates an invocation deadline without allowing adapters to restart work. */
+  signal?: AbortSignal;
 }
 
 export interface CitedSource {
