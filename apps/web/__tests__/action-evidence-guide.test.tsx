@@ -29,7 +29,7 @@ describe("웹 ActionEvidenceGuide", () => {
     expect(html).toContain("며칠~몇 주");
   });
 
-  it("무료 결과의 lead/rest 모두 한국어일 때만 가이드를 노출한다", () => {
+  it("무료 결과의 lead/rest가 locale을 가이드에 전달한다", () => {
     const resultSource = readFileSync(
       fileURLToPath(
         new URL(
@@ -40,11 +40,22 @@ describe("웹 ActionEvidenceGuide", () => {
       "utf8"
     );
     expect(resultSource).toContain(
-      "{isKo && lead.guide && <ActionEvidenceGuide guide={lead.guide} />}"
+      "{lead.guide && <ActionEvidenceGuide guide={lead.guide} isKo={isKo} />}"
     );
     expect(resultSource).toContain(
-      "{isKo && action.guide && <ActionEvidenceGuide guide={action.guide} />}"
+      "{action.guide && <ActionEvidenceGuide guide={action.guide} isKo={isKo} />}"
     );
     expect(resultSource).toContain("isKo ? \"이 처방이 나온 근거 (실측)\"");
+  });
+
+  it("영어 locale에서 가이드의 UI chrome을 영어로 렌더한다", () => {
+    const html = renderToStaticMarkup(
+      createElement(ActionEvidenceGuide, { guide, isKo: false })
+    );
+    expect(html).toContain("Estimated work time");
+    expect(html).toContain("Recheck condition");
+    expect(html).toContain("Work time, remeasurement timing");
+    expect(html).toContain("Google Search (AI features)");
+    expect(html).not.toContain("예상 작업 시간");
   });
 });

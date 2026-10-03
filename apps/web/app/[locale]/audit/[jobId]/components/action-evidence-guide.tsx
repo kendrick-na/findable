@@ -14,6 +14,24 @@ import {
   engineDisplayName,
 } from "@repo/audit/action-rules";
 
+const GRADE_MEANING_EN: Record<EvidenceGrade, string> = {
+  strong: "An official platform document confirms this prerequisite.",
+  medium: "A large observation or official document exists; this does not guarantee an effect.",
+  weak: "Only a small experiment or limited replication supports this.",
+  none: "No effect is established, or there is a policy or downside risk.",
+};
+const ENGINE_NAME_EN: Record<string, string> = {
+  chatgpt: "ChatGPT",
+  claude: "Claude",
+  gemini: "Gemini",
+  google: "Google Search (AI features)",
+  hyperclova: "HyperCLOVA X",
+  naver: "Naver Search",
+  "naver-briefing": "Naver AI Briefing",
+  perplexity: "Perplexity",
+  daum: "Daum Search",
+};
+
 const GRADE_TONE: Record<EvidenceGrade, string> = {
   strong: "border-[var(--brand-3)]/40 text-[var(--brand-3)]",
   medium: "border-sky-300/30 text-sky-300",
@@ -21,13 +39,19 @@ const GRADE_TONE: Record<EvidenceGrade, string> = {
   none: "border-red-300/30 text-red-300",
 };
 
-function GradeBadge({ grade }: { grade: EvidenceGrade }) {
+function GradeBadge({
+  grade,
+  isKo = true,
+}: {
+  grade: EvidenceGrade;
+  isKo?: boolean;
+}) {
   return (
     <span
       className={`rounded-full border px-2 py-0.5 font-medium text-xs ${GRADE_TONE[grade]}`}
-      title={EVIDENCE_GRADE_LABEL[grade].meaning}
+      title={isKo ? EVIDENCE_GRADE_LABEL[grade].meaning : GRADE_MEANING_EN[grade]}
     >
-      {EVIDENCE_GRADE_LABEL[grade].label}
+      {isKo ? EVIDENCE_GRADE_LABEL[grade].label : `Evidence: ${grade}`}
     </span>
   );
 }
@@ -40,7 +64,13 @@ function effortLabel(effort: ActionGuide["effortHours"]): string {
   return effort.per === "week" ? `매주 약 ${range}` : `약 ${range}`;
 }
 
-function Sources({ sources }: { sources: ActionGuide["sources"] }) {
+function Sources({
+  sources,
+  isKo = true,
+}: {
+  sources: ActionGuide["sources"];
+  isKo?: boolean;
+}) {
   return (
     <ul className="space-y-1">
       {sources.map((s) => (
@@ -51,7 +81,7 @@ function Sources({ sources }: { sources: ActionGuide["sources"] }) {
             rel="noopener noreferrer"
             target="_blank"
           >
-            출처: {s.label}
+            {isKo ? "출처: " : "Source: "}{s.label}
           </a>
         </li>
       ))}
@@ -59,25 +89,35 @@ function Sources({ sources }: { sources: ActionGuide["sources"] }) {
   );
 }
 
-export function ActionEvidenceGuide({ guide }: { guide: ActionGuide }) {
+export function ActionEvidenceGuide({
+  guide,
+  isKo = true,
+}: {
+  guide: ActionGuide;
+  isKo?: boolean;
+}) {
+  const engineLabel = (engine: string) =>
+    isKo ? engineDisplayName(engine) : (ENGINE_NAME_EN[engine] ?? engine);
   const rows: [string, string][] = [
     [
-      "적용되는 AI",
+      isKo ? "적용되는 AI" : "Applies to",
       guide.engines.length === 0
-        ? "측정한 AI 전체"
-        : guide.engines.map(engineDisplayName).join(", "),
+        ? isKo ? "측정한 AI 전체" : "All measured AI systems"
+        : guide.engines.map(engineLabel).join(", "),
     ],
-    ["예상 작업 시간", effortLabel(guide.effortHours)],
-    ["재측정 권장 시점", guide.effectLag],
-    ["다시 잴 숫자", guide.remeasureMetric],
-    ["재점검 조건", guide.failCondition],
+    [isKo ? "예상 작업 시간" : "Estimated work time", effortLabel(guide.effortHours)],
+    [isKo ? "재측정 권장 시점" : "Suggested remeasurement timing", guide.effectLag],
+    [isKo ? "다시 잴 숫자" : "Metric to remeasure", guide.remeasureMetric],
+    [isKo ? "재점검 조건" : "Recheck condition", guide.failCondition],
   ];
   return (
     <div className="mt-4 space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <GradeBadge grade={guide.evidenceGrade} />
+        <GradeBadge grade={guide.evidenceGrade} isKo={isKo} />
         <span className="text-xs text-zinc-400">
-          {EVIDENCE_GRADE_LABEL[guide.evidenceGrade].meaning}
+          {isKo
+            ? EVIDENCE_GRADE_LABEL[guide.evidenceGrade].meaning
+            : GRADE_MEANING_EN[guide.evidenceGrade]}
         </span>
       </div>
       <dl className="space-y-2">
@@ -92,12 +132,14 @@ export function ActionEvidenceGuide({ guide }: { guide: ActionGuide }) {
         ))}
       </dl>
       <p className="text-xs text-zinc-500 leading-relaxed">
-        작업 시간·재측정 시점·재점검 조건은 Findable 내부 운영 기준·추정이며 효과를 입증하지 않습니다.
+        {isKo
+          ? "작업 시간·재측정 시점·재점검 조건은 Findable 내부 운영 기준·추정이며 효과를 입증하지 않습니다."
+          : "Work time, remeasurement timing, and recheck conditions are Findable operating estimates; they do not prove an effect."}
       </p>
       {guide.quotes && guide.quotes.length > 0 && (
         <div className="space-y-2">
           <p className="font-medium text-xs text-zinc-400">
-            AI가 실제로 이렇게 답했습니다
+            {isKo ? "AI가 실제로 이렇게 답했습니다" : "Measured response excerpt"}
           </p>
           {guide.quotes.map((q) => (
             <blockquote
@@ -105,14 +147,14 @@ export function ActionEvidenceGuide({ guide }: { guide: ActionGuide }) {
               key={`${q.engineId}:${q.excerpt.slice(0, 24)}`}
             >
               <span className="font-medium text-zinc-200">
-                {engineDisplayName(q.engineId)}
+                {engineLabel(q.engineId)}
               </span>{" "}
               {q.excerpt}
             </blockquote>
           ))}
         </div>
       )}
-      <Sources sources={guide.sources} />
+      <Sources sources={guide.sources} isKo={isKo} />
     </div>
   );
 }

@@ -4412,7 +4412,7 @@ function ActionDetails({
         {action.source && (
           <p className="mt-3 text-xs text-zinc-400">{action.source}</p>
         )}
-        {isKo && action.guide && <ActionEvidenceGuide guide={action.guide} />}
+        {action.guide && <ActionEvidenceGuide guide={action.guide} isKo={isKo} />}
       </div>
     </details>
   );
@@ -4533,7 +4533,7 @@ function ActionTeaser({
             {lead.source && (
               <p className="mt-3 text-xs text-zinc-400">{lead.source}</p>
             )}
-            {isKo && lead.guide && <ActionEvidenceGuide guide={lead.guide} />}
+            {lead.guide && <ActionEvidenceGuide guide={lead.guide} isKo={isKo} />}
           </div>
         </div>
 
