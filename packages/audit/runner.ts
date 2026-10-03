@@ -52,7 +52,6 @@ import {
   type RunPrompt,
 } from "./audit-prompts";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
-import { runBriefingForAuditJob } from "./briefing-runner";
 import {
   assertCheckpointProvenance,
   makeAuditCheckpoint,
@@ -94,7 +93,6 @@ import {
 } from "./tracking";
 import { commitAuditResult } from "./commit-audit-result";
 import {
-  AUDIT_BRIEFING_WORST_CASE_MS,
   AUDIT_PDF_WORST_CASE_MS,
   AUDIT_POST_PROCESSING_RESERVE_MS,
   AUDIT_RUN_TIME_BUDGET_MS,
@@ -989,15 +987,11 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       dualWriteEnabled && input.organizationId && input.brandId
     );
     const pdfExpected = isPublishableAuditResult(result);
-    const briefingExpected = Boolean(
-      keys().AUDIT_BRIEFING_IN_MAIN_ENABLED &&
-        input.organizationId &&
-        input.brandId
-    );
     let postprocessing: AuditPostprocessing = {
       tracking: trackingExpected ? "pending" : "skipped",
       pdf: pdfExpected ? "pending" : "skipped",
-      briefing: briefingExpected ? "pending" : "skipped",
+      // Briefing has its own explicit request route and is never part of the core run.
+      briefing: "not_required",
     };
     const updatePostprocessing = async (
       stage: keyof AuditPostprocessing,
@@ -1182,62 +1176,6 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       const pdfStatus = pdfExpected ? "deferred" : "skipped";
       log.warn("audit.pdf.skipped_unverified", { jobId: input.jobId, status: pdfStatus });
       await updatePostprocessing("pdf", pdfStatus);
-    }
-
-    /**
-     * 🔴 **네이버 AI 브리핑 — 본류 편입**(N-45 · 남은일 #4-b B-4).
-     * 📕 설계 = `docs/_적용/브리핑_본류편입_기획_2026-08-17.md`
-     *
-     * ⭐ **「8번째 엔진」이 아니라 「질의 축 하나 더」다.**
-     *   본류 7엔진은 *추천형*("{브랜드} 추천")을 묻는데, 브리핑은 그 질의엔 **원리상 안 뜬다**.
-     *   그냥 끼우면 거의 전량 「미노출」이 되고 그게 *"네이버가 우리를 모른다"* 로 오독된다.
-     *   → 브리핑은 **자기 질의**(효과·후기·장단점)를 쓴다. 그래서 분모도 다르다.
-     *   ⛔ 7엔진 등장률 평균에 **넣지 않는다**(`metrics` 는 위에서 이미 확정됐다 —
-     *     이 블록은 `result` 를 저장한 **뒤**라 점수에 영향이 없다).
-     *
-     * ⛔ **로그인 측정에만** 돌린다(`organizationId` + `brandId`).
-     *   무료 진단은 건수가 통제되지 않아 **Firecrawl 크레딧 예측이 무너진다**
-     *   (cron 은 `MAX_TRIGGERS_PER_RUN=5` 로 하루 15콜 고정인데, 무료 진단 100건이면
-     *   하루 300콜이다). 무료 진단은 지금처럼 **결과 페이지 버튼**으로 남는다.
-     *
-     * ⛔ **본류를 막지 않는다** — 이미 `status: completed` 로 저장한 뒤이고, 실패해도
-     *   삼킨다. 브리핑은 **부가 축**이라 그것 하나로 측정 전체를 무르면 안 된다
-     *   (📕 `persistAuditTracking` 과 같은 best-effort 규칙).
-     *
-     * ⚠️ 크레딧이 마르면 402 로 즉시 중단되고(N-39) 화면은 「측정하지 못했어요」로
-     *   정직하게 말하며(N-45), 일일 다이제스트가 👤 에게 알린다(B-6).
-    */
-    if (briefingExpected && budget.hasBudgetFor(AUDIT_BRIEFING_WORST_CASE_MS)) {
-      const briefingController = new AbortController();
-      const abortBriefing = () =>
-        briefingController.abort(
-          budget.signal.reason ??
-            new DOMException("Briefing budget exceeded", "AbortError")
-        );
-      budget.signal.addEventListener("abort", abortBriefing, { once: true });
-      try {
-        const briefingStatus = await awaitWithTimeout(
-          runBriefingForAuditJob({
-            jobId: input.jobId,
-            signal: briefingController.signal,
-          }),
-          AUDIT_BRIEFING_WORST_CASE_MS,
-          abortBriefing
-        );
-        await updatePostprocessing("briefing", briefingStatus);
-      } catch (briefingError) {
-        // 여기서 throw 하면 **이미 완료된 측정**이 실패로 뒤집힌다.
-        log.warn("audit.briefing.main_flow_failed", {
-          jobId: input.jobId,
-          error: parseError(briefingError),
-        });
-        await updatePostprocessing("briefing", "failed");
-      } finally {
-        budget.signal.removeEventListener("abort", abortBriefing);
-      }
-    } else if (briefingExpected) {
-      log.warn("audit.briefing.deferred_budget", { jobId: input.jobId });
-      await updatePostprocessing("briefing", "deferred");
     }
 
     // CrewAI 4 에이전트 심층분석은 여기서 자동 실행하지 않는다 (원가전략, 2026-07-27).

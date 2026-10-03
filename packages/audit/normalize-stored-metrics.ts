@@ -258,16 +258,34 @@ export function publicAuditResult<T>(input: T): T {
   }
   // A revalidated run keeps its pre-revalidation result for audit purposes.
   // That copy carries superseded verdicts and must never leave the server.
-  const result: Record<string, unknown> = isRecord(input.revalidation)
-    ? {
-        ...input,
-        revalidation: Object.fromEntries(
-          Object.entries(input.revalidation).filter(
-            ([key]) => key !== "original"
-          )
-        ),
-      }
-    : input;
+  const result: Record<string, unknown> = {
+    ...input,
+    ...(isRecord(input.revalidation)
+      ? {
+          revalidation: Object.fromEntries(
+            Object.entries(input.revalidation).filter(
+              ([key]) => key !== "original"
+            )
+          ),
+        }
+      : {}),
+    ...(Array.isArray(input.engineResponses)
+      ? {
+          engineResponses: input.engineResponses.map((row) =>
+            isRecord(row)
+              ? Object.fromEntries(
+                  Object.entries(row).filter(
+                    ([key]) =>
+                      key !== "usage" &&
+                      key !== "shareOfVoice" &&
+                      key !== "trackingInputCaptured"
+                  )
+                )
+              : row
+          ),
+        }
+      : {}),
+  };
   const status = auditPublicationStatus(result);
   if (status === "published") {
     return result as T;

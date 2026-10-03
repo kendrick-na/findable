@@ -175,13 +175,16 @@ describe("B-5 축 분리 — 브리핑이 다른 집계를 오염시키지 않�
     expect(MIRROR_DATA).toMatch(/\n\s*engines,/);
   });
 
-  it("🔴 등장률 분모(`metrics`)가 **브리핑 앞에서** 확정된다", () => {
-    // 뒤에 있으면 브리핑이 「측정한 AI N곳」에 들어가 분모가 8이 된다.
-    //   그러면 7엔진 등장률이 조용히 희석된다(축이 다른데 같은 분모).
+  it("🔴 본류 점수는 별도 요청 브리핑 없이 확정된다", () => {
     const metrics = RUNNER.indexOf("const metrics = aggregateAudit");
-    const call = RUNNER.indexOf("runBriefingForAuditJob({");
+    const commit = RUNNER.indexOf("commitAuditResult(");
+    const route = readFileSync(
+      join(ROOT, "apps/web/app/api/audit/[jobId]/briefing/route.ts"),
+      "utf8"
+    );
     expect(metrics).toBeGreaterThan(-1);
-    expect(call).toBeGreaterThan(-1);
-    expect(metrics, "점수 확정이 브리핑 뒤에 있다").toBeLessThan(call);
+    expect(commit).toBeGreaterThan(metrics);
+    expect(RUNNER).not.toContain("runBriefingForAuditJob({");
+    expect(route).toContain("runBriefingForAuditJob({");
   });
 });

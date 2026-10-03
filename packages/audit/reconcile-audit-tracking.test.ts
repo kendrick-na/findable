@@ -21,6 +21,33 @@ describe("reconcileAuditTracking", () => {
     vi.clearAllMocks();
   });
 
+  it.fails("known RED: briefing commit before Tracking has no replay owner", async () => {
+    findUnique.mockResolvedValue({
+      status: "completed",
+      organizationId: "org-1",
+      brandId: "brand-1",
+      completedAt: new Date("2026-10-04T00:00:00Z"),
+      result: {
+        briefingStatus: "completed",
+        briefingPrompt: "브랜드 효과",
+        engineResponses: [{
+          engineId: "naver-briefing",
+          excerpt: "saved briefing",
+          brandMentioned: true,
+          isStub: false,
+          errorMessage: null,
+        }],
+      },
+      postprocessing: { tracking: "completed", briefing: "not_required" },
+    });
+
+    await reconcileAuditTracking("job-briefing-crash");
+
+    expect(persistAuditTracking).toHaveBeenCalledWith(
+      expect.objectContaining({ trackingAxis: "briefing", auditJobId: "job-briefing-crash" })
+    );
+  });
+
   it("replays only keyed completed snapshots and advances the marker conditionally", async () => {
     findUnique.mockResolvedValue({
       status: "completed",

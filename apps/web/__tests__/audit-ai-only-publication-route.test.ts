@@ -37,6 +37,10 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
     metrics: { sov: 100 },
     engineResponses: Array.from({ length: 10 }, (_, index) => ({
       engineId: ["chatgpt", "claude", "perplexity", "gemini"][index % 4],
+      usage: { inputTokens: 11, outputTokens: 7, costModel: "token" },
+      shareOfVoice: 0.75,
+      trackingInputCaptured: true,
+      excerpt: "visible answer",
       brandMentioned: true,
       mentionQuality: "confirmed",
       isStub: false,
@@ -79,6 +83,10 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
   expect(body.pdfOutdated).toBe(true);
   expect(body.result.geoActions).toEqual([]);
   expect(body.result.topRecommendations).toEqual([]);
+  expect(body.result.engineResponses[0].excerpt).toBe("visible answer");
+  expect(body.result.engineResponses[0]).not.toHaveProperty("usage");
+  expect(body.result.engineResponses[0]).not.toHaveProperty("shareOfVoice");
+  expect(body.result.engineResponses[0]).not.toHaveProperty("trackingInputCaptured");
 });
 
 it("withholds PDF and crew output on the real poll route while retaining search evidence", async () => {

@@ -5,6 +5,7 @@ export type AuditPostprocessingStage =
   | "unknown"
   | "reconciling"
   | "deferred"
+  | "not_required"
   | "skipped";
 
 /** Core AuditJob.completed is not a promise that these derived outputs exist. */

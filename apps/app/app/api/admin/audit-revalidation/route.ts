@@ -112,7 +112,8 @@ export async function POST(request: Request) {
                  '{regionScoresOutdated}', to_jsonb($7::boolean), true
                ),
                '{actionsOutdated}', to_jsonb($8::boolean), true
-             )
+             ),
+             "pdfUrl" = NULL
            WHERE "id" = $9
              AND "status" = 'completed'
              AND COALESCE("result"->>'briefingStatus', 'not_requested')

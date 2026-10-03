@@ -282,6 +282,7 @@ describe("runAuditJob offline lifecycle contracts", () => {
 
   it("keeps completed status when a post-commit hook throws", async () => {
     briefingEnabled = true;
+    persistAuditTracking.mockRejectedValue(new Error("tracking unavailable"));
     const runAuditJob = await loadRunner();
 
     await runAuditJob(input);
@@ -289,10 +290,17 @@ describe("runAuditJob offline lifecycle contracts", () => {
     expect(auditJobUpdate).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
     );
-    expect(runBriefingForAuditJob).toHaveBeenCalledWith({
-      jobId: input.jobId,
-      signal: expect.any(AbortSignal),
-    });
+    expect(runBriefingForAuditJob).not.toHaveBeenCalled();
+  });
+
+  it("never starts paid briefing automatically even with the flag on and budget available", async () => {
+    briefingEnabled = true;
+    const runAuditJob = await loadRunner();
+
+    await runAuditJob(input);
+
+    expect(terminalCalls()[0].data.postprocessing.briefing).toBe("not_required");
+    expect(runBriefingForAuditJob).not.toHaveBeenCalled();
   });
 
   it("does not start automatic briefing when the Tracking marker write fails", async () => {
@@ -302,28 +310,22 @@ describe("runAuditJob offline lifecycle contracts", () => {
 
     await runAuditJob(input);
 
-    expect(runBriefingForAuditJob).toHaveBeenCalledWith({
-      jobId: input.jobId,
-      signal: expect.any(AbortSignal),
-    });
+    expect(runBriefingForAuditJob).not.toHaveBeenCalled();
     expect(auditJobUpdate).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
     );
   });
 
-  it("keeps the automatic briefing state as not_required", async () => {
-    briefingEnabled = true;
+  it("keeps the on-demand briefing state unrequested", async () => {
+    briefingEnabled = false;
     const runAuditJob = await loadRunner();
 
     await runAuditJob(input);
 
     const completed = terminalCalls()[0];
-    expect(completed.data.postprocessing.briefing).toBe("pending");
-    expect(runBriefingForAuditJob).toHaveBeenCalledWith({
-      jobId: input.jobId,
-      signal: expect.any(AbortSignal),
-    });
-    briefingEnabled = false;
+    expect(completed.data.postprocessing.briefing).toBe("not_required");
+    expect(completed.data.result.briefingStatus).toBe("not_requested");
+    expect(runBriefingForAuditJob).not.toHaveBeenCalled();
   });
 
   it("stores the real scheduler partial contract as provisional publication", async () => {
@@ -376,13 +378,7 @@ describe("runAuditJob offline lifecycle contracts", () => {
         input.jobId,
         "pending"
       );
-      expect(executeRawUnsafe).toHaveBeenCalledWith(
-        expect.stringContaining('"postprocessing"'),
-        "briefing",
-        "deferred",
-        input.jobId,
-        "pending"
-      );
+      expect(completed.data.postprocessing.briefing).toBe("not_required");
       expect(runBriefingForAuditJob).not.toHaveBeenCalled();
 
       const {
