@@ -43,7 +43,7 @@ describe("ActionEvidenceGuide", () => {
     expect(view.getByText("재점검 조건")).toBeTruthy();
     expect(view.getByText(guide.failCondition)).toBeTruthy();
     expect(container.textContent).toContain(
-      "Findable 내부 운영 기준이며 효과를 입증하지 않습니다"
+      "Findable 내부 운영 기준·추정이며 효과를 입증하지 않습니다"
     );
     expect(container.textContent).toContain("노우버스는 에듀테크");
     const link = container.querySelector("a[href='https://example.com/a']");

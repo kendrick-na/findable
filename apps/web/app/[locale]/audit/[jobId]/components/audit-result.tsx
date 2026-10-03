@@ -85,6 +85,7 @@ import { CompetitorBenchmark } from "./competitor-benchmark";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
 import { ProvisionalEvidenceView } from "./provisional-evidence-view";
 import { TruthMirror } from "./truth-mirror";
+import { ActionEvidenceGuide } from "./action-evidence-guide";
 
 interface Props {
   jobId: string;
@@ -323,6 +324,7 @@ function normalizeLegacyResult(result: JobResult): JobResult {
 /** packages/audit/actions.ts GeoAction 과 동일 모양(클라 컴포넌트라 타입만 재선언). */
 interface GeoActionView {
   evidence: string;
+  guide?: import("@repo/audit/action-rules").ActionGuide;
   how: string;
   kind: string;
   priority: 1 | 2 | 3;
@@ -4410,6 +4412,7 @@ function ActionDetails({
         {action.source && (
           <p className="mt-3 text-xs text-zinc-400">{action.source}</p>
         )}
+        {action.guide && <ActionEvidenceGuide guide={action.guide} />}
       </div>
     </details>
   );

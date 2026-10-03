@@ -75,7 +75,7 @@ export const ActionEvidenceGuide = ({ guide }: { guide: ActionGuide }) => (
       <Row label="재점검 조건">{guide.failCondition}</Row>
     </dl>
     <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-      작업 시간과 재점검 조건은 Findable 내부 운영 기준이며 효과를 입증하지 않습니다.
+      작업 시간·재측정 시점·재점검 조건은 Findable 내부 운영 기준·추정이며 효과를 입증하지 않습니다.
     </p>
     {guide.quotes && guide.quotes.length > 0 && (
       <div className="flex flex-col gap-2">
