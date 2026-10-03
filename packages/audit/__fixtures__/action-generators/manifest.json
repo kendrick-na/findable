@@ -1,0 +1,38 @@
+{
+  "generatorScript": "scripts/generate-audit-action-fixtures.mjs",
+  "generatorScriptSha256": "31637c9e869abb8652176ceadd02eab93c851bbbe2a33caea6ec4bb3d444429e",
+  "inputSha256": "f92186b9d15aa41d9d68e4b4f8e308d316899e4fb921d2efeaa8e50b901956b0",
+  "sourceFiles": [
+    "packages/audit/actions.ts",
+    "packages/audit/action-rules.ts"
+  ],
+  "commits": [
+    {
+      "commit": "37088ab82dc98330fb2a6747a4afae292fbcf210",
+      "fixture": "37088ab.json",
+      "sourceBlobs": {
+        "packages/audit/actions.ts": "585fdf99ed51f021c1444af5f485887805503893",
+        "packages/audit/action-rules.ts": "6418798e53e129d1589e21622572fb58eab4b5ae"
+      },
+      "expectedFilter": "all projected naver_blog and content_fix cards are removed"
+    },
+    {
+      "commit": "3618c25b618c23de43b138530fc8ffa50399341f",
+      "fixture": "3618c25.json",
+      "sourceBlobs": {
+        "packages/audit/actions.ts": "7819978adbcd2e227070baa298caf978569d3abf",
+        "packages/audit/action-rules.ts": "3035b98e8284bcfbd5797c492933a6eb0e090fd5"
+      },
+      "expectedFilter": "safe naver_blog cards remain; projected content_fix cards are removed"
+    },
+    {
+      "commit": "0dce32ea2bf32a4e4b1f4f1fe32d3c28e8d20dbf",
+      "fixture": "0dce32e.json",
+      "sourceBlobs": {
+        "packages/audit/actions.ts": "7819978adbcd2e227070baa298caf978569d3abf",
+        "packages/audit/action-rules.ts": "417c38b4c4bda4f985c542487ae8bf35499c2315"
+      },
+      "expectedFilter": "all projected naver_blog and content_fix cards remain"
+    }
+  ]
+}
