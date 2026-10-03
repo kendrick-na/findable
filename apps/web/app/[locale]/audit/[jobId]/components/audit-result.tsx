@@ -85,7 +85,10 @@ import { CompetitorBenchmark } from "./competitor-benchmark";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
 import { ProvisionalEvidenceView } from "./provisional-evidence-view";
 import { TruthMirror } from "./truth-mirror";
-import { ActionEvidenceGuide } from "./action-evidence-guide";
+import {
+  ActionDetails as TeaserActionDetails,
+  ActionLead as TeaserActionLead,
+} from "./action-teaser-cards";
 
 interface Props {
   jobId: string;
@@ -4338,86 +4341,6 @@ function EngineGapCta({ result, isKo }: { isKo: boolean; result: JobResult }) {
  * ⚠️ "하지 말 것"(kind='avoid') 액션은 티저로 쓰지 않는다. 첫인상이 금지사항이면
  *    처방의 가치가 전달되지 않으므로, 실행형 액션을 우선 고른다.
  */
-/**
- * 처방 1건 = 접힌 카드. 눌러야 `how`(실행 방법)가 열린다.
- *
- * 🔴 접기는 **밀도** 때문이지 **잠금이 아니다** — 내용은 전부 여기 있고 클릭 한 번이면 열린다.
- *   (같은 세션 D 작업의 진실거울 접기와 동일 원칙: 삭제·요약 아닌 접기.)
- * `<details>` 를 쓰는 이유: JS 상태 없이 동작하고 **브라우저 검색(Ctrl+F)·스크린리더가
- *   접힌 내용도 찾는다**. 접근성 기본값이 가장 좋은 요소다.
- */
-function ActionDetails({
-  action,
-  index,
-  isKo,
-}: {
-  action: GeoActionView;
-  index: number;
-  isKo: boolean;
-}) {
-  const isAvoid = action.kind === "avoid";
-  return (
-    <details className="group rounded-lg border border-white/10 bg-white/[0.02] transition-colors hover:border-white/20">
-      <summary className="flex cursor-pointer list-none items-start gap-3 p-4">
-        <div
-          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-semibold text-[11px] tabular-nums ${
-            isAvoid
-              ? "bg-white/10 text-zinc-400"
-              : "bg-[var(--brand-3)]/15 text-[var(--brand-3)]"
-          }`}
-        >
-          {isAvoid ? "!" : index}
-        </div>
-        <h4 className="min-w-0 flex-1 font-medium text-sm text-zinc-100 leading-snug">
-          {action.title}
-        </h4>
-        <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="border-white/5 border-t px-4 pt-4 pb-4">
-        {/* 🔴 `how` 는 마크다운 `**강조**` 를 포함한다 — 파서가 없으므로 그대로 그리면
-            별표가 글자로 보인다(라이브 실측). 표시 직전 단일 통로인 stripMarkdown 으로 푼다. */}
-        <p className="whitespace-pre-line text-sm text-zinc-300 leading-relaxed">
-          {stripMarkdown(action.how)}
-        </p>
-        {(action.where || action.verification) && (
-          <div className="mt-4 space-y-2 rounded-lg border border-sky-300/15 bg-sky-300/[0.04] p-3 text-sm leading-relaxed">
-            {action.where && (
-              <p className="text-zinc-300">
-                <span className="font-medium text-sky-300">
-                  {isKo ? "수정 위치 · " : "Where to change · "}
-                </span>
-                {stripMarkdown(action.where)}
-              </p>
-            )}
-            {action.verification && (
-              <p className="text-zinc-400">
-                <span className="font-medium text-sky-300">
-                  {isKo ? "검증 방법 · " : "How to verify · "}
-                </span>
-                {stripMarkdown(action.verification)}
-              </p>
-            )}
-          </div>
-        )}
-        {action.evidence && (
-          <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3">
-            <div className="mb-1.5 font-medium text-[11px] text-zinc-400">
-              {isKo ? "이 처방이 나온 근거 (실측)" : "Evidence (measured)"}
-            </div>
-            <p className="whitespace-pre-line text-sm text-zinc-400 leading-relaxed">
-              {stripMarkdown(action.evidence)}
-            </p>
-          </div>
-        )}
-        {action.source && (
-          <p className="mt-3 text-xs text-zinc-400">{action.source}</p>
-        )}
-        {action.guide && <ActionEvidenceGuide guide={action.guide} isKo={isKo} />}
-      </div>
-    </details>
-  );
-}
-
 function ActionTeaser({
   result,
   isKo,
@@ -4515,26 +4438,7 @@ function ActionTeaser({
           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand-3)]/15 font-semibold text-[11px] text-[var(--brand-3)] tabular-nums">
             1
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-base text-zinc-50 leading-snug md:text-lg">
-              {lead.title}
-            </h3>
-            <p className="mt-3 whitespace-pre-line text-sm text-zinc-300 leading-relaxed">
-              {stripMarkdown(lead.how)}
-            </p>
-            <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3">
-              <div className="mb-1.5 font-medium text-[11px] text-zinc-400">
-                {isKo ? "이 처방이 나온 근거 (실측)" : "Evidence (measured)"}
-              </div>
-              <p className="whitespace-pre-line text-sm text-zinc-400 leading-relaxed">
-                {stripMarkdown(lead.evidence)}
-              </p>
-            </div>
-            {lead.source && (
-              <p className="mt-3 text-xs text-zinc-400">{lead.source}</p>
-            )}
-            {lead.guide && <ActionEvidenceGuide guide={lead.guide} isKo={isKo} />}
-          </div>
+          <TeaserActionLead action={lead} isKo={isKo} />
         </div>
 
         {restAll.length > 0 && (
@@ -4546,7 +4450,7 @@ function ActionTeaser({
             </p>
             <div className="flex flex-col gap-2">
               {restAll.map((action, index) => (
-                <ActionDetails
+                <TeaserActionDetails
                   action={action}
                   index={index + 2}
                   isKo={isKo}
