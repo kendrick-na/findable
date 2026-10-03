@@ -22,11 +22,23 @@ import {
   clientReportDisclosure,
   parseClientReportData,
 } from "@repo/audit/client-report/report-data";
+import {
+  currentEngineDisplayText,
+  ENGINE_NAMES,
+} from "@repo/audit/client-report/compute";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ClientReportDisclosureNotice } from "../components/client-report/client-report-disclosure";
 import { describe, expect, it } from "vitest";
 
 const FIXTURES = join(import.meta.dirname, "fixtures/client-report");
 const read = <T>(name: string): T =>
   JSON.parse(readFileSync(join(FIXTURES, name), "utf8")) as T;
+
+const currentEngineLabels = <T>(value: T): T =>
+  JSON.parse(
+    JSON.stringify(value).replaceAll("네이버 AI", "네이버 검색 노출")
+  ) as T;
 
 interface PythonExpected {
   compute: Record<string, unknown>;
@@ -57,7 +69,7 @@ describe.each([
   ] as const)("%s 가 순서까지 같다", (key) => {
     // JSON 왕복: 파이썬 dict 의 정수 키(cells)는 JSON 에서 문자열이 된다 — 같은 조건으로 맞춘다.
     expect(JSON.parse(JSON.stringify(actual[key]))).toEqual(
-      expected.compute[key]
+      currentEngineLabels(expected.compute[key])
     );
   });
 
@@ -81,7 +93,9 @@ describe.each([
     const fixture = read<{ computed: unknown; config: unknown }>(
       `${slug}.report.json`
     );
-    expect(JSON.parse(JSON.stringify(data.computed))).toEqual(fixture.computed);
+    expect(JSON.parse(JSON.stringify(data.computed))).toEqual(
+      currentEngineLabels(fixture.computed)
+    );
     expect(data.config).toEqual(fixture.config);
   });
 });
@@ -137,6 +151,7 @@ describe("고객 리포트 공개 고지", () => {
     expect(clientReportDisclosure(data)).toEqual({
       isFrozenSnapshot: true,
       retiredEngineIds: ["hyperclova"],
+      legacySyntheticEngineIds: ["naver"],
     });
   });
 
@@ -147,6 +162,7 @@ describe("고객 리포트 공개 고지", () => {
 
     const currentOnly = {
       ...data,
+      config: { ...data.config, measured_at: "2026.09.29" },
       computed: {
         ...data.computed,
         answers: data.computed.answers.filter(
@@ -157,10 +173,46 @@ describe("고객 리포트 공개 고지", () => {
         ),
       },
     };
+    const currentNaver = currentOnly.computed.engines.find(
+      (engine) => engine.id === "naver"
+    );
+    if (currentNaver) currentNaver.name = "네이버 검색 노출";
 
     expect(clientReportDisclosure(currentOnly)).toEqual({
       isFrozenSnapshot: true,
       retiredEngineIds: [],
+      legacySyntheticEngineIds: [],
     });
+  });
+
+  it("Naver는 현재 생성본에서 AI 답변으로 과장하지 않는다", () => {
+    expect(ENGINE_NAMES.naver).toBe("네이버 검색 노출");
+    expect(currentEngineDisplayText("Perplexity, 네이버 AI, 다음 검색")).toBe(
+      "Perplexity, 네이버 검색 노출, 다음 검색"
+    );
+  });
+
+  it("동일한 고지가 screen과 print 렌더 모두에 포함된다", () => {
+    const screen = renderToStaticMarkup(
+      createElement(ClientReportDisclosureNotice, {
+        legacySyntheticEngineIds: ["naver"],
+        print: false,
+        retiredEngineIds: ["hyperclova"],
+      })
+    );
+    const print = renderToStaticMarkup(
+      createElement(ClientReportDisclosureNotice, {
+        legacySyntheticEngineIds: ["naver"],
+        print: true,
+        retiredEngineIds: ["hyperclova"],
+      })
+    );
+
+    expect(screen).toContain("현재 측정값이나 현재 엔진 상태를 보증하지 않습니다");
+    expect(screen).toContain("과거 네이버 합성 측정");
+    expect(screen).toContain('data-report-disclosure="screen"');
+    expect(print).toContain("현재 측정값이나 현재 엔진 상태를 보증하지 않습니다");
+    expect(print).toContain("과거 네이버 합성 측정");
+    expect(print).toContain('data-report-disclosure="print"');
   });
 });

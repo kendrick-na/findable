@@ -133,6 +133,8 @@ export interface ClientReportDisclosure {
   isFrozenSnapshot: true;
   /** Historical engine rows that must not be read as current measurements. */
   retiredEngineIds: string[];
+  /** Pre-cutover Naver rows were Findable's synthetic summary, not Naver AI. */
+  legacySyntheticEngineIds: string[];
 }
 
 const RETIRED_ENGINE_IDS = new Set(["hyperclova"]);
@@ -142,15 +144,21 @@ const RETIRED_ENGINE_IDS = new Set(["hyperclova"]);
  * This deliberately does not invalidate the snapshot or its PDF URL.
  */
 export function clientReportDisclosure(
-  data: Pick<ClientReportData, "computed">
+  data: Pick<ClientReportData, "computed" | "config">
 ): ClientReportDisclosure {
   const engineIds = new Set<string>([
     ...data.computed.answers.map((answer) => answer.engine),
     ...data.computed.engines.map((engine) => engine.id),
   ]);
+  const naverEngine = data.computed.engines.find((engine) => engine.id === "naver");
+  const measuredAt = data.config.measured_at.replaceAll(".", "-");
+  const legacyNaver =
+    engineIds.has("naver") &&
+    (naverEngine?.name === "네이버 AI" || measuredAt < "2026-09-29");
   return {
     isFrozenSnapshot: true,
     retiredEngineIds: [...RETIRED_ENGINE_IDS].filter((id) => engineIds.has(id)),
+    legacySyntheticEngineIds: legacyNaver ? ["naver"] : [],
   };
 }
 

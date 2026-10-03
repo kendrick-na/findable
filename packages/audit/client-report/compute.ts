@@ -15,7 +15,7 @@ export const ENGINE_NAMES = {
   perplexity: "Perplexity",
   gemini: "Gemini",
   hyperclova: "HyperCLOVA X",
-  naver: "네이버 AI",
+  naver: "네이버 검색 노출",
   daum: "다음 검색",
 } as const;
 export type EngineId = keyof typeof ENGINE_NAMES;
@@ -29,6 +29,18 @@ export const ENGINE_MONO: Record<EngineId, string> = {
   naver: "N",
   daum: "D",
 };
+
+/** Current display labels also normalize labels stored by older snapshots. */
+export function currentEngineDisplayName(
+  engineId: string,
+  fallback?: string
+): string {
+  return ENGINE_NAMES[engineId as EngineId] ?? fallback ?? engineId;
+}
+
+export function currentEngineDisplayText(text: string): string {
+  return text.replaceAll("네이버 AI", ENGINE_NAMES.naver);
+}
 
 export const LABELS = {
   ok: { name: "정확", desc: "실제 브랜드와 서비스를 맞게 설명" },

@@ -10,6 +10,8 @@
 import {
   ENGINE_MONO,
   ENGINE_NAMES,
+  currentEngineDisplayName,
+  currentEngineDisplayText,
   type EngineId,
   LABELS,
   type LabelId,
@@ -232,7 +234,7 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
             {engines.map((e) => (
               <span key={e.id}>
                 <Mono engine={e.id} />
-                {e.name}
+                {currentEngineDisplayName(e.id, e.name)}
               </span>
             ))}
           </div>
@@ -337,7 +339,7 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
               {s.engines_correct}
               <small>/ {s.engines_total}곳</small>
             </div>
-            <div className="f">{s.correct_engine_names}</div>
+            <div className="f">{currentEngineDisplayText(s.correct_engine_names)}</div>
           </div>
           <div>
             <div className="t">공식 사이트 인용</div>
@@ -376,7 +378,7 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
                 <td>
                   <span className="eng">
                     <Mono engine={e.id} />
-                    {e.name}
+                    {currentEngineDisplayName(e.id, e.name)}
                   </span>
                 </td>
                 <td>
@@ -459,7 +461,7 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
                 <td>
                   <span className="eng">
                     <Mono engine={e.id} />
-                    {e.name}
+                    {currentEngineDisplayName(e.id, e.name)}
                   </span>
                 </td>
                 {perQ.map((q) => {
@@ -694,7 +696,7 @@ export function ClientReport({ data, webUrl }: ClientReportProps) {
                   </div>
                 </td>
                 <td style={{ fontSize: "8pt", color: "var(--ink2)" }}>
-                  {t.engines}
+                  {currentEngineDisplayText(t.engines)}
                 </td>
                 <td className="c">
                   {t.in_ok ? (
