@@ -17,7 +17,11 @@ import {
 } from "@repo/audit/client-report/compute";
 import { pyFloatStr, pyRound } from "@repo/audit/client-report/py-compat";
 import { formatOfficialPct } from "@repo/audit/client-report/render-strings";
-import type { ClientReportData } from "@repo/audit/client-report/report-data";
+import {
+  type ClientReportData,
+  type ClientReportDisclosure,
+} from "@repo/audit/client-report/report-data";
+import { ClientReportDisclosureNotice } from "./client-report-disclosure";
 
 const TOTAL = 11;
 const ASSET = {
@@ -122,6 +126,7 @@ function Foot({
 export interface ClientReportProps {
   readonly data: ClientReportData;
   readonly legacySyntheticEngineIds?: readonly string[];
+  readonly printDisclosure?: ClientReportDisclosure;
   /** 표지에 작게 찍는 웹 리포트 주소(PDF 에서 웹으로 돌아오는 길). */
   readonly webUrl: string | null;
 }
@@ -129,6 +134,7 @@ export interface ClientReportProps {
 export function ClientReport({
   data,
   legacySyntheticEngineIds = [],
+  printDisclosure,
   webUrl,
 }: ClientReportProps) {
   const c = data.config;
@@ -158,6 +164,14 @@ export function ClientReport({
     <>
       {/* 01 표지 */}
       <section className="page cover">
+        {printDisclosure ? (
+          <ClientReportDisclosureNotice
+            legacySyntheticEngineIds={printDisclosure.legacySyntheticEngineIds}
+            measurementMix={printDisclosure.measurementMix}
+            print
+            retiredEngineIds={printDisclosure.retiredEngineIds}
+          />
+        ) : null}
         <img alt="" className="fbig" src={ASSET.fCream} />
         <img alt="Findable" className="logo" src={ASSET.logo} />
         <div className="kick">

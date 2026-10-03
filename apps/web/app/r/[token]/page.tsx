@@ -90,7 +90,7 @@ export default async function ClientReportPage({
           </a>
         </div>
       ) : null}
-      {disclosure.isFrozenSnapshot ? (
+      {!print && disclosure.isFrozenSnapshot ? (
         <ClientReportDisclosureNotice
           legacySyntheticEngineIds={disclosure.legacySyntheticEngineIds}
           measurementMix={disclosure.measurementMix}
@@ -102,6 +102,7 @@ export default async function ClientReportPage({
         <ClientReport
           data={data}
           legacySyntheticEngineIds={disclosure.legacySyntheticEngineIds}
+          printDisclosure={print ? disclosure : undefined}
           webUrl={webUrl}
         />
       </main>
