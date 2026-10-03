@@ -8,7 +8,7 @@ import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
 import { buildGeoActions } from "@repo/audit/actions";
 import { describe, expect, it } from "vitest";
 
-const action = (overrides: Record<string, unknown>) => ({
+const action = (overrides: Record<string, unknown>): Record<string, unknown> => ({
   evidence: "측정 근거",
   how: "실행 방법",
   priority: 2,
@@ -75,6 +75,35 @@ describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
     });
 
     expect(filterStoredGeoActions([current, naver])).toEqual([current, naver]);
+  });
+
+  it("다른 문장의 부정문이 구형 긍정 지시를 살리지 않는다", () => {
+    const content = action({
+      kind: "content_fix",
+      how: "질문마다 답하는 페이지를 하나씩 두고, 질문을 제목·URL에 그대로 쓰세요.\n다만 효과를 보장하지 않는다는 점은 확인하세요.",
+    });
+    const naver = action({
+      kind: "naver_blog",
+      evidence: "인용 272건은 한 사례의 분포입니다.",
+      how: "매주 올리면 네이버 AI 브리핑에 인용될 수 있습니다.\n이 수치가 기업 블로그 효과의 근거는 아닙니다.",
+    });
+
+    expect(filterStoredGeoActions([content, naver])).toEqual([]);
+  });
+
+  it("저장 원본은 유지하고 구형 effectLag만 표시용으로 정정한다", () => {
+    const legacy = action({
+      kind: "naver_blog",
+      guide: { effectLag: "몇 주~몇 달. 글이 쌓여야 보입니다." },
+    });
+    const projected = filterStoredGeoActions([legacy]);
+
+    expect((legacy.guide as { effectLag: string }).effectLag).toBe(
+      "몇 주~몇 달. 글이 쌓여야 보입니다."
+    );
+    expect(
+      (projected[0]?.guide as { effectLag: string }).effectLag
+    ).toBe("게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.");
   });
 
   it("3618c25 생성기 형태의 구형 content_fix는 guide가 완비돼도 제거한다", () => {

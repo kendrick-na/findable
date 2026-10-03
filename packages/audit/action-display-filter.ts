@@ -16,6 +16,7 @@
 
 interface StoredActionLike {
   evidence?: unknown;
+  guide?: unknown;
   how?: unknown;
   kind?: unknown;
   source?: unknown;
@@ -34,8 +35,8 @@ const LEGACY_CAUSAL_CLAIM_RE =
   /AI가 인용하기 좋습니다|그대로 쓰는 것이 핵심|채택할 확률이 올라갑니다|인용하기 좋다는/i;
 const LEGACY_NAVER_EXTRAPOLATION_RE =
   /(?:49\.3\s*%|272건)[\s\S]*(?:매주|주\s*1회)[\s\S]*(?:인용될 수|언급될 수|인용합니다|언급합니다)|(?:매주|주\s*1회)[\s\S]*(?:인용될 수|언급될 수|인용합니다|언급합니다)[\s\S]*(?:49\.3\s*%|272건)/i;
-const LEGACY_NAVER_NEGATED_RE =
-  /(?:(?:49\.3\s*%|272건|매주|주\s*1회)[^.\n]*(?:인용될 수|언급될 수|인용합니다|언급합니다)[^.\n]*(?:보장|근거|않|아니)|(?:보장|근거|않|아니)[^.\n]*(?:인용될 수|언급될 수|인용합니다|언급합니다)[^.\n]*(?:49\.3\s*%|272건|매주|주\s*1회))/i;
+const LEGACY_NAVER_POSITIVE_SENTENCE_RE =
+  /(?:49\.3\s*%|272건|매주|주\s*1회)[^\.\n]*(?:인용될 수|언급될 수|인용합니다|언급합니다)|(?:인용될 수|언급될 수|인용합니다|언급합니다)[^\.\n]*(?:49\.3\s*%|272건|매주|주\s*1회)/i;
 const LEGACY_CONTENT_FIX_TEMPLATE_RE =
   /(?:질문\s*마다[^.\n]{0,40}(?:페이지|문서)[^.\n]{0,20}(?:하나씩|한\s*개씩)|(?:제목|URL|주소)[^.\n]{0,20}(?:질문|질문 문구)[^.\n]{0,20}(?:그대로|복사)|(?:질문|질문 문구)[^.\n]{0,20}(?:제목|URL|주소)[^.\n]{0,20}(?:그대로|복사))/i;
 const LEGACY_BING_PREREQUISITE_RE =
@@ -45,7 +46,13 @@ const CHATGPT_RE = /ChatGPT/i;
 const LEGACY_LLMS_BAN_RE =
   /llms\.txt[\s\S]*(?:파일 만들기|밝힌 적이 없고)|(?:파일 만들기|밝힌 적이 없고)[\s\S]*llms\.txt/i;
 const LEGACY_NEGATION_RE =
-  /필요\s*없|하지\s*마|않(?:습니다|는다|음)?|아니(?:다|어서|지만)?|보장(?:은|을)?\s*않|근거(?:가|는)?\s*없/i;
+  /필요\s*없|(?:하지|지)\s*말|않(?:습니다|는다|음)?|아니(?:다|어서|지만)?|보장[^.\n]*(?:없|않)|근거[^.\n]*(?:없|않)/i;
+const LEGACY_EFFECT_LAG_COPY: Record<string, string> = {
+  "몇 주~몇 달. 글이 쌓여야 보입니다.":
+    "게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
+  "몇 달. 가장 느리지만 오래 갑니다.":
+    "외부 언급 후 몇 달 이상. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
+};
 
 function actionText(action: StoredActionLike): string {
   return [
@@ -60,7 +67,7 @@ function actionText(action: StoredActionLike): string {
     .join("\n");
 }
 
-function hasNegatedLegacySentence(
+function hasUnnegatedLegacySentence(
   text: string,
   legacyPattern: RegExp
 ): boolean {
@@ -68,8 +75,28 @@ function hasNegatedLegacySentence(
     .split(/[\n.!?。！？]/)
     .some(
       (sentence) =>
-        legacyPattern.test(sentence) && LEGACY_NEGATION_RE.test(sentence)
+        legacyPattern.test(sentence) && !LEGACY_NEGATION_RE.test(sentence)
     );
+}
+
+function projectStoredAction<T extends StoredActionLike>(action: T): T {
+  if (!action.guide || typeof action.guide !== "object") {
+    return action;
+  }
+  const guide = action.guide as Record<string, unknown>;
+  if (
+    typeof guide.effectLag !== "string" ||
+    !LEGACY_EFFECT_LAG_COPY[guide.effectLag]
+  ) {
+    return action;
+  }
+  return {
+    ...action,
+    guide: {
+      ...guide,
+      effectLag: LEGACY_EFFECT_LAG_COPY[guide.effectLag],
+    },
+  } as T;
 }
 
 function isUnsupportedStoredAction(action: StoredActionLike): boolean {
@@ -83,14 +110,14 @@ function isUnsupportedStoredAction(action: StoredActionLike): boolean {
   if (
     action.kind === "naver_blog" &&
     LEGACY_NAVER_EXTRAPOLATION_RE.test(text) &&
-    !LEGACY_NAVER_NEGATED_RE.test(text)
+    hasUnnegatedLegacySentence(text, LEGACY_NAVER_POSITIVE_SENTENCE_RE)
   ) {
     return true;
   }
   if (
     action.kind === "content_fix" &&
     LEGACY_CONTENT_FIX_TEMPLATE_RE.test(text) &&
-    !hasNegatedLegacySentence(text, LEGACY_CONTENT_FIX_TEMPLATE_RE)
+    hasUnnegatedLegacySentence(text, LEGACY_CONTENT_FIX_TEMPLATE_RE)
   ) {
     return true;
   }
@@ -118,12 +145,14 @@ export function filterStoredGeoActions<T extends StoredActionLike>(
   if (!Array.isArray(actions)) {
     return [];
   }
-  return actions.filter(
-    (action) =>
-      Boolean(action) &&
-      typeof action === "object" &&
-      !isUnsupportedStoredAction(action)
-  );
+  return actions
+    .filter(
+      (action) =>
+        Boolean(action) &&
+        typeof action === "object" &&
+        !isUnsupportedStoredAction(action)
+    )
+    .map(projectStoredAction);
 }
 
 /**
