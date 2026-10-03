@@ -5,6 +5,7 @@
  */
 
 import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
+import { buildGeoActions } from "@repo/audit/actions";
 import { describe, expect, it } from "vitest";
 
 const action = (overrides: Record<string, unknown>) => ({
@@ -14,19 +15,6 @@ const action = (overrides: Record<string, unknown>) => ({
   title: "액션",
   ...overrides,
 });
-
-const completeGuide = {
-  evidenceBasis: "internal_hypothesis",
-  evidenceGrade: "weak",
-  notGuaranteed: "효과를 보장하지 않습니다.",
-  publishCheck: "공개 주소와 색인을 확인하세요.",
-  effectLag: "재측정 권장 시점: 몇 주 뒤.",
-  remeasureMetric: "같은 질문의 확인 답변 수",
-  failCondition: "두 번 재도 확인되지 않으면 수정하세요.",
-  sources: [{ label: "[사례 분석] 출처", url: "https://example.com/source" }],
-  engines: ["naver"],
-  effortHours: { min: 1, max: 2, per: "week" },
-};
 
 describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
   it("prompt_gap의 인용 보장 문구를 제거한다", () => {
@@ -75,30 +63,72 @@ describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
     expect(filterStoredGeoActions([legacy, current])).toEqual([current]);
   });
 
-  it("완성된 신규 가이드는 정직한 부정문 때문에 legacy regex에 걸리지 않는다", () => {
+  it("신규 카드의 정직한 부정문은 legacy regex에 걸리지 않는다", () => {
     const current = action({
       kind: "content_fix",
       how: "질문마다 페이지 하나씩 만들 필요 없습니다. 질문을 제목·URL에 그대로 복사하지 말고 실제 내용에 맞추세요.",
-      guide: completeGuide,
     });
     const naver = action({
       kind: "naver_blog",
       evidence: "인용 272건은 한 사례의 분포입니다.",
       how: "매주 올려도 인용될 수 있다는 보장은 없습니다.",
-      guide: completeGuide,
     });
 
     expect(filterStoredGeoActions([current, naver])).toEqual([current, naver]);
   });
 
-  it("evidenceBasis만 덧붙인 구형 카드는 fail-closed로 제거한다", () => {
-    const spoofed = action({
-      kind: "content_fix",
-      how: "질문마다 답하는 페이지를 하나씩 만들고, 질문을 제목·URL에 그대로 넣으세요.",
-      guide: { evidenceBasis: "observational" },
-    });
+  it("3618c25 생성기 형태의 구형 content_fix는 guide가 완비돼도 제거한다", () => {
+    const base = {
+      brandName: "설화수",
+      brandDomain: "sulwhasoo.com",
+      averageMentionPosition: null,
+      enginesMeasured: 4,
+      enginesMentioned: 1,
+      marketScope: "both" as const,
+      prompts: [{ hit: 0, text: "설화수 추천해줘", total: 4 }],
+      verdicts: {
+        confusedQuotes: [],
+        counts: {
+          absent: 0,
+          answered: 10,
+          confirmed: 1,
+          differentEntity: 0,
+          engineError: 0,
+          total: 10,
+          unclassified: 0,
+          unknownBrand: 6,
+          unverified: 0,
+        },
+        differentEntityEngines: [],
+        ownedCitationCount: 0,
+      },
+    };
+    const scenarios = [
+      base,
+      { ...base, marketScope: "korea" as const },
+      { ...base, enginesMentioned: 0 },
+      {
+        ...base,
+        verdicts: { ...base.verdicts, ownedCitationCount: 2 },
+      },
+    ];
+    const restoredLegacyCards = scenarios.flatMap((scenario) =>
+      buildGeoActions(scenario).flatMap((generated) =>
+        generated.kind === "content_fix"
+          ? [
+              JSON.parse(
+                JSON.stringify({
+                  ...generated,
+                  how: "고객이 AI에 실제로 묻는 질문마다 답하는 페이지를 하나씩 두고, 그 질문을 페이지 제목과 주소(URL)에 그대로 쓰세요.",
+                })
+              ),
+            ]
+          : []
+      )
+    );
 
-    expect(filterStoredGeoActions([spoofed])).toEqual([]);
+    expect(restoredLegacyCards).toHaveLength(4);
+    expect(filterStoredGeoActions(restoredLegacyCards)).toEqual([]);
   });
 
   it("Bing 등록을 ChatGPT 노출의 필요조건으로 말하는 카드를 제거한다", () => {

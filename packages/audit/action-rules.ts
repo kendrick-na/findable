@@ -568,7 +568,7 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
           engines: ["naver", "naver-briefing", "hyperclova"],
           effortHours: { min: 2, max: 4, per: "week" },
           effectLag:
-            "재측정 권장 시점: 게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
+            "게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
           remeasureMetric: remeasure,
           failCondition:
             "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 계열 답변에서 알아본 답변이 0건이면, 주제를 더 좁히거나 질문 문구를 고객 표현으로 바꾸세요.",
@@ -669,7 +669,7 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
         engines: ["chatgpt", "google"],
         effortHours: { min: 8, max: 20, per: "total" },
         effectLag:
-          "재측정 권장 시점: 외부 언급 후 몇 달 이상. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
+          "외부 언급 후 몇 달 이상. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
         remeasureMetric: remeasure,
         failCondition:
           "외부 언급을 여러 건 만든 뒤에도 알아본 답변이 늘지 않으면, 그 글·영상이 회사 이름을 정확히 쓰고 있는지(오타·다른 표기)부터 확인하세요.",
