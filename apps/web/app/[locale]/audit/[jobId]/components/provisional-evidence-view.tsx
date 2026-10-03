@@ -1,11 +1,29 @@
 "use client";
 
 import type { AnswerBucketSummary } from "@repo/audit/answer-buckets";
+import type { AuditPublicationIssue } from "@repo/audit/normalize-stored-metrics";
 import {
   AnswerBucketBoard,
   type MatrixAnswer,
   QuestionEngineMatrix,
 } from "./answer-buckets";
+
+function provisionalReason(
+  issue: AuditPublicationIssue | null | undefined,
+  isKo: boolean
+): string | null {
+  if (issue === "incomplete_execution") {
+    return isKo
+      ? "계획한 브랜드 질문 중 일부에서 AI 답변을 받지 못해 질문 측정이 미완료됐습니다."
+      : "Some planned brand questions received no AI answer, so the measurement is incomplete.";
+  }
+  if (issue === "question_plan_unverified") {
+    return isKo
+      ? "과거 측정의 질문 계획을 확인할 수 없어 결과를 잠정으로 표시합니다."
+      : "The question plan for this historical run cannot be verified.";
+  }
+  return null;
+}
 
 /** A provisional run exposes channel evidence, never the blended GEO score. */
 export function ProvisionalEvidenceView({
@@ -13,6 +31,7 @@ export function ProvisionalEvidenceView({
   discoveryPromptCount,
   domain,
   isKo,
+  issue,
   rows,
   summary,
 }: {
@@ -20,10 +39,12 @@ export function ProvisionalEvidenceView({
   discoveryPromptCount?: number;
   domain: string;
   isKo: boolean;
+  issue?: AuditPublicationIssue | null;
   rows: MatrixAnswer[];
   summary: AnswerBucketSummary;
 }) {
   const searchCount = summary.search?.adjudicated ?? 0;
+  const reason = provisionalReason(issue, isKo);
   return (
     <section
       className="mx-auto max-w-5xl space-y-8 pb-24 lg:pb-12"
@@ -43,6 +64,9 @@ export function ProvisionalEvidenceView({
             ? `브랜드 질문 AI 확정 답변 ${summary.ai.adjudicated}건 · 검색 노출 ${searchCount}건. 검색 결과는 AI 답변과 분리해 보여드립니다.`
             : `${summary.ai.adjudicated} adjudicated brand-question AI answers · ${searchCount} search results. Search exposure is shown separately from AI answers.`}
         </p>
+        {reason ? (
+          <p className="mt-2 text-sm text-zinc-300 leading-relaxed">{reason}</p>
+        ) : null}
         <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
           {isKo
             ? "이번 회차의 혼합 종합 점수·개선 처방·PDF는 공개하지 않습니다. 아래 분류와 원문은 측정 근거로 확인할 수 있습니다."

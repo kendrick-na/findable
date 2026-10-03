@@ -52,3 +52,23 @@ it("shows brand AI and search counts separately without a mixed provisional scor
   expect(html).not.toContain("참고 · GEO 종합 점수");
   expect(html).not.toContain("잠정 점수");
 });
+
+it("explains incomplete questions and an unverifiable historical plan without publishing a score", () => {
+  for (const [issue, explanation] of [
+    ["incomplete_execution", "질문 측정이 미완료됐습니다"],
+    ["question_plan_unverified", "질문 계획을 확인할 수 없어"],
+  ] as const) {
+    const html = renderToStaticMarkup(
+      <ProvisionalEvidenceView
+        brandName="Synthetic"
+        domain="example.test"
+        isKo
+        issue={issue}
+        rows={[]}
+        summary={summarizeAnswerBuckets([])}
+      />
+    );
+    expect(html).toContain(explanation);
+    expect(html).toContain("점수 보류");
+  }
+});

@@ -24,6 +24,8 @@ import { isTrackableResponse } from "./tracking-eligibility";
 
 /** runner가 flat 이전에 각 응답에 태깅해 넘겨주는 항목. promptText로 promptId를 잇는다. */
 export interface TaggedEngineResponse extends EngineResponse {
+  /** Absolute index in the saved audit question plan; disambiguates duplicate text. */
+  promptIndex?: number;
   /**
    * 브랜드 이름 질문인지, 이름 없는 질문(discovery)인지(2026-09-29).
    * 러너는 discovery 행을 이 함수에 넘기지 않는다(시계열 분모 보호).

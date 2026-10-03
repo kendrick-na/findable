@@ -12,6 +12,7 @@ import {
   summarizeAnswerBuckets,
 } from "./answer-buckets";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
+import { questionCoverage } from "./question-coverage";
 
 const CORE_ENGINES = new Set<EngineId>([
   "chatgpt",
@@ -82,7 +83,11 @@ export type AuditPublicationIssue =
   /** More than 20% of successful answers could not be adjudicated. */
   | "unverified_share"
   /** Fewer than 10 adjudicated answers — too small a sample to publish. */
-  | "insufficient_sample";
+  | "insufficient_sample"
+  /** Some planned brand questions received no successful AI answer. */
+  | "incomplete_execution"
+  /** Stored evidence has no reconstructable question plan. */
+  | "question_plan_unverified";
 
 function countOf(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
@@ -164,6 +169,27 @@ export function auditPublicationIssue(
     return "brand_verification";
   }
   const { unverified, verified } = counts;
+  const coverage = questionCoverage(result);
+  if (
+    coverage === null &&
+    (result.promptsCount !== undefined ||
+      result.measurementContext !== undefined ||
+      (Array.isArray(result.engineResponses) &&
+        result.engineResponses.some(
+          (row) => isRecord(row) && row.promptIndex !== undefined
+        )))
+  ) {
+    // A stored question plan with unidentifiable core rows cannot prove that
+    // every planned question was measured. Keep metrics-only legacy fixtures
+    // on their existing version gate, but fail closed for plan-bearing runs.
+    return "question_plan_unverified";
+  }
+  if (
+    coverage !== null &&
+    coverage.brand.withSuccessfulAiAnswer < coverage.brand.planned
+  ) {
+    return "incomplete_execution";
+  }
   const answers = verified + unverified;
   if (answers > 0 && unverified / answers > PROVISIONAL_MAX_UNVERIFIED_SHARE) {
     return "unverified_share";
@@ -195,7 +221,10 @@ export function auditPublicationStatus(
     return "published";
   }
   if (
-    (issue === "unverified_share" || issue === "insufficient_sample") &&
+    (issue === "unverified_share" ||
+      issue === "insufficient_sample" ||
+      issue === "incomplete_execution" ||
+      issue === "question_plan_unverified") &&
     isRecord(result) &&
     (publicationAnswerCounts(result)?.verified ?? 0) > 0
   ) {
@@ -363,6 +392,7 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
     (row): row is Record<string, unknown> & BucketableAnswer =>
       isRecord(row) && typeof row.engineId === "string"
   );
+  const coverage = questionCoverage(storedResult);
   const measurementContext = isRecord(storedResult.measurementContext)
     ? storedResult.measurementContext
     : null;
@@ -402,6 +432,7 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
         brandDomain:
           typeof storedResult.domain === "string" ? storedResult.domain : null,
       }),
+      ...(coverage ? { questionCoverage: coverage } : {}),
     },
     ...(requiresRevalidation
       ? {

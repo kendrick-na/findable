@@ -339,9 +339,20 @@ async function ActionsPage({
             {first.brand.name || first.brand.domain} · 지금 할 일 · 결과 보류
           </h1>
           <p className="text-muted-foreground text-sm">
+            {publicationIssue === "incomplete_execution"
+              ? "계획한 브랜드 질문의 AI 측정이 중단되거나 일부 미완료돼 자동 개선 처방을 확정할 수 없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요."
+              : null}
+            {publicationIssue === "question_plan_unverified"
+              ? "과거 측정의 질문 계획을 확인할 수 없어 자동 개선 처방을 확정할 수 없습니다. 수집된 답변은 근거로만 확인하세요."
+              : null}
             {publicationIssue === "insufficient_sample"
               ? "이번 측정은 브랜드 판별이 끝난 답변이 너무 적어 자동 개선 처방을 확정할 수 없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요."
-              : "이번 측정은 브랜드 판별이 완료되지 않아 자동 개선 처방을 확정할 수 없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요."}
+              : null}
+            {publicationIssue !== "incomplete_execution" &&
+            publicationIssue !== "question_plan_unverified" &&
+            publicationIssue !== "insufficient_sample"
+              ? "이번 측정은 브랜드 판별이 완료되지 않아 자동 개선 처방을 확정할 수 없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요."
+              : null}
           </p>
           <Link
             className="text-sm underline"

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { MENTION_VERDICT_VERSION } from "../ai/lib/mention-verdict-version";
-import { isPublishableAuditResult } from "./normalize-stored-metrics";
+import {
+  auditPublicationIssue,
+  auditPublicationStatus,
+  isPublishableAuditResult,
+  publicAuditResult,
+} from "./normalize-stored-metrics";
 import {
   proposeAuditRevalidation,
   revalidateStoredAuditResult,
@@ -128,13 +133,27 @@ describe("stored audit revalidation backfill", () => {
       sov: Math.round((3 / 11) * 100),
     });
     expect(outcome.result.geoActions).toEqual([]);
-    expect(isPublishableAuditResult(outcome.result)).toBe(true);
+    // Entity revalidation cannot reconstruct an absent question plan. The
+    // verdict is updated, but publication still requires a new measurement.
+    expect(auditPublicationIssue(outcome.result)).toBe(
+      "question_plan_unverified"
+    );
+    expect(auditPublicationStatus(outcome.result)).toBe("provisional");
+    expect(isPublishableAuditResult(outcome.result)).toBe(false);
+    const publicMetrics = publicAuditResult(outcome.result).metrics as Record<
+      string,
+      unknown
+    >;
+    expect(publicMetrics.sov).toBeNull();
     expect(JSON.stringify(original)).toBe(before);
   });
 
   it("skips current results and asks for re-measurement when no official identity was stored", async () => {
     const verify = vi.fn();
-    const current = { ...legacy(), mentionVerdictVersion: MENTION_VERDICT_VERSION };
+    const current = {
+      ...legacy(),
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    };
     expect(
       await revalidateStoredAuditResult(current, { verify })
     ).toMatchObject({ status: "skipped", reason: "already_current" });

@@ -1567,6 +1567,7 @@ function CompletedView({
           discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
           domain={result.domain}
           isKo={isKo}
+          issue={auditPublicationIssue(result)}
           rows={coreResponses}
           summary={summary}
         />

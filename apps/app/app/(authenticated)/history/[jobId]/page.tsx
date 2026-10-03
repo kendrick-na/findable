@@ -98,6 +98,10 @@ export default async function AuditHistoryDetail({
   let partialHeading = "판별 미완료 · 잠정 결과";
   if (brandAiVerifiedCount === 0) {
     partialHeading = "브랜드 AI 결과 보류";
+  } else if (publicationIssue === "question_plan_unverified") {
+    partialHeading = "질문 계획 확인 불가 · 잠정 결과";
+  } else if (publicationIssue === "incomplete_execution") {
+    partialHeading = "질문 측정 미완료 · 잠정 결과";
   } else if (publicationIssue === "insufficient_sample") {
     partialHeading = "확정 답변 부족 · 잠정 결과";
   }
@@ -130,13 +134,22 @@ export default async function AuditHistoryDetail({
         </div>
         {isPartial ? (
           <section className="findable-card border border-amber-500/30 p-5">
-            <h2 className="font-semibold text-lg">
-              {partialHeading}
-            </h2>
+            <h2 className="font-semibold text-lg">{partialHeading}</h2>
             <p className="mt-2 text-muted-foreground text-sm">
+              {publicationIssue === "incomplete_execution"
+                ? "계획한 브랜드 질문의 AI 측정이 중단되거나 일부 미완료됐습니다. 이번 회차의 점수·등장률·개선 처방은 확정하지 않습니다."
+                : null}
+              {publicationIssue === "question_plan_unverified"
+                ? "과거 측정의 질문 계획을 확인할 수 없어 이번 회차의 점수·등장률·개선 처방을 확정하지 않습니다. 수집된 답변은 근거로만 확인할 수 있습니다."
+                : null}
               {publicationIssue === "insufficient_sample"
                 ? `브랜드 질문의 AI 판별이 끝난 답변이 ${brandAiVerifiedCount}건뿐이라 이번 회차의 점수·등장률·개선 처방은 확정하지 않습니다.`
-                : `AI 답변은 일부 수집했지만 브랜드 판별이 ${metrics?.unverifiedCount ?? 0}건 완료되지 않았습니다. 이번 회차의 점수·등장률·개선 처방은 확정하지 않습니다.`}{" "}
+                : null}
+              {publicationIssue !== "incomplete_execution" &&
+              publicationIssue !== "question_plan_unverified" &&
+              publicationIssue !== "insufficient_sample"
+                ? `AI 답변은 일부 수집했지만 브랜드 판별이 ${metrics?.unverifiedCount ?? 0}건 완료되지 않았습니다. 이번 회차의 점수·등장률·개선 처방은 확정하지 않습니다.`
+                : null}{" "}
               자세한 응답은 공개 리포트에서 확인할 수 있습니다.
             </p>
             {(metrics?.errors?.length ?? 0) > 0 ? (

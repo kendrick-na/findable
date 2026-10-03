@@ -490,6 +490,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         const p = prompts[i];
         return responses.map((r) => ({
           ...r,
+          promptIndex: i,
           promptText: p?.text ?? "",
           promptLang: p?.lang ?? "ko",
           promptKind: p?.kind ?? "brand",
@@ -686,6 +687,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           brandVariants
         ).mentioned,
         promptText: tagged[index]?.promptText,
+        promptIndex: tagged[index]?.promptIndex,
         promptLang: tagged[index]?.promptLang,
         // 이름 없는 질문인지(2026-09-29) — 화면이 「이름 없이 물었을 때 추천됨」을 따로 센다.
         promptKind: tagged[index]?.promptKind ?? "brand",

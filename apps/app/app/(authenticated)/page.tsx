@@ -500,11 +500,21 @@ const App = async ({ searchParams }: AppProperties) => {
 
             {!currentRunPublishable && currentRunJob ? (
               <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-amber-100 text-sm">
+                {currentRunIssue === "incomplete_execution"
+                  ? "계획한 브랜드 질문의 AI 측정이 중단되거나 일부 미완료됐습니다."
+                  : null}
+                {currentRunIssue === "question_plan_unverified"
+                  ? "과거 측정의 질문 계획을 확인할 수 없어 결과를 잠정으로 표시합니다."
+                  : null}
                 {currentRunIssue === "insufficient_sample"
                   ? `이번 측정은 브랜드 질문의 AI 판별이 끝난 답변이 ${publicationVerifiedAnswerCount(correctedCurrentResult) ?? 0}건뿐이라 기준(${MIN_VERIFIED_ANSWERS}건)에 못 미칩니다.`
-                  : `이번 측정은 브랜드 판별 ${currentRunUnverified}회가 완료되지 않았습니다.`}{" "}
-                이번 회차의 점수·등장률·추세·개선 처방은
-                확정하지 않습니다.{" "}
+                  : null}
+                {currentRunIssue !== "incomplete_execution" &&
+                currentRunIssue !== "question_plan_unverified" &&
+                currentRunIssue !== "insufficient_sample"
+                  ? `이번 측정은 브랜드 판별 ${currentRunUnverified}회가 완료되지 않았습니다.`
+                  : null}{" "}
+                이번 회차의 점수·등장률·추세·개선 처방은 확정하지 않습니다.{" "}
                 <Link
                   className="underline underline-offset-2"
                   href={`${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`}
