@@ -221,6 +221,32 @@ describe("이름 없는 질문·검색 노출은 헤드라인 분모 밖", () =>
     expect(summary.search).toMatchObject({ confirmed: 1, total: 1 });
     expect(summary.engines).toEqual({ measured: 1, confirmed: 1 });
   });
+  it("검색 엔진의 discovery 응답은 검색 노출률이나 AI discovery 추천률에 섞지 않는다", () => {
+    const summary = summarizeAnswerBuckets([
+      {
+        engineId: "naver",
+        naverSource: "search_results",
+        brandMentioned: true,
+        mentionQuality: "confirmed",
+        promptKind: "brand",
+      },
+      {
+        engineId: "naver",
+        naverSource: "search_results",
+        brandMentioned: true,
+        mentionQuality: "confirmed",
+        promptKind: "discovery",
+      },
+      {
+        engineId: "chatgpt",
+        brandMentioned: true,
+        mentionQuality: "confirmed",
+        promptKind: "discovery",
+      },
+    ]);
+    expect(summary.search).toMatchObject({ confirmed: 1, total: 1 });
+    expect(summary.discovery).toMatchObject({ asked: 1, recommended: 1 });
+  });
   it("discovery 가 없는 회차는 null(「0/0」을 말하지 않는다)", () => {
     expect(summarizeAnswerBuckets(rows.slice(0, 2)).discovery).toBeNull();
   });

@@ -1,6 +1,10 @@
 "use server";
 
 import {
+  type PromptKind,
+  summarizeAnswerBuckets,
+} from "@repo/audit/answer-buckets";
+import {
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
@@ -19,8 +23,11 @@ export interface ConsultingEngineResponse {
   engineId: string;
   errorMessage: string | null;
   excerpt: string;
+  isStub: boolean;
   mentionPosition: number | null;
   mentionQuality: string | null;
+  naverSource: string | null;
+  promptKind: PromptKind | null;
 }
 
 export interface ConsultingAudit {
@@ -108,6 +115,10 @@ function stringOf(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+function promptKindOf(value: unknown): PromptKind | null {
+  return value === "brand" || value === "discovery" ? value : null;
+}
+
 function sourceDomain(
   row: Record<string, unknown> | null,
   url: string
@@ -168,6 +179,9 @@ function toAuditSnapshot(audit: {
             mentionPosition: finiteNumber(row?.mentionPosition),
             excerpt: stringOf(row?.excerpt) ?? "",
             errorMessage: stringOf(row?.errorMessage),
+            isStub: row?.isStub === true,
+            promptKind: promptKindOf(row?.promptKind),
+            naverSource: stringOf(row?.naverSource),
             citedSources: sourceRows(row?.citedSources),
           },
         ];
@@ -177,6 +191,9 @@ function toAuditSnapshot(audit: {
   const sov = isPublishableAuditResult(correctedResult)
     ? finiteNumber(metrics?.sov)
     : null;
+  const answerBuckets = summarizeAnswerBuckets(responses, {
+    brandDomain: stringOf(result?.domain),
+  });
   const failedEngineIds = [
     ...(metrics?.errors?.map((error) => error.engineId) ?? []),
     ...responses.flatMap((response) =>
@@ -195,8 +212,8 @@ function toAuditSnapshot(audit: {
     sov,
     usable: isUsableRun(correctedResult),
     responseCount: responses.length,
-    mentionedResponses: responses.filter((response) => response.brandMentioned)
-      .length,
+    mentionedResponses:
+      answerBuckets.ai.confirmed + (answerBuckets.search?.confirmed ?? 0),
     errorCount: failedEngineIds.length,
     failedEngineIds,
     engineResponses: responses,

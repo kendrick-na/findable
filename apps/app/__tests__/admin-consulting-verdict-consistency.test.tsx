@@ -1,3 +1,4 @@
+import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 
@@ -74,4 +75,66 @@ it("does not expose pre-verdict stored mention booleans as confirmed customer ev
   expect(html).toContain("판정보류");
   expect(html).not.toContain("AI 언급률");
   expect(html).not.toContain("브랜드 미확인");
+});
+
+it("counts only confirmed brand-question AI and search rows in the admin summary", async () => {
+  const confirmed = (engineId: string, promptKind = "brand") => ({
+    engineId,
+    promptKind,
+    brandMentioned: true,
+    mentionQuality: "confirmed",
+    isStub: false,
+    errorMessage: null,
+    naverSource: engineId === "naver" ? "search_results" : null,
+  });
+  mocks.findUnique.mockResolvedValue({
+    id: "org-1",
+    name: "Customer",
+    plan: "Starter",
+    consultationNotes: [],
+    brands: [
+      {
+        id: "brand-1",
+        name: "Synthetic",
+        domain: "example.test",
+        _count: { prompts: 10, trackings: 0 },
+        siteReadinessRuns: [],
+        searchPerformanceConnections: [],
+        auditJobs: [
+          {
+            id: "audit-current",
+            status: "completed",
+            createdAt: new Date("2026-10-04T00:00:00Z"),
+            completedAt: new Date("2026-10-04T00:01:00Z"),
+            errorMessage: null,
+            result: {
+              brandName: "Synthetic",
+              domain: "example.test",
+              mentionVerdictVersion: MENTION_VERDICT_VERSION,
+              metrics: {
+                sov: 100,
+                enginesCovered: ["chatgpt", "naver"],
+                enginesWithMention: ["chatgpt", "naver"],
+              },
+              engineResponses: [
+                ...Array.from({ length: 10 }, () => confirmed("chatgpt")),
+                confirmed("naver"),
+                confirmed("chatgpt", "discovery"),
+                confirmed("naver", "discovery"),
+                confirmed("naver-briefing"),
+                confirmed("hyperclova"),
+                { ...confirmed("perplexity"), errorMessage: "429" },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const workspace = await getConsultingWorkspace("org-1");
+  const audit = workspace?.brands[0]?.lastAudit;
+  expect(audit?.usable).toBe(true);
+  expect(audit?.responseCount).toBe(16);
+  expect(audit?.mentionedResponses).toBe(11);
 });
