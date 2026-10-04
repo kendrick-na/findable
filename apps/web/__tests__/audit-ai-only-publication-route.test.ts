@@ -162,6 +162,12 @@ it("does not expose a blended provisional score for eight brand AI answers plus 
   const searchRows = Array.from({ length: 7 }, (_, index) =>
     ["naver", "daum"].map((engineId) => ({
       engineId,
+      ...(engineId === "naver"
+        ? {
+            naverSource: "search_results",
+            naverSamplingVersion: "interleave-v1",
+          }
+        : {}),
       promptText: `brand-${index}`,
       promptKind: "brand",
       rawResponse: "synthetic search result",
@@ -207,6 +213,15 @@ it("does not expose a blended provisional score for eight brand AI answers plus 
   expect(body.result.metrics.answerBuckets.ai.adjudicated).toBe(8);
   expect(body.result.metrics.answerBuckets.search.adjudicated).toBe(14);
   expect(body.result.engineResponses).toHaveLength(22);
+  expect(
+    body.result.engineResponses.filter(
+      (row: { engineId: string }) => row.engineId === "naver"
+    )
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ naverSamplingVersion: "interleave-v1" }),
+    ])
+  );
   expect(body.result.geoActions).toEqual([]);
 });
 
