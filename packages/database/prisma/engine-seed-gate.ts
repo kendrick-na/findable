@@ -6,7 +6,6 @@
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/client";
-import { connectionSchema } from "./db-target-fingerprint";
 
 export interface EngineSeedVerdict {
   missing: string[];
@@ -34,10 +33,8 @@ export async function readEngineSeedState(
   try {
     const rows = await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
-      // PrismaPg ignores ?schema=; follow Prisma's table location explicitly.
-      await tx.$executeRawUnsafe(
-        `SET LOCAL search_path TO "${connectionSchema(connectionString)}"`
-      );
+      // Deliberately no ?schema= handling: the runtime client (PrismaPg) ignores
+      // it and reads "public"."Engine", so the gate must look where Tracking does.
       return tx.$queryRawUnsafe<{ id: string }[]>('SELECT id FROM "Engine"');
     });
     return evaluateEngineSeed(rows, required);

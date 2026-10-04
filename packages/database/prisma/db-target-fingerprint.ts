@@ -40,23 +40,59 @@ export function safeErrorLabel(error: unknown): string {
   return "unknown";
 }
 
-export function fingerprintDatabaseUrl(value: string): DatabaseFingerprint {
-  const url = new URL(value);
-  const [first = "", ...rest] = url.hostname.toLowerCase().split(".");
+const SUPABASE_DIRECT_HOST = /^db\.([a-z0-9]+)\.supabase\.co$/;
+const SUPABASE_POOLER_HOST = /\.pooler\.supabase\.com$/;
+const SUPABASE_POOLER_USER = /^[^.]+\.([a-z0-9]+)$/;
+
+/**
+ * Identity of the database a connection reaches, without the secret parts.
+ * - Neon: the pooled hostname only adds "-pooler" to the endpoint ID.
+ * - Supabase (supabase.com/docs/guides/database/connecting-to-postgres, checked
+ *   2026-10-04): direct = db.<ref>.supabase.co, shared pooler =
+ *   aws-<n>-<region>.pooler.supabase.com:5432|6543 with user postgres.<ref>.
+ *   Every project in a region shares the pooler host, so the project ref is the
+ *   target; session/transaction ports and the direct host collapse onto it.
+ */
+function targetKey(url: URL, value: string): { key: string; pooled: boolean } {
+  const host = url.hostname.toLowerCase();
+  const database = decodeURIComponent(url.pathname.replace(LEADING_SLASH, ""));
+  const schema = connectionSchema(value);
+  const direct = SUPABASE_DIRECT_HOST.exec(host);
+  if (direct) {
+    return {
+      key: ["supabase", direct[1], database, schema].join("|"),
+      pooled: false,
+    };
+  }
+  if (SUPABASE_POOLER_HOST.test(host)) {
+    const ref = SUPABASE_POOLER_USER.exec(
+      decodeURIComponent(url.username).toLowerCase()
+    )?.[1];
+    if (!ref) {
+      throw new Error("supabase pooler user lacks a project ref");
+    }
+    return {
+      key: ["supabase", ref, database, schema].join("|"),
+      pooled: true,
+    };
+  }
+  const [first = "", ...rest] = host.split(".");
   const pooled = first.endsWith("-pooler");
   const endpoint = pooled ? first.slice(0, -"-pooler".length) : first;
-  const database = decodeURIComponent(url.pathname.replace(LEADING_SLASH, ""));
+  return {
+    key: [endpoint, rest.join("."), url.port || "5432", database, schema].join(
+      "|"
+    ),
+    pooled,
+  };
+}
+
+export function fingerprintDatabaseUrl(value: string): DatabaseFingerprint {
+  const url = new URL(value);
+  const { key, pooled } = targetKey(url, value);
   return {
     pooled,
-    target: short(
-      [
-        endpoint,
-        rest.join("."),
-        url.port || "5432",
-        database,
-        connectionSchema(value),
-      ].join("|")
-    ),
+    target: short(key),
     role: short(decodeURIComponent(url.username)),
   };
 }
@@ -118,8 +154,8 @@ export function parseEnvFile(path: string): Record<string, string> {
 }
 
 /**
- * `<env-file>#VAR` or `<env-file>#A??B` — first non-empty value, mirroring the
- * runtime/CLI `??` fallbacks (e.g. migrate reads DATABASE_URL_UNPOOLED ?? DATABASE_URL).
+ * `<env-file>#VAR` or `<env-file>#A??B`, resolved with JS `??` semantics to
+ * mirror the runtime/CLI fallbacks (e.g. migrate reads DATABASE_URL_UNPOOLED ?? DATABASE_URL).
  */
 export function resolveEnvSpec(spec: string): string | undefined {
   const hash = spec.lastIndexOf("#");
@@ -127,10 +163,13 @@ export function resolveEnvSpec(spec: string): string | undefined {
     throw new Error("env spec must be <env-file>#<VAR>[??<VAR>...]");
   }
   const env = parseEnvFile(spec.slice(0, hash));
-  for (const name of spec.slice(hash + 1).split("??")) {
-    const value = env[name.trim()];
-    if (value) {
-      return value;
+  for (const raw of spec.slice(hash + 1).split("??")) {
+    const name = raw.trim();
+    if (Object.hasOwn(env, name)) {
+      // JS `??` stops at the first defined value even when it is "" — the
+      // runtime then fails z.url(). A pulled Sensitive variable also reads as
+      // "", so an empty value is reported missing instead of falling back.
+      return env[name] === "" ? undefined : env[name];
     }
   }
   return undefined;
