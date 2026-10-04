@@ -342,13 +342,7 @@ function LegacyNaverRow({
             onClick={() => setOpen((v) => !v)}
             type="button"
           >
-            {open
-              ? isKo
-                ? "요약 접기"
-                : "Hide summary"
-              : isKo
-                ? "당시 요약 보기"
-                : "Show that summary"}
+            {summaryToggleLabel(open, isKo)}
           </button>
         )}
         {open && (
@@ -639,4 +633,11 @@ export function RevenueImpactOptIn({
       )}
     </details>
   );
+}
+
+function summaryToggleLabel(open: boolean, isKo: boolean): string {
+  if (open) {
+    return isKo ? "요약 접기" : "Hide summary";
+  }
+  return isKo ? "당시 요약 보기" : "Show that summary";
 }

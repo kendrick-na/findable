@@ -100,6 +100,86 @@ interface Props {
 // ──────────────────────────────────────────────────────────────────
 
 type Severity = "red" | "amber" | "green";
+
+function byLocale<T extends string>(isKo: boolean, ko: T, en: T): T {
+  return isKo ? ko : en;
+}
+
+function actionExpandLabel(
+  expanded: boolean,
+  hasSteps: boolean,
+  isKo: boolean
+): string {
+  if (expanded) {
+    return byLocale(isKo, "간단히 보기", "Show less");
+  }
+  return hasSteps
+    ? byLocale(isKo, "근거와 실행 방법 보기", "View rationale and steps")
+    : byLocale(isKo, "근거 전체 보기", "View full rationale");
+}
+
+function severityDotClass(severity: Severity): string {
+  if (severity === "green") {
+    return "bg-[var(--signal-good)]";
+  }
+  return severity === "amber"
+    ? "bg-[var(--signal-warn)]"
+    : "bg-[var(--signal-bad)]";
+}
+
+function donutTextColor(severity: Severity): string {
+  if (severity === "green") {
+    return "text-[var(--signal-good)]";
+  }
+  return severity === "amber" ? "text-[var(--signal-warn)]" : "text-zinc-100";
+}
+
+function axisTone(pct: number): Severity {
+  if (pct >= 70) {
+    return "green";
+  }
+  return pct >= 40 ? "amber" : "red";
+}
+
+function axisBarColor(tone: Severity): string {
+  if (tone === "green") {
+    return "bg-[var(--signal-good)]";
+  }
+  return tone === "amber" ? "bg-[var(--signal-warn)]" : "bg-white/25";
+}
+
+function kpiValueColor(tone: Severity | undefined): string {
+  if (tone === "green") {
+    return "text-[var(--signal-good)]";
+  }
+  if (tone === "amber") {
+    return "text-[var(--signal-warn)]";
+  }
+  return tone === "red" ? "text-[var(--signal-bad)]" : "text-zinc-100";
+}
+
+function findingDotClass(severity: Severity): string {
+  if (severity === "red") {
+    return "bg-[var(--signal-bad)]";
+  }
+  return severity === "amber"
+    ? "bg-[var(--signal-warn)]"
+    : "bg-[var(--signal-good)]";
+}
+
+function sentimentToneClass(
+  tone: "positive" | "negative" | "neutral" | "muted"
+): string {
+  if (tone === "positive") {
+    return "bg-[var(--signal-good)]/10 text-[var(--signal-good)] border-[var(--signal-good)]/30";
+  }
+  if (tone === "negative") {
+    return "bg-[var(--signal-bad)]/10 text-[var(--signal-bad)] border-[var(--signal-bad)]/30";
+  }
+  return tone === "neutral"
+    ? "bg-[var(--signal-warn)]/10 text-[var(--signal-warn)] border-[var(--signal-warn)]/30"
+    : "bg-white/5 text-zinc-400 border-white/10";
+}
 type CrewStatus =
   | "not_requested"
   | "queued"
@@ -808,7 +888,7 @@ export function AuditResultView({ jobId, locale }: Props) {
         }
       }
     }
-    void poll();
+    poll();
   }, [jobId]);
 
   useEffect(() => {
@@ -1002,7 +1082,7 @@ function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
         ? `내 GEO 점수 ${score}점 받았어요! · Findable\n${url}`
         : `My GEO score is ${score}/100 · Findable\n${url}`;
       if (typeof navigator !== "undefined" && navigator.clipboard) {
-        void navigator.clipboard.writeText(text);
+        navigator.clipboard.writeText(text);
         alert(
           isKo
             ? "링크를 복사했어요. 카카오톡에 붙여넣어 주세요."
@@ -1458,12 +1538,8 @@ function VerificationPartialView({
                 </span>
                 <span className="text-xs text-zinc-400">
                   {response.errorMessage
-                    ? isKo
-                      ? "응답 오류"
-                      : "Error"
-                    : isKo
-                      ? "답변 수집"
-                      : "Answer collected"}
+                    ? byLocale(isKo, "응답 오류", "Error")
+                    : byLocale(isKo, "답변 수집", "Answer collected")}
                 </span>
               </summary>
               <div className="whitespace-pre-wrap border-white/10 border-t px-4 py-4 text-sm text-zinc-300 leading-relaxed">
@@ -1539,7 +1615,7 @@ function CompletedView({
   );
   // 계산은 `@repo/audit/measurement-coverage` 단일 진실을 쓴다(규칙 복제 금지).
   const coverage = countMeasurementCoverage(coreResponses);
-  const { measured, attempted } = coverage;
+  const { attempted } = coverage;
   // 「우리를 어떻게 설명하나」를 보는 섹션(진실거울·네이버 격차)에는 **브랜드 이름으로 물은
   //   AI 답변만** 넘긴다(2026-09-29). Daum 은 검색 결과 조각이고, 이름 없는 질문은
   //   「설명」이 아니라 「추천」을 잰다 — 섞으면 「모른다」가 부풀려진다.
@@ -1800,9 +1876,11 @@ function HeroSection({
   const bucketHeadline = answerBucketHeadline(result.brandName, buckets, isKo);
   // 잠정 회차는 아래 처방을 가리므로 「무엇부터 손볼지 알려드려요」류 약속을 하지 않는다.
   const headline = provisional
-    ? isKo
-      ? `${bucketHeadline} 브랜드 판별이 충분히 끝나지 않아 이번 회차는 잠정 결과예요.`
-      : `${bucketHeadline} Brand verification is incomplete, so this run is provisional.`
+    ? byLocale(
+        isKo,
+        `${bucketHeadline} 브랜드 판별이 충분히 끝나지 않아 이번 회차는 잠정 결과예요.`,
+        `${bucketHeadline} Brand verification is incomplete, so this run is provisional.`
+      )
     : bucketHeadline;
 
   // ──────────────────────────────────────────────────
@@ -1846,13 +1924,7 @@ function HeroSection({
           </div>
           <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-medium text-xs">
             <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                severity === "green"
-                  ? "bg-[var(--signal-good)]"
-                  : severity === "amber"
-                    ? "bg-[var(--signal-warn)]"
-                    : "bg-[var(--signal-bad)]"
-              }`}
+              className={`h-1.5 w-1.5 rounded-full ${severityDotClass(severity)}`}
             />
             {/* (2026-09-29) 이 등급은 GEO 참고 점수의 등급이다 — 4칸 헤드라인과 섞여 읽히지 않게 이름을 붙인다. */}
             <span className="text-zinc-300">
@@ -1971,9 +2043,11 @@ function HeroSection({
           <ScoreDonut isKo={isKo} severity={severity} value={totalScore} />
           <p className="max-w-[14rem] text-center text-sm text-zinc-400 leading-relaxed">
             {provisional
-              ? isKo
-                ? "잠정 점수예요. 판별이 충분한 다음 측정에서 확정돼요."
-                : "Provisional score — it becomes final once a run is sufficiently verified."
+              ? byLocale(
+                  isKo,
+                  "잠정 점수예요. 판별이 충분한 다음 측정에서 확정돼요.",
+                  "Provisional score — it becomes final once a run is sufficiently verified."
+                )
               : scoreTierMeaning(totalScore, isKo)}
           </p>
           <PreviousRunBadge history={job.history} isKo={isKo} />
@@ -2062,9 +2136,7 @@ function HeroSection({
           )}
           unit={
             result.metrics.averageMentionPosition !== null
-              ? isKo
-                ? "번째"
-                : ""
+              ? byLocale(isKo, "번째", "")
               : "—"
           }
           value={result.metrics.averageMentionPosition ?? 0}
@@ -2266,18 +2338,9 @@ function ScoreDonut({
   //        ④ 색맹 99%가 적녹이라 접근성 문제도 겹친다.
   //   → 좋은 상태(green)만 색으로 보상하고, 낮은 상태는 **중립**으로 사실만 전달한다.
   //     "좋은지 나쁜지"는 색이 아니라 옆의 티어 라벨(scoreTierLabel)이 글자로 말한다.
-  const gradId =
-    severity === "green"
-      ? "g-good"
-      : severity === "amber"
-        ? "g-warn"
-        : "g-warn";
-  const textColor =
-    severity === "green"
-      ? "text-[var(--signal-good)]"
-      : severity === "amber"
-        ? "text-[var(--signal-warn)]"
-        : "text-zinc-100";
+  // Amber and red share the warm gradient (anti-panic gauge).
+  const gradId = severity === "green" ? "g-good" : "g-warn";
+  const textColor = donutTextColor(severity);
 
   return (
     <div className="relative flex h-56 w-56 shrink-0 items-center justify-center">
@@ -2364,15 +2427,10 @@ function ScoreDonut({
 
 function FiveAxisBar({ axis, isKo }: { axis: AxisScore; isKo: boolean }) {
   const pct = (axis.score / axis.max) * 100;
-  const tone: Severity = pct >= 70 ? "green" : pct >= 40 ? "amber" : "red";
+  const tone: Severity = axisTone(pct);
   // 저점 빨강 제거 — 게이지(ScoreDonut)와 같은 안티패닉 규율. 0점 고객 화면이 온통 빨강이 되면
   //   개선 가능한 상태가 "실패 통보"로 읽힌다. 낮음은 **채움이 짧은 것**으로 이미 보인다.
-  const barColor =
-    tone === "green"
-      ? "bg-[var(--signal-good)]"
-      : tone === "amber"
-        ? "bg-[var(--signal-warn)]"
-        : "bg-white/25";
+  const barColor = axisBarColor(tone);
   const width = useMotionValue(0);
   const widthPct = useTransform(width, (v: number) => `${v}%`);
   useEffect(() => {
@@ -2453,14 +2511,7 @@ function KpiCell({
     return () => ctrl.stop();
   }, [value, v]);
 
-  const valueColor =
-    tone === "green"
-      ? "text-[var(--signal-good)]"
-      : tone === "amber"
-        ? "text-[var(--signal-warn)]"
-        : tone === "red"
-          ? "text-[var(--signal-bad)]"
-          : "text-zinc-100";
+  const valueColor = kpiValueColor(tone);
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-3">
@@ -3125,10 +3176,8 @@ function CrewFailedCard({ jobId, isKo }: { jobId: string; isKo: boolean }) {
           >
             {retrying ? (
               <Loader2 className="h-4 w-4 animate-spin" />
-            ) : isKo ? (
-              "다시 시도"
             ) : (
-              "Retry"
+              byLocale(isKo, "다시 시도", "Retry")
             )}
           </Button>
         </div>
@@ -3341,12 +3390,12 @@ function NaverBriefingTriggerCard({
               <>
                 <Search className="h-4 w-4" />
                 {failed
-                  ? isKo
-                    ? "다시 측정하기"
-                    : "Retry measurement"
-                  : isKo
-                    ? "네이버 AI 브리핑 측정"
-                    : "Measure Naver AI Briefing"}
+                  ? byLocale(isKo, "다시 측정하기", "Retry measurement")
+                  : byLocale(
+                      isKo,
+                      "네이버 AI 브리핑 측정",
+                      "Measure Naver AI Briefing"
+                    )}
               </>
             )}
           </Button>
@@ -3428,13 +3477,17 @@ export function BriefingNotSurfaced({
           {isKo ? "이번엔 측정하지 못했어요" : "We couldn't measure this time"}
         </p>
         <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">
-          {isKo
-            ? throttled
-              ? "요청이 몰려 잠시 막혔어요. 조금 뒤에 다시 시도하면 측정됩니다."
-              : "측정 도구 연결에 문제가 있어요. 저희가 확인하고 있으니 곧 다시 측정됩니다."
-            : throttled
-              ? "Requests were throttled. Try again shortly and it will measure."
-              : "Our measurement tool is having trouble connecting. We're on it — this will be measured again soon."}
+          {throttled
+            ? byLocale(
+                isKo,
+                "요청이 몰려 잠시 막혔어요. 조금 뒤에 다시 시도하면 측정됩니다.",
+                "Requests were throttled. Try again shortly and it will measure."
+              )
+            : byLocale(
+                isKo,
+                "측정 도구 연결에 문제가 있어요. 저희가 확인하고 있으니 곧 다시 측정됩니다.",
+                "Our measurement tool is having trouble connecting. We're on it — this will be measured again soon."
+              )}
         </p>
         <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
           {isKo
@@ -3526,9 +3579,11 @@ function NaverBriefingCompletedCard({
           ) : null}
           <p className="mt-4 whitespace-pre-line text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]">
             {briefing.isStub
-              ? isKo
-                ? "네이버 AI 브리핑 연결이 아직 켜지지 않았어요 (Browserbase 미설정)."
-                : "Naver AI Briefing is not connected yet (Browserbase not configured)."
+              ? byLocale(
+                  isKo,
+                  "네이버 AI 브리핑 연결이 아직 켜지지 않았어요 (Browserbase 미설정).",
+                  "Naver AI Briefing is not connected yet (Browserbase not configured)."
+                )
               : (() => {
                   // 브리핑 박스는 접힌 상태로 스크랩돼 문장이 중간에 끊길 수 있다
                   // ("…준비형 콘텐츠가 더 많" §A-5). 끊겼으면 말줄임을 붙여
@@ -3710,17 +3765,7 @@ function ActionCard({ action, isKo }: { action: ActionItem; isKo: boolean }) {
         onClick={() => setExpanded((value) => !value)}
         type="button"
       >
-        {isKo
-          ? expanded
-            ? "간단히 보기"
-            : action.steps.length > 0
-              ? "근거와 실행 방법 보기"
-              : "근거 전체 보기"
-          : expanded
-            ? "Show less"
-            : action.steps.length > 0
-              ? "View rationale and steps"
-              : "View full rationale"}
+        {actionExpandLabel(expanded, action.steps.length > 0, isKo)}
       </button>
       <div className="mt-4 flex items-center justify-between border-white/5 border-t pt-3 text-xs">
         {/* 🔴 S7-2차(2026-08-11) — `임팩트 4/5`·`노력 2/5` 만 있고 **5가 뭘 뜻하는지
@@ -3915,12 +3960,7 @@ function AnalystAccordion({
 }
 
 function FindingRow({ finding }: { finding: Finding }) {
-  const dotCls =
-    finding.severity === "red"
-      ? "bg-[var(--signal-bad)]"
-      : finding.severity === "amber"
-        ? "bg-[var(--signal-warn)]"
-        : "bg-[var(--signal-good)]";
+  const dotCls = findingDotClass(finding.severity);
   return (
     <div className="flex items-start gap-3 rounded-md border border-white/5 bg-white/5 px-3 py-2.5">
       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dotCls}`} />
@@ -3988,14 +4028,7 @@ function Pill({
   tone: "positive" | "negative" | "neutral" | "muted";
   children: React.ReactNode;
 }) {
-  const cls =
-    tone === "positive"
-      ? "bg-[var(--signal-good)]/10 text-[var(--signal-good)] border-[var(--signal-good)]/30"
-      : tone === "negative"
-        ? "bg-[var(--signal-bad)]/10 text-[var(--signal-bad)] border-[var(--signal-bad)]/30"
-        : tone === "neutral"
-          ? "bg-[var(--signal-warn)]/10 text-[var(--signal-warn)] border-[var(--signal-warn)]/30"
-          : "bg-white/5 text-zinc-400 border-white/10";
+  const cls = sentimentToneClass(tone);
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2 py-0.5 font-medium text-xs ${cls}`}
@@ -4535,13 +4568,13 @@ function ReportToDashboardGuide({
         </div>
         <div className="rounded-lg border border-[var(--brand-2)]/20 bg-[var(--brand-2)]/5 p-4">
           <p className="font-medium text-sm text-zinc-100">
-            {isKo
-              ? isWorkspaceAudit
-                ? "대시보드에서 이어보기"
-                : "가입 후 대시보드"
-              : isWorkspaceAudit
-                ? "Continue in your dashboard"
-                : "Dashboard after sign-up"}
+            {isWorkspaceAudit
+              ? byLocale(
+                  isKo,
+                  "대시보드에서 이어보기",
+                  "Continue in your dashboard"
+                )
+              : byLocale(isKo, "가입 후 대시보드", "Dashboard after sign-up")}
           </p>
           <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">
             {isKo

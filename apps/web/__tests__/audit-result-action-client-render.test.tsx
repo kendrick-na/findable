@@ -178,6 +178,7 @@ async function waitForText(container: HTMLElement, text: string) {
 }
 
 afterEach(async () => {
+  // biome-ignore lint/suspicious/useAwait: async act() flushes React effects before assertions
   await act(async () => {
     root?.unmount();
   });
@@ -220,6 +221,7 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    // biome-ignore lint/suspicious/useAwait: async act() flushes React effects before assertions
     await act(async () => {
       root?.render(<AuditResultView jobId="fixture-job" locale={locale} />);
     });

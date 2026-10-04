@@ -6,11 +6,11 @@ import { describe, expect, it } from "vitest";
 // and briefing runner. No provider, database, or runner implementation is
 // mocked here; this test only checks what a later replay worker can recover
 // from the stored snapshot.
-type StoredResponse = {
+interface StoredResponse {
   engineId: string;
   promptIndex?: number;
   promptText?: string;
-};
+}
 
 function coreKey(row: StoredResponse): string | null {
   if (row.promptIndex === undefined) {

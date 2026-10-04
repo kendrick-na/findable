@@ -52,6 +52,46 @@ function actionLabel(
   return "실시간 상태 보기";
 }
 
+function statusTone(
+  status: AuditJob["status"],
+  isUnavailable: boolean
+): string {
+  return isUnavailable ? STATUS_TONE.failed : STATUS_TONE[status];
+}
+
+function statusLabel(
+  status: AuditJob["status"],
+  isUnavailable: boolean
+): string {
+  return isUnavailable ? "측정 불가" : STATUS_LABEL[status];
+}
+
+/** Failure details for failed/unusable runs; live progress otherwise. */
+function unfinishedRunHref(
+  job: Pick<AuditJob, "id" | "status">,
+  isUnavailable: boolean
+): string {
+  return job.status === "failed" || isUnavailable
+    ? `/history/${job.id}`
+    : `/brand/measuring?job=${job.id}`;
+}
+
+function hasCollectedEngineAnswer(result: unknown): boolean {
+  const responses = (
+    result as {
+      engineResponses?: Array<{
+        errorMessage?: string | null;
+        isStub?: boolean;
+      }>;
+    } | null
+  )?.engineResponses;
+  return (
+    responses?.some(
+      (response) => !(response.errorMessage || response.isStub)
+    ) ?? false
+  );
+}
+
 export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
   const webUrl = env.NEXT_PUBLIC_WEB_URL;
 
@@ -74,18 +114,7 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
     <ul className="flex flex-col gap-3">
       {jobs.map((job) => {
         const result = withRecomputedAuditMetrics(job.result);
-        const responses = (
-          result as {
-            engineResponses?: Array<{
-              errorMessage?: string | null;
-              isStub?: boolean;
-            }>;
-          } | null
-        )?.engineResponses;
-        const hasCollectedAnswer =
-          responses?.some(
-            (response) => !(response.errorMessage || response.isStub)
-          ) ?? false;
+        const hasCollectedAnswer = hasCollectedEngineAnswer(result);
         const publicationStatus = auditPublicationStatus(result);
         const isPartial =
           job.status === "completed" &&
@@ -118,17 +147,13 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
                   "border-transparent",
                   isPartial
                     ? STATUS_TONE.processing
-                    : isUnavailable
-                      ? STATUS_TONE.failed
-                      : STATUS_TONE[job.status]
+                    : statusTone(job.status, isUnavailable)
                 )}
                 variant="outline"
               >
                 {isPartial
                   ? "잠정 결과"
-                  : isUnavailable
-                    ? "측정 불가"
-                    : STATUS_LABEL[job.status]}
+                  : statusLabel(job.status, isUnavailable)}
               </Badge>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
@@ -171,11 +196,7 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
             ) : (
               <a
                 className={rowClassName}
-                href={
-                  job.status === "failed" || isUnavailable
-                    ? `/history/${job.id}`
-                    : `/brand/measuring?job=${job.id}`
-                }
+                href={unfinishedRunHref(job, isUnavailable)}
               >
                 {body}
               </a>

@@ -51,21 +51,27 @@ function effortLabel(
   effort: ActionGuide["effortHours"],
   isKo: boolean
 ): string {
-  const range =
-    effort.min === effort.max
-      ? isKo
-        ? `${effort.min}시간`
-        : `${effort.min} hours`
-      : isKo
-        ? `${effort.min}~${effort.max}시간`
-        : `${effort.min}-${effort.max} hours`;
-  return effort.per === "week"
-    ? isKo
-      ? `매주 약 ${range}`
-      : `about ${range} per week`
-    : isKo
-      ? `약 ${range}`
-      : `about ${range}`;
+  const range = effortRange(effort, isKo);
+  if (effort.per === "week") {
+    return isKo ? `매주 약 ${range}` : `about ${range} per week`;
+  }
+  return isKo ? `약 ${range}` : `about ${range}`;
+}
+
+function effortRange(
+  effort: ActionGuide["effortHours"],
+  isKo: boolean
+): string {
+  if (effort.min === effort.max) {
+    return isKo ? `${effort.min}시간` : `${effort.min} hours`;
+  }
+  return isKo
+    ? `${effort.min}~${effort.max}시간`
+    : `${effort.min}-${effort.max} hours`;
+}
+
+function allChannelsLabel(isKo: boolean): string {
+  return isKo ? "측정 채널 전체" : "All measured channels";
 }
 
 function Sources({
@@ -108,9 +114,7 @@ export function ActionEvidenceGuide({
     [
       isKo ? "적용 채널" : "Measurement channels",
       guide.engines.length === 0
-        ? isKo
-          ? "측정 채널 전체"
-          : "All measured channels"
+        ? allChannelsLabel(isKo)
         : guide.engines.map(engineLabel).join(", "),
     ],
     [

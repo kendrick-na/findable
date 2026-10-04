@@ -339,7 +339,7 @@ describe("product Tracking replay through PrismaPg", () => {
       );
       expect(Number(rows[0].count)).toBe(5);
       const comparable = await database.$queryRawUnsafe<
-        Array<Record<string, unknown>>
+        Record<string, unknown>[]
       >(
         `SELECT "trackingRowKey", "rawResponse", "shareOfVoice", "inputTokens", "outputTokens", "costBasis"
          FROM "Tracking" WHERE "trackingRowKey" IN ($1, $2) ORDER BY "trackingRowKey"`,
@@ -413,7 +413,7 @@ describe("product Tracking replay through PrismaPg", () => {
         reconcileBriefingTracking("job-briefing-crash")
       ).resolves.toBe("skipped");
       const recovered = await database.$queryRawUnsafe<
-        Array<Record<string, unknown>>
+        Record<string, unknown>[]
       >(
         `SELECT "rawResponse", "shareOfVoice", "inputTokens", "outputTokens" FROM "Tracking"
          WHERE "trackingRowKey" = 'job-briefing-crash|briefing|0|naver-briefing'`
