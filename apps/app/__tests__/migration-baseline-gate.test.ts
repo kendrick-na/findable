@@ -30,6 +30,9 @@ const port = 16_132 + Math.floor(Math.random() * 100);
 const role = execFileSync("id", ["-un"], { encoding: "utf8" }).trim();
 const connectionString = `postgresql://${role}@127.0.0.1:${port}/postgres`;
 let serverStarted = false;
+// initdb/postmaster abort on macOS without a valid locale
+// ("postmaster became multithreaded during startup"), so pin C locale here.
+const pgEnv = { ...process.env, LC_ALL: "C", LANG: "C" };
 
 const files: Record<string, string> = {
   "20260818_invite_code": 'CREATE TABLE "A" (id int);\n',
@@ -118,7 +121,7 @@ describe("evaluateMigrationBaseline", () => {
 });
 
 function run(command: string, args: string[]) {
-  const result = spawnSync(command, args, { encoding: "utf8" });
+  const result = spawnSync(command, args, { encoding: "utf8", env: pgEnv });
   if (result.status !== 0) {
     throw new Error(`${command} failed: ${result.stderr || result.stdout}`);
   }
