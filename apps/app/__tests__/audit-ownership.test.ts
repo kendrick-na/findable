@@ -61,6 +61,16 @@ describe("🔴 isAuditOwner — 소유자가 **아닌** 경우(PII 유출 방지
     expect(isAuditOwner(orgJob, { orgId: "org_999" })).toBe(false);
   });
 
+  test("🔴 조직 FK가 있으면 같은 이메일도 다른 활성 조직 경계를 우회하지 못한다", () => {
+    const orgJob = { email: "owner@brand.com", organizationId: "org_123" };
+    expect(
+      isAuditOwner(orgJob, {
+        email: "owner@brand.com",
+        orgId: "org_999",
+      })
+    ).toBe(false);
+  });
+
   test("🔴 같은 도메인이라고 소유자가 되지 않는다 — 회사 동료도 남이다", () => {
     // `medicube.co.kr` 한 도메인에 이메일이 15개였다는 실측이 있다.
     expect(isAuditOwner(JOB, { email: "colleague@brand.com" })).toBe(false);
