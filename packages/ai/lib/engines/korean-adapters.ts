@@ -226,8 +226,31 @@ async function naverSearch(
     throw signal.reason ?? new DOMException("Aborted", "AbortError");
   }
 
+  // The APIs rank within each endpoint, not across endpoints. Concatenating
+  // blog first and slicing to ten silently drops all news/web evidence when
+  // blog has ten hits. Interleave by rank to represent every available channel.
+  const groups = results.map((result) =>
+    result.status === "fulfilled" ? result.value : []
+  );
+  const items: NaverSearchItem[] = [];
+  for (
+    let rank = 0;
+    items.length < 10 && groups.some((group) => rank < group.length);
+    rank++
+  ) {
+    for (const group of groups) {
+      const item = group[rank];
+      if (item) {
+        items.push(item);
+        if (items.length === 10) {
+          break;
+        }
+      }
+    }
+  }
+
   return {
-    items: results.flatMap((r) => (r.status === "fulfilled" ? r.value : [])),
+    items,
     failures: results.flatMap((r) =>
       r.status === "rejected"
         ? [r.reason instanceof Error ? r.reason.message : String(r.reason)]
