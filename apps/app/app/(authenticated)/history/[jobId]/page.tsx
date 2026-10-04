@@ -212,14 +212,15 @@ export default async function AuditHistoryDetail({
                 </div>
                 <div className="rounded-lg border border-white/10 p-4">
                   <p className="text-muted-foreground text-sm">
-                    AI 답변 등장률
+                    AI·검색 등장률
                   </p>
                   <p className="mt-1 font-semibold text-2xl">
                     {Math.round(metrics.sov)}%
                   </p>
                   <p className="mt-1 text-muted-foreground text-xs">
-                    성공한 답변 {successfulResponseCount(metrics)}개 기준 · AI{" "}
-                    {coverage.measured}/{coverage.attempted}곳 측정
+                    성공한 AI·검색 응답 {successfulResponseCount(metrics)}개
+                    기준 · AI·검색 {coverage.measured}/{coverage.attempted}곳
+                    측정
                   </p>
                 </div>
               </div>
