@@ -10,6 +10,10 @@ import {
   type PromptKind,
 } from "./answer-buckets";
 import { engineDisplayName } from "./engine-labels";
+import {
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "./search-sampling-version";
 
 export interface AuditPdfData {
   brandName: string;
@@ -27,6 +31,9 @@ export interface AuditPdfData {
     /** 판정(2026-09-29) — 배지를 4분류로 그린다. 구 회차엔 없다. */
     mentionQuality?: string | null;
     promptKind?: PromptKind | null;
+    /** Naver search sampling marker (W1). Read via `searchSamplingVersionOf`. */
+    naverSamplingVersion?: string | null;
+    naverSource?: string | null;
   }>;
   generatedAt: string;
   language: "ko" | "en" | "both";
@@ -116,6 +123,15 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
   const failedEngineCount = [...attemptedIds].filter(
     (id) => !successfulIds.has(id)
   ).length;
+  // W1: same label as web/app/email, from the same source of truth. Null when
+  //   the run has no Naver search row (nothing to label).
+  const samplingLabel = searchSamplingLabel(
+    searchSamplingVersionOf(data),
+    true
+  );
+  const samplingNote = samplingLabel
+    ? `<p class="sampling-note" data-testid="search-sampling-label">${escapeHtml(samplingLabel)} — 표본 방식이 다른 회차와는 검색 노출을 비교하지 않습니다.</p>`
+    : "";
 
   return `<!doctype html>
 <html lang="ko">
@@ -137,6 +153,7 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
 
   .title { margin-top: 14px; font-size: 16pt; font-weight: 800; letter-spacing: -0.03em; }
   .subtitle { margin-top: 4px; font-size: 9.5pt; color: #4b5563; }
+  .sampling-note { margin-top: 2px; font-size: 8pt; color: #6b7280; }
 
   .scorecard { margin-top: 14px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
   .card { padding: 10px 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; }
@@ -192,6 +209,7 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
 
 <h1 class="title">${escapeHtml(data.brandName)}의 AI 가시성 진단 (${escapeHtml(data.domain)})</h1>
 <p class="subtitle">질문 ${data.promptsCount}개 · 브랜드 질문 기준 AI 답변 ${aiCount}곳 · 검색 노출 ${searchCount}곳 · 미측정 ${failedEngineCount}곳 · 실제 ${data.metrics.enginesCovered.length}회 시도 · 측정 언어 ${LANGUAGE_LABEL[data.language]}</p>
+${samplingNote}
 
 <div class="scorecard">
   <div class="card primary">
