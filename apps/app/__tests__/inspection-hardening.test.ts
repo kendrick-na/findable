@@ -215,6 +215,16 @@ describe("schema handling against a disposable PostgreSQL", () => {
       // Rows only in tenant must not satisfy the gate: the runtime reads public.
       const engines = await readEngineSeedState(tenantUrl, ["chatgpt"]);
       expect(engines).toEqual({ ok: false, missing: ["chatgpt"] });
+
+      // Nor through a role-level search_path (Prisma always qualifies "public").
+      await admin.$executeRawUnsafe(
+        `ALTER ROLE "${role}" SET search_path = tenant`
+      );
+      expect(await readEngineSeedState(base, ["chatgpt"])).toEqual({
+        ok: false,
+        missing: ["chatgpt"],
+      });
+      await admin.$executeRawUnsafe(`ALTER ROLE "${role}" RESET search_path`);
     } finally {
       await admin.$disconnect();
       spawnSync(

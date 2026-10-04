@@ -35,7 +35,9 @@ export async function readEngineSeedState(
       await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
       // Deliberately no ?schema= handling: the runtime client (PrismaPg) ignores
       // it and reads "public"."Engine", so the gate must look where Tracking does.
-      return tx.$queryRawUnsafe<{ id: string }[]>('SELECT id FROM "Engine"');
+      return tx.$queryRawUnsafe<{ id: string }[]>(
+        'SELECT id FROM "public"."Engine"'
+      );
     });
     return evaluateEngineSeed(rows, required);
   } finally {
