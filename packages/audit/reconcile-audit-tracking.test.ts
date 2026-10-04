@@ -166,22 +166,29 @@ describe("reconcileAuditTracking", () => {
       brandId: "brand-1",
       completedAt: new Date("2026-10-04T00:00:00Z"),
       postprocessing: { tracking: "pending" },
-      result: { engineResponses: [{
-        engineId: "chatgpt",
-        promptIndex: 0,
-        promptText: "브랜드 추천",
-        promptLang: "ko",
-        trackingInputCaptured: true,
-        rawResponse: "result",
-        brandMentioned: true,
-        isStub: false,
-        errorMessage: null,
-      }] },
+      result: {
+        engineResponses: [
+          {
+            engineId: "chatgpt",
+            promptIndex: 0,
+            promptText: "브랜드 추천",
+            promptLang: "ko",
+            trackingInputCaptured: true,
+            rawResponse: "result",
+            brandMentioned: true,
+            isStub: false,
+            errorMessage: null,
+          },
+        ],
+      },
     });
-    executeRawUnsafe.mockReset()
+    executeRawUnsafe
+      .mockReset()
       .mockResolvedValueOnce(1)
       .mockRejectedValueOnce(new Error("finalize DB unavailable"));
-    organizationFindUnique.mockRejectedValueOnce(new Error("classification DB unavailable"));
+    organizationFindUnique.mockRejectedValueOnce(
+      new Error("classification DB unavailable")
+    );
     await expect(reconcileAuditTracking("job-db-down")).resolves.toBe("failed");
     expect(executeRawUnsafe).toHaveBeenCalledTimes(2);
     expect(persistAuditTracking).not.toHaveBeenCalled();

@@ -13,7 +13,7 @@ type ReplayAxis = "tracking" | "briefingTracking";
  * with a token-and-stage CAS; a late successful writer wins if it finalized
  * first. Pending/unknown markers already at the limit are retired when due.
  */
-export async function retireExhaustedTrackingClaim(
+export function retireExhaustedTrackingClaim(
   db: ReconcileDatabase,
   jobId: string,
   axis: ReplayAxis,

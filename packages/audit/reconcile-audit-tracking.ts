@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
-import { classifyTrackingReplay, retireExhaustedTrackingClaim, TRACKING_RECONCILE_MAX_ATTEMPTS } from "./tracking-replay-policy";
+import {
+  classifyTrackingReplay,
+  retireExhaustedTrackingClaim,
+  TRACKING_RECONCILE_MAX_ATTEMPTS,
+} from "./tracking-replay-policy";
 
 type ReconcileDatabase = Pick<typeof database, "$executeRawUnsafe">;
 
@@ -111,16 +115,23 @@ export async function reconcileAuditTracking(
   }
   const marker = job.postprocessing as Record<string, unknown>;
   const attempts = marker.trackingReconcileAttempts;
-  if (typeof attempts === "number" && attempts >= TRACKING_RECONCILE_MAX_ATTEMPTS) {
+  if (
+    typeof attempts === "number" &&
+    attempts >= TRACKING_RECONCILE_MAX_ATTEMPTS
+  ) {
     const retired = await retireExhaustedTrackingClaim(
       database,
       jobId,
       "tracking",
       trackingStage,
-      typeof marker.trackingReconcileToken === "string" ? marker.trackingReconcileToken : null,
+      typeof marker.trackingReconcileToken === "string"
+        ? marker.trackingReconcileToken
+        : null,
       now
     );
-    if (retired === 1) log.warn("audit.tracking.reconcile_retry_exhausted", { jobId, attempts });
+    if (retired === 1) {
+      log.warn("audit.tracking.reconcile_retry_exhausted", { jobId, attempts });
+    }
     return "skipped";
   }
   const claimToken = await claimAuditTracking(database, jobId, now);
@@ -201,7 +212,10 @@ export async function reconcileAuditTracking(
     } catch (finalizeError) {
       // DB failure or forced termination still leaves the fenced stale lease
       // for a later bounded reclaim/retirement.
-      log.warn("audit.tracking.reconcile_finalize_failed", { jobId, error: String(finalizeError) });
+      log.warn("audit.tracking.reconcile_finalize_failed", {
+        jobId,
+        error: String(finalizeError),
+      });
     }
     return "failed";
   }

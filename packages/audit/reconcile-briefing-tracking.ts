@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
-import { classifyTrackingReplay, retireExhaustedTrackingClaim, TRACKING_RECONCILE_MAX_ATTEMPTS } from "./tracking-replay-policy";
+import {
+  classifyTrackingReplay,
+  retireExhaustedTrackingClaim,
+  TRACKING_RECONCILE_MAX_ATTEMPTS,
+} from "./tracking-replay-policy";
 
 type ReconcileDatabase = Pick<typeof database, "$executeRawUnsafe">;
 
@@ -98,16 +102,23 @@ export async function reconcileBriefingTracking(
 
   const stage = job.postprocessing as Record<string, unknown>;
   const attempts = stage.briefingTrackingReconcileAttempts;
-  if (typeof attempts === "number" && attempts >= TRACKING_RECONCILE_MAX_ATTEMPTS) {
+  if (
+    typeof attempts === "number" &&
+    attempts >= TRACKING_RECONCILE_MAX_ATTEMPTS
+  ) {
     const retired = await retireExhaustedTrackingClaim(
       database,
       jobId,
       "briefingTracking",
       marker,
-      typeof stage.briefingTrackingReconcileToken === "string" ? stage.briefingTrackingReconcileToken : null,
+      typeof stage.briefingTrackingReconcileToken === "string"
+        ? stage.briefingTrackingReconcileToken
+        : null,
       now
     );
-    if (retired === 1) log.warn("audit.briefing.tracking_retry_exhausted", { jobId, attempts });
+    if (retired === 1) {
+      log.warn("audit.briefing.tracking_retry_exhausted", { jobId, attempts });
+    }
     return "skipped";
   }
   const token = await claimBriefingTracking(database, jobId, now);
@@ -176,7 +187,10 @@ export async function reconcileBriefingTracking(
     try {
       await finalizeBriefingTracking(database, jobId, token, "unknown");
     } catch (finalizeError) {
-      log.warn("audit.briefing.tracking_finalize_failed", { jobId, error: String(finalizeError) });
+      log.warn("audit.briefing.tracking_finalize_failed", {
+        jobId,
+        error: String(finalizeError),
+      });
     }
     return "failed";
   }
