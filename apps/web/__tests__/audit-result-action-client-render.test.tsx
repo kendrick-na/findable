@@ -212,7 +212,7 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     await act(() => {
       root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
     });
-    await waitForText(container, "집계 기준이 변경");
+    await waitForText(container, "검증·집계 기준이 변경");
     expect(container.querySelectorAll("[data-testid='audit-metric-basis-notice']"))
       .toHaveLength(1);
 

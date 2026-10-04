@@ -183,6 +183,7 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
   expect(response.status).toBe(200);
   expect(body.pdfUrl).toBeNull();
   expect(body.pdfOutdated).toBe(true);
+  expect(body.metricBasisChanged).toBe(false);
   expect(body.result.geoActions).toEqual([]);
   expect(body.result.topRecommendations).toEqual([]);
 });

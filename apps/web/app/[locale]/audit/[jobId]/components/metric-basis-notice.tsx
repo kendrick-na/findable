@@ -8,8 +8,8 @@ export function AuditMetricBasisNotice({ locale }: { locale: string }) {
       data-testid="audit-metric-basis-notice"
     >
       {isKo
-        ? "이 회차는 저장 당시와 현재의 집계 기준이 변경되어 화면 수치를 다시 계산했습니다. 이전에 받은 이메일·PDF의 숫자와 다를 수 있습니다. 이는 제품 효과나 성과 개선을 뜻하지 않습니다."
-        : "The calculation rules changed after this run was saved, so the figures on this page were recalculated. They may differ from earlier emails or PDFs. This does not establish a product effect or improved results."}
+        ? "이 회차는 저장 이후 검증·집계 기준이 변경되어 현재 화면에 다시 적용했습니다. 수치가 재계산되거나 표시가 보류될 수 있으며, 이전에 받은 이메일·PDF의 내용과 다를 수 있습니다. 이 변경 자체는 제품 효과나 성과 개선을 뜻하지 않습니다."
+        : "Verification or calculation rules changed after this run was saved and were reapplied here. Figures may be recalculated or withheld, and this page may differ from earlier emails or PDFs. The change itself does not establish a product effect or improved results."}
     </aside>
   );
 }

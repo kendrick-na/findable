@@ -6,9 +6,11 @@ it("tells readers that the current figures may differ from immutable older copie
   const ko = renderToStaticMarkup(<AuditMetricBasisNotice locale="ko" />);
   const en = renderToStaticMarkup(<AuditMetricBasisNotice locale="en" />);
 
-  expect(ko).toContain("집계 기준이 변경");
+  expect(ko).toContain("검증·집계 기준이 변경");
+  expect(ko).toContain("표시가 보류될 수");
   expect(ko).toContain("이전에 받은 이메일·PDF");
   expect(ko).not.toContain("성과가 개선");
-  expect(en).toContain("calculation rules changed");
+  expect(en).toContain("Verification or calculation rules changed");
+  expect(en).toContain("may be recalculated or withheld");
   expect(en).toContain("earlier emails or PDFs");
 });

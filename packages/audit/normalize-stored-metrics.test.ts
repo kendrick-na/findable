@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { aggregateAudit } from "../ai/lib/engines/aggregate";
+import type { EngineResponse } from "../ai/lib/engines/types";
 import { MENTION_VERDICT_VERSION } from "../ai/lib/mention-verdict-version";
+import { answerShareOfVoice, summarizeAnswerBuckets } from "./answer-buckets";
 import { countMeasurementCoverage } from "./measurement-coverage";
 import {
   auditPublicationIssue,
@@ -38,6 +41,55 @@ function unverifiedRows(n: number): Record<string, unknown>[] {
 }
 
 describe("saved audit metric normalization", () => {
+  it("does not show a correction for a current runner-shaped brand/discovery cohort", () => {
+    const answer = (
+      engineId: EngineResponse["engineId"],
+      promptKind: "brand" | "discovery",
+      quality: "confirmed" | "absent" | "unverified"
+    ) => ({
+      engineId,
+      promptKind,
+      brandMentioned: quality === "confirmed",
+      mentionQuality: quality,
+      mentionListSize: null,
+      mentionPosition: null,
+      sentiment: null,
+      citedSources: [],
+      rawResponse: "",
+      shareOfVoice: quality === "confirmed" ? 1 : 0,
+      durationMs: 1,
+      isStub: false,
+      errorMessage: null,
+      ...(engineId === "naver" ? { naverSource: "search_results" } : {}),
+    });
+    const tagged = [
+      ...Array.from({ length: 10 }, () =>
+        answer("chatgpt", "brand", "confirmed")
+      ),
+      answer("claude", "brand", "unverified"),
+      answer("naver", "brand", "absent"),
+      answer("gemini", "discovery", "confirmed"),
+      answer("naver", "discovery", "confirmed"),
+    ];
+    const brandFlat = tagged.filter((row) => row.promptKind === "brand");
+    const stored = {
+      domain: "example.test",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {
+        ...aggregateAudit(brandFlat, "example.test"),
+        answerBuckets: summarizeAnswerBuckets(tagged, {
+          brandDomain: "example.test",
+        }),
+      },
+      engineResponses: tagged.map((row) => ({
+        ...row,
+        sov: answerShareOfVoice(row, row.shareOfVoice),
+      })),
+    };
+    const reread = withRecomputedAuditMetrics(stored);
+    expect(isPublishableAuditResult(reread)).toBe(true);
+    expect(hasRecomputedAuditMetricsChanged(stored, reread)).toBe(false);
+  });
   it("detects a stored discovery-search metric that changes on read without a PDF", () => {
     const original = {
       domain: "example.test",
