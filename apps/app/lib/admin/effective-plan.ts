@@ -1,16 +1,17 @@
 import "server-only";
 
 import {
-  hasCurrentPaymentGrant,
   type MemberPlanSignal,
   normalizePlan,
   type Plan,
-  planFromPublicMetadata,
   resolveOrganizationPlan,
 } from "@repo/auth/plan";
-import { clerkClient } from "@repo/auth/server";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
+import {
+  loadClerkPlanSignals,
+  memberPlanSignal,
+} from "@/lib/billing/clerk-plan-signals";
 
 /**
  * Admin-console plan display (2026-10-05).
@@ -28,9 +29,6 @@ import { log } from "@repo/observability/log";
  *   page never crashes because Clerk is down.
  */
 
-/** Clerk getUserList page size (at or below the Clerk list API limit). */
-const CLERK_USER_PAGE = 100;
-
 export interface AdminPlanView {
   /** Raw `Organization.plan` (invite/admin grant only). */
   dbPlan: Plan;
@@ -45,47 +43,6 @@ export interface AdminPlanOrgInput {
   memberIds: readonly string[];
   plan: string;
   planExpiresAt: Date | null;
-}
-
-type ClerkPlanSignal = Pick<
-  MemberPlanSignal,
-  "clerkPlan" | "hasCurrentPaymentGrant"
->;
-
-async function loadClerkSignals(
-  userIds: readonly string[]
-): Promise<Map<string, ClerkPlanSignal> | null> {
-  const signals = new Map<string, ClerkPlanSignal>();
-  if (userIds.length === 0) {
-    return signals;
-  }
-  try {
-    const clerk = await clerkClient();
-    for (let i = 0; i < userIds.length; i += CLERK_USER_PAGE) {
-      const chunk = userIds.slice(i, i + CLERK_USER_PAGE);
-      const page = await clerk.users.getUserList({
-        userId: [...chunk],
-        limit: CLERK_USER_PAGE,
-      });
-      for (const user of page.data) {
-        signals.set(user.id, {
-          clerkPlan: planFromPublicMetadata(
-            user.publicMetadata as Record<string, unknown> | null
-          ),
-          hasCurrentPaymentGrant: hasCurrentPaymentGrant(
-            user.privateMetadata as Record<string, unknown> | null
-          ),
-        });
-      }
-    }
-    return signals;
-  } catch (error) {
-    log.error("admin.plan.clerk_lookup_failed", {
-      users: userIds.length,
-      error: String(error),
-    });
-    return null;
-  }
 }
 
 function dbOnlyViews(
@@ -110,7 +67,7 @@ export async function resolveAdminOrgPlans(
   try {
     const userIds = [...new Set(orgs.flatMap((org) => org.memberIds))];
     const [clerkSignals, invites, partners] = await Promise.all([
-      loadClerkSignals(userIds),
+      loadClerkPlanSignals(userIds, "admin.plan.clerk_lookup_failed"),
       database.inviteRedemption.findMany({
         where: { userId: { in: userIds } },
         select: { userId: true },
@@ -126,17 +83,10 @@ export async function resolveAdminOrgPlans(
     return new Map(
       orgs.map((org) => {
         const dbPlan = normalizePlan(org.plan);
+        // Clerk failed → per-user payment is unknown → free (DB grant only).
         const members: MemberPlanSignal[] = [...new Set(org.memberIds)].map(
-          (userId) => {
-            // Clerk failed → per-user payment is unknown → free (DB grant only).
-            const clerk = clerkSignals?.get(userId);
-            return {
-              clerkPlan: clerk?.clerkPlan ?? "free",
-              hasCurrentPaymentGrant: clerk?.hasCurrentPaymentGrant ?? false,
-              hasInviteRedemption: invited.has(userId),
-              isApprovedPartner: approvedPartners.has(userId),
-            };
-          }
+          (userId) =>
+            memberPlanSignal(userId, clerkSignals, invited, approvedPartners)
         );
         const effectivePlan = resolveOrganizationPlan({
           organizationPlan: dbPlan,

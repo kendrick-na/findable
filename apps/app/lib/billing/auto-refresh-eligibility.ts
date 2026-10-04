@@ -15,19 +15,13 @@
  */
 
 import {
-  hasCurrentPaymentGrant,
   type MemberPlanSignal,
   type Plan,
   planCapabilities,
-  planFromPublicMetadata,
   resolveOrganizationPlan,
 } from "@repo/auth/plan";
-import { clerkClient } from "@repo/auth/server";
 import { database } from "@repo/database";
-import { log } from "@repo/observability/log";
-
-/** Clerk getUserList 한 번에 묻는 사용자 수(Clerk 목록 API 의 limit 상한 이하). */
-const CLERK_USER_PAGE = 100;
+import { loadClerkPlanSignals, memberPlanSignal } from "./clerk-plan-signals";
 
 export interface AutoRefreshOrganization {
   brands: Array<{
@@ -38,48 +32,6 @@ export interface AutoRefreshOrganization {
   }>;
   id: string;
   plan: Plan;
-}
-
-type ClerkPlanSignal = Pick<
-  MemberPlanSignal,
-  "clerkPlan" | "hasCurrentPaymentGrant"
->;
-
-/** 사용자별 Clerk 권한. 실패하면 null(호출부가 DB 만으로 판정). */
-async function loadClerkSignals(
-  userIds: readonly string[]
-): Promise<Map<string, ClerkPlanSignal> | null> {
-  const signals = new Map<string, ClerkPlanSignal>();
-  if (userIds.length === 0) {
-    return signals;
-  }
-  try {
-    const clerk = await clerkClient();
-    for (let i = 0; i < userIds.length; i += CLERK_USER_PAGE) {
-      const chunk = userIds.slice(i, i + CLERK_USER_PAGE);
-      const page = await clerk.users.getUserList({
-        userId: [...chunk],
-        limit: CLERK_USER_PAGE,
-      });
-      for (const user of page.data) {
-        signals.set(user.id, {
-          clerkPlan: planFromPublicMetadata(
-            user.publicMetadata as Record<string, unknown> | null
-          ),
-          hasCurrentPaymentGrant: hasCurrentPaymentGrant(
-            user.privateMetadata as Record<string, unknown> | null
-          ),
-        });
-      }
-    }
-    return signals;
-  } catch (error) {
-    log.error("cron.auto-refresh.clerk_plan_lookup_failed", {
-      users: userIds.length,
-      error: String(error),
-    });
-    return null;
-  }
 }
 
 /** 자동 재측정이 허용된(autoRefreshHours != null) 조직과 그 실효 플랜. */
@@ -113,7 +65,8 @@ export async function loadAutoRefreshOrganizations(
   const userIds = [...new Set([...membersByOrg.values()].flat())];
 
   const [clerkSignals, invites, partners] = await Promise.all([
-    loadClerkSignals(userIds),
+    // 실패 시 null → DB 권한만으로 판정(대상을 늘리는 쪽으로 열지 않는다).
+    loadClerkPlanSignals(userIds, "cron.auto-refresh.clerk_plan_lookup_failed"),
     database.inviteRedemption.findMany({
       where: { userId: { in: userIds } },
       select: { userId: true },
@@ -128,17 +81,10 @@ export async function loadAutoRefreshOrganizations(
 
   const eligible: AutoRefreshOrganization[] = [];
   for (const org of orgs) {
+    // Clerk 실패 시 사용자별 결제 권한은 모른다 → free 로 둔다(DB 권한만 남음).
     const members: MemberPlanSignal[] = (membersByOrg.get(org.id) ?? []).map(
-      (userId) => {
-        // Clerk 실패 시 사용자별 결제 권한은 모른다 → free 로 둔다(DB 권한만 남음).
-        const clerk = clerkSignals?.get(userId);
-        return {
-          clerkPlan: clerk?.clerkPlan ?? "free",
-          hasCurrentPaymentGrant: clerk?.hasCurrentPaymentGrant ?? false,
-          hasInviteRedemption: invited.has(userId),
-          isApprovedPartner: approvedPartners.has(userId),
-        };
-      }
+      (userId) =>
+        memberPlanSignal(userId, clerkSignals, invited, approvedPartners)
     );
     const plan = resolveOrganizationPlan({
       organizationPlan: org.plan,
