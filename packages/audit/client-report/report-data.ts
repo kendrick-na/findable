@@ -21,7 +21,7 @@ export const CLIENT_REPORT_SCHEMA_VERSION = 1;
  * 이 코드가 옮겨 온 템플릿 스냅숏. `Findable_GEO리포트_템플릿/template.html` 을 바꾸면
  * 웹 렌더러(apps/web/app/r/...)도 같이 고치고 이 값을 올린다.
  */
-export const CLIENT_REPORT_TEMPLATE_VERSION = "geo-report-template@2026-09-28";
+export const CLIENT_REPORT_TEMPLATE_VERSION = "geo-report-template@2026-10-04";
 
 const labelId = z.enum(["ok", "other", "made", "generic", "unknown", "none"]);
 
@@ -114,13 +114,50 @@ export const clientReportDataSchema = z.object({
     clientSlug: z.string(),
     importedAt: z.string(),
   }),
+  publicationReview: z
+    .object({
+      narrativeApproved: z.boolean(),
+      pdfUrl: z.string().url().optional(),
+      pdfSha256: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      reportId: z.string().min(1).optional(),
+      reviewedAt: z.string().datetime(),
+      reviewerUserId: z.string().min(1),
+      snapshotAuditId: z.string().min(1),
+      snapshotImportedAt: z.string().datetime(),
+      snapshotSha256: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      snapshotVersion: z.number().int().positive(),
+      templateVersion: z.string().min(1),
+    })
+    .optional(),
   config: clientReportConfigViewSchema,
   computed: computedSchema,
 });
 
+export interface PublicationReview {
+  narrativeApproved: boolean;
+  pdfSha256?: string;
+  pdfUrl?: string;
+  reportId?: string;
+  reviewedAt: string;
+  reviewerUserId: string;
+  snapshotAuditId: string;
+  snapshotImportedAt: string;
+  snapshotSha256?: string;
+  snapshotVersion: number;
+  templateVersion: string;
+}
+
 export interface ClientReportData {
   computed: ClientReportComputed;
   config: ClientReportConfigView;
+  /** Archival metadata only. Public rendering must use a separately trusted review. */
+  publicationReview?: PublicationReview;
   schema: typeof CLIENT_REPORT_SCHEMA;
   schemaVersion: typeof CLIENT_REPORT_SCHEMA_VERSION;
   source: { auditId: string; clientSlug: string; importedAt: string };
@@ -131,8 +168,6 @@ export interface ClientReportData {
 export interface ClientReportDisclosure {
   /** Report.data is a point-in-time snapshot, not a live remeasurement. */
   isFrozenSnapshot: true;
-  /** Historical engine rows that must not be read as current measurements. */
-  retiredEngineIds: string[];
   /** Pre-cutover Naver rows were Findable's synthetic summary, not Naver AI. */
   legacySyntheticEngineIds: string[];
   measurementMix: {
@@ -141,31 +176,60 @@ export interface ClientReportDisclosure {
     legacySyntheticAnswers: number;
     searchExposureAnswers: number;
   };
+  /** Historical narrative can render only after a review bound to this template. */
+  narrativeAttested: boolean;
+  /** Stored PDF can be offered only after a snapshot-bound review records its exact URL and digest. */
+  pdfDownloadAttested: boolean;
+  publicationReviewRequired: boolean;
+  /** Historical engine rows that must not be read as current measurements. */
+  retiredEngineIds: string[];
+}
+
+export interface PublicationVerification {
+  /** SHA-256 calculated server-side from the currently fetched PDF bytes. */
+  pdfSha256?: string;
+  /** Trusted DB identity of the report being rendered. */
+  reportId: string;
+  /** SHA-256 calculated server-side from the currently loaded snapshot. */
+  snapshotSha256: string;
 }
 
 const RETIRED_ENGINE_IDS = new Set(["hyperclova"]);
+const MEASURED_AT_RE = /^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/;
 
 /**
- * Public, policy-neutral disclosure for an already-issued report.
- * This deliberately does not invalidate the snapshot or its PDF URL.
+ * Public disclosure and quarantine decision for an already-issued report.
+ * Risky historical snapshots stay frozen but their narrative/PDF are withheld
+ * until a review is bound to the exact audit/import/version/template metadata.
  */
 export function clientReportDisclosure(
-  data: Pick<ClientReportData, "computed" | "config">
+  data: Pick<
+    ClientReportData,
+    | "computed"
+    | "config"
+    | "publicationReview"
+    | "source"
+    | "templateVersion"
+    | "version"
+  >,
+  currentPdfUrl?: string | null,
+  trustedPublicationReview?: PublicationReview,
+  verification?: PublicationVerification
 ): ClientReportDisclosure {
   const engineIds = new Set<string>([
     ...data.computed.answers.map((answer) => answer.engine),
     ...data.computed.engines.map((engine) => engine.id),
   ]);
-  const measuredAtMatch = /^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/.exec(
-    data.config.measured_at
-  );
+  const measuredAtMatch = MEASURED_AT_RE.exec(data.config.measured_at);
   const measuredAt = measuredAtMatch
     ? `${measuredAtMatch[1]}-${measuredAtMatch[2].padStart(2, "0")}-${measuredAtMatch[3].padStart(2, "0")}`
     : null;
+  // A Naver row without a parseable provenance date is ambiguous. Treat it as
+  // the retired synthetic measurement instead of silently presenting it as
+  // current search exposure.
   const legacyNaver =
     engineIds.has("naver") &&
-    measuredAt !== null &&
-    measuredAt < "2026-09-29";
+    (measuredAt === null || measuredAt < "2026-09-29");
   const measurementMix = {
     directAiAnswers: 0,
     retiredAnswers: 0,
@@ -183,10 +247,45 @@ export function clientReportDisclosure(
       measurementMix.directAiAnswers += 1;
     }
   }
+  const retiredEngineIds = [...RETIRED_ENGINE_IDS].filter((id) =>
+    engineIds.has(id)
+  );
+  const legacySyntheticEngineIds = legacyNaver ? ["naver"] : [];
+  // Report.data is customer-facing mutable JSON, so an embedded review cannot
+  // authorize its own publication. Template metadata in that same JSON is also
+  // provenance only: changing it or re-importing an old config must not unlock
+  // operator-authored claims. Every snapshot therefore needs a separately
+  // trusted, append-only, role-checked review before narrative/PDF publication.
+  const review = trustedPublicationReview;
+  const reviewMatchesSnapshot =
+    review !== undefined &&
+    verification !== undefined &&
+    review.reportId !== undefined &&
+    review.snapshotSha256 !== undefined &&
+    review.templateVersion === CLIENT_REPORT_TEMPLATE_VERSION &&
+    review.templateVersion === data.templateVersion &&
+    review.reportId === verification.reportId &&
+    review.snapshotAuditId === data.source.auditId &&
+    review.snapshotImportedAt === data.source.importedAt &&
+    review.snapshotSha256 === verification.snapshotSha256 &&
+    review.snapshotVersion === data.version &&
+    Number.isFinite(new Date(review.reviewedAt).getTime()) &&
+    review.reviewerUserId.length > 0;
   return {
     isFrozenSnapshot: true,
-    retiredEngineIds: [...RETIRED_ENGINE_IDS].filter((id) => engineIds.has(id)),
-    legacySyntheticEngineIds: legacyNaver ? ["naver"] : [],
+    retiredEngineIds,
+    legacySyntheticEngineIds,
+    narrativeAttested: Boolean(
+      reviewMatchesSnapshot && review.narrativeApproved
+    ),
+    pdfDownloadAttested:
+      reviewMatchesSnapshot &&
+      currentPdfUrl !== undefined &&
+      currentPdfUrl !== null &&
+      review.pdfUrl === currentPdfUrl &&
+      review.pdfSha256 !== undefined &&
+      verification.pdfSha256 === review.pdfSha256,
+    publicationReviewRequired: true,
     measurementMix,
   };
 }

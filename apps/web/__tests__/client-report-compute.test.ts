@@ -13,25 +13,24 @@ import {
   type ClientReportAudit,
   type ClientReportConfig,
   computeClientReport,
+  currentEngineDisplayName,
+  currentEngineDisplayText,
+  ENGINE_NAMES,
 } from "@repo/audit/client-report/compute";
 import { pyRound } from "@repo/audit/client-report/py-compat";
 import { renderStrings } from "@repo/audit/client-report/render-strings";
 import {
   buildClientReportData,
-  clientReportPdfFilename,
+  CLIENT_REPORT_TEMPLATE_VERSION,
   clientReportDisclosure,
+  clientReportPdfFilename,
   parseClientReportData,
 } from "@repo/audit/client-report/report-data";
-import {
-  currentEngineDisplayName,
-  currentEngineDisplayText,
-  ENGINE_NAMES,
-} from "@repo/audit/client-report/compute";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
 import { ClientReport } from "../components/client-report/client-report";
 import { ClientReportDisclosureNotice } from "../components/client-report/client-report-disclosure";
-import { describe, expect, it } from "vitest";
 
 const FIXTURES = join(import.meta.dirname, "fixtures/client-report");
 const read = <T>(name: string): T =>
@@ -154,6 +153,9 @@ describe("고객 리포트 공개 고지", () => {
       isFrozenSnapshot: true,
       retiredEngineIds: ["hyperclova"],
       legacySyntheticEngineIds: ["naver"],
+      narrativeAttested: false,
+      pdfDownloadAttested: false,
+      publicationReviewRequired: true,
       measurementMix: {
         directAiAnswers: 16,
         retiredAnswers: 2,
@@ -163,13 +165,14 @@ describe("고객 리포트 공개 고지", () => {
     });
   });
 
-  it("현재 엔진만 있는 동결 리포트는 과거 엔진 경고를 만들지 않는다", () => {
+  it("현재 엔진·현재 템플릿이어도 별도 신뢰 검수 없이는 서술을 열지 않는다", () => {
     const data = parseClientReportData(read("knowverse.report.json"));
     expect(data).not.toBeNull();
     if (!data) return;
 
     const currentOnly = {
       ...data,
+      templateVersion: CLIENT_REPORT_TEMPLATE_VERSION,
       config: { ...data.config, measured_at: "2026.09.29" },
       computed: {
         ...data.computed,
@@ -190,6 +193,9 @@ describe("고객 리포트 공개 고지", () => {
       isFrozenSnapshot: true,
       retiredEngineIds: [],
       legacySyntheticEngineIds: [],
+      narrativeAttested: false,
+      pdfDownloadAttested: false,
+      publicationReviewRequired: true,
       measurementMix: {
         directAiAnswers: 16,
         retiredAnswers: 0,
@@ -210,6 +216,112 @@ describe("고객 리포트 공개 고지", () => {
     expect(clientReportDisclosure(postCutoverStoredOldLabel).legacySyntheticEngineIds).toEqual(
       []
     );
+  });
+
+  it("Naver 측정일 형식을 해석하지 못하면 과거 합성을 현재 검색 노출로 간주하지 않는다", () => {
+    const data = parseClientReportData(read("knowverse.report.json"));
+    expect(data).not.toBeNull();
+    if (!data) {
+      return;
+    }
+
+    const unknownDate = {
+      ...data,
+      templateVersion: CLIENT_REPORT_TEMPLATE_VERSION,
+      config: { ...data.config, measured_at: "2026/09/30" },
+      computed: {
+        ...data.computed,
+        answers: data.computed.answers.filter(
+          (answer) => answer.engine !== "hyperclova"
+        ),
+        engines: data.computed.engines.filter(
+          (engine) => engine.id !== "hyperclova"
+        ),
+      },
+    };
+
+    expect(clientReportDisclosure(unknownDate)).toMatchObject({
+      legacySyntheticEngineIds: ["naver"],
+      narrativeAttested: false,
+      publicationReviewRequired: true,
+    });
+  });
+
+  it("템플릿 버전 문자열을 고쳐도 스냅숏은 스스로 격리를 풀 수 없다", () => {
+    const data = parseClientReportData(read("techdd.report.json"));
+    expect(data).not.toBeNull();
+    if (!data) {
+      return;
+    }
+
+    const currentEnginesOnly = {
+      ...data,
+      config: { ...data.config, measured_at: "2026.10.04" },
+      computed: {
+        ...data.computed,
+        answers: data.computed.answers.filter(
+          (answer) => !["hyperclova", "naver"].includes(answer.engine)
+        ),
+        engines: data.computed.engines.filter(
+          (engine) => !["hyperclova", "naver"].includes(engine.id)
+        ),
+      },
+    };
+
+    expect(clientReportDisclosure(currentEnginesOnly)).toMatchObject({
+      narrativeAttested: false,
+      publicationReviewRequired: true,
+    });
+    expect(
+      clientReportDisclosure({
+        ...currentEnginesOnly,
+        templateVersion: CLIENT_REPORT_TEMPLATE_VERSION,
+      })
+    ).toMatchObject({
+      narrativeAttested: false,
+      publicationReviewRequired: true,
+    });
+  });
+
+  it("옛 운영자 config를 오늘 다시 import해도 검수 전 서술은 격리한다", () => {
+    const config = read<ClientReportConfig>("knowverse.config.json");
+    const audit = read<ClientReportAudit>("knowverse.audit.min.json");
+    const rebuilt = buildClientReportData({
+      config,
+      audit,
+      slug: "knowverse-reimported",
+      version: 2,
+      importedAt: new Date("2026-10-04T12:00:00Z"),
+    });
+    const currentRowsOnly = {
+      ...rebuilt,
+      config: { ...rebuilt.config, measured_at: "2026.10.04" },
+      computed: {
+        ...rebuilt.computed,
+        answers: rebuilt.computed.answers.filter(
+          (answer) => !["hyperclova", "naver"].includes(answer.engine)
+        ),
+        engines: rebuilt.computed.engines.filter(
+          (engine) => !["hyperclova", "naver"].includes(engine.id)
+        ),
+      },
+    };
+
+    const disclosure = clientReportDisclosure(currentRowsOnly);
+    expect(rebuilt.templateVersion).toBe(CLIENT_REPORT_TEMPLATE_VERSION);
+    expect(disclosure).toMatchObject({
+      narrativeAttested: false,
+      publicationReviewRequired: true,
+    });
+    const html = renderToStaticMarkup(
+      createElement(ClientReport, {
+        data: currentRowsOnly,
+        narrativeAttested: disclosure.narrativeAttested,
+        webUrl: null,
+      })
+    );
+    expect(html).not.toContain("AI가 공식 사이트에 도달하지 못하면");
+    expect(html).toContain("발행 당시 해석과 개선 제안은");
   });
 
   it("Naver는 현재 생성본에서 AI 답변으로 과장하지 않는다", () => {

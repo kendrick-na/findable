@@ -8,18 +8,18 @@
 //   (유일한 예외: 파이썬 템플릿 안에서 하던 표시용 반올림 `ch.pct|round|int`).
 
 import {
-  ENGINE_MONO,
   currentEngineDisplayName,
   currentEngineDisplayText,
+  ENGINE_MONO,
   type EngineId,
   LABELS,
   type LabelId,
 } from "@repo/audit/client-report/compute";
 import { pyFloatStr, pyRound } from "@repo/audit/client-report/py-compat";
 import { formatOfficialPct } from "@repo/audit/client-report/render-strings";
-import {
-  type ClientReportData,
-  type ClientReportDisclosure,
+import type {
+  ClientReportData,
+  ClientReportDisclosure,
 } from "@repo/audit/client-report/report-data";
 import { ClientReportDisclosureNotice } from "./client-report-disclosure";
 
@@ -43,7 +43,11 @@ function safeAccuracyHeadline(
   return `전체 측정 ${total}건 중 ${accurate}건이 저장된 판별에서 ${brand}를 정확히 설명했습니다`;
 }
 
-function safeCoverSubtitle(custom: string, engineCount: number, answerCount: number): string {
+function safeCoverSubtitle(
+  custom: string,
+  engineCount: number,
+  answerCount: number
+): string {
   return custom.replace(
     /ChatGPT·Claude·Gemini\s+등\s+AI\s+\d+개\s+엔진,\s+\d+개\s+답변/g,
     `ChatGPT·Claude·Gemini와 검색을 포함한 ${engineCount}개 측정 채널, 전체 측정 ${answerCount}건`
@@ -133,20 +137,116 @@ function Foot({
 export interface ClientReportProps {
   readonly data: ClientReportData;
   readonly legacySyntheticEngineIds?: readonly string[];
+  readonly narrativeAttested?: boolean;
   readonly printDisclosure?: ClientReportDisclosure;
   /** 표지에 작게 찍는 웹 리포트 주소(PDF 에서 웹으로 돌아오는 길). */
   readonly webUrl: string | null;
 }
 
+function resolveNarrative(
+  config: ClientReportData["config"],
+  attested: boolean
+) {
+  if (attested) {
+    return {
+      causes: config.causes,
+      headlines: config.headlines ?? {},
+      insightsAccuracy: config.insights_accuracy,
+      insightsCitation: config.insights_citation,
+      insightsMatrix: config.insights_matrix,
+      playbook: config.playbook,
+      poc: config.poc,
+      siteChecks: config.site_checks,
+      why: config.why,
+    };
+  }
+  const notice =
+    "발행 당시 해석과 개선 제안은 근거·인과 표현을 재검수하는 동안 공개하지 않습니다. 측정 원문과 관찰값은 위 표에서 확인할 수 있습니다.";
+  return {
+    causes: [{ h: "원인 해석 재검수 중", p: notice }],
+    headlines: {},
+    insightsAccuracy: [notice],
+    insightsCitation: [notice],
+    insightsMatrix: [notice],
+    playbook: [{ p: "P0" as const, h: "개선 제안 재검수 중", d: notice }],
+    poc: [{ d: "보류", h: "재검수 후 제공", p: notice }],
+    siteChecks: [
+      {
+        item: "사이트 기본기 점검",
+        state: "warn" as const,
+        note: "발행 당시 점검 항목과 판단 근거를 재검수하고 있습니다.",
+      },
+    ],
+    why: [{ h: "발행 당시 서술 재검수 중", p: notice }],
+  };
+}
+
+const REVIEW_HOLD =
+  "발행 당시 해석과 개선 제안은 근거·인과 표현을 재검수하는 동안 공개하지 않습니다.";
+
+function resolveReviewCopy(attested: boolean) {
+  if (!attested) {
+    return {
+      finalBody: REVIEW_HOLD,
+      finalHeading: "발행본 해석 재검수 중",
+      nextDeck: REVIEW_HOLD,
+      nextDraftBody: REVIEW_HOLD,
+      nextDraftHeading: "개선 제안",
+      nextGiveTitle: "후속 제공 항목 재검수",
+      nextHeading: "발행 당시 후속 계획을 재검수하고 있습니다",
+      nextKicker: "후속 계획 재검수",
+      nextMeasureBody: REVIEW_HOLD,
+      nextMeasureHeading: "후속 측정",
+      playbookCtaBody: REVIEW_HOLD,
+      playbookCtaButton: "재검수 후 제공",
+      playbookCtaHeading: "개선 제안 재검수 중",
+      tocNext: "후속 계획 재검수",
+      tocPlaybook: "개선 제안 재검수",
+    };
+  }
+  return {
+    finalBody:
+      "Findable이 AI 검색 현황을 직접 진단하고, 무엇부터 고칠지 알려드립니다.",
+    finalHeading: "AI가 우리 브랜드를 어떻게 말하는지 궁금하다면?",
+    nextDeck:
+      "이번 리포트와 같은 질문·같은 엔진으로 다시 측정해 전후를 비교합니다. 변화는 관찰 결과로만 보고하며 매출 효과로 단정하지 않습니다.",
+    nextDraftBody: "P0·P1 항목의 수정 문구와 발행용 소개글 초안을 드립니다.",
+    nextDraftHeading: "수정안과 문구 초안",
+    nextGiveTitle: "PoC 기간 동안 Findable이 드리는 것",
+    nextHeading: "20일 뒤, AI의 대답이 달라졌는지 확인합니다",
+    nextKicker: "20일 개선·재측정 계획",
+    nextMeasureBody: "같은 조건의 전후 비교 리포트와 30분 해석 미팅.",
+    nextMeasureHeading: "재측정 리포트",
+    playbookCtaBody:
+      "P0·P1 항목의 구체적인 수정 문구와 외부 발행용 소개글 초안을 Findable이 준비합니다.",
+    playbookCtaButton: "20일 개선 PoC 알아보기 →",
+    playbookCtaHeading: "수정 문구까지 함께 만들어 드립니다",
+    tocNext: "20일 개선·재측정 계획",
+    tocPlaybook: "바로 실천하는 개선 플레이북",
+  };
+}
+
 export function ClientReport({
   data,
   legacySyntheticEngineIds = [],
+  narrativeAttested = true,
   printDisclosure,
   webUrl,
 }: ClientReportProps) {
   const c = data.config;
   const { answers, engines, per_q: perQ, channels, top, s } = data.computed;
-  const H = c.headlines ?? {};
+  const {
+    causes,
+    headlines: H,
+    insightsAccuracy,
+    insightsCitation,
+    insightsMatrix,
+    playbook,
+    poc,
+    siteChecks,
+    why,
+  } = resolveNarrative(c, narrativeAttested);
+  const reviewCopy = resolveReviewCopy(narrativeAttested);
   const officialPct = formatOfficialPct(s);
   const accuracyHeadline = safeAccuracyHeadline(H.p4, s.n, s.ok_n, c.brand);
   const coverSubtitle = safeCoverSubtitle(c.cover_sub, s.engines_total, s.n);
@@ -163,8 +263,8 @@ export function ClientReport({
     ["Section 3", `AI가 바라보는 ${c.brand}`, 6],
     ["Section 4", "AI가 인용하는 콘텐츠", 7],
     ["Section 5", "왜 이런 결과가 나왔을까", 8],
-    ["Playbook", "바로 실천하는 개선 플레이북", 9],
-    ["Next", "20일 개선·재측정 계획", 10],
+    ["Playbook", reviewCopy.tocPlaybook, 9],
+    ["Next", reviewCopy.tocNext, 10],
   ];
   const stateName = { ok: "양호", warn: "보완", bad: "부족" } as const;
 
@@ -190,7 +290,8 @@ export function ClientReport({
         <div className="verdict">
           <div className="l">한 줄 결론</div>
           <div className="s">
-            전체 측정 {s.n}건 중 {s.ok_n}건이 저장된 판별에서 {c.brand}를 정확히 설명했습니다.
+            전체 측정 {s.n}건 중 {s.ok_n}건이 저장된 판별에서 {c.brand}를 정확히
+            설명했습니다.
           </div>
           <div className="nums">
             <div>
@@ -219,7 +320,11 @@ export function ClientReport({
             >
               <div className="eg">
                 <Mono engine={a.engine} />
-                {currentEngineDisplayName(a.engine, undefined, legacySyntheticEngineIds)}
+                {currentEngineDisplayName(
+                  a.engine,
+                  undefined,
+                  legacySyntheticEngineIds
+                )}
               </div>
               <div className="qt" {...rich(a.who)} />
               <div className="mk">{a.label === "ok" ? "정확" : "틀림"}</div>
@@ -239,7 +344,7 @@ export function ClientReport({
           <div>
             분석 답변
             <b>
-                {s.engines_total}개 엔진 · 전체 측정 {s.n}건
+              {s.engines_total}개 엔진 · 전체 측정 {s.n}건
             </b>
           </div>
         </div>
@@ -258,7 +363,7 @@ export function ClientReport({
           이 리포트를 만든 이유<span className="dot">.</span>
         </h1>
         <div className="why-grid">
-          {c.why.map((w, i) => (
+          {why.map((w, i) => (
             <div className="why-item" key={w.h}>
               <div className="n">{i + 1}</div>
               <div>
@@ -344,11 +449,7 @@ export function ClientReport({
         <Head brand={c.brand} sec="Section 1 · 정확도" />
         <div className="kicker">AI는 {c.brand}를 정확히 알고 있을까?</div>
         <h1 className="sec">
-          <span
-            {...rich(
-              accuracyHeadline
-            )}
-          />
+          <span {...rich(accuracyHeadline)} />
           <span className="dot">.</span>
         </h1>
         <div className="band">
@@ -467,7 +568,7 @@ export function ClientReport({
           </tbody>
         </table>
         <div className="ins">
-          {c.insights_accuracy.map((t) => (
+          {insightsAccuracy.map((t) => (
             <div key={t} {...rich(t)} />
           ))}
         </div>
@@ -493,7 +594,9 @@ export function ClientReport({
         <h1 className="sec">
           <span
             {...rich(
-              H.p5 ?? "같은 질문에도 엔진마다 전혀 다른 회사를 설명합니다"
+              narrativeAttested
+                ? (H.p5 ?? "같은 질문에도 엔진마다 전혀 다른 회사를 설명합니다")
+                : "저장된 엔진별 관찰값을 표시합니다"
             )}
           />
           <span className="dot">.</span>
@@ -558,7 +661,7 @@ export function ClientReport({
           ))}
         </div>
         <div className="ins">
-          {c.insights_matrix.map((t) => (
+          {insightsMatrix.map((t) => (
             <div key={t} {...rich(t)} />
           ))}
         </div>
@@ -675,8 +778,10 @@ export function ClientReport({
         <h1 className="sec">
           <span
             {...rich(
-              H.p7 ??
-                `AI가 근거로 삼은 출처 중 공식 사이트는 ${officialPct}%뿐입니다`
+              narrativeAttested
+                ? (H.p7 ??
+                    `AI가 근거로 삼은 출처 중 공식 사이트는 ${officialPct}%뿐입니다`)
+                : "저장된 답변의 출처 도메인 구성을 표시합니다"
             )}
           />
           <span className="dot">.</span>
@@ -773,7 +878,7 @@ export function ClientReport({
           </tbody>
         </table>
         <div className="ins">
-          {c.insights_citation.map((t) => (
+          {insightsCitation.map((t) => (
             <div key={t} {...rich(t)} />
           ))}
         </div>
@@ -797,12 +902,16 @@ export function ClientReport({
         <div className="kicker">왜 이런 결과가 나왔을까</div>
         <h1 className="sec">
           <span
-            {...rich(H.p8 ?? `AI가 ${c.brand}를 놓치는 이유는 세 가지입니다`)}
+            {...rich(
+              narrativeAttested
+                ? (H.p8 ?? `AI가 ${c.brand}를 놓치는 이유는 세 가지입니다`)
+                : "발행 당시 원인 해석을 재검수하고 있습니다"
+            )}
           />
           <span className="dot">.</span>
         </h1>
         <div className="causes">
-          {c.causes.map((x, i) => (
+          {causes.map((x, i) => (
             <div className="cause" key={x.h}>
               <div className="n">{i + 1}</div>
               <div>
@@ -825,7 +934,7 @@ export function ClientReport({
               <th style={{ width: "22mm" }}>상태</th>
               <th>확인 내용</th>
             </tr>
-            {c.site_checks.map((x) => (
+            {siteChecks.map((x) => (
               <tr key={x.item}>
                 <td className="name" {...rich(x.item)} />
                 <td>
@@ -855,7 +964,11 @@ export function ClientReport({
         <div className="kicker">바로 실천하는 개선 플레이북</div>
         <h1 className="sec">
           <span
-            {...rich(H.p9 ?? "AI가 어디서 읽든 같은 설명을 만나게 하세요")}
+            {...rich(
+              narrativeAttested
+                ? (H.p9 ?? "AI가 어디서 읽든 같은 설명을 만나게 하세요")
+                : "개선 제안은 근거 재검수 후 제공합니다"
+            )}
           />
           <span className="dot">.</span>
         </h1>
@@ -872,7 +985,7 @@ export function ClientReport({
                 <b>{grp}</b>
                 <span>{when}</span>
               </div>
-              {c.playbook
+              {playbook
                 .filter((x) => x.p === grp)
                 .map((x) => (
                   <div className="pb-item" key={x.h}>
@@ -885,12 +998,9 @@ export function ClientReport({
         </div>
         <div className="cta">
           <div>
-            <h4>수정 문구까지 함께 만들어 드립니다</h4>
-            <p>
-              P0·P1 항목의 구체적인 수정 문구와 외부 발행용 소개글 초안을
-              Findable이 준비합니다.
-            </p>
-            <span className="btn">20일 개선 PoC 알아보기 →</span>
+            <h4>{reviewCopy.playbookCtaHeading}</h4>
+            <p>{reviewCopy.playbookCtaBody}</p>
+            <span className="btn">{reviewCopy.playbookCtaButton}</span>
           </div>
           <img alt="" className="fmark" src={ASSET.fMark} />
         </div>
@@ -905,19 +1015,14 @@ export function ClientReport({
       {/* 10 계획 */}
       <section className="page">
         <Head brand={c.brand} sec="Next" />
-        <div className="kicker">20일 개선·재측정 계획</div>
+        <div className="kicker">{reviewCopy.nextKicker}</div>
         <h1 className="big">
-          20일 뒤, AI의 대답이
-          <br />
-          달라졌는지 확인합니다<span className="dot">.</span>
+          {reviewCopy.nextHeading}
+          <span className="dot">.</span>
         </h1>
-        <div className="deck">
-          이번 리포트와 <b>같은 질문·같은 엔진</b>으로 다시 측정해 전후를
-          비교합니다. 변화는 관찰 결과로만 보고하며 매출 효과로 단정하지
-          않습니다.
-        </div>
+        <div className="deck">{reviewCopy.nextDeck}</div>
         <div className="tl">
-          {c.poc.map((x) => (
+          {poc.map((x) => (
             <div key={x.d}>
               <div className="d" {...rich(x.d)} />
               <div className="h" {...rich(x.h)} />
@@ -926,7 +1031,7 @@ export function ClientReport({
           ))}
         </div>
         <h3 className="sq" style={{ marginTop: "12mm" }}>
-          PoC 기간 동안 Findable이 드리는 것
+          {reviewCopy.nextGiveTitle}
         </h3>
         <div className="give">
           <div>
@@ -934,21 +1039,18 @@ export function ClientReport({
             <p>모든 측정 답변 원문과 판별 사유, 인용 출처를 표로 공유합니다.</p>
           </div>
           <div>
-            <h4>수정안과 문구 초안</h4>
-            <p>P0·P1 항목의 수정 문구와 발행용 소개글 초안을 드립니다.</p>
+            <h4>{reviewCopy.nextDraftHeading}</h4>
+            <p>{reviewCopy.nextDraftBody}</p>
           </div>
           <div>
-            <h4>재측정 리포트</h4>
-            <p>같은 조건의 전후 비교 리포트와 30분 해석 미팅.</p>
+            <h4>{reviewCopy.nextMeasureHeading}</h4>
+            <p>{reviewCopy.nextMeasureBody}</p>
           </div>
         </div>
         <div className="cta">
           <div>
-            <h4>AI가 우리 브랜드를 어떻게 말하는지 궁금하다면?</h4>
-            <p>
-              Findable이 AI 검색 현황을 직접 진단하고, 무엇부터 고칠지
-              알려드립니다.
-            </p>
+            <h4>{reviewCopy.finalHeading}</h4>
+            <p>{reviewCopy.finalBody}</p>
             <span className="btn">findable.co.kr</span>
           </div>
           <img alt="" className="fmark" src={ASSET.fMark} />
