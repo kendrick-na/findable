@@ -14,6 +14,7 @@ import {
   DONT_LIST,
   EVIDENCE_GRADE_LABEL,
   entityClarityAction,
+  hasCompleteNaverSearchBaseline,
   RULE_THRESHOLDS,
   summarizeVerdicts,
   type VerdictResponseLike,
@@ -50,6 +51,7 @@ function inputOf(f: Fixture): ActionInput {
         .map((r) => r.engineId)
     ).size,
     marketScope: f.marketScope,
+    naverSearchMeasured: hasCompleteNaverSearchBaseline(f.engineResponses),
     verdicts: summarizeVerdicts(f.engineResponses, {
       brandDomain: f.domain,
       brandName: f.brandName,
@@ -59,6 +61,21 @@ function inputOf(f: Fixture): ActionInput {
 
 const knowverse = load("audit-knowverse.json");
 const indigo = load("audit-indigochild.json");
+
+describe("네이버 검색 전체 기준선", () => {
+  it("성공 행 없음·일부 오류는 기준선 없음, 전부 성공만 전체 기준선", () => {
+    const ok = { engineId: "naver", errorMessage: null, isStub: false };
+    const failed = {
+      engineId: "naver",
+      errorMessage: "timeout",
+      isStub: false,
+    };
+    expect(hasCompleteNaverSearchBaseline([])).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([failed])).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([ok, failed])).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([ok, ok])).toBe(true);
+  });
+});
 
 describe("summarizeVerdicts — 공개 진단 실측과 일치", () => {
   it("노우버스: 23건 = 답 22 + 오류 1, 확인 5 · 오인 8", () => {
@@ -164,6 +181,15 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
     }).find((a) => a.kind === "naver_blog");
     expect(naver).toBeDefined();
     expect(naver?.verification).toContain("이번 회차는 네이버 검색 미측정");
+    expect(naver?.verification).toContain("기준선");
+    expect(naver?.guide?.remeasureMetric).toContain("기준선 없음");
+  });
+
+  it("측정 상태를 전달하지 않는 호출부도 기준선이 있다고 가정하지 않는다", () => {
+    const naver = buildGeoActions({
+      ...inputOf(indigo),
+      naverSearchMeasured: undefined,
+    }).find((a) => a.kind === "naver_blog");
     expect(naver?.verification).toContain("기준선");
     expect(naver?.guide?.remeasureMetric).toContain("기준선 없음");
   });

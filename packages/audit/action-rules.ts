@@ -381,7 +381,7 @@ export interface RuleSignals {
   marketScope: MarketScope;
   /** "측정한 AI 7곳" / "응답을 받은 AI 6곳(요청 7곳)" — actions.ts 가 만든다. */
   measuredLabel: string;
-  /** false이면 네이버 검색 노출 기준선이 없는 회차. */
+  /** true는 브랜드 질문의 네이버 검색 응답이 모두 성공해 비교 기준선이 있는 회차. */
   naverSearchMeasured?: boolean;
   /** 관측된 공식 도메인 인용 수. 모르면 null(규칙을 켜지 않는다). */
   ownedCitations: number | null;
@@ -454,6 +454,23 @@ export function isAwarenessLow(sig: RuleSignals): boolean {
     return v.unknownBrand + v.absent > v.confirmed;
   }
   return sig.enginesMeasured > 0 && sig.enginesMentioned === 0;
+}
+
+/** 브랜드 질문의 네이버 검색 응답이 모두 성공했을 때만 전체 비교 기준선을 인정한다. */
+export function hasCompleteNaverSearchBaseline(
+  responses: Array<{
+    engineId: string;
+    errorMessage?: string | null;
+    isStub?: boolean | null;
+  }>
+): boolean {
+  const naverRows = responses.filter(
+    (response) => response.engineId === "naver"
+  );
+  return (
+    naverRows.length > 0 &&
+    naverRows.every((response) => !(response.errorMessage || response.isStub))
+  );
 }
 
 function awarenessEvidence(sig: RuleSignals): string {
@@ -545,8 +562,8 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
             "한 사례 분석(네이버 AI 브리핑 인용 272건)에서는 검색 상위 10위 밖 문서도 인용됐습니다. 그 분석은 기업 블로그 게시의 효과를 잰 것이 아니어서, 이 카드는 Findable의 실행 가설입니다.",
           where: "네이버 블로그(회사 공식 계정)",
           verification:
-            sig.naverSearchMeasured === false
-              ? "이번 회차는 네이버 검색 미측정입니다. 먼저 같은 질문으로 검색 노출 기준선을 기록하고, 게시·색인 뒤 동일 질문에서 다시 확인하세요. AI 답변 변화는 보조 관찰로만 기록하세요."
+            sig.naverSearchMeasured !== true
+              ? "이번 회차는 네이버 검색 미측정 또는 일부 질문만 측정됐습니다. 먼저 같은 질문 전체의 검색 노출 기준선을 기록하고, 게시·색인 뒤 동일 질문에서 다시 확인하세요. AI 답변 변화는 보조 관찰로만 기록하세요."
               : "다음 측정에서 같은 질문에 네이버 검색 노출이 있었는지 확인하세요. AI 답변 변화는 보조 관찰로만 기록하세요.",
         },
         {
@@ -562,11 +579,13 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
           effectLag:
             "게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
           remeasureMetric:
-            sig.naverSearchMeasured === false
-              ? "같은 질문에서 네이버 검색 노출이 확인된 질문 수 (이번 회차 기준선 없음)"
+            sig.naverSearchMeasured !== true
+              ? "같은 질문에서 네이버 검색 노출이 확인된 질문 수 (이번 회차 비교 가능한 전체 기준선 없음)"
               : "같은 질문에서 네이버 검색 노출이 확인된 질문 수",
           failCondition:
-            "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 검색 노출이 확인된 질문 수가 늘지 않으면, 주제를 더 좁히거나 제목·첫 문장을 고객 표현으로 바꾸세요.",
+            sig.naverSearchMeasured !== true
+              ? "먼저 같은 질문 전체의 네이버 검색 기준선을 확보하세요. 그 전에는 노출 증감을 실패 또는 성공으로 판정하지 않습니다."
+              : "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 검색 노출이 확인된 질문 수가 늘지 않으면, 주제를 더 좁히거나 제목·첫 문장을 고객 표현으로 바꾸세요.",
         }
       )
     );

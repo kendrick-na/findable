@@ -147,7 +147,7 @@ export interface ActionInput {
    *   넓게 두는 쪽이 안전하다(`inferMarketScope` 의 판단과 같은 방향).
    */
   marketScope?: MarketScope;
-  /** 이번 회차의 네이버 검색 응답이 하나 이상 성공했는가. false면 비교 기준선이 없다. */
+  /** 브랜드 질문의 네이버 검색 응답이 모두 성공했는가. 생략/false면 전체 기준선을 가정하지 않는다. */
   naverSearchMeasured?: boolean;
   /** 실제로 AI가 인용한 자사 URL. 출처 귀속이 확인된 URL만 넣는다. */
   ownedCitationUrls?: string[];

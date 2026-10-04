@@ -1,6 +1,9 @@
 /** Disposable local DB fixture: product generator -> persisted JSON -> public UI. */
 import { PrismaPg } from "@prisma/adapter-pg";
-import { summarizeVerdicts } from "../../audit/action-rules";
+import {
+  hasCompleteNaverSearchBaseline,
+  summarizeVerdicts,
+} from "../../audit/action-rules";
 import { buildGeoActions } from "../../audit/actions";
 import {
   isPublishableAuditResult,
@@ -48,6 +51,8 @@ const aiRows = Array.from({ length: 10 }, (_, promptIndex) => ({
 const searchRows = aiRows.map((row) => ({
   ...row,
   engineId: "naver",
+  naverSource: "search_results",
+  promptText: `W1 Route Fixture 소개 ${row.promptIndex + 1}`,
   brandMentioned: false,
   mentionQuality: "absent",
   mentionPosition: null,
@@ -62,7 +67,7 @@ const actions = buildGeoActions({
   enginesMeasured: 1,
   enginesMentioned: 1,
   marketScope: "korea",
-  naverSearchMeasured: true,
+  naverSearchMeasured: hasCompleteNaverSearchBaseline(searchRows),
   verdicts,
 });
 if (!actions.some((action) => action.kind === "naver_blog")) {
