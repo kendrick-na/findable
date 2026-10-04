@@ -21,7 +21,7 @@ export const CLIENT_REPORT_SCHEMA_VERSION = 1;
  * 이 코드가 옮겨 온 템플릿 스냅숏. `Findable_GEO리포트_템플릿/template.html` 을 바꾸면
  * 웹 렌더러(apps/web/app/r/...)도 같이 고치고 이 값을 올린다.
  */
-export const CLIENT_REPORT_TEMPLATE_VERSION = "geo-report-template@2026-09-28";
+export const CLIENT_REPORT_TEMPLATE_VERSION = "geo-report-template@2026-10-04";
 
 const labelId = z.enum(["ok", "other", "made", "generic", "unknown", "none"]);
 
@@ -208,8 +208,12 @@ export function clientReportDisclosure(
   const measuredAt = measuredAtMatch
     ? `${measuredAtMatch[1]}-${measuredAtMatch[2].padStart(2, "0")}-${measuredAtMatch[3].padStart(2, "0")}`
     : null;
+  // A Naver row without a parseable provenance date is ambiguous. Treat it as
+  // the retired synthetic measurement instead of silently presenting it as
+  // current search exposure.
   const legacyNaver =
-    engineIds.has("naver") && measuredAt !== null && measuredAt < "2026-09-29";
+    engineIds.has("naver") &&
+    (measuredAt === null || measuredAt < "2026-09-29");
   const measurementMix = {
     directAiAnswers: 0,
     retiredAnswers: 0,
@@ -231,8 +235,14 @@ export function clientReportDisclosure(
     engineIds.has(id)
   );
   const legacySyntheticEngineIds = legacyNaver ? ["naver"] : [];
+  // The 2026-10-04 template is the first version whose public renderer
+  // quarantines every operator-authored narrative surface. Older and unknown
+  // snapshots therefore require a separately trusted review even if their
+  // engine rows look current.
   const publicationReviewRequired =
-    retiredEngineIds.length > 0 || legacySyntheticEngineIds.length > 0;
+    data.templateVersion !== CLIENT_REPORT_TEMPLATE_VERSION ||
+    retiredEngineIds.length > 0 ||
+    legacySyntheticEngineIds.length > 0;
   // Report.data is customer-facing mutable JSON, so an embedded review cannot
   // authorize its own publication. Only an append-only, role-checked source may
   // provide this separate argument.

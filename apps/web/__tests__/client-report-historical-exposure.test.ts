@@ -64,6 +64,12 @@ it("does not present knowverse's causal claim as established fact in print", asy
   expect(html).not.toContain("AI가 공식 사이트에 도달하지 못하면");
   expect(html).not.toContain("20일 뒤, AI의 대답이");
   expect(html).not.toContain("수정 문구까지 함께 만들어 드립니다");
+  expect(html).not.toContain(knowverse.config.site_checks[0]?.item);
+  expect(html).not.toContain(knowverse.config.site_checks[0]?.note);
+  expect(html).not.toContain(
+    "같은 질문에도 엔진마다 전혀 다른 회사를 설명합니다"
+  );
+  expect(html).not.toContain("AI가 근거로 삼은 출처 중 공식 사이트는");
   expect(html).toContain("발행본 안내");
 });
 

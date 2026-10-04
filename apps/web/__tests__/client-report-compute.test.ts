@@ -13,25 +13,24 @@ import {
   type ClientReportAudit,
   type ClientReportConfig,
   computeClientReport,
+  currentEngineDisplayName,
+  currentEngineDisplayText,
+  ENGINE_NAMES,
 } from "@repo/audit/client-report/compute";
 import { pyRound } from "@repo/audit/client-report/py-compat";
 import { renderStrings } from "@repo/audit/client-report/render-strings";
 import {
   buildClientReportData,
-  clientReportPdfFilename,
+  CLIENT_REPORT_TEMPLATE_VERSION,
   clientReportDisclosure,
+  clientReportPdfFilename,
   parseClientReportData,
 } from "@repo/audit/client-report/report-data";
-import {
-  currentEngineDisplayName,
-  currentEngineDisplayText,
-  ENGINE_NAMES,
-} from "@repo/audit/client-report/compute";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
 import { ClientReport } from "../components/client-report/client-report";
 import { ClientReportDisclosureNotice } from "../components/client-report/client-report-disclosure";
-import { describe, expect, it } from "vitest";
 
 const FIXTURES = join(import.meta.dirname, "fixtures/client-report");
 const read = <T>(name: string): T =>
@@ -173,6 +172,7 @@ describe("고객 리포트 공개 고지", () => {
 
     const currentOnly = {
       ...data,
+      templateVersion: CLIENT_REPORT_TEMPLATE_VERSION,
       config: { ...data.config, measured_at: "2026.09.29" },
       computed: {
         ...data.computed,
@@ -216,6 +216,71 @@ describe("고객 리포트 공개 고지", () => {
     expect(clientReportDisclosure(postCutoverStoredOldLabel).legacySyntheticEngineIds).toEqual(
       []
     );
+  });
+
+  it("Naver 측정일 형식을 해석하지 못하면 과거 합성을 현재 검색 노출로 간주하지 않는다", () => {
+    const data = parseClientReportData(read("knowverse.report.json"));
+    expect(data).not.toBeNull();
+    if (!data) {
+      return;
+    }
+
+    const unknownDate = {
+      ...data,
+      templateVersion: CLIENT_REPORT_TEMPLATE_VERSION,
+      config: { ...data.config, measured_at: "2026/09/30" },
+      computed: {
+        ...data.computed,
+        answers: data.computed.answers.filter(
+          (answer) => answer.engine !== "hyperclova"
+        ),
+        engines: data.computed.engines.filter(
+          (engine) => engine.id !== "hyperclova"
+        ),
+      },
+    };
+
+    expect(clientReportDisclosure(unknownDate)).toMatchObject({
+      legacySyntheticEngineIds: ["naver"],
+      narrativeAttested: false,
+      publicationReviewRequired: true,
+    });
+  });
+
+  it("안전 템플릿보다 오래되거나 알 수 없는 스냅숏은 엔진 구성과 무관하게 재검수를 요구한다", () => {
+    const data = parseClientReportData(read("techdd.report.json"));
+    expect(data).not.toBeNull();
+    if (!data) {
+      return;
+    }
+
+    const currentEnginesOnly = {
+      ...data,
+      config: { ...data.config, measured_at: "2026.10.04" },
+      computed: {
+        ...data.computed,
+        answers: data.computed.answers.filter(
+          (answer) => !["hyperclova", "naver"].includes(answer.engine)
+        ),
+        engines: data.computed.engines.filter(
+          (engine) => !["hyperclova", "naver"].includes(engine.id)
+        ),
+      },
+    };
+
+    expect(clientReportDisclosure(currentEnginesOnly)).toMatchObject({
+      narrativeAttested: false,
+      publicationReviewRequired: true,
+    });
+    expect(
+      clientReportDisclosure({
+        ...currentEnginesOnly,
+        templateVersion: CLIENT_REPORT_TEMPLATE_VERSION,
+      })
+    ).toMatchObject({
+      narrativeAttested: true,
+      publicationReviewRequired: false,
+    });
   });
 
   it("Naver는 현재 생성본에서 AI 답변으로 과장하지 않는다", () => {

@@ -156,6 +156,7 @@ function resolveNarrative(
       insightsMatrix: config.insights_matrix,
       playbook: config.playbook,
       poc: config.poc,
+      siteChecks: config.site_checks,
       why: config.why,
     };
   }
@@ -169,6 +170,13 @@ function resolveNarrative(
     insightsMatrix: [notice],
     playbook: [{ p: "P0" as const, h: "개선 제안 재검수 중", d: notice }],
     poc: [{ d: "보류", h: "재검수 후 제공", p: notice }],
+    siteChecks: [
+      {
+        item: "사이트 기본기 점검",
+        state: "warn" as const,
+        note: "발행 당시 점검 항목과 판단 근거를 재검수하고 있습니다.",
+      },
+    ],
     why: [{ h: "발행 당시 서술 재검수 중", p: notice }],
   };
 }
@@ -235,6 +243,7 @@ export function ClientReport({
     insightsMatrix,
     playbook,
     poc,
+    siteChecks,
     why,
   } = resolveNarrative(c, narrativeAttested);
   const reviewCopy = resolveReviewCopy(narrativeAttested);
@@ -585,7 +594,9 @@ export function ClientReport({
         <h1 className="sec">
           <span
             {...rich(
-              H.p5 ?? "같은 질문에도 엔진마다 전혀 다른 회사를 설명합니다"
+              narrativeAttested
+                ? (H.p5 ?? "같은 질문에도 엔진마다 전혀 다른 회사를 설명합니다")
+                : "저장된 엔진별 관찰값을 표시합니다"
             )}
           />
           <span className="dot">.</span>
@@ -767,8 +778,10 @@ export function ClientReport({
         <h1 className="sec">
           <span
             {...rich(
-              H.p7 ??
-                `AI가 근거로 삼은 출처 중 공식 사이트는 ${officialPct}%뿐입니다`
+              narrativeAttested
+                ? (H.p7 ??
+                    `AI가 근거로 삼은 출처 중 공식 사이트는 ${officialPct}%뿐입니다`)
+                : "저장된 답변의 출처 도메인 구성을 표시합니다"
             )}
           />
           <span className="dot">.</span>
@@ -921,7 +934,7 @@ export function ClientReport({
               <th style={{ width: "22mm" }}>상태</th>
               <th>확인 내용</th>
             </tr>
-            {c.site_checks.map((x) => (
+            {siteChecks.map((x) => (
               <tr key={x.item}>
                 <td className="name" {...rich(x.item)} />
                 <td>
