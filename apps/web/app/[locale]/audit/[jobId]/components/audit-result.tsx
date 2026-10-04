@@ -4684,7 +4684,9 @@ function UpsellCard({
   //   "AI 8곳 중 7곳"처럼 **재보지도 못한 엔진을 분모에 넣는다**.
   //   `isFullCoverage` 판정(= 전 엔진 인지)도 이 값으로 갈리므로 문장이 뒤집힌다.
   const measuredCount = countMeasurementCoverage(
-    result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
+    result.engineResponses.filter(
+      (r) => answerGroup(r.engineId) === "ai" && !isDiscoveryAnswer(r)
+    )
   ).measured;
 
   const { headline, bodyCopy } = buildUpsellCopy({

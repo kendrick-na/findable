@@ -199,6 +199,20 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     );
   });
 
+  it("네이버 검색 노출을 무료 업셀의 AI 엔진 수에 넣지 않는다", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
+    expect(container.textContent).toContain(
+      "이번 측정에서 AI 1곳 모두가 우리를 알아봤어요"
+    );
+    expect(container.textContent).not.toContain("AI 2곳 중 1곳");
+  });
+
   it.each([
     ["ko", "적용 채널", "네이버 검색 노출", "수정 위치", "검증 방법", "근거 보통"],
     ["en", "Measurement channels", "Naver search exposure", "Where to change", "How to verify", "Evidence: medium"],
