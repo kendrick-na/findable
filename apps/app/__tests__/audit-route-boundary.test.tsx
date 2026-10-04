@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   runBriefing: vi.fn(),
   streamChat: vi.fn(),
   sendEmail: vi.fn(),
+  metricBasisChanged: vi.fn(),
+  adviceBasisChanged: vi.fn(),
+  publishable: vi.fn(),
 }));
 
 vi.mock("@repo/database", () => ({
@@ -72,10 +75,12 @@ vi.mock("@repo/email/templates/audit-report", () => ({
 }));
 vi.mock("@repo/audit/normalize-stored-metrics", () => ({
   withRecomputedAuditMetrics: (result: unknown) => result,
-  isPublishableAuditResult: () => true,
+  isPublishableAuditResult: mocks.publishable,
   auditPublicationIssue: () => null,
   publicAuditResult: (result: unknown) => result,
   hasStaleAuditPdf: () => false,
+  hasRecomputedAuditMetricsChanged: mocks.metricBasisChanged,
+  hasFilteredStoredAuditAdvice: mocks.adviceBasisChanged,
   isCurrentAuditPdfUrl: () => true,
 }));
 vi.mock("next/og", () => ({
@@ -154,6 +159,9 @@ beforeEach(() => {
   mocks.createLead.mockResolvedValue({});
   mocks.reconcile.mockResolvedValue(null);
   mocks.streamChat.mockReturnValue(Response.json({ ok: true }));
+  mocks.metricBasisChanged.mockReturnValue(false);
+  mocks.adviceBasisChanged.mockReturnValue(false);
+  mocks.publishable.mockReturnValue(true);
 });
 
 describe("audit route tenant boundary", () => {
@@ -271,6 +279,8 @@ describe("audit route tenant boundary", () => {
     });
 
     test("SSR omits private summary", async () => {
+      mocks.metricBasisChanged.mockReturnValue(true);
+      mocks.adviceBasisChanged.mockReturnValue(true);
       const html = renderToStaticMarkup(
         await AuditResultPage({
           params: Promise.resolve({ locale: "ko", jobId }),
@@ -286,6 +296,7 @@ describe("audit route tenant boundary", () => {
       );
       expect(html).not.toContain("private.example");
       expect(html).not.toContain('data-testid="ssr-summary"');
+      expect(html).not.toContain('data-testid="audit-metric-basis-notice"');
     });
 
     test("OG preview cannot embed private brand or domain", async () => {
@@ -307,6 +318,7 @@ describe("audit route tenant boundary", () => {
   });
 
   test("owner can poll workspace result and render SSR summary", async () => {
+    mocks.metricBasisChanged.mockReturnValue(true);
     mocks.auth.mockResolvedValue({ userId: "owner", orgId: "owner-org" });
     mocks.currentUser.mockResolvedValue({
       primaryEmailAddressId: "primary",
@@ -324,6 +336,41 @@ describe("audit route tenant boundary", () => {
       })
     );
     expect(html).toContain("private.example");
+    expect(html).toContain('data-testid="audit-metric-basis-notice"');
+  });
+
+  test("owner sees an advice-only correction without a false metric claim", async () => {
+    mocks.adviceBasisChanged.mockReturnValue(true);
+    mocks.auth.mockResolvedValue({ userId: "owner", orgId: "owner-org" });
+    mocks.currentUser.mockResolvedValue({
+      primaryEmailAddressId: "primary",
+      emailAddresses: [],
+    });
+    const html = renderToStaticMarkup(
+      await AuditResultPage({
+        params: Promise.resolve({ locale: "ko", jobId }),
+      })
+    );
+    expect(html).toContain('data-testid="audit-metric-basis-notice"');
+    expect(html).toContain("저장된 일부 실행 권고");
+    expect(html).not.toContain("수치가 재계산");
+  });
+
+  test("provisional owner sees a correction without claiming actions are displayed", async () => {
+    mocks.adviceBasisChanged.mockReturnValue(true);
+    mocks.publishable.mockReturnValue(false);
+    mocks.auth.mockResolvedValue({ userId: "owner", orgId: "owner-org" });
+    mocks.currentUser.mockResolvedValue({
+      primaryEmailAddressId: "primary",
+      emailAddresses: [],
+    });
+    const html = renderToStaticMarkup(
+      await AuditResultPage({
+        params: Promise.resolve({ locale: "ko", jobId }),
+      })
+    );
+    expect(html).toContain("실행 권고는 판정 보류로 공개하지 않습니다");
+    expect(html).not.toContain("화면에서 제외하거나 수정했습니다");
   });
 
   test("owner API response sanitizes stored geo and crew claims at the server boundary", async () => {
@@ -452,6 +499,52 @@ describe("audit route tenant boundary", () => {
       domain: "private.example",
       isWorkspaceAudit: false,
     });
+  });
+
+  test("OG AI claim excludes a Naver-only search mention and discloses legacy missing rows", async () => {
+    const payload = {
+      domain: "example.com",
+      result: {
+        brandName: "Example",
+        mentionVerdictVersion: 2,
+        metrics: {
+          ...privateJob.result.metrics,
+          enginesCovered: ["chatgpt", "naver"],
+          enginesWithMention: ["naver"],
+          verifiedCount: 10,
+          unverifiedCount: 0,
+        },
+        engineResponses: [
+          { engineId: "chatgpt", brandMentioned: false, promptKind: "brand" },
+          { engineId: "naver", brandMentioned: true, promptKind: "brand" },
+        ],
+      },
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(payload));
+    try {
+      const image = await auditOg(request(), params);
+      const html = renderToStaticMarkup(
+        (image as unknown as { element: React.ReactElement }).element
+      );
+      expect(html).toContain("AI 엔진 1곳 중 0곳에서 확인");
+      expect(html).not.toContain("2곳 중 1곳");
+
+      fetchMock.mockResolvedValueOnce(
+        Response.json({
+          ...payload,
+          result: { ...payload.result, engineResponses: undefined },
+        })
+      );
+      const legacy = await auditOg(request(), params);
+      const legacyHtml = renderToStaticMarkup(
+        (legacy as unknown as { element: React.ReactElement }).element
+      );
+      expect(legacyHtml).toContain("AI 답변별 집계 정보 없음");
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   test("SetNull legacy org marker remains readable by its active org", async () => {

@@ -87,18 +87,32 @@ function Metric({
 }
 
 function responseState(response: ConsultingEngineResponse) {
-  if (response.brandMentioned) {
-    return {
-      Icon: CheckCircle2Icon,
-      iconClassName: "text-emerald-300",
-      label: "브랜드 확인",
-    };
-  }
   if (response.errorMessage) {
     return {
       Icon: XCircleIcon,
       iconClassName: "text-red-300",
       label: "응답 오류",
+    };
+  }
+  if (response.mentionQuality === "unverified") {
+    return {
+      Icon: AlertTriangleIcon,
+      iconClassName: "text-amber-300",
+      label: "판정보류",
+    };
+  }
+  if (response.mentionQuality === "different_entity") {
+    return {
+      Icon: AlertTriangleIcon,
+      iconClassName: "text-amber-300",
+      label: "동명 다른 대상",
+    };
+  }
+  if (response.brandMentioned) {
+    return {
+      Icon: CheckCircle2Icon,
+      iconClassName: "text-emerald-300",
+      label: "브랜드 확인",
     };
   }
   return {
@@ -206,18 +220,22 @@ function AuditData({ brand }: { brand: ConsultingBrand }) {
         />
         <Metric
           icon={BarChart3Icon}
-          label="AI 언급률"
+          label="AI·검색 등장률"
           value={audit.sov === null ? "—" : `${number(audit.sov)}%`}
         />
         <Metric
           icon={DatabaseIcon}
-          label="엔진 응답"
+          label="브랜드 질문 시도"
           value={`${number(audit.responseCount)}개`}
         />
         <Metric
           icon={SearchCheckIcon}
-          label="브랜드 확인"
-          value={`${number(audit.mentionedResponses)}개`}
+          label="AI·검색 브랜드 확인"
+          value={
+            audit.mentionedResponses === null
+              ? "—"
+              : `${number(audit.mentionedResponses)}개`
+          }
         />
       </div>
 
@@ -225,9 +243,9 @@ function AuditData({ brand }: { brand: ConsultingBrand }) {
         <div className="mx-4 mt-4 flex gap-2 rounded-lg border border-amber-400/20 bg-amber-400/10 p-3 text-amber-100 text-sm">
           <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
           <p>
-            응답 데이터 {audit.responseCount}개는 정상 저장됐지만, 등록한
-            브랜드명 <b>{brand.name}</b>으로 확인된 응답이 없어 0점입니다.
-            사이트의 실제 표기·별칭과 등록 브랜드명을 먼저 대조하세요.
+            브랜드 질문 시도 {audit.responseCount}개 중 <b>{brand.name}</b>과
+            동일한 대상으로 확인된 답변은 없습니다. 동명 다른 대상·판정보류·실제
+            미노출을 원문에서 구분한 뒤 조치하세요.
           </p>
         </div>
       ) : null}
@@ -527,9 +545,9 @@ export function CustomerDataPanel({ brands }: { brands: ConsultingBrand[] }) {
                       <th className="pb-2">시점</th>
                       <th>상태</th>
                       <th>GEO</th>
-                      <th>언급률</th>
-                      <th>응답</th>
-                      <th>브랜드 확인</th>
+                      <th>AI·검색 등장률</th>
+                      <th>브랜드 질문 시도</th>
+                      <th>AI·검색 브랜드 확인</th>
                       <th>오류</th>
                     </tr>
                   </thead>
@@ -552,7 +570,7 @@ export function CustomerDataPanel({ brands }: { brands: ConsultingBrand[] }) {
                           {audit.sov === null ? "—" : `${number(audit.sov)}%`}
                         </td>
                         <td>{audit.responseCount}</td>
-                        <td>{audit.mentionedResponses}</td>
+                        <td>{audit.mentionedResponses ?? "—"}</td>
                         <td>{audit.errorCount}</td>
                       </tr>
                     ))}

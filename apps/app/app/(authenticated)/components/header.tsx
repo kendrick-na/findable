@@ -42,7 +42,7 @@ const HeaderMetric = async () => {
         {metric.sov}%
       </span>
       <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-        AI 등장률
+        AI·검색 등장률
       </span>
     </div>
   );

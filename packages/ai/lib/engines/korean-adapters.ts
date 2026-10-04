@@ -178,6 +178,9 @@ export const hyperclovaAdapter: EngineAdapter = async (query) => {
 //    ⛔ 예전 D-008(검색 결과 + HyperCLOVA 합성으로 Cue: 재현)은 폐지 — 아래 naverAdapter 주석.
 // ─────────────────────────────────────────────
 
+/** Stored with each new Naver search row; older unmarked rows are not comparable. */
+export const NAVER_SEARCH_SAMPLING_VERSION = "interleave-v1";
+
 interface NaverSearchItem {
   bloggername?: string;
   description?: string;
@@ -226,8 +229,31 @@ async function naverSearch(
     throw signal.reason ?? new DOMException("Aborted", "AbortError");
   }
 
+  // The APIs rank within each endpoint, not across endpoints. Concatenating
+  // blog first and slicing to ten silently drops all news/web evidence when
+  // blog has ten hits. Interleave by rank to represent every available channel.
+  const groups = results.map((result) =>
+    result.status === "fulfilled" ? result.value : []
+  );
+  const items: NaverSearchItem[] = [];
+  for (
+    let rank = 0;
+    items.length < 10 && groups.some((group) => rank < group.length);
+    rank++
+  ) {
+    for (const group of groups) {
+      const item = group[rank];
+      if (item) {
+        items.push(item);
+        if (items.length === 10) {
+          break;
+        }
+      }
+    }
+  }
+
   return {
-    items: results.flatMap((r) => (r.status === "fulfilled" ? r.value : [])),
+    items,
     failures: results.flatMap((r) =>
       r.status === "rejected"
         ? [r.reason instanceof Error ? r.reason.message : String(r.reason)]

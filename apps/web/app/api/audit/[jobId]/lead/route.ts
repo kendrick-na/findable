@@ -2,6 +2,7 @@
 //
 // 사용자가 결과 페이지 하단 "📩 풀 리포트 받기" 클릭 → 이 API 호출 → Resend로 이메일 발송
 
+import { answerGroup, isDiscoveryAnswer } from "@repo/audit/answer-buckets";
 import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 import { geoAxisScores, scoreTier, TIER_LABEL_KO } from "@repo/audit/geo-score";
 import { maskEmail } from "@repo/audit/mask";
@@ -11,6 +12,10 @@ import {
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import {
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import { database } from "@repo/database";
 import { resend } from "@repo/email";
 import { AuditReportEmail } from "@repo/email/templates/audit-report";
@@ -50,6 +55,12 @@ interface AuditMetrics {
 interface AuditResult {
   brandName?: string;
   domain?: string;
+  engineResponses?: Array<{
+    engineId: string;
+    errorMessage?: string | null;
+    isStub?: boolean | null;
+    promptKind?: string | null;
+  }>;
   metrics?: AuditMetrics;
 }
 
@@ -184,8 +195,29 @@ export async function POST(
       enginesWithMention: [],
     };
     const geoScore = calcGeoScore(metrics);
-    const enginesMentioned = new Set(metrics.enginesWithMention).size;
-    const enginesTotal = new Set(metrics.enginesCovered).size;
+    const measuredEngines = result.engineResponses?.length
+      ? new Set(
+          result.engineResponses
+            .filter(
+              (row) =>
+                (answerGroup(row.engineId) === "ai" ||
+                  answerGroup(row.engineId) === "search") &&
+                !isDiscoveryAnswer(row) &&
+                !row.errorMessage &&
+                !row.isStub
+            )
+            .map((row) => row.engineId)
+        )
+      : null;
+    const enginesTotal = measuredEngines?.size || null;
+    const enginesMentioned =
+      enginesTotal !== null && measuredEngines
+        ? new Set(
+            metrics.enginesWithMention.filter((engineId) =>
+              measuredEngines.has(engineId)
+            )
+          ).size
+        : null;
 
     const crew = sanitizeStoredCrewResult(
       job.crewResult
@@ -215,6 +247,10 @@ export async function POST(
         enginesMentioned,
         enginesTotal,
         resultUrl: `${baseUrl}/ko/audit/${jobId}`,
+        searchSamplingLabel: searchSamplingLabel(
+          searchSamplingVersionOf(job.result),
+          true
+        ),
         pdfUrl:
           job.pdfUrl &&
           isCurrentAuditPdfUrl(job.pdfUrl) &&
@@ -224,6 +260,15 @@ export async function POST(
         topActions,
       }),
     });
+
+    if (sendResult.error || !sendResult.data?.id) {
+      log.error("lead.email_failed", {
+        jobId,
+        error: sendResult.error?.name ?? "missing_provider_id",
+        statusCode: sendResult.error?.statusCode,
+      });
+      return NextResponse.json({ ok: true, emailSent: false });
+    }
 
     log.info("lead.email_sent", {
       jobId,

@@ -49,6 +49,7 @@ vi.mock("./official-site-identity", () => ({
   resolveOfficialSiteIdentity: vi.fn(async () => ({ title: "Test Brand" })),
 }));
 vi.mock("@repo/ai/lib/engines", () => ({
+  NAVER_SEARCH_SAMPLING_VERSION: "interleave-v1",
   aggregateAudit,
   auditCost: vi.fn(() => ({
     totalKrw: 0,
@@ -77,7 +78,14 @@ vi.mock("./prompt-query-scheduler", async () =>
 );
 vi.mock("./tracking", () => ({
   persistAuditTracking,
-  tagCoreResponses: (responsesByPrompt: unknown[][], prompts: Array<{ text: string; lang: "ko" | "en"; kind?: "brand" | "discovery" }>) =>
+  tagCoreResponses: (
+    responsesByPrompt: unknown[][],
+    prompts: Array<{
+      text: string;
+      lang: "ko" | "en";
+      kind?: "brand" | "discovery";
+    }>
+  ) =>
     responsesByPrompt.flatMap((responses, promptIndex) =>
       responses.map((response) => ({
         ...(response as Record<string, unknown>),
@@ -100,7 +108,10 @@ vi.mock("./actions", () => ({
   actionsToStrings: vi.fn(() => []),
   buildGeoActions: vi.fn(() => []),
 }));
-vi.mock("./action-rules", () => ({ summarizeVerdicts: vi.fn(() => ({})) }));
+vi.mock("./action-rules", () => ({
+  hasCompleteNaverSearchBaseline: vi.fn(() => false),
+  summarizeVerdicts: vi.fn(() => ({})),
+}));
 vi.mock("./answer-buckets", () => ({
   answerShareOfVoice: vi.fn(() => null),
   classifyAnswer: vi.fn(() => "other"),
@@ -190,7 +201,9 @@ beforeEach(() => {
     },
   });
   queryPromptsSequentially.mockImplementation(async (prompts, query) =>
-    Promise.all(prompts.map((prompt: unknown, index: number) => query(prompt, index)))
+    Promise.all(
+      prompts.map((prompt: unknown, index: number) => query(prompt, index))
+    )
   );
   queryAllEngines.mockResolvedValue([response()]);
   verifyMentions.mockImplementation(async (rows: unknown[]) =>
@@ -202,7 +215,10 @@ beforeEach(() => {
   );
   persistAuditTracking.mockResolvedValue("persisted");
   auditJobUpdate.mockResolvedValue({});
-  auditJobFindUnique.mockResolvedValue({ checkpoint: null, createdAt: new Date(0) });
+  auditJobFindUnique.mockResolvedValue({
+    checkpoint: null,
+    createdAt: new Date(0),
+  });
   executeRawUnsafe.mockResolvedValue(1);
   auditJobUpdateMany.mockImplementation(async (args) => {
     await auditJobUpdate(args);
@@ -218,15 +234,19 @@ describe("runAuditJob offline lifecycle contracts", () => {
     await runAuditJob(input);
 
     expect(auditJobUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "failed" }),
+      })
     );
     expect(auditJobUpdate).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "completed" }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "completed" }),
+      })
     );
   });
 
   it("stores partial raw answers without Tracking and marks recovery as unimplemented", async () => {
-    queryPromptsSequentially.mockResolvedValue([[response()],[response()]]);
+    queryPromptsSequentially.mockResolvedValue([[response()], [response()]]);
     const runAuditJob = await loadRunner();
 
     await runAuditJob(input);
@@ -247,10 +267,14 @@ describe("runAuditJob offline lifecycle contracts", () => {
     await runAuditJob(input);
 
     expect(auditJobUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "completed" }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "completed" }),
+      })
     );
     expect(auditJobUpdate).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "failed" }),
+      })
     );
     expect(executeRawUnsafe).toHaveBeenCalledWith(
       expect.stringContaining('"postprocessing"'),
@@ -263,10 +287,14 @@ describe("runAuditJob offline lifecycle contracts", () => {
 
   it("commits AuditJob completed before entering the Tracking persistence boundary", async () => {
     const events: string[] = [];
+    // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
     auditJobUpdate.mockImplementation(async ({ data }) => {
-      if (data?.status === "completed") events.push("audit-completed");
+      if (data?.status === "completed") {
+        events.push("audit-completed");
+      }
       return {};
     });
+    // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
     persistAuditTracking.mockImplementation(async () => {
       events.push("tracking-persist-start");
       return "persisted";
@@ -288,7 +316,9 @@ describe("runAuditJob offline lifecycle contracts", () => {
     await runAuditJob(input);
 
     expect(auditJobUpdate).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "failed" }),
+      })
     );
     expect(runBriefingForAuditJob).not.toHaveBeenCalled();
   });
@@ -299,7 +329,9 @@ describe("runAuditJob offline lifecycle contracts", () => {
 
     await runAuditJob(input);
 
-    expect(terminalCalls()[0].data.postprocessing.briefing).toBe("not_required");
+    expect(terminalCalls()[0].data.postprocessing.briefing).toBe(
+      "not_required"
+    );
     expect(runBriefingForAuditJob).not.toHaveBeenCalled();
   });
 
@@ -312,7 +344,9 @@ describe("runAuditJob offline lifecycle contracts", () => {
 
     expect(runBriefingForAuditJob).not.toHaveBeenCalled();
     expect(auditJobUpdate).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "failed" }),
+      })
     );
   });
 
@@ -356,6 +390,7 @@ describe("runAuditJob offline lifecycle contracts", () => {
     });
     try {
       briefingEnabled = true;
+      // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
       queryAllEngines.mockImplementation(async () => {
         // The first real scheduler batch completes late enough that the next
         // question cannot safely start (270s deadline, 35s minimum budget).
@@ -407,11 +442,17 @@ describe("runAuditJob offline lifecycle contracts", () => {
     vi.doMock("./prompt-query-scheduler", () => ({
       queryPromptsSequentially: async (
         prompts: Array<{ text: string; lang: "en" }>,
-        query: (prompt: { text: string; lang: "en" }, index: number) => Promise<unknown>
+        query: (
+          prompt: { text: string; lang: "en" },
+          index: number
+        ) => Promise<unknown>
       ) => [await query(prompts[0], 0)],
     }));
     vi.doMock("./run-budget", () => vi.importActual("./run-budget"));
-    vi.doMock("./normalize-stored-metrics", () => ({ isPublishableAuditResult: () => true }));
+    vi.doMock("./normalize-stored-metrics", () => ({
+      isPublishableAuditResult: () => true,
+    }));
+    // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
     queryAllEngines.mockImplementation(async () => {
       // One completed prompt leaves 51s before the 270s internal deadline;
       // the real scheduler then stops before starting another prompt.
@@ -421,13 +462,10 @@ describe("runAuditJob offline lifecycle contracts", () => {
     generateAuditPdf.mockImplementation(
       (_jobId: string, _data: unknown, signal?: AbortSignal) =>
         new Promise((resolve) =>
-          setTimeout(
-            () => {
-              expect(signal?.aborted).toBe(true);
-              resolve({ pdfUrl: "local://pdf", pdfSize: 1 });
-            },
-            100_000
-          )
+          setTimeout(() => {
+            expect(signal?.aborted).toBe(true);
+            resolve({ pdfUrl: "local://pdf", pdfSize: 1 });
+          }, 100_000)
         )
     );
 
@@ -443,7 +481,9 @@ describe("runAuditJob offline lifecycle contracts", () => {
       await vi.advanceTimersByTimeAsync(51_000);
       expect(generateAuditPdf).toHaveBeenCalled();
       expect(generateAuditPdf.mock.calls[0][2]).toBeInstanceOf(AbortSignal);
-      expect((generateAuditPdf.mock.calls[0][2] as AbortSignal).aborted).toBe(true);
+      expect((generateAuditPdf.mock.calls[0][2] as AbortSignal).aborted).toBe(
+        true
+      );
       // The desired contract is bounded completion at the internal deadline;
       // the runner's PDF timeout must win before the 100s fake render resolves.
       expect(settled).toBe(true);
@@ -463,11 +503,16 @@ describe("runAuditJob offline lifecycle contracts", () => {
     vi.doMock("./prompt-query-scheduler", () => ({
       queryPromptsSequentially: async (
         prompts: Array<{ text: string; lang: "en" }>,
-        query: (prompt: { text: string; lang: "en" }, index: number) => Promise<unknown>
+        query: (
+          prompt: { text: string; lang: "en" },
+          index: number
+        ) => Promise<unknown>
       ) => [await query(prompts[0], 0)],
     }));
     vi.doMock("./run-budget", () => vi.importActual("./run-budget"));
-    vi.doMock("./normalize-stored-metrics", () => ({ isPublishableAuditResult: () => true }));
+    vi.doMock("./normalize-stored-metrics", () => ({
+      isPublishableAuditResult: () => true,
+    }));
     vi.doMock("./answer-buckets", () => vi.importActual("./answer-buckets"));
     generateAuditPrompts.mockReturnValue([
       { text: "q1", lang: "en", kind: "brand" },
@@ -478,7 +523,8 @@ describe("runAuditJob offline lifecycle contracts", () => {
     queryAllEngines.mockResolvedValue([response()]);
 
     let finalCommitStarted = false;
-    let lateCommitSettled = false;
+    let _lateCommitSettled = false;
+    // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
     auditJobUpdate.mockImplementation(async ({ data }) => {
       if (data?.status === "completed") {
         finalCommitStarted = true;
@@ -487,7 +533,7 @@ describe("runAuditJob offline lifecycle contracts", () => {
         // that this write did or did not commit until the database responds.
         return new Promise((resolve) =>
           setTimeout(() => {
-            lateCommitSettled = true;
+            _lateCommitSettled = true;
             resolve({});
           }, 300_000)
         );
@@ -513,7 +559,9 @@ describe("runAuditJob offline lifecycle contracts", () => {
       // compete with the delayed commit by writing failed or post-processing.
       expect(settled).toBe(true);
       expect(auditJobUpdate).not.toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "failed" }),
+        })
       );
       expect(persistAuditTracking).not.toHaveBeenCalled();
       expect(generateAuditPdf).not.toHaveBeenCalled();
@@ -563,25 +611,33 @@ describe("runAuditJob offline lifecycle contracts", () => {
     vi.doMock("./prompt-query-scheduler", () => ({
       queryPromptsSequentially: async (
         prompts: Array<{ text: string; lang: "en" }>,
-        query: (prompt: { text: string; lang: "en" }, index: number) => Promise<unknown>
+        query: (
+          prompt: { text: string; lang: "en" },
+          index: number
+        ) => Promise<unknown>
       ) => [await query(prompts[0], 0)],
     }));
     vi.doMock("./run-budget", () => vi.importActual("./run-budget"));
-    vi.doMock("./normalize-stored-metrics", () => ({ isPublishableAuditResult: () => true }));
+    vi.doMock("./normalize-stored-metrics", () => ({
+      isPublishableAuditResult: () => true,
+    }));
     generateAuditPdf.mockResolvedValue({
       pdfUrl: "https://blob.test/runner-owned.pdf",
       pdfSize: 1,
     });
     let pdfUrlCommitAttempted = false;
-    auditJobUpdate.mockImplementation(async ({ data }: { data?: { pdfUrl?: string } }) => {
-      if (data?.pdfUrl) {
-        // Fault injection: the database write may have committed before the
-        // caller observed a transport/timeout error.
-        pdfUrlCommitAttempted = true;
-        throw new Error("pdf url commit outcome ambiguous");
+    auditJobUpdate.mockImplementation(
+      // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
+      async ({ data }: { data?: { pdfUrl?: string } }) => {
+        if (data?.pdfUrl) {
+          // Fault injection: the database write may have committed before the
+          // caller observed a transport/timeout error.
+          pdfUrlCommitAttempted = true;
+          throw new Error("pdf url commit outcome ambiguous");
+        }
+        return {};
       }
-      return {};
-    });
+    );
 
     try {
       const runAuditJob = await loadRunner();

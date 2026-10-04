@@ -26,6 +26,10 @@ import {
 } from "@repo/audit/answer-buckets";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
 import { engineDisplayName, engineNote } from "@repo/audit/engine-labels";
+import {
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { AlertCircle, ChevronDown } from "lucide-react";
 import { useState } from "react";
@@ -93,11 +97,14 @@ export function AnswerBucketBoard({
   summary,
   isKo,
   discoveryPromptCount,
+  searchSamplingVersion,
 }: {
   summary: AnswerBucketSummary;
   isKo: boolean;
   /** 러너가 만든 이름 없는 질문 수. undefined = 그 기능 이전 회차(말하지 않는다). */
   discoveryPromptCount?: number;
+  /** 이 회차 네이버 검색 표본 방식(`searchSamplingVersionOf`). 라벨로만 쓴다. */
+  searchSamplingVersion?: string | null;
 }) {
   const { ai } = summary;
   return (
@@ -185,24 +192,78 @@ export function AnswerBucketBoard({
             </li>
           )
         )}
-        {Object.entries(summary.searchByEngine ?? {}).length > 0 && (
-          <li className="break-keep" data-testid="search-exposure-line">
-            <span className="font-medium text-zinc-300">
-              {Object.entries(summary.searchByEngine ?? {})
-                .map(
-                  ([id, g]) =>
-                    `${engineDisplayName(id, isKo)} ${g.confirmed}/${g.adjudicated}`
-                )
-                .join(" · ")}
-            </span>{" "}
-            —{" "}
-            {isKo
-              ? "AI 답변이 아니라 검색 결과에 우리 브랜드·공식 도메인이 나왔는지 본 값이라 AI 비율과 따로 셌어요."
-              : "Whether search results show your brand or official domain — not AI answers, so counted separately."}
-          </li>
-        )}
+        <SearchExposureLine
+          isKo={isKo}
+          searchByEngine={summary.searchByEngine}
+          searchSamplingVersion={searchSamplingVersion}
+        />
       </ul>
     </div>
+  );
+}
+
+function legacySummaryToggleCopy(open: boolean, isKo: boolean): string {
+  if (open) {
+    return isKo ? "요약 접기" : "Hide summary";
+  }
+  return isKo ? "당시 요약 보기" : "Show that summary";
+}
+
+/** 검색 노출 한 줄 — AI 비율과 따로 센 값 + 네이버 표본 방식 라벨. */
+function SearchExposureLine({
+  searchByEngine,
+  isKo,
+  searchSamplingVersion,
+}: {
+  searchByEngine: AnswerBucketSummary["searchByEngine"] | undefined;
+  isKo: boolean;
+  searchSamplingVersion?: string | null;
+}) {
+  const entries = Object.entries(searchByEngine ?? {});
+  if (entries.length === 0) {
+    return null;
+  }
+  return (
+    <li className="break-keep" data-testid="search-exposure-line">
+      <span className="font-medium text-zinc-300">
+        {entries
+          .map(
+            ([id, g]) =>
+              `${engineDisplayName(id, isKo)} ${g.confirmed}/${g.adjudicated}`
+          )
+          .join(" · ")}
+      </span>{" "}
+      —{" "}
+      {isKo
+        ? "AI 답변이 아니라 검색 결과에 우리 브랜드·공식 도메인이 나왔는지 본 값이라 AI 비율과 따로 셌어요."
+        : "Whether search results show your brand or official domain — not AI answers, so counted separately."}
+      {entries.some(([id]) => id === "naver") &&
+        searchSamplingVersion !== undefined && (
+          <SearchSamplingTag isKo={isKo} version={searchSamplingVersion} />
+        )}
+    </li>
+  );
+}
+
+/** 네이버 검색 노출 값 옆의 작은 표본 방식 라벨(W1 정책: 방식이 다르면 비교 안 함). */
+export function SearchSamplingTag({
+  version,
+  isKo,
+}: {
+  version: string | null | undefined;
+  isKo: boolean;
+}) {
+  const label = searchSamplingLabel(version, isKo);
+  if (!label) {
+    return null;
+  }
+  return (
+    <span
+      className="ml-1.5 inline-block rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500"
+      data-testid="search-sampling-label"
+    >
+      {label}
+    </span>
   );
 }
 
@@ -245,6 +306,7 @@ export interface MatrixAnswer {
   excerpt: string;
   isStub: boolean;
   mentionQuality?: string | null;
+  naverSamplingVersion?: string | null;
   naverSource?: string | null;
   promptKind?: PromptKind | null;
   promptText?: string | null;
@@ -342,13 +404,7 @@ function LegacyNaverRow({
             onClick={() => setOpen((v) => !v)}
             type="button"
           >
-            {open
-              ? isKo
-                ? "요약 접기"
-                : "Hide summary"
-              : isKo
-                ? "당시 요약 보기"
-                : "Show that summary"}
+            {legacySummaryToggleCopy(open, isKo)}
           </button>
         )}
         {open && (
@@ -382,6 +438,15 @@ function MatrixRow({
   );
 }
 
+function excludedSearchCopy(isKo: boolean) {
+  return {
+    label: isKo ? "집계 제외 · 이름 없는 검색" : "Excluded · unbranded search",
+    reason: isKo
+      ? "이름 없는 검색 결과는 AI 추천이나 브랜드 질문 검색 노출로 집계하지 않습니다."
+      : "Unbranded search results are not counted as AI recommendations or branded search exposure.",
+  };
+}
+
 function CurrentMatrixRow({
   row,
   isKo,
@@ -395,22 +460,36 @@ function CurrentMatrixRow({
   const [open, setOpen] = useState(false);
   const bucket = classifyAnswer(row);
   const isSearch = answerGroup(row.engineId) === "search";
+  const excludedDiscoverySearch = isSearch && isDiscoveryAnswer(row);
+  let displayBucket: string = bucket;
+  if (retired) {
+    displayBucket = "retired";
+  } else if (excludedDiscoverySearch) {
+    displayBucket = "excluded_discovery_search";
+  }
+  const excludedCopy = excludedSearchCopy(isKo);
+  let excludedLabel = excludedCopy.label;
+  if (retired) {
+    excludedLabel = isKo
+      ? "집계 제외 · 서비스 종료"
+      : "Excluded · service ended";
+  }
   const hasText = bucket !== "engine_error" && Boolean(row.excerpt);
   const full = hasText ? stripMarkdown(row.excerpt) : "";
   const short = hasText ? preview(row.excerpt) : "";
   return (
     <li
       className="grid gap-2 border-white/5 border-t px-4 py-3 first:border-t-0 sm:grid-cols-[12rem_1fr] sm:gap-4"
-      data-bucket={retired ? "retired" : bucket}
+      data-bucket={displayBucket}
     >
       <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-start">
         <span className="font-medium text-sm text-zinc-100">
           {engineDisplayName(row.engineId, isKo)}
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
-          {retired ? (
+          {retired || excludedDiscoverySearch ? (
             <span className="inline-flex self-start whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-medium text-xs text-zinc-400">
-              {isKo ? "집계 제외 · 서비스 종료" : "Excluded · service ended"}
+              {excludedLabel}
             </span>
           ) : (
             <AnswerBucketPill bucket={bucket} isKo={isKo} />
@@ -424,7 +503,9 @@ function CurrentMatrixRow({
       </div>
       <div className="min-w-0">
         <p className="break-keep text-xs text-zinc-400">
-          {answerReason(row, isKo)}
+          {excludedDiscoverySearch
+            ? excludedCopy.reason
+            : answerReason(row, isKo)}
         </p>
         {hasText && (
           <p className="mt-1 whitespace-pre-line text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]">
@@ -451,6 +532,17 @@ function EngineLegend({ rows, isKo }: { rows: MatrixAnswer[]; isKo: boolean }) {
   const notes = [...new Set(rows.map((r) => r.engineId))]
     .map((id) => engineNote(id, isKo))
     .filter((note): note is string => Boolean(note));
+  const samplingLabel = searchSamplingLabel(
+    searchSamplingVersionOf({ engineResponses: rows }),
+    isKo
+  );
+  if (samplingLabel) {
+    notes.push(
+      isKo
+        ? `${samplingLabel} — 표본 방식이 다른 회차와는 검색 노출 수를 비교하지 않아요.`
+        : `${samplingLabel} — search exposure is not compared with runs that used another sampling method.`
+    );
+  }
   if (notes.length === 0) {
     return null;
   }
@@ -492,8 +584,8 @@ export function QuestionEngineMatrix({
         </div>
         <p className="mt-1.5 break-keep text-xs text-zinc-500 leading-relaxed">
           {isKo
-            ? `이번 측정에서 던진 질문 ${groups.length}개와 엔진별 답변 전부예요. 답변마다 위 4가지 중 어디에 들어갔는지와 그 이유를 적었어요. 날짜별 변화는 대시보드의 ‘추적 질문’에서 볼 수 있어요.`
-            : `All ${groups.length} questions from this run and every engine's answer, each with its category and reason. Track changes over time in the dashboard.`}
+            ? `이번 측정에서 던진 질문 ${groups.length}개와 엔진별 답변 전부예요. 집계 대상은 판정과 이유를, 제외 대상은 제외 사유를 표시합니다. 날짜별 변화는 대시보드의 ‘추적 질문’에서 볼 수 있어요.`
+            : `All ${groups.length} questions from this run and every engine's answer. Counted answers show their category and reason; excluded rows show why. Track changes over time in the dashboard.`}
         </p>
       </div>
       <EngineLegend isKo={isKo} rows={rows} />

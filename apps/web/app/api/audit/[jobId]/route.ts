@@ -16,6 +16,8 @@ import {
 } from "@repo/audit/history";
 import { maskEmail } from "@repo/audit/mask";
 import {
+  hasFilteredStoredAuditAdvice,
+  hasRecomputedAuditMetricsChanged,
   hasStaleAuditPdf,
   isCurrentAuditPdfUrl,
   isPublishableAuditResult,
@@ -23,6 +25,7 @@ import {
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
+import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
 import { reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
@@ -87,6 +90,7 @@ async function loadHistory(job: {
           domain: r.domain,
           createdAt: r.createdAt,
           score: scoreOf(result),
+          searchSamplingVersion: searchSamplingVersionOf(r.result),
           usable: isUsableRun(result),
         };
       }),
@@ -209,6 +213,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     const result = withRecomputedAuditMetrics(job.result);
+    const metricBasisChanged = hasRecomputedAuditMetricsChanged(
+      job.result,
+      result
+    );
+    const adviceBasisChanged = hasFilteredStoredAuditAdvice(job.result);
     const publishable = isPublishableAuditResult(result);
     const safeResult = sanitizePublicAuditResult(result);
     const pdfOutdated = Boolean(
@@ -239,6 +248,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       language: job.language,
       pdfUrl: pdfOutdated || !publishable ? null : job.pdfUrl,
       pdfOutdated,
+      metricBasisChanged,
+      adviceBasisChanged,
       result: safeResult,
       crewStatus: job.crewStatus,
       crewResult: publishable ? sanitizeStoredCrewResult(job.crewResult) : null,

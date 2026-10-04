@@ -2,6 +2,13 @@ import { isDiscoveryAnswer } from "@repo/audit/answer-buckets";
 import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
 import { withRecomputedAuditMetrics } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun } from "@repo/audit/run-quality";
+import {
+  compareAcrossSearchSampling,
+  LEGACY_SEARCH_SAMPLING_VERSION,
+  type SearchSamplingBlockReason,
+  sameSearchSamplingSeries,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import type { AuditJob } from "@repo/database";
 
 // AuditJob.result 는 Prisma Json?(=unknown). apps/web audit-result.tsx 의
@@ -213,6 +220,12 @@ export interface DashboardData {
    * 2개 미만이면 고를 게 없으므로 호출부가 UI 를 렌더하지 않는다.
    */
   brandOptions: BrandOption[];
+  /**
+   * W1 정책(2026-10-05): 직전 회차와 네이버 검색 표본 방식이 달라 비교를 막았으면 그 이유.
+   * 막혔으면 sovDeltaPoints·previousMentionPosition·previousSentiment 가 null 이고,
+   * 화면은 「비교 불가(측정 방식 변경)」를 말한다(0 이나 「2회차부터」가 아니다).
+   */
+  comparisonBlockedReason: SearchSamplingBlockReason | null;
   coverage: EngineCoverage | null;
   /**
    * 최신 측정의 도메인. **재측정 버튼에 필요하다**(버튼은 `domain`+`brandName` 을 받는다).
@@ -238,6 +251,8 @@ export interface DashboardData {
    *   (0 으로 깔면 "0개 응답 평균"이라는 거짓 표기가 된다 — 지어내지 않는다).
    */
   positionSampleCount: number | null;
+  /** 직전 측정 시각(같은 브랜드). 없으면 null — 검색 표본 비교 가드의 기준. */
+  previousMeasuredAt: Date | null;
   /** 직전 측정의 평균 순위. 비교값 폴백 2단계(§4-1)용 — 경쟁사 데이터 없을 때 "지난달 N번째". */
   previousMentionPosition: number | null;
   /**
@@ -254,11 +269,61 @@ export interface DashboardData {
    * ⚠️ AuditJob 폴백 경로에는 프롬프트 원장이 없어 **빈 배열**이다.
    */
   promptScores: PromptScore[];
+  /** 최신 회차의 네이버 검색 표본 방식(라벨용). 측정이 없으면 null. */
+  searchSamplingVersion: string | null;
   sentiment: SentimentSummary | null;
   // 직전 completed 대비 변화율(%p). 이전 측정 없으면 null → 배지 생략.
   sovDeltaPoints: number | null;
   totalCount: number;
   trend: SovTrendPoint[];
+  /** 검색 표본 방식이 최신 회차와 달라 추세선에서 뺀 회차 수(조용히 줄이지 않는다). */
+  trendExcludedRuns: number;
+}
+
+/**
+ * W1 정책의 대시보드 적용 지점(두 소스 경로 공통). 등장률·순위·감성은 네이버 검색 노출
+ * 행을 함께 센 혼합 지표다 → 직전 회차와 표본 방식이 다르면 델타·직전값을 지우고,
+ * 추세선은 최신 회차와 같은 방식의 회차만 남긴다. 비교 판정은 공통 가드 하나로 한다.
+ */
+export function applySearchSamplingGuard(
+  data: DashboardData,
+  versionAt: (measuredAtMs: number) => string
+): DashboardData {
+  if (!data.latestMeasuredAt) {
+    return data;
+  }
+  const latestVersion = versionAt(data.latestMeasuredAt.getTime());
+  const series = sameSearchSamplingSeries(
+    data.trend,
+    (point) => versionAt(point.timestamp),
+    latestVersion
+  );
+  const guarded: DashboardData = {
+    ...data,
+    searchSamplingVersion: latestVersion,
+    trend: series.points,
+    trendExcludedRuns: series.excludedCount,
+  };
+  if (!data.previousMeasuredAt) {
+    return guarded;
+  }
+  const comparison = compareAcrossSearchSampling(
+    {
+      value: null,
+      version: versionAt(data.previousMeasuredAt.getTime()),
+    },
+    { value: null, version: latestVersion }
+  );
+  if (comparison.comparable) {
+    return guarded;
+  }
+  return {
+    ...guarded,
+    comparisonBlockedReason: comparison.blockedReason,
+    previousMentionPosition: null,
+    previousSentiment: null,
+    sovDeltaPoints: null,
+  };
 }
 
 const trendDateFormatter = new Intl.DateTimeFormat("ko-KR", {
@@ -398,48 +463,61 @@ export function buildDashboardData(jobs: AuditJob[]): DashboardData {
   // 히어로 3장: 최신 completed job 의 metrics 에서 추출. 평균 순위는 **같은 브랜드의**
   // 직전 측정과 비교해 "지난 측정 대비" 폴백(§4-1 2단계)을 만든다.
   const previousJob = previous?.job ?? null;
+  const versionByRun = new Map(
+    sameBrandCompleted.map((job) => [
+      measuredAt(job).getTime(),
+      searchSamplingVersionOf(job.result),
+    ])
+  );
 
-  return {
-    // D10: AuditJob 폴백 경로에는 **Brand 행이 없다**(무료진단은 Brand 를 만들지 않는다).
-    //   브랜드 id 가 없으면 전환 대상을 식별할 수 없으므로 목록도 비운다 —
-    //   latestBrandId 를 null 로 두는 것(바로 아래)과 같은 이유다.
-    brandOptions: [],
-    // "밀리는 질문": AuditJob 폴백에는 **프롬프트 원장(Tracking)이 없다** → 빈 배열.
-    //   brandOptions 를 비우는 것과 같은 이유(식별할 원장이 없으면 지어내지 않는다).
-    promptScores: [],
-    totalCount: sameBrandCompleted.length,
-    latestSov,
-    sovDeltaPoints,
-    coverage,
-    // AuditJob 폴백에는 Brand 행이 없다(무료진단은 Brand 를 만들지 않는다) → 주석 UI 비표시.
-    latestBrandId: null,
-    // 폴백 경로엔 Brand 행이 없지만 **도메인은 job 에 있다** → 재측정 버튼은 줄 수 있다.
-    latestBrandDomain: latestJob?.domain ?? null,
-    latestBrandName,
-    latestMeasuredAt,
-    trend,
-    averageMentionPosition: latestJob
-      ? extractAverageMentionPosition(latestJob.result)
-      : null,
-    averageMentionListSize: latestJob
-      ? extractAverageMentionListSize(latestJob.result)
-      : null,
-    // 🔴 **AuditJob 결과에는 순위 표본 수가 없다**(`AuditMetrics` 에 그 필드가 없다).
-    //   → `null` 로 두고 화면이 표기를 **생략**한다. 0 으로 깔면 "0개 응답 평균"이라는
-    //   거짓 표기가 되고, 아무 수나 넣으면 지어내는 것이다.
-    //   📕 이 파일 자신의 경고: *"세션N-6 의 「쌍둥이 구현 중 폴백만 누락」 사고가
-    //     정확히 이 파일에서 났다"* → 그래서 **명시적으로** null 을 적는다(빠뜨림과 구분).
-    positionSampleCount: null,
-    previousMentionPosition: previousJob
-      ? extractAverageMentionPosition(previousJob.result)
-      : null,
-    // D5: 감성도 직전 측정과 비교한다. ⚠️ 아래 Tracking 경로와 **같이** 채울 것 —
-    //   세션N-6의 "쌍둥이 구현 중 폴백만 누락" 사고가 정확히 이 파일에서 났다.
-    previousSentiment: previousJob
-      ? extractSentiment(previousJob.result)
-      : null,
-    sentiment: latestJob ? extractSentiment(latestJob.result) : null,
-  };
+  return applySearchSamplingGuard(
+    {
+      comparisonBlockedReason: null,
+      previousMeasuredAt: previous ? measuredAt(previous.job) : null,
+      searchSamplingVersion: null,
+      trendExcludedRuns: 0,
+      // D10: AuditJob 폴백 경로에는 **Brand 행이 없다**(무료진단은 Brand 를 만들지 않는다).
+      //   브랜드 id 가 없으면 전환 대상을 식별할 수 없으므로 목록도 비운다 —
+      //   latestBrandId 를 null 로 두는 것(바로 아래)과 같은 이유다.
+      brandOptions: [],
+      // "밀리는 질문": AuditJob 폴백에는 **프롬프트 원장(Tracking)이 없다** → 빈 배열.
+      //   brandOptions 를 비우는 것과 같은 이유(식별할 원장이 없으면 지어내지 않는다).
+      promptScores: [],
+      totalCount: sameBrandCompleted.length,
+      latestSov,
+      sovDeltaPoints,
+      coverage,
+      // AuditJob 폴백에는 Brand 행이 없다(무료진단은 Brand 를 만들지 않는다) → 주석 UI 비표시.
+      latestBrandId: null,
+      // 폴백 경로엔 Brand 행이 없지만 **도메인은 job 에 있다** → 재측정 버튼은 줄 수 있다.
+      latestBrandDomain: latestJob?.domain ?? null,
+      latestBrandName,
+      latestMeasuredAt,
+      trend,
+      averageMentionPosition: latestJob
+        ? extractAverageMentionPosition(latestJob.result)
+        : null,
+      averageMentionListSize: latestJob
+        ? extractAverageMentionListSize(latestJob.result)
+        : null,
+      // 🔴 **AuditJob 결과에는 순위 표본 수가 없다**(`AuditMetrics` 에 그 필드가 없다).
+      //   → `null` 로 두고 화면이 표기를 **생략**한다. 0 으로 깔면 "0개 응답 평균"이라는
+      //   거짓 표기가 되고, 아무 수나 넣으면 지어내는 것이다.
+      //   📕 이 파일 자신의 경고: *"세션N-6 의 「쌍둥이 구현 중 폴백만 누락」 사고가
+      //     정확히 이 파일에서 났다"* → 그래서 **명시적으로** null 을 적는다(빠뜨림과 구분).
+      positionSampleCount: null,
+      previousMentionPosition: previousJob
+        ? extractAverageMentionPosition(previousJob.result)
+        : null,
+      // D5: 감성도 직전 측정과 비교한다. ⚠️ 아래 Tracking 경로와 **같이** 채울 것 —
+      //   세션N-6의 "쌍둥이 구현 중 폴백만 누락" 사고가 정확히 이 파일에서 났다.
+      previousSentiment: previousJob
+        ? extractSentiment(previousJob.result)
+        : null,
+      sentiment: latestJob ? extractSentiment(latestJob.result) : null,
+    },
+    (ms) => versionByRun.get(ms) ?? LEGACY_SEARCH_SAMPLING_VERSION
+  );
 }
 
 // ──────────────────────────────────────────────────
@@ -493,6 +571,25 @@ export function invalidTrackingRunTimes(
       .map((job) => job.completedAt?.getTime())
       .filter((time): time is number => time !== undefined)
   );
+}
+
+/**
+ * W1: Tracking run 시각(= AuditJob.completedAt) → 네이버 검색 표본 방식.
+ * Tracking 행에는 방식이 없으므로 같은 회차의 AuditJob 결과에서 읽는다.
+ */
+export function trackingRunSearchSamplingVersions(
+  jobs: Array<{ completedAt: Date | null; result: unknown }>
+): Map<number, string> {
+  const versions = new Map<number, string>();
+  for (const job of jobs) {
+    if (job.completedAt) {
+      versions.set(
+        job.completedAt.getTime(),
+        searchSamplingVersionOf(job.result)
+      );
+    }
+  }
+  return versions;
 }
 
 /**
@@ -735,7 +832,12 @@ function foldTrackingRuns(rows: TrackingRowInput[]): TrackingRun[] {
  */
 export function buildTrackingDashboardData(
   rows: TrackingRowInput[],
-  selectedBrandId?: string
+  selectedBrandId?: string,
+  /**
+   * W1: run 시각(ms = AuditJob.completedAt = Tracking.trackedAt) → 네이버 검색 표본 방식.
+   * Tracking 행에는 방식이 없으므로 호출부가 AuditJob 결과에서 만든다. 없는 run 은 legacy.
+   */
+  runSearchSamplingVersions?: ReadonlyMap<number, string>
 ): DashboardData | null {
   // Naver AI Briefing is an auxiliary search-result measurement. The report's
   // core metrics exclude it; including it here silently changes the same
@@ -797,35 +899,42 @@ export function buildTrackingDashboardData(
     )
   );
 
-  return {
-    brandOptions,
-    promptScores,
-    // 🔴 순위 평균의 모집단(N-48) — 최신 런에서 순위가 나온 응답 수.
-    positionSampleCount: latest.positionSampleCount,
-    // 🔴 D10 이 드러낸 결함: 여기가 `runs.length`(**org 전체** 측정 횟수)였다.
-    //   브랜드가 하나뿐인 것처럼 보이던 때는 티가 안 났지만, 전환 UI 가 생기면서
-    //   화면이 "이 브랜드 이야기"가 되자 거짓말이 됐다 — 엔비디아(실측 **1회** 측정)를
-    //   골랐는데 하단에 `측정 2회`(나이키 1 + 엔비디아 1)로 표시되고,
-    //   같은 화면의 순위 카드는 `비교는 2회차 측정부터 보여드려요`라 **자기모순**이었다.
-    //   → 보고 있는 브랜드의 측정 횟수로 바꾼다.
-    totalCount: brandRuns.length,
-    latestSov: latest.sov,
-    sovDeltaPoints: previous ? latest.sov - previous.sov : null,
-    coverage: latest.coverage,
-    // Tracking 경로에는 실제 Brand 가 있다 → 주석 작성 가능(감사 D2).
-    latestBrandId: latest.brandId,
-    latestBrandDomain: latest.brandDomain,
-    latestBrandName: latest.brandName,
-    latestMeasuredAt: latest.measuredAt,
-    trend,
-    averageMentionPosition: latest.averageMentionPosition,
-    averageMentionListSize: latest.averageMentionListSize,
-    // 같은 브랜드의 직전 측정과 비교(brandRuns 기준) — 브랜드가 섞이면 오독이 된다.
-    previousMentionPosition: previous?.averageMentionPosition ?? null,
-    // D5: 감성도 같은 브랜드의 직전 측정과 비교(위 AuditJob 폴백과 쌍둥이).
-    previousSentiment: previous?.sentiment ?? null,
-    sentiment: latest.sentiment,
-  };
+  return applySearchSamplingGuard(
+    {
+      comparisonBlockedReason: null,
+      previousMeasuredAt: previous?.measuredAt ?? null,
+      searchSamplingVersion: null,
+      trendExcludedRuns: 0,
+      brandOptions,
+      promptScores,
+      // 🔴 순위 평균의 모집단(N-48) — 최신 런에서 순위가 나온 응답 수.
+      positionSampleCount: latest.positionSampleCount,
+      // 🔴 D10 이 드러낸 결함: 여기가 `runs.length`(**org 전체** 측정 횟수)였다.
+      //   브랜드가 하나뿐인 것처럼 보이던 때는 티가 안 났지만, 전환 UI 가 생기면서
+      //   화면이 "이 브랜드 이야기"가 되자 거짓말이 됐다 — 엔비디아(실측 **1회** 측정)를
+      //   골랐는데 하단에 `측정 2회`(나이키 1 + 엔비디아 1)로 표시되고,
+      //   같은 화면의 순위 카드는 `비교는 2회차 측정부터 보여드려요`라 **자기모순**이었다.
+      //   → 보고 있는 브랜드의 측정 횟수로 바꾼다.
+      totalCount: brandRuns.length,
+      latestSov: latest.sov,
+      sovDeltaPoints: previous ? latest.sov - previous.sov : null,
+      coverage: latest.coverage,
+      // Tracking 경로에는 실제 Brand 가 있다 → 주석 작성 가능(감사 D2).
+      latestBrandId: latest.brandId,
+      latestBrandDomain: latest.brandDomain,
+      latestBrandName: latest.brandName,
+      latestMeasuredAt: latest.measuredAt,
+      trend,
+      averageMentionPosition: latest.averageMentionPosition,
+      averageMentionListSize: latest.averageMentionListSize,
+      // 같은 브랜드의 직전 측정과 비교(brandRuns 기준) — 브랜드가 섞이면 오독이 된다.
+      previousMentionPosition: previous?.averageMentionPosition ?? null,
+      // D5: 감성도 같은 브랜드의 직전 측정과 비교(위 AuditJob 폴백과 쌍둥이).
+      previousSentiment: previous?.sentiment ?? null,
+      sentiment: latest.sentiment,
+    },
+    (ms) => runSearchSamplingVersions?.get(ms) ?? LEGACY_SEARCH_SAMPLING_VERSION
+  );
 }
 
 // 상대 시간(예: "3일 전"). 7일 초과면 YYYY.MM.DD.

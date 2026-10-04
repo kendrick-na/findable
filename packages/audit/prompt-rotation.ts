@@ -15,7 +15,17 @@ export function pickRotatingPrompts<
     const aTime = a.lastTrackedAt?.getTime() ?? 0;
     const bTime = b.lastTrackedAt?.getTime() ?? 0;
     // 한 번도 안 잰 것(0)이 가장 오래 잰 것보다 먼저 오도록 오름차순.
-    return aTime - bTime;
+    if (aTime !== bTime) {
+      return aTime - bTime;
+    }
+    // DB 반환 순서는 보장되지 않으므로 같은 시각에는 영속 ID로 순서를 고정한다.
+    if (a.id < b.id) {
+      return -1;
+    }
+    if (a.id > b.id) {
+      return 1;
+    }
+    return 0;
   });
   return sorted.slice(0, limit);
 }
