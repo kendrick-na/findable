@@ -694,6 +694,13 @@ export function AuditResultView({ jobId, locale }: Props) {
           const body = (await response.json().catch(() => null)) as {
             error?: string;
           } | null;
+          // 접근 권한은 재시도로 바뀌지 않는다. 다른 조직이 활성화된 사용자를
+          // 4·8·16초 동안 로딩에 묶지 말고, 즉시 조직 전환 안내를 보여준다.
+          if (response.status === 403) {
+            pollControlRef.current.active = false;
+            setError("REPORT_FORBIDDEN");
+            return;
+          }
           // 존재하지 않는 ID와 잘못된 ID는 재시도해도 바뀌지 않는다. 이전에는
           // 4·8·16초를 더 기다린 뒤에야 오류를 보여, 대시보드에서 잘못 연결된
           // 리포트가 계속 로딩 중인 것처럼 보였다.
@@ -1176,30 +1183,38 @@ function LoadingState({ message }: { message: string }) {
 
 function ErrorState({ message, isKo }: { message: string; isKo: boolean }) {
   const reportNotFound = message === "REPORT_NOT_FOUND";
+  const reportForbidden = message === "REPORT_FORBIDDEN";
+  let title = isKo ? "결과 로드 실패" : "Failed to load";
+  let detail = message;
+  let actionLabel = isKo
+    ? "대시보드에서 측정 이력 열기"
+    : "Open dashboard history";
+  if (reportForbidden) {
+    title = isKo
+      ? "현재 조직에서는 이 리포트를 볼 수 없어요"
+      : "This report belongs to another workspace";
+    detail = isKo
+      ? "대시보드에서 이 측정을 만든 조직으로 전환한 뒤 다시 열어 주세요."
+      : "Switch to the workspace that created this measurement, then open it again.";
+    actionLabel = isKo
+      ? "대시보드에서 해당 조직으로 전환"
+      : "Switch workspace in the dashboard";
+  } else if (reportNotFound) {
+    title = isKo ? "이 리포트를 찾을 수 없어요" : "This report is unavailable";
+    detail = isKo
+      ? "이전 측정 기록이 공개 리포트와 아직 연결되지 않았습니다. 대시보드의 측정 이력에서 해당 회차를 확인해 주세요."
+      : "This earlier measurement is not yet connected to a public report. Check the run in your dashboard history.";
+  }
   return (
     <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6 text-red-300">
       <div className="flex items-center gap-2 font-semibold">
         <XCircle className="h-5 w-5" />
-        {reportNotFound
-          ? isKo
-            ? "이 리포트를 찾을 수 없어요"
-            : "This report is unavailable"
-          : isKo
-            ? "결과 로드 실패"
-            : "Failed to load"}
+        {title}
       </div>
-      <p className="mt-2 text-sm">
-        {reportNotFound
-          ? isKo
-            ? "이전 측정 기록이 공개 리포트와 아직 연결되지 않았습니다. 대시보드의 측정 이력에서 해당 회차를 확인해 주세요."
-            : "This earlier measurement is not yet connected to a public report. Check the run in your dashboard history."
-          : message}
-      </p>
-      {reportNotFound && (
+      <p className="mt-2 text-sm">{detail}</p>
+      {(reportNotFound || reportForbidden) && (
         <Button asChild className="mt-4" variant="outline">
-          <a href="https://app.findable.co.kr/history">
-            {isKo ? "대시보드에서 측정 이력 열기" : "Open dashboard history"}
-          </a>
+          <a href="https://app.findable.co.kr/history">{actionLabel}</a>
         </Button>
       )}
     </div>
