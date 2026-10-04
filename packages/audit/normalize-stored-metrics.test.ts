@@ -5,6 +5,7 @@ import {
   auditPublicationIssue,
   auditPublicationStatus,
   citationPrescriptionsRestricted,
+  hasRecomputedAuditMetricsChanged,
   hasStaleAuditPdf,
   isCurrentAuditPdfUrl,
   isPublishableAuditResult,
@@ -37,6 +38,29 @@ function unverifiedRows(n: number): Record<string, unknown>[] {
 }
 
 describe("saved audit metric normalization", () => {
+  it("detects a stored discovery-search metric that changes on read without a PDF", () => {
+    const original = {
+      domain: "example.test",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100, enginesCovered: ["chatgpt", "naver"] },
+      engineResponses: [
+        ...rows(10, 0, { promptKind: "brand" }),
+        {
+          engineId: "naver",
+          promptKind: "discovery",
+          brandMentioned: true,
+          mentionQuality: "confirmed",
+          naverSource: "search_results",
+          isStub: false,
+          errorMessage: null,
+        },
+      ],
+    };
+    const corrected = withRecomputedAuditMetrics(original);
+    expect(isPublishableAuditResult(corrected)).toBe(true);
+    expect(hasRecomputedAuditMetricsChanged(original, corrected)).toBe(true);
+    expect(hasRecomputedAuditMetricsChanged(corrected, corrected)).toBe(false);
+  });
   it("recognizes only current versioned audit PDF URLs", () => {
     expect(
       isCurrentAuditPdfUrl(

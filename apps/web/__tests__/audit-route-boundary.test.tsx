@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   runBriefing: vi.fn(),
   streamChat: vi.fn(),
   sendEmail: vi.fn(),
+  metricBasisChanged: vi.fn(),
 }));
 
 vi.mock("@repo/database", () => ({
@@ -75,6 +76,7 @@ vi.mock("@repo/audit/normalize-stored-metrics", () => ({
   auditPublicationIssue: () => null,
   publicAuditResult: (result: unknown) => result,
   hasStaleAuditPdf: () => false,
+  hasRecomputedAuditMetricsChanged: mocks.metricBasisChanged,
   isCurrentAuditPdfUrl: () => true,
 }));
 vi.mock("next/og", () => ({
@@ -151,6 +153,7 @@ beforeEach(() => {
   mocks.createLead.mockResolvedValue({});
   mocks.reconcile.mockResolvedValue(null);
   mocks.streamChat.mockReturnValue(Response.json({ ok: true }));
+  mocks.metricBasisChanged.mockReturnValue(false);
 });
 
 describe("audit route tenant boundary", () => {
@@ -254,6 +257,7 @@ describe("audit route tenant boundary", () => {
     });
 
     test("SSR omits private summary", async () => {
+      mocks.metricBasisChanged.mockReturnValue(true);
       const html = renderToStaticMarkup(
         await AuditResultPage({
           params: Promise.resolve({ locale: "ko", jobId }),
@@ -261,6 +265,7 @@ describe("audit route tenant boundary", () => {
       );
       expect(html).not.toContain("private.example");
       expect(html).not.toContain('data-testid="ssr-summary"');
+      expect(html).not.toContain('data-testid="audit-metric-basis-notice"');
     });
 
     test("OG preview cannot embed private brand or domain", async () => {
@@ -282,6 +287,7 @@ describe("audit route tenant boundary", () => {
   });
 
   test("owner can poll workspace result and render SSR summary", async () => {
+    mocks.metricBasisChanged.mockReturnValue(true);
     mocks.auth.mockResolvedValue({ userId: "owner", orgId: "owner-org" });
     mocks.currentUser.mockResolvedValue({
       primaryEmailAddressId: "primary",
@@ -299,6 +305,7 @@ describe("audit route tenant boundary", () => {
       })
     );
     expect(html).toContain("private.example");
+    expect(html).toContain('data-testid="audit-metric-basis-notice"');
   });
 
   test("owner API response sanitizes stored geo and crew claims at the server boundary", async () => {

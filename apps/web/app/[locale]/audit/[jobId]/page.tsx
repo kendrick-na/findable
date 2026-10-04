@@ -1,10 +1,11 @@
 // /audit/[jobId] — Audit 결과 페이지 (PRD §13.1)
 
-import { database } from "@repo/database";
 import {
+  hasRecomputedAuditMetricsChanged,
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { createMetadata } from "@repo/seo/metadata";
@@ -13,6 +14,7 @@ import { resolveIsOwner } from "../../../api/audit/_lib/owner";
 import { canExposeAuditResult } from "../../../api/audit/_lib/public-access";
 import { AuditResultView } from "./components/audit-result";
 import { AuditSummarySsr } from "./components/audit-summary-ssr";
+import { AuditMetricBasisNotice } from "./components/metric-basis-notice";
 
 interface AuditResultPageProps {
   params: Promise<{ locale: string; jobId: string }>;
@@ -68,10 +70,17 @@ async function loadSummaryJob(jobId: string) {
         status: true,
       },
     });
-    if (!job || !(await canExposeAuditResult(job, await resolveIsOwner(job)))) {
+    if (
+      !(job && (await canExposeAuditResult(job, await resolveIsOwner(job))))
+    ) {
       return null;
     }
-    return { ...job, result: withRecomputedAuditMetrics(job.result) };
+    const result = withRecomputedAuditMetrics(job.result);
+    return {
+      ...job,
+      result,
+      metricBasisChanged: hasRecomputedAuditMetricsChanged(job.result, result),
+    };
   } catch (error) {
     log.error("audit.ssr_summary.failed", { error: parseError(error) });
     return null;
@@ -96,7 +105,14 @@ const AuditResultPage = async ({ params }: AuditResultPageProps) => {
         {summaryJob && isPublishableAuditResult(summaryJob.result) && (
           <AuditSummarySsr job={summaryJob} locale={locale} />
         )}
-        <AuditResultView jobId={jobId} locale={locale} />
+        {summaryJob?.metricBasisChanged && (
+          <AuditMetricBasisNotice locale={locale} />
+        )}
+        <AuditResultView
+          correctionNoticeShown={summaryJob?.metricBasisChanged ?? false}
+          jobId={jobId}
+          locale={locale}
+        />
       </div>
     </div>
   );

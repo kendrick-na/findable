@@ -28,6 +28,61 @@ vi.mock("../app/api/audit/_lib/owner", () => ({
 
 import { GET } from "../app/api/audit/[jobId]/route";
 
+it("discloses a changed stored metric basis even when no PDF exists", async () => {
+  const jobId = "55555555-5555-4555-8555-555555555555";
+  mocks.findUnique.mockResolvedValue({
+    id: jobId,
+    email: "synthetic@example.test",
+    organizationId: null,
+    status: "completed",
+    domain: "example.test",
+    language: "ko",
+    pdfUrl: null,
+    result: {
+      brandName: "Synthetic",
+      domain: "example.test",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100, enginesCovered: ["chatgpt", "naver"] },
+      engineResponses: [
+        ...Array.from({ length: 10 }, () => ({
+          engineId: "chatgpt",
+          promptKind: "brand",
+          brandMentioned: false,
+          mentionQuality: "absent",
+          isStub: false,
+          errorMessage: null,
+        })),
+        {
+          engineId: "naver",
+          promptKind: "discovery",
+          brandMentioned: true,
+          mentionQuality: "confirmed",
+          naverSource: "search_results",
+          isStub: false,
+          errorMessage: null,
+        },
+      ],
+    },
+    crewStatus: "not_requested",
+    crewResult: null,
+    createdAt: new Date("2026-10-03T00:00:00Z"),
+    completedAt: new Date("2026-10-03T00:01:00Z"),
+    errorMessage: null,
+  });
+  mocks.findMany.mockResolvedValue([]);
+
+  const response = await GET(
+    new Request(`https://findable.example/api/audit/${jobId}`) as never,
+    { params: Promise.resolve({ jobId }) }
+  );
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body.pdfOutdated).toBe(false);
+  expect(body.metricBasisChanged).toBe(true);
+  expect(body.result.metrics.sov).not.toBe(100);
+});
+
 it("withholds an old PDF when only its stored recommendations are now filtered", async () => {
   const jobId = "44444444-4444-4444-8444-444444444444";
   const result = withRecomputedAuditMetrics({

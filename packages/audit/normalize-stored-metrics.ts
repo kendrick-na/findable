@@ -464,6 +464,40 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
   return corrected as T;
 }
 
+/**
+ * Stored figures can differ from the current read-time projection even when no
+ * PDF was ever generated. Let every public surface disclose that correction.
+ * This is a disclosure signal, not proof that an old email or Blob was recalled.
+ */
+export function hasRecomputedAuditMetricsChanged(
+  original: unknown,
+  corrected: unknown
+): boolean {
+  if (!(isRecord(original) && isRecord(corrected))) {
+    return false;
+  }
+  const stored = original.metrics;
+  const current = corrected.metrics;
+  if (!(isRecord(stored) && isRecord(current))) {
+    return false;
+  }
+  const displayed = [
+    "sov",
+    "averageMentionPosition",
+    "enginesCovered",
+    "enginesWithMention",
+    "sentimentDistribution",
+    "stubCount",
+    "topCitedDomains",
+    "answerBuckets",
+    "verifiedCount",
+    "unverifiedCount",
+  ];
+  return displayed.some(
+    (key) => semanticJson(stored[key]) !== semanticJson(current[key])
+  );
+}
+
 /** A generated PDF is immutable; don't offer it when its displayed metrics are stale. */
 export function hasStaleAuditPdf(
   original: unknown,

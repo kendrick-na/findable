@@ -90,8 +90,10 @@ import {
   ActionDetails as TeaserActionDetails,
   ActionLead as TeaserActionLead,
 } from "./action-teaser-cards";
+import { AuditMetricBasisNotice } from "./metric-basis-notice";
 
 interface Props {
+  correctionNoticeShown?: boolean;
   jobId: string;
   locale: string;
 }
@@ -365,6 +367,7 @@ interface JobResponse {
   isWorkspaceAudit?: boolean;
   jobId: string;
   language: string;
+  metricBasisChanged?: boolean;
   pdfOutdated?: boolean;
   pdfUrl: string | null;
   result: JobResult | null;
@@ -665,7 +668,11 @@ function totalFiveAxis(view: FiveAxisView): number {
 // 메인 진입점
 // ──────────────────────────────────────────────────────────────────
 
-export function AuditResultView({ jobId, locale }: Props) {
+export function AuditResultView({
+  correctionNoticeShown = false,
+  jobId,
+  locale,
+}: Props) {
   const isKo = locale.startsWith("ko");
   const [job, setJob] = useState<JobResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -864,6 +871,9 @@ export function AuditResultView({ jobId, locale }: Props) {
 
   return (
     <>
+      {job.metricBasisChanged && !correctionNoticeShown && (
+        <AuditMetricBasisNotice locale={locale} />
+      )}
       <CompletedView job={job} locale={locale} result={displayResult} />
       {auditPublicationIssue(displayResult) === null && (
         <ViralBar job={job} locale={locale} />

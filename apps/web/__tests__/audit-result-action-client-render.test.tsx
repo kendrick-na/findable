@@ -199,6 +199,32 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     );
   });
 
+  it("shows the correction disclosure if SSR lookup missed it, without duplicating SSR", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ ...response, metricBasisChanged: true })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "집계 기준이 변경");
+    expect(container.querySelectorAll("[data-testid='audit-metric-basis-notice']"))
+      .toHaveLength(1);
+
+    await act(() => {
+      root?.render(
+        <AuditResultView correctionNoticeShown jobId="fixture-job" locale="ko" />
+      );
+    });
+    expect(container.querySelectorAll("[data-testid='audit-metric-basis-notice']"))
+      .toHaveLength(0);
+  });
+
   it("네이버 검색 노출을 무료 업셀의 AI 엔진 수에 넣지 않는다", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
