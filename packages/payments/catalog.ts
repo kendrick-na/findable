@@ -85,6 +85,7 @@ export function listPriceForPlan(plan: PayablePlan): number | null {
 export const PAYMENT_ID_PREFIX = "fdbl";
 
 const CLERK_USER_PREFIX_RE = /^user_/;
+const BASE36_RE = /^[0-9a-z]+$/;
 
 /** Clerk userId(`user_xxx`) → paymentId 에 심을 uid 조각. */
 export function uidForPaymentId(userId: string): string {
@@ -116,4 +117,23 @@ export function userIdFromPaymentId(paymentId: string): string | null {
   }
   const uid = parts.slice(2, -1).join("-");
   return uid.length > 0 ? `user_${uid}` : null;
+}
+
+/**
+ * paymentId 끝 조각(base36 시각) → 발급 시각. 형식이 아니면 null.
+ *
+ * 정기결제 회차 ID는 청구 예정 시각으로, 단건·첫 결제 ID는 결제 시작 시각으로 만든다.
+ * 그래서 이 값은 "이 결제가 대가를 치른 이용 기간의 시작"으로 쓸 수 있다
+ * (갱신 실패 유예 만료 때 끝난 결제 권한만 골라 회수하는 데 사용).
+ */
+export function paymentIssuedAtFromPaymentId(paymentId: string): Date | null {
+  if (!userIdFromPaymentId(paymentId)) {
+    return null;
+  }
+  const raw = paymentId.split("-").at(-1) ?? "";
+  if (!BASE36_RE.test(raw)) {
+    return null;
+  }
+  const ms = Number.parseInt(raw, 36);
+  return Number.isSafeInteger(ms) && ms > 0 ? new Date(ms) : null;
 }

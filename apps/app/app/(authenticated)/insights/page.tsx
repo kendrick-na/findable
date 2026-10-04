@@ -1,3 +1,4 @@
+import { searchSamplingBlockedCopy } from "@repo/audit/search-sampling-version";
 import { auth } from "@repo/auth/server";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { ArrowRightIcon, FileTextIcon, Settings2Icon } from "lucide-react";
@@ -51,15 +52,28 @@ function PerformanceSignals({
       <span>최적화 준비도 {performance.optimizationReadiness}%</span>
       <span>· 색인 가능 {performance.indexEligibility ? "예" : "아니오"}</span>
       <span>· AI 인용 {performance.citationDetected ? "감지" : "미감지"}</span>
-      {performance.scoreDelta !== null ? (
-        <span>
-          · 재측정 변화 {performance.scoreDelta > 0 ? "+" : ""}
-          {performance.scoreDelta}점
-        </span>
-      ) : (
-        <span>· 발행 후 재측정 필요</span>
-      )}
+      <ScoreChangeSignal performance={performance} />
     </div>
+  );
+}
+
+function ScoreChangeSignal({
+  performance,
+}: {
+  performance: NonNullable<Awaited<ReturnType<typeof contentPerformance>>>;
+}) {
+  if (performance.scoreComparisonBlocked) {
+    // W1 정책: 네이버 검색 표본 방식이 바뀐 두 회차의 GEO 점수는 비교하지 않는다.
+    return <span>· 재측정 변화 {searchSamplingBlockedCopy(true)}</span>;
+  }
+  if (performance.scoreDelta === null) {
+    return <span>· 발행 후 재측정 필요</span>;
+  }
+  return (
+    <span>
+      · 재측정 변화 {performance.scoreDelta > 0 ? "+" : ""}
+      {performance.scoreDelta}점
+    </span>
   );
 }
 

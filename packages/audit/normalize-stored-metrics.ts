@@ -5,7 +5,10 @@ import type {
   EngineResponse,
 } from "@repo/ai/lib/engines/types";
 import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
-import { filterStoredTopRecommendations } from "./action-display-filter";
+import {
+  filterStoredGeoActions,
+  filterStoredTopRecommendations,
+} from "./action-display-filter";
 import {
   answerShareOfVoice,
   type BucketableAnswer,
@@ -482,6 +485,94 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
   return corrected as T;
 }
 
+/**
+ * Stored figures can differ from the current read-time projection even when no
+ * PDF was ever generated. Let every public surface disclose that correction.
+ * This is a disclosure signal, not proof that an old email or Blob was recalled.
+ */
+export function hasRecomputedAuditMetricsChanged(
+  original: unknown,
+  corrected: unknown
+): boolean {
+  if (!(isRecord(original) && isRecord(corrected))) {
+    return false;
+  }
+  const stored = original.metrics;
+  const current = corrected.metrics;
+  if (!(isRecord(stored) && isRecord(current))) {
+    return false;
+  }
+  const displayed = [
+    "sov",
+    "averageMentionPosition",
+    "enginesCovered",
+    "enginesWithMention",
+    "sentimentDistribution",
+    "stubCount",
+    "topCitedDomains",
+    "answerBuckets",
+    "verifiedCount",
+    "unverifiedCount",
+  ];
+  return (
+    displayed.some(
+      (key) => semanticJson(stored[key]) !== semanticJson(current[key])
+    ) || hasChangedAnswerDisplay(original, corrected)
+  );
+}
+
+/** Fields corrected on read that the one-page PDF renders per answer. */
+function hasChangedAnswerDisplay(
+  original: unknown,
+  corrected: unknown
+): boolean {
+  if (!(isRecord(original) && isRecord(corrected))) {
+    return false;
+  }
+  const savedRows = original.engineResponses;
+  const currentRows = corrected.engineResponses;
+  if (!(Array.isArray(savedRows) && Array.isArray(currentRows))) {
+    return false;
+  }
+  const projection = (rows: unknown[]) =>
+    rows.map((row) => {
+      if (!isRecord(row)) {
+        return row;
+      }
+      return {
+        brandMentioned: row.brandMentioned,
+        mentionQuality: row.mentionQuality,
+        mentionPosition: row.mentionPosition,
+        sov: row.sov,
+      };
+    });
+  return (
+    semanticJson(projection(savedRows)) !==
+    semanticJson(projection(currentRows))
+  );
+}
+
+/** Report when previously saved advice is suppressed or revised at display time. */
+export function hasFilteredStoredAuditAdvice(original: unknown): boolean {
+  if (!isRecord(original)) {
+    return false;
+  }
+  if (
+    Array.isArray(original.geoActions) &&
+    semanticJson(
+      filterStoredGeoActions(original.geoActions as Record<string, unknown>[])
+    ) !== semanticJson(original.geoActions)
+  ) {
+    return true;
+  }
+  return (
+    Array.isArray(original.topRecommendations) &&
+    semanticJson(
+      filterStoredTopRecommendations(original.topRecommendations)
+    ) !== semanticJson(original.topRecommendations)
+  );
+}
+
 /** A generated PDF is immutable; don't offer it when its displayed metrics are stale. */
 export function hasStaleAuditPdf(
   original: unknown,
@@ -493,16 +584,13 @@ export function hasStaleAuditPdf(
   if (!isPublishableAuditResult(corrected)) {
     return true;
   }
-  // The PDF template renders this legacy string projection verbatim. If the
-  // current display filter removes any stored recommendation, the immutable
-  // PDF may still contain the removed claim even when all metrics are equal.
-  if (Array.isArray(original.topRecommendations)) {
-    const filtered = filterStoredTopRecommendations(
-      original.topRecommendations
-    );
-    if (semanticJson(filtered) !== semanticJson(original.topRecommendations)) {
-      return true;
-    }
+  // The PDF renders topRecommendations derived from the saved actions. An
+  // action may be revised even when the string-only filter misses its claim.
+  if (hasFilteredStoredAuditAdvice(original)) {
+    return true;
+  }
+  if (hasChangedAnswerDisplay(original, corrected)) {
+    return true;
   }
   const oldMetrics = original.metrics;
   const newMetrics = corrected.metrics;

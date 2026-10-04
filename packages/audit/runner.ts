@@ -20,6 +20,7 @@ import { resolveBrandIdentity } from "@repo/ai/lib/brand-identity";
 import {
   aggregateAudit,
   auditCost,
+  NAVER_SEARCH_SAMPLING_VERSION,
   partitionCitedSources,
   queryAllEngines,
 } from "@repo/ai/lib/engines";
@@ -31,7 +32,10 @@ import {
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
-import { summarizeVerdicts } from "./action-rules";
+import {
+  hasCompleteNaverSearchBaseline,
+  summarizeVerdicts,
+} from "./action-rules";
 import { actionsToStrings, buildGeoActions } from "./actions";
 import {
   answerShareOfVoice,
@@ -808,6 +812,17 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       enginesMeasured: aiMeasurementCoverage.measured,
       enginesAttempted: aiMeasurementCoverage.attempted,
       enginesMentioned: new Set(metrics.enginesWithMention).size,
+      naverSearchMeasured: hasCompleteNaverSearchBaseline(
+        flat
+          .map((response, index) => ({
+            ...response,
+            promptIndex: tagged[index]?.promptIndex,
+          }))
+          .filter(isBrandRow),
+        prompts.flatMap((prompt, index) =>
+          prompt.lang === "ko" && prompt.kind !== "discovery" ? [index] : []
+        )
+      ),
       // 처방의 채널을 타깃 시장에 맞춘다(세션N-24). 점수의 분모를 정하는 값과 **같은 것**을 쓴다
       //   — 여기서 따로 추정하면 화면 안에서 시장 판정이 둘로 갈린다.
       marketScope,
@@ -885,7 +900,12 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         // 답변 4분류(+판정 보류) — 저장해 두면 화면·API 가 같은 판정을 읽는다.
         answerBucket: classifyAnswer(r),
         // 네이버 행은 이제 검색 결과 원문이다(2026-09-29). 이 표시가 없는 과거 행은 합성 요약.
-        ...(r.engineId === "naver" ? { naverSource: "search_results" } : {}),
+        ...(r.engineId === "naver"
+          ? {
+              naverSource: "search_results",
+              naverSamplingVersion: NAVER_SEARCH_SAMPLING_VERSION,
+            }
+          : {}),
         engineId: r.engineId,
         brandMentioned: r.brandMentioned,
         mentionPosition: r.mentionPosition,

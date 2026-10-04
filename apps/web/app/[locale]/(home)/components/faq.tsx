@@ -23,7 +23,7 @@ const FAQ_KO = [
   {
     question: "측정 결과는 무엇을 의미하나요?",
     answer:
-      "GEO 종합 점수는 인지·감성·인용 품질·경쟁 위치·답변 등장률을 합친 진단값입니다. AI 답변 등장률은 성공한 답변 중 브랜드가 실제로 한 번 이상 등장한 비율입니다. 서로 다른 지표이므로 같은 대표 점수처럼 비교하지 않습니다.",
+      "GEO 종합 점수는 인지·감성·인용 품질·경쟁 위치·AI·검색 합산 등장률을 합친 기존 진단값입니다. AI 답변 등장률은 브랜드 질문에서 판정이 끝난 AI 답변 중 등록 브랜드로 확인된 비율입니다. AI·검색 합산 등장률에는 네이버·다음 검색 노출도 포함됩니다. 서로 다른 지표이므로 같은 대표 점수처럼 비교하지 않습니다.",
   },
   {
     question: "측정 후 무엇을 할 수 있나요?",
@@ -51,7 +51,7 @@ const FAQ_EN = [
   {
     question: "What do the scores mean?",
     answer:
-      "The GEO composite combines recognition, sentiment, citation quality, competitive position, and answer appearance. Answer appearance is the percentage of successful answers that mention the brand at least once. They are separate metrics, not duplicate headline scores.",
+      "The GEO composite combines recognition, sentiment, citation quality, competitive position, and an AI and search appearance rate. The AI-only answer rate counts confirmed brand mentions among adjudicated brand-question AI answers. The stored AI and search appearance rate also includes Naver and Daum search exposure. These are different metrics, not duplicate headline scores.",
   },
   {
     question: "What can I do after a measurement?",

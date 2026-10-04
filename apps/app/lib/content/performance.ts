@@ -1,6 +1,10 @@
 import "server-only";
 
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
+import {
+  compareAcrossSearchSampling,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import { database } from "@repo/database";
 
 const HEADING_RE = /^##\s+/m;
@@ -53,10 +57,21 @@ export async function contentPerformance(input: {
   const usable = audits
     .flatMap((run) =>
       run.completedAt && isUsableRun(run.result)
-        ? [{ at: run.completedAt, score: scoreOf(run.result) }]
+        ? [
+            {
+              at: run.completedAt,
+              score: scoreOf(run.result),
+              searchSamplingVersion: searchSamplingVersionOf(run.result),
+            },
+          ]
         : []
     )
-    .filter((run): run is { at: Date; score: number } => run.score !== null);
+    .filter(
+      (
+        run
+      ): run is { at: Date; score: number; searchSamplingVersion: string } =>
+        run.score !== null
+    );
   const publishedAt = content.publishedAt;
   const baseline = publishedAt
     ? usable.filter((run) => run.at <= publishedAt).at(-1)
@@ -89,11 +104,21 @@ export async function contentPerformance(input: {
     LINK_RE.test(content.bodyMarkdown),
     content.qualityChecks[0]?.status !== "failed",
   ];
+  // W1 정책: GEO 점수에는 네이버 검색 노출이 섞인다 → 표본 방식이 다르면 비교하지 않는다.
+  const comparison =
+    baseline && current
+      ? compareAcrossSearchSampling(
+          { value: baseline.score, version: baseline.searchSamplingVersion },
+          { value: current.score, version: current.searchSamplingVersion }
+        )
+      : null;
   return {
     contentId: content.id,
-    baselineScore: baseline?.score ?? null,
+    baselineScore:
+      comparison?.comparable === false ? null : (baseline?.score ?? null),
     currentScore: current?.score ?? null,
-    scoreDelta: baseline && current ? current.score - baseline.score : null,
+    scoreComparisonBlocked: comparison?.comparable === false,
+    scoreDelta: comparison?.delta ?? null,
     citationDetected,
     indexEligibility: content.status === "published" && !content.noindex,
     sitemapIncluded: content.status === "published" && !content.noindex,

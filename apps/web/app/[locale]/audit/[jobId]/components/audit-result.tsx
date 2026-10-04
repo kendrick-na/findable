@@ -33,6 +33,7 @@ import {
   type PromptKind,
   summarizeAnswerBuckets,
 } from "@repo/audit/answer-buckets";
+import { countBrandAiRecognition } from "@repo/audit/brand-ai-recognition";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
 import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 import { engineDisplayName } from "@repo/audit/engine-labels";
@@ -55,6 +56,11 @@ import {
   PROVISIONAL_MAX_UNVERIFIED_SHARE,
 } from "@repo/audit/normalize-stored-metrics";
 import { detailedRankLabel } from "@repo/audit/rank-label";
+import {
+  searchSamplingBlockedCopy,
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { Button } from "@repo/design-system/components/ui/button";
 import {
@@ -86,11 +92,13 @@ import {
   QuestionEngineMatrix,
 } from "./answer-buckets";
 import { CompetitorBenchmark } from "./competitor-benchmark";
+import { AuditMetricBasisNotice } from "./metric-basis-notice";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
 import { ProvisionalEvidenceView } from "./provisional-evidence-view";
 import { TruthMirror } from "./truth-mirror";
 
 interface Props {
+  correctionNoticeShown?: boolean;
   jobId: string;
   locale: string;
 }
@@ -417,6 +425,7 @@ interface GeoActionView {
   where?: string;
 }
 interface JobResponse {
+  adviceBasisChanged?: boolean;
   completedAt: string | null;
   createdAt: string;
   crewCompletedAt: string | null;
@@ -435,15 +444,19 @@ interface JobResponse {
    * 첫 측정이면 전부 null·totalRuns=1 → 배지가 아예 렌더되지 않는다.
    */
   history?: {
+    comparisonBlockedReason?: string | null;
+    currentSearchSamplingVersion?: string | null;
     deltaPoints: number | null;
     previousAt: string | null;
     previousJobId: string | null;
     previousScore: number | null;
+    previousSearchSamplingVersion?: string | null;
     totalRuns: number;
   } | null;
   isWorkspaceAudit?: boolean;
   jobId: string;
   language: string;
+  metricBasisChanged?: boolean;
   pdfOutdated?: boolean;
   pdfUrl: string | null;
   result: JobResult | null;
@@ -549,6 +562,27 @@ function PreviousRunBadge({
   history: JobResponse["history"];
   isKo: boolean;
 }) {
+  if (history?.comparisonBlockedReason) {
+    // W1 정책: 검색 표본 방식이 바뀐 직전 회차와는 점수 차이를 내지 않는다.
+    return (
+      <div
+        className="flex flex-col items-center gap-1 text-center"
+        data-testid="previous-run-blocked"
+      >
+        <span className="font-medium text-xs text-zinc-400">
+          {searchSamplingBlockedCopy(isKo)}
+        </span>
+        <span className="text-[11px] text-zinc-500">
+          {[
+            searchSamplingLabel(history.previousSearchSamplingVersion, isKo),
+            searchSamplingLabel(history.currentSearchSamplingVersion, isKo),
+          ]
+            .filter(Boolean)
+            .join(" → ")}
+        </span>
+      </div>
+    );
+  }
   const delta = history?.deltaPoints;
   if (!history || delta === null || delta === undefined) {
     return null;
@@ -711,8 +745,8 @@ function fiveAxisScores(metrics: JobMetrics, isKo: boolean): FiveAxisView {
       score: sovAxis,
       max: 10,
       hint: isKo
-        ? "성공한 AI 답변 중 우리 브랜드가 등장한 비율"
-        : "Share of successful AI answers that mention your brand",
+        ? "성공한 AI·검색 응답 중 우리 브랜드가 등장한 비율"
+        : "Share of successful AI answers and search results that mention your brand",
     },
     {
       key: "competition",
@@ -744,7 +778,11 @@ function totalFiveAxis(view: FiveAxisView): number {
 // 메인 진입점
 // ──────────────────────────────────────────────────────────────────
 
-export function AuditResultView({ jobId, locale }: Props) {
+export function AuditResultView({
+  correctionNoticeShown = false,
+  jobId,
+  locale,
+}: Props) {
   const isKo = locale.startsWith("ko");
   const [job, setJob] = useState<JobResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -950,6 +988,15 @@ export function AuditResultView({ jobId, locale }: Props) {
 
   return (
     <>
+      {(job.metricBasisChanged || job.adviceBasisChanged) &&
+        !correctionNoticeShown && (
+          <AuditMetricBasisNotice
+            adviceBasisChanged={job.adviceBasisChanged}
+            locale={locale}
+            metricBasisChanged={job.metricBasisChanged}
+            provisional={auditPublicationIssue(displayResult) !== null}
+          />
+        )}
       <CompletedView job={job} locale={locale} result={displayResult} />
       {auditPublicationIssue(displayResult) === null && (
         <ViralBar job={job} locale={locale} />
@@ -2021,6 +2068,7 @@ function HeroSection({
       <AnswerBucketBoard
         discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
         isKo={isKo}
+        searchSamplingVersion={searchSamplingVersionOf(result)}
         summary={buckets}
       />
 
@@ -2030,7 +2078,7 @@ function HeroSection({
         </div>
         <p className="mt-1 break-keep text-xs text-zinc-500 leading-relaxed">
           {isKo
-            ? `인지·감정·노출 품질·AI 답변 등장률·경쟁 위치를 가중 합산한 기존 진단값이에요. 지난 측정과 비교할 수 있게 계산 방식은 그대로 두었어요(네이버·다음 검색 노출 포함 · 등장률 ${Math.round(result.metrics.sov)}%).`
+            ? `인지·감정·노출 품질·AI·검색 합산 등장률·경쟁 위치를 가중 합산한 기존 진단값이에요. 지난 측정과 비교할 수 있게 계산 방식은 그대로 두었어요(네이버·다음 검색 노출 포함 · 등장률 ${Math.round(result.metrics.sov)}%).`
             : `The existing weighted composite of recognition, sentiment, presence, answer appearance and competition. Kept unchanged so runs stay comparable (includes Naver/Daum search · appearance ${Math.round(result.metrics.sov)}%).`}
         </p>
       </div>
@@ -4607,14 +4655,14 @@ function ReportToDashboardGuide({
 function buildUpsellCopy({
   isKo,
   brandName,
-  sov,
+  aiConfirmedRate,
   mentionedCount,
   measuredCount,
   isSharedView,
 }: {
   isKo: boolean;
   brandName: string;
-  sov: number;
+  aiConfirmedRate: number | null;
   mentionedCount: number;
   measuredCount: number;
   isSharedView: boolean;
@@ -4636,7 +4684,7 @@ function buildUpsellCopy({
     if (isKo) {
       return {
         headline: `${brandName}의 AI 검색 성적표예요 — 우리 브랜드는 어떨까요?`,
-        bodyCopy: `이 진단은 ChatGPT·Perplexity·네이버 등 AI ${measuredCount}곳에 실제로 물어본 결과예요. 도메인만 넣으면 3분 만에 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`,
+        bodyCopy: `이 진단은 ChatGPT·Perplexity 등 AI ${measuredCount}곳에 실제로 물어본 결과예요. 도메인만 넣으면 3분 만에 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`,
       };
     }
     return {
@@ -4648,32 +4696,36 @@ function buildUpsellCopy({
   if (isKo) {
     if (isInvisible) {
       return {
-        headline: `지금 ${brandName}${objectParticle(brandName)} 아는 AI는 ${measuredCount}곳 중 0곳이에요`,
-        bodyCopy:
-          "지금은 기준점이 0이에요. 개선 작업을 한 뒤 다시 측정하면 올라갔는지 알 수 있어요. 무료 계정을 만들면 이 결과가 그 기준점으로 남아요.",
+        headline: "이번 측정에서 우리 브랜드로 확인된 AI 답변은 없어요",
+        bodyCopy: `AI ${measuredCount}곳의 브랜드 질문에서 확인된 답변은 0건이에요. 모른다는 답변·다른 회사를 설명한 답변·판정보류는 서로 달라요. 판정보류·동명 회사는 아래 원문에서 구분해 보고, 다음 측정에서 변화를 확인하세요.`,
       };
     }
-    const headline = `${brandName}의 AI 답변 등장률은 ${sov}%예요`;
+    const headline =
+      aiConfirmedRate === null
+        ? `${brandName}의 판정 가능한 AI 답변이 없어 등장률을 말할 수 없어요`
+        : `${brandName}의 AI 답변 등장률은 ${aiConfirmedRate}%예요 (판정 완료 답변 기준)`;
     return {
       headline,
       bodyCopy: isFullCoverage
-        ? `이번 측정에서 AI ${measuredCount}곳 모두가 우리를 알아봤어요. 이 상태가 유지되는지는 다음 측정과 비교하세요. 무료 계정에서는 회차별 결과를 관리할 수 있어요.`
-        : `이번 측정에서 AI ${measuredCount}곳 중 ${mentionedCount}곳이 우리를 알아봤어요. 무료 계정에서 회차별 변화를 비교할 수 있어요.`,
+        ? `측정한 AI ${measuredCount}곳 모두에서 이번 회차에 한 번 이상 우리 브랜드로 확인됐어요. 이 상태가 유지되는지는 다음 측정과 비교하세요. 무료 계정에서는 회차별 결과를 관리할 수 있어요.`
+        : `이번 측정에서 AI ${measuredCount}곳 중 ${mentionedCount}곳의 답변에서 한 번 이상 우리 브랜드로 확인됐어요. 무료 계정에서 회차별 변화를 비교할 수 있어요.`,
     };
   }
 
   if (isInvisible) {
     return {
-      headline: `0 of ${measuredCount} AI engines know ${brandName} today`,
-      bodyCopy:
-        "Your baseline is zero. You'll only know if the fixes worked by measuring again. A free account keeps this as that baseline.",
+      headline: `No AI answer in this run was confirmed as ${brandName}`,
+      bodyCopy: `Across ${measuredCount} measured AI engines, no brand-question answer was confirmed. Unknown, namesake and unverified answers need different follow-ups; inspect the answers below before remeasuring.`,
     };
   }
   return {
-    headline: `${brandName} appeared in ${sov}% of successful AI answers`,
+    headline:
+      aiConfirmedRate === null
+        ? `No adjudicated AI answers are available for ${brandName}`
+        : `${brandName} appeared in ${aiConfirmedRate}% of adjudicated AI answers`,
     bodyCopy: isFullCoverage
-      ? `All ${measuredCount} measured engines recognize your brand today. The question is whether that holds — and whether competitors are gaining. Only your next run can tell. A free account keeps today as your baseline.`
-      : `${mentionedCount} of ${measuredCount} engines recognize your brand today. Whether that number is growing only shows against your next run. A free account keeps this result on your dashboard.`,
+      ? `At least one brand-question answer from each of ${measuredCount} measured AI engines matched your brand in this run. Remeasure under the same conditions to see whether that holds.`
+      : `At least one brand-question answer from ${mentionedCount} of ${measuredCount} measured AI engines matched your brand in this run. Remeasure under the same conditions to check for change.`,
   };
 }
 
@@ -4722,20 +4774,19 @@ function UpsellCard({
   // Clerk sign-up 은 email_address_field 프리필을 쿼리로 받는다. 마스킹 값이 아니라
   // 실주소가 필요하므로 여기선 prefill 을 걸지 않고, 대신 "어떤 주소로" 가입해야 하는지
   // 화면에 명시한다(마스킹 노출 원칙 유지). 사용자가 직접 입력 → 오연결 위험 제거.
-  const sov = Math.round(result.metrics.sov);
-  const mentionedCount = new Set(result.metrics.enginesWithMention).size;
+  const aiConfirmedRate = summarizeAnswerBuckets(result.engineResponses).ai
+    .confirmedRate;
   // 🔴 세션N-28 — 여기도 분모를 직접 셌다(`enginesCovered` 고유화 = 오류·stub 안 뺌).
   //   이번 회차엔 우연히 같은 값이 나왔지만, 전부 실패한 엔진이 섞이면 업셀 카피가
   //   "AI 8곳 중 7곳"처럼 **재보지도 못한 엔진을 분모에 넣는다**.
   //   `isFullCoverage` 판정(= 전 엔진 인지)도 이 값으로 갈리므로 문장이 뒤집힌다.
-  const measuredCount = countMeasurementCoverage(
-    result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
-  ).measured;
+  const { measured: measuredCount, mentioned: mentionedCount } =
+    countBrandAiRecognition(result.engineResponses);
 
   const { headline, bodyCopy } = buildUpsellCopy({
     isKo,
     brandName: result.brandName,
-    sov,
+    aiConfirmedRate,
     mentionedCount,
     measuredCount,
     isSharedView,

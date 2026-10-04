@@ -10,11 +10,14 @@ import {
   buildPaymentId,
   cancelBillingKeySchedules,
   deleteBillingKey,
+  getPortOnePayment,
   isPortOneConfigured,
   nextBillingDate,
   type PayablePlan,
+  paymentIssuedAtFromPaymentId,
   payWithBillingKey,
   schedulePaymentWithBillingKey,
+  userIdFromPaymentId,
 } from "@repo/payments";
 import { ensureOrgExists } from "@/lib/db/ensure-org";
 
@@ -41,6 +44,114 @@ import { ensureOrgExists } from "@/lib/db/ensure-org";
 /** 정기결제 채널키(빌링키 발급 전용 채널). 단건 채널과 **다른 값**이다. */
 const BILLING_CHANNEL_KEY =
   process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_BILLING ?? "";
+
+/**
+ * 🔒 이중 청구 방지(2026-10-05 컨트롤타워 승인 정책 — fail-closed).
+ *
+ * - active·past_due 이거나 빌링키가 남아 있는 조직은 새 구독을 시작하지 않는다.
+ *   (Starter 중 Growth 결제 → 옛 예약이 고아가 되어 매달 두 번 청구되던 구멍)
+ * - 청구 직전에 `billingNextPaymentId = 이번 첫 결제 ID` 를 **조건부 updateMany** 로 선점한다.
+ *   동시에 들어온 두 번째 confirm 은 선점에 실패해 청구하지 않는다.
+ * - 청구 뒤 DB 저장이 실패하면 선점 표식이 남는다 → 재시도는 새 ID로 다시 청구하지 않고
+ *   "복구 필요"로 멈춘다. 표식은 PortOne 조회로 미청구(FAILED·CANCELLED)가 확인될 때만 푼다.
+ *   (새 테이블·마이그레이션 없이 기존 컬럼만 쓴다. 선점 중에도 빌링키가 없으므로 결제 웹훅은
+ *   이 첫 결제를 갱신 회차로 보지 않는다.)
+ */
+const SUBSCRIPTION_BLOCKING_STATUSES = new Set<string>(["active", "past_due"]);
+/** 이보다 최근에 선점된 첫 결제는 아직 진행 중일 수 있어 PortOne 조회도 하지 않는다. */
+const PENDING_CHARGE_SETTLE_MS = 10 * 60 * 1000;
+/** PortOne 이 "청구되지 않았다"고 확정한 상태 — 이때만 선점 표식을 푼다. */
+const UNCHARGED_PAYMENT_STATUSES = new Set<string>(["FAILED", "CANCELLED"]);
+
+const ALREADY_SUBSCRIBED_ERROR =
+  "이미 정기결제 중인 조직입니다. 플랜 변경은 기존 구독을 해지한 뒤 다시 가입하거나 상담으로 문의해 주세요.";
+const IN_PROGRESS_ERROR =
+  "이전 결제를 처리 중입니다. 잠시 후 결제 내역을 확인해 주세요.";
+const NEEDS_RECOVERY_ERROR =
+  "결제는 완료됐지만 구독 정보를 저장하지 못했습니다. 다시 결제하지 마시고 상담으로 문의해 주시면 복구해 드릴게요.";
+
+type PendingChargeState = "released" | "in_progress" | "paid";
+
+/**
+ * 선점된 첫 결제가 실제로 청구되지 않았으면 표식을 풀고 "released".
+ * 조회 실패·진행 중 상태는 모두 표식 유지(fail-closed).
+ */
+async function settlePendingCharge(
+  orgId: string,
+  pendingPaymentId: string,
+  options: { skipAgeCheck?: boolean } = {}
+): Promise<PendingChargeState> {
+  const issuedAt = paymentIssuedAtFromPaymentId(pendingPaymentId);
+  if (
+    !options.skipAgeCheck &&
+    issuedAt &&
+    Date.now() - issuedAt.getTime() < PENDING_CHARGE_SETTLE_MS
+  ) {
+    return "in_progress";
+  }
+  let status: string;
+  try {
+    status = (await getPortOnePayment(pendingPaymentId)).status;
+  } catch (error) {
+    log.error("billing.subscribe.pending_lookup_failed", {
+      orgId,
+      paymentId: pendingPaymentId,
+      error: parseError(error),
+    });
+    return "in_progress";
+  }
+  if (UNCHARGED_PAYMENT_STATUSES.has(status)) {
+    await database.organization.updateMany({
+      where: { id: orgId, billingNextPaymentId: pendingPaymentId },
+      data: { billingNextPaymentId: null },
+    });
+    return "released";
+  }
+  if (status === "PAID" || status === "PARTIAL_CANCELLED") {
+    log.error("billing.subscribe.pending_paid_unrecorded", {
+      orgId,
+      paymentId: pendingPaymentId,
+    });
+    return "paid";
+  }
+  return "in_progress";
+}
+
+type EntryCheck = { ok: true } | { ok: false; error: string };
+
+/** 이 조직이 지금 새 구독(첫 청구)을 시작해도 되는가. */
+async function checkSubscriptionEntry(orgId: string): Promise<EntryCheck> {
+  const org = await database.organization.findUnique({
+    where: { id: orgId },
+    select: {
+      billingStatus: true,
+      billingCustomerId: true,
+      billingNextPaymentId: true,
+    },
+  });
+  if (!org) {
+    return {
+      ok: false,
+      error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    };
+  }
+  if (
+    SUBSCRIPTION_BLOCKING_STATUSES.has(org.billingStatus) ||
+    org.billingCustomerId
+  ) {
+    return { ok: false, error: ALREADY_SUBSCRIBED_ERROR };
+  }
+  if (org.billingNextPaymentId) {
+    const state = await settlePendingCharge(orgId, org.billingNextPaymentId);
+    if (state === "paid") {
+      return { ok: false, error: NEEDS_RECOVERY_ERROR };
+    }
+    if (state === "in_progress") {
+      return { ok: false, error: IN_PROGRESS_ERROR };
+    }
+  }
+  return { ok: true };
+}
 
 export interface SubscribeIntent {
   /** 첫 회 청구 금액(VAT 포함). 화면 고지와 같은 값이어야 한다. */
@@ -79,6 +190,18 @@ export const createSubscribeIntent = async (
     return {
       error: "정기결제가 아직 설정되지 않았습니다. 상담으로 문의해 주세요.",
     };
+  }
+
+  // 이미 구독 중이거나 이전 첫 결제가 미정리인 조직엔 빌링키 발급창을 열지 않는다.
+  const ensuredOrgId = await ensureOrgExists();
+  if (!ensuredOrgId) {
+    return {
+      error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    };
+  }
+  const entry = await checkSubscriptionEntry(ensuredOrgId);
+  if (!entry.ok) {
+    return { error: entry.error };
   }
 
   const user = await currentUser();
@@ -135,12 +258,34 @@ export const confirmSubscription = async (
     customerEmail ||
     "Findable 고객";
 
-  const paymentId = buildPaymentId(plan, userId);
   // 결제 전에 구독 소유 조직을 보장한다. 돈은 받았는데 빌링키·해지·다음 예약을 기록할
   // 조직이 없는 상태를 만들면 안 된다.
   const ensuredOrgId = await ensureOrgExists();
   if (!ensuredOrgId) {
-    return { error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    return {
+      error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    };
+  }
+
+  const entry = await checkSubscriptionEntry(ensuredOrgId);
+  if (!entry.ok) {
+    log.warn("billing.subscribe.entry_refused", { userId, plan });
+    return { error: entry.error };
+  }
+
+  // 🔒 청구 전 선점 — 같은 조직의 동시·중복 confirm 중 하나만 청구한다.
+  const paymentId = buildPaymentId(plan, userId);
+  const claimed = await database.organization.updateMany({
+    where: {
+      id: ensuredOrgId,
+      billingCustomerId: null,
+      billingNextPaymentId: null,
+    },
+    data: { billingNextPaymentId: paymentId },
+  });
+  if (claimed.count !== 1) {
+    log.warn("billing.subscribe.claim_lost", { userId, plan });
+    return { error: IN_PROGRESS_ERROR };
   }
 
   try {
@@ -154,7 +299,27 @@ export const confirmSubscription = async (
       customerName,
       customerEmail,
     });
+  } catch (error) {
+    log.error("billing.subscribe.failed", {
+      userId,
+      paymentId,
+      error: parseError(error),
+    });
+    // 청구 여부를 PortOne 에 확인한다. 미청구가 확정될 때만 선점을 풀어 재시도를 허용한다.
+    const state = await settlePendingCharge(ensuredOrgId, paymentId, {
+      skipAgeCheck: true,
+    });
+    if (state === "released") {
+      return {
+        error: "정기결제 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+      };
+    }
+    return {
+      error: state === "paid" ? NEEDS_RECOVERY_ERROR : IN_PROGRESS_ERROR,
+    };
+  }
 
+  try {
     // 결제 시각을 기준으로 다음 결제일과 ID를 정한다. 같은 예약을 재시도해도 ID가 변하지 않아야
     // PortOne의 중복예약 방지와 웹훅 재시도가 안전하다.
     const paidAt = new Date();
@@ -164,10 +329,9 @@ export const confirmSubscription = async (
     // 빌링키를 저장해 둬야 나중에 해지(예약 취소 + 삭제)를 할 수 있다.
     // ⚠️ Clerk 웹훅 지연으로 org row 가 아직 없을 수 있다 → `ensureOrgExists` 로 먼저 보장한다.
     //   (`relationMode="prisma"` 라 없는 org 에 update 하면 예외가 난다.)
-    // ⚠️ 저장 실패가 **결제 성공을 뒤집지 않게** catch 로 가둔다 — 돈은 이미 나갔다.
-    //   대신 error 로그를 남겨 수동 복구가 가능하게 한다(빌링키가 로그에 남으면 안 되므로 키는 제외).
-    await database.organization.update({
-      where: { id: ensuredOrgId },
+    // 선점 표식(billingNextPaymentId = 이번 결제 ID)이 그대로일 때만 확정한다.
+    const recorded = await database.organization.updateMany({
+      where: { id: ensuredOrgId, billingNextPaymentId: paymentId },
       data: {
         billingCustomerId: billingKey,
         billingProvider: "portone",
@@ -177,6 +341,9 @@ export const confirmSubscription = async (
         billingNextPaymentAt: nextPaymentAt,
       },
     });
+    if (recorded.count !== 1) {
+      throw new Error("subscription claim was not held at record time");
+    }
 
     let renewalScheduled = false;
     try {
@@ -223,14 +390,14 @@ export const confirmSubscription = async (
 
     return { ok: true, plan, granted, renewalScheduled };
   } catch (error) {
-    log.error("billing.subscribe.failed", {
+    // ⚠️ 돈은 이미 나갔다. 선점 표식을 남겨 재시도가 새 ID로 다시 청구하지 못하게 하고,
+    //   결제 웹훅이 plan 을 부여한다. 조직 기록은 운영자가 이 로그로 복구한다(키는 로그 제외).
+    log.error("billing.subscribe.post_charge_record_failed", {
       userId,
       paymentId,
       error: parseError(error),
     });
-    return {
-      error: "정기결제 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.",
-    };
+    return { error: NEEDS_RECOVERY_ERROR };
   }
 };
 
@@ -243,7 +410,7 @@ export type UnsubscribeResult = { ok: true } | { error: string };
  *   빌링키만 지우고 예약을 남기면 포트원 리커버리가 계속 청구를 시도한다(무한 과금).
  */
 export const unsubscribe = async (): Promise<UnsubscribeResult> => {
-  const { userId, orgId } = await auth();
+  const { userId, orgId, has } = await auth();
   if (!userId) {
     return { error: "로그인 후 이용해 주세요." };
   }
@@ -253,12 +420,29 @@ export const unsubscribe = async (): Promise<UnsubscribeResult> => {
 
   const org = await database.organization.findUnique({
     where: { id: orgId },
-    select: { billingCustomerId: true, billingProvider: true },
+    select: {
+      billingCustomerId: true,
+      billingLastPaymentId: true,
+      billingProvider: true,
+    },
   });
 
   const billingKey = org?.billingCustomerId;
   if (!(billingKey && org?.billingProvider === "portone")) {
     return { error: "해지할 정기결제가 없습니다." };
+  }
+
+  // 🔒 해지 권한(2026-10-05 컨트롤타워 승인): 결제한 멤버 본인 또는 조직 관리자만.
+  //   결제자를 알 수 없는(레거시) 구독은 관리자만 해지한다(fail-closed).
+  const payerId = org.billingLastPaymentId
+    ? userIdFromPaymentId(org.billingLastPaymentId)
+    : null;
+  const isOrgAdmin = has?.({ role: "org:admin" }) ?? false;
+  if (!(payerId === userId || isOrgAdmin)) {
+    log.warn("billing.unsubscribe.forbidden", { userId, orgId });
+    return {
+      error: "결제한 멤버 또는 조직 관리자만 구독을 해지할 수 있습니다.",
+    };
   }
 
   try {
@@ -273,14 +457,15 @@ export const unsubscribe = async (): Promise<UnsubscribeResult> => {
         billingCustomerId: null,
         billingProvider: null,
         billingStatus: "canceled",
-        billingLastPaymentId: null,
+        // 예약은 위에서 취소됐다. 웹훅이 이 회차를 갱신으로 보지 않게 ID만 지운다.
         billingNextPaymentId: null,
-        billingNextPaymentAt: null,
+        // billingLastPaymentId·billingNextPaymentAt 은 남긴다 = 이미 결제한 기간의
+        // 출처와 끝(paid-through). auto-refresh cron 의 expireCancelledSubscriptions 가
+        // 그 시각이 지나면 Clerk 결제 권한을 회수하고 billingStatus 를 expired 로 닫는다.
       },
     });
 
-    // plan 은 즉시 내리지 않는다 — 이미 결제한 이용 기간이 남아 있기 때문.
-    // (기간 만료 처리는 갱신 스케줄러 도입 시 함께. 지금은 상태만 canceled.)
+    // plan 은 즉시 내리지 않는다 — 이미 결제한 이용 기간이 남아 있기 때문(유예 없음).
     log.info("billing.unsubscribe.done", { userId, orgId });
     return { ok: true };
   } catch (error) {

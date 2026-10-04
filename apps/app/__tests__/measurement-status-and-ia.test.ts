@@ -9,7 +9,7 @@ describe("측정 상태·결과 IA 계약", () => {
     const status = read(
       "app/(authenticated)/components/dashboard-system-status.tsx"
     );
-    expect(status).toContain('connections.length === 0');
+    expect(status).toContain("connections.length === 0");
     expect(status).toContain('"아직 연결 없음"');
   });
 
@@ -82,9 +82,9 @@ describe("측정 상태·결과 IA 계약", () => {
   it("내부 측정 상세는 종합 점수와 답변 등장률을 서로 다른 지표로 정의한다", () => {
     const detail = read("app/(authenticated)/history/[jobId]/page.tsx");
     expect(detail).toContain("GEO 종합 진단 점수");
-    expect(detail).toContain("AI 답변 등장률");
+    expect(detail).toContain("AI·검색 등장률");
     expect(detail).toContain("5축 진단");
-    expect(detail).toContain("성공한 답변");
+    expect(detail).toContain("성공한 AI·검색 응답");
     expect(detail).toContain("successfulResponseCount(metrics)");
     expect(detail).toContain("countMeasurementCoverage");
     expect(detail).toContain('value.engineId !== "naver-briefing"');

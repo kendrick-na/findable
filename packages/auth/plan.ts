@@ -133,6 +133,51 @@ export function resolveEffectivePlan(input: {
   );
 }
 
+/**
+ * 결제로 부여된 권한이 현재 살아 있는가 — Clerk privateMetadata 의 현재 결제 출처.
+ * 유예 만료·환불은 이 값을 비우므로(plan-grant) 같은 판정을 화면과 cron 이 공유한다.
+ */
+export function hasCurrentPaymentGrant(
+  privateMetadata: Record<string, unknown> | null | undefined
+): boolean {
+  return typeof privateMetadata?.findablePaymentId === "string";
+}
+
+/** 조직 구성원 한 명의 사용자별 권한 신호(resolveEffectivePlan 입력과 같은 뜻). */
+export interface MemberPlanSignal {
+  clerkPlan: Plan;
+  hasCurrentPaymentGrant: boolean;
+  hasInviteRedemption: boolean;
+  isApprovedPartner: boolean;
+}
+
+/**
+ * 세션 없는 서버 작업(자동 재측정 cron)용 조직 플랜.
+ *
+ * 화면 게이트는 "보고 있는 구성원" 기준으로 resolveEffectivePlan 을 부른다. cron 은 보는
+ * 사람이 없으므로 구성원 각각을 같은 함수로 판정한 뒤 가장 높은 값을 쓴다 — 즉 어떤
+ * 구성원이 대시보드에서 유료로 보이면 그 조직은 유료다. 구성원 정보가 없으면 조직 DB 권한만.
+ */
+export function resolveOrganizationPlan(input: {
+  members: readonly MemberPlanSignal[];
+  now?: Date;
+  organizationPlan: Plan;
+  organizationPlanExpiresAt: Date | null;
+}): Plan {
+  const base = {
+    organizationPlan: input.organizationPlan,
+    organizationPlanExpiresAt: input.organizationPlanExpiresAt,
+    now: input.now,
+  };
+  return input.members.reduce<Plan>(
+    (best, member) => {
+      const plan = resolveEffectivePlan({ ...base, ...member });
+      return hasPlan(plan, best) ? plan : best;
+    },
+    resolveEffectivePlan({ ...base, clerkPlan: "free" })
+  );
+}
+
 // ──────────────────────────────────────────────────
 // 플랜 능력치(게이팅 단일 진실) — 2026-07-30 백로그 2·7.
 //

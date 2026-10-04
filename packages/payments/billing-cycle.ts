@@ -60,3 +60,25 @@ export function addMonthsClamped(from: Date, months = 1): Date {
 export function nextBillingDate(from: Date): Date {
   return addMonthsClamped(from, 1);
 }
+
+/**
+ * 갱신 결제 실패 후 유료 권한을 유지하는 유예 기간(일). 2026-10-05 컨트롤타워 결정.
+ *
+ * ⚠️ 이 값이 유일한 출처다. 웹훅(실패 기록)과 cron(유예 만료 회수)이 모두 여기서 읽는다.
+ */
+export const RENEWAL_FAILURE_GRACE_DAYS = 7;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 실패한 갱신 회차의 청구 예정 시각(dueAt)으로부터 유예가 끝나는 시각. */
+export function renewalGraceEndsAt(dueAt: Date): Date {
+  return new Date(dueAt.getTime() + RENEWAL_FAILURE_GRACE_DAYS * DAY_MS);
+}
+
+/**
+ * `now` 기준으로 유예가 끝난 회차의 청구 예정 시각 상한.
+ * dueAt <= 이 값이면 유예가 끝났다(cron 조회 조건용).
+ */
+export function renewalGraceCutoff(now: Date): Date {
+  return new Date(now.getTime() - RENEWAL_FAILURE_GRACE_DAYS * DAY_MS);
+}

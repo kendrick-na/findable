@@ -178,8 +178,7 @@ async function waitForText(container: HTMLElement, text: string) {
 }
 
 afterEach(async () => {
-  // biome-ignore lint/suspicious/useAwait: async act() flushes React effects before assertions
-  await act(async () => {
+  await act(() => {
     root?.unmount();
   });
   root = undefined;
@@ -197,6 +196,148 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
             status: 200,
           })
       )
+    );
+  });
+
+  it("shows the correction disclosure if SSR lookup missed it, without duplicating SSR", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ ...response, metricBasisChanged: true })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "검증·집계 기준을 다시 적용");
+    expect(
+      container.querySelectorAll("[data-testid='audit-metric-basis-notice']")
+    ).toHaveLength(1);
+
+    await act(() => {
+      root?.render(
+        <AuditResultView
+          correctionNoticeShown
+          jobId="fixture-job"
+          locale="ko"
+        />
+      );
+    });
+    expect(
+      container.querySelectorAll("[data-testid='audit-metric-basis-notice']")
+    ).toHaveLength(0);
+  });
+
+  it("renders 비교 불가 instead of a score delta when the Naver search sample changed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ...response,
+          history: {
+            comparisonBlockedReason: "search_sampling_changed",
+            currentSearchSamplingVersion: "interleave-v1",
+            deltaPoints: null,
+            previousAt: "2026-10-01T00:00:00.000Z",
+            previousJobId: "older-job",
+            previousScore: null,
+            previousSearchSamplingVersion: "legacy",
+            totalRuns: 2,
+          },
+        })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "비교 불가(측정 방식 변경)");
+    const badge = container.querySelector(
+      "[data-testid='previous-run-blocked']"
+    );
+    expect(badge?.textContent).toContain("검색 표본 v1");
+    expect(badge?.textContent).toContain("검색 표본 v2");
+    expect(container.textContent).not.toContain("지난번보다");
+    expect(container.textContent).not.toContain("지난번과 같아요");
+  });
+
+  it("shows an advice-only correction if SSR lookup missed it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ ...response, adviceBasisChanged: true })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "저장된 일부 실행 권고");
+    expect(container.textContent).not.toContain("수치가 재계산");
+    expect(
+      container.querySelectorAll("[data-testid='audit-metric-basis-notice']")
+    ).toHaveLength(1);
+  });
+
+  it("네이버 검색 노출을 무료 업셀의 AI 엔진 수에 넣지 않는다", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
+    expect(container.textContent).toContain(
+      "측정한 AI 1곳 모두에서 이번 회차에 한 번 이상 우리 브랜드로 확인됐어요"
+    );
+    expect(container.textContent).not.toContain("AI 2곳 중 1곳");
+    // Stored GEO SoV=50 mixes search; all ten AI answers in this fixture are confirmed.
+    expect(container.textContent).toContain("AI 답변 등장률은 100%예요");
+    expect(container.textContent).not.toContain("AI 답변 등장률은 50%예요");
+    expect(container.textContent).toContain("성공한 AI·검색 응답 중");
+    expect(container.textContent).not.toContain(
+      "성공한 AI 답변 중 우리 브랜드가 등장한 비율"
+    );
+  });
+
+  it("네이버 검색만 발견되어도 AI가 브랜드를 안다고 주장하지 않는다", async () => {
+    const searchOnly = structuredClone(response);
+    for (const row of searchOnly.result.engineResponses) {
+      row.brandMentioned = row.engineId === "naver";
+    }
+    searchOnly.result.metrics.enginesWithMention = ["naver"];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(searchOnly), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
+    expect(container.textContent).toContain(
+      "이번 측정에서 우리 브랜드로 확인된 AI 답변은 없어요"
+    );
+    expect(container.textContent).toContain(
+      "판정보류·동명 회사는 아래 원문에서 구분"
+    );
+    expect(container.textContent).not.toContain(
+      "AI 1곳 모두가 우리를 알아봤어요"
     );
   });
 
@@ -221,8 +362,7 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    // biome-ignore lint/suspicious/useAwait: async act() flushes React effects before assertions
-    await act(async () => {
+    await act(() => {
       root?.render(<AuditResultView jobId="fixture-job" locale={locale} />);
     });
     await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");

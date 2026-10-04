@@ -18,6 +18,12 @@
  *   저장 규칙을 바꾸면 캐시 동작이 함께 바뀐다(범위 밖 부작용).
  */
 
+import {
+  compareAcrossSearchSampling,
+  normalizeSearchSamplingVersion,
+  type SearchSamplingBlockReason,
+} from "./search-sampling-version";
+
 const WWW_PREFIX_RE = /^www\./;
 const PROTOCOL_PREFIX_RE = /^https?:\/\//;
 const TRAILING_SLASH_RE = /\/$/;
@@ -49,6 +55,11 @@ export interface HistoryCandidate {
   /** geo 총점. 계산은 호출부가 geoAxisScores 로 이미 끝낸 값을 넘긴다. */
   score: number | null;
   /**
+   * 네이버 검색 표본 방식(`searchSamplingVersionOf(result)`). GEO 총점에 검색 노출이
+   * 섞이므로 방식이 다르면 점수 차이를 내지 않는다. 없으면 legacy 로 본다.
+   */
+  searchSamplingVersion?: string | null;
+  /**
    * 이 측정이 **비교 대상으로 쓸 만한가**. false 면 직전 후보에서 제외한다.
    *
    * 🔴 실측 근거(2026-08-07): `nike.com` 의 2026-07-29 job 은 `status=completed` 인데
@@ -60,24 +71,33 @@ export interface HistoryCandidate {
 }
 
 export interface AuditHistoryComparison {
+  /** 검색 표본 방식이 달라 비교를 막았으면 그 이유. 막지 않았으면 null. */
+  comparisonBlockedReason: SearchSamplingBlockReason | null;
+  /** 현재 회차의 검색 표본 방식(라벨용). 현재 회차를 못 찾으면 null. */
+  currentSearchSamplingVersion: string | null;
   /** 직전 대비 점수 변화(양수=개선). 이전이 없으면 null. */
   deltaPoints: number | null;
   /** 직전 측정 시각(ISO). 없으면 null. */
   previousAt: string | null;
   /** 직전 측정의 jobId — "그때 결과 보기" 링크용. */
   previousJobId: string | null;
-  /** 직전 측정 점수. */
+  /** 직전 측정 점수. 검색 표본 방식이 달라 비교를 막았으면 null. */
   previousScore: number | null;
+  /** 직전 회차의 검색 표본 방식. 직전이 없으면 null. */
+  previousSearchSamplingVersion: string | null;
   /** 이 브랜드를 지금까지 몇 번 쟀나(현재 포함). 1이면 첫 측정. */
   totalRuns: number;
 }
 
 /** 이전 측정이 없을 때의 기본값(첫 진단). */
 export const EMPTY_HISTORY: AuditHistoryComparison = {
+  comparisonBlockedReason: null,
+  currentSearchSamplingVersion: null,
   deltaPoints: null,
   previousAt: null,
   previousJobId: null,
   previousScore: null,
+  previousSearchSamplingVersion: null,
   totalRuns: 1,
 };
 
@@ -117,22 +137,35 @@ export function buildAuditHistory(
     )
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
+  const currentSearchSamplingVersion = current
+    ? normalizeSearchSamplingVersion(current.searchSamplingVersion)
+    : null;
   const previous = earlier.at(0);
   if (!previous) {
-    return { ...EMPTY_HISTORY, totalRuns: sameBrand.length || 1 };
+    return {
+      ...EMPTY_HISTORY,
+      currentSearchSamplingVersion,
+      totalRuns: sameBrand.length || 1,
+    };
   }
 
-  const currentScore = current?.score ?? null;
-  const deltaPoints =
-    currentScore !== null && previous.score !== null
-      ? currentScore - previous.score
-      : null;
+  const previousSearchSamplingVersion = normalizeSearchSamplingVersion(
+    previous.searchSamplingVersion
+  );
+  // 🔴 W1 정책: 네이버 검색 표본 방식이 다른 두 회차는 비교하지 않는다(공통 가드).
+  const comparison = compareAcrossSearchSampling(
+    { value: previous.score, version: previousSearchSamplingVersion },
+    { value: current?.score ?? null, version: currentSearchSamplingVersion }
+  );
 
   return {
-    deltaPoints,
+    comparisonBlockedReason: comparison.blockedReason,
+    currentSearchSamplingVersion,
+    deltaPoints: comparison.delta,
     previousAt: previous.createdAt.toISOString(),
     previousJobId: previous.id,
-    previousScore: previous.score,
+    previousScore: comparison.comparable ? previous.score : null,
+    previousSearchSamplingVersion,
     totalRuns: sameBrand.length,
   };
 }

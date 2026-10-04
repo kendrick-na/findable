@@ -28,6 +28,112 @@ vi.mock("../app/api/audit/_lib/owner", () => ({
 
 import { GET } from "../app/api/audit/[jobId]/route";
 
+it("discloses a changed stored metric basis even when no PDF exists", async () => {
+  const jobId = "55555555-5555-4555-8555-555555555555";
+  mocks.findUnique.mockResolvedValue({
+    id: jobId,
+    email: "synthetic@example.test",
+    organizationId: null,
+    status: "completed",
+    domain: "example.test",
+    language: "ko",
+    pdfUrl: null,
+    result: {
+      brandName: "Synthetic",
+      domain: "example.test",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100, enginesCovered: ["chatgpt", "naver"] },
+      engineResponses: [
+        ...Array.from({ length: 10 }, () => ({
+          engineId: "chatgpt",
+          promptKind: "brand",
+          brandMentioned: false,
+          mentionQuality: "absent",
+          isStub: false,
+          errorMessage: null,
+        })),
+        {
+          engineId: "naver",
+          promptKind: "discovery",
+          brandMentioned: true,
+          mentionQuality: "confirmed",
+          naverSource: "search_results",
+          isStub: false,
+          errorMessage: null,
+        },
+      ],
+    },
+    crewStatus: "not_requested",
+    crewResult: null,
+    createdAt: new Date("2026-10-03T00:00:00Z"),
+    completedAt: new Date("2026-10-03T00:01:00Z"),
+    errorMessage: null,
+  });
+  mocks.findMany.mockResolvedValue([]);
+
+  const response = await GET(
+    new Request(`https://findable.example/api/audit/${jobId}`) as never,
+    { params: Promise.resolve({ jobId }) }
+  );
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body.pdfOutdated).toBe(false);
+  expect(body.metricBasisChanged).toBe(true);
+  expect(body.result.metrics.sov).not.toBe(100);
+});
+
+it("hides a versioned PDF whose answer-level SoV is stale despite equal aggregate metrics", async () => {
+  const jobId = "66666666-6666-4666-8666-666666666666";
+  const corrected = withRecomputedAuditMetrics({
+    brandName: "Synthetic",
+    domain: "example.test",
+    mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    metrics: { sov: 0 },
+    engineResponses: Array.from({ length: 10 }, () => ({
+      engineId: "chatgpt",
+      promptKind: "brand",
+      brandMentioned: false,
+      mentionQuality: "absent",
+      sov: 0,
+      isStub: false,
+      errorMessage: null,
+    })),
+  });
+  mocks.findUnique.mockResolvedValue({
+    id: jobId,
+    email: "synthetic@example.test",
+    organizationId: null,
+    status: "completed",
+    domain: "example.test",
+    language: "ko",
+    pdfUrl: `https://blob.test/audits/audit-v3-${jobId}-1.pdf`,
+    result: {
+      ...corrected,
+      engineResponses: corrected.engineResponses.map((row, index) =>
+        index === 0 ? { ...row, sov: 1 } : row
+      ),
+    },
+    crewStatus: "not_requested",
+    crewResult: null,
+    createdAt: new Date("2026-10-03T00:00:00Z"),
+    completedAt: new Date("2026-10-03T00:01:00Z"),
+    errorMessage: null,
+  });
+  mocks.findMany.mockResolvedValue([]);
+
+  const response = await GET(
+    new Request(`https://findable.example/api/audit/${jobId}`) as never,
+    { params: Promise.resolve({ jobId }) }
+  );
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body.pdfOutdated).toBe(true);
+  expect(body.pdfUrl).toBeNull();
+  expect(body.metricBasisChanged).toBe(true);
+});
+
 it("withholds an old PDF when only its stored recommendations are now filtered", async () => {
   const jobId = "44444444-4444-4444-8444-444444444444";
   const result = withRecomputedAuditMetrics({
@@ -62,7 +168,7 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
     status: "completed",
     domain: "example.test",
     language: "ko",
-    pdfUrl: "https://example.test/old-report.pdf",
+    pdfUrl: "https://example.test/audits/audit-v3-advice-only.pdf",
     result,
     crewStatus: "not_requested",
     crewResult: null,
@@ -81,6 +187,8 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
   expect(response.status).toBe(200);
   expect(body.pdfUrl).toBeNull();
   expect(body.pdfOutdated).toBe(true);
+  expect(body.metricBasisChanged).toBe(false);
+  expect(body.adviceBasisChanged).toBe(true);
   expect(body.result.geoActions).toEqual([]);
   expect(body.result.topRecommendations).toEqual([]);
   expect(body.result.engineResponses[0].excerpt).toBe("visible answer");
@@ -89,6 +197,58 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
   expect(body.result.engineResponses[0]).not.toHaveProperty(
     "trackingInputCaptured"
   );
+});
+
+it("withholds a v3 PDF when a stored action is revised but its string recommendation survives", async () => {
+  const jobId = "77777777-7777-4777-8777-777777777777";
+  const how =
+    "매주(주 1회) 올리면 네이버 AI 브리핑이나 HyperCLOVA X 가 우리를 인용·언급한다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.";
+  const result = withRecomputedAuditMetrics({
+    brandName: "Synthetic",
+    domain: "example.test",
+    mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    metrics: { sov: 100 },
+    engineResponses: Array.from({ length: 10 }, () => ({
+      engineId: "chatgpt",
+      promptKind: "brand",
+      brandMentioned: true,
+      mentionQuality: "confirmed",
+      isStub: false,
+      errorMessage: null,
+    })),
+    geoActions: [{ kind: "naver_blog", title: "네이버 글쓰기", how }],
+    topRecommendations: [`네이버 글쓰기 — ${how}`],
+  });
+  mocks.findUnique.mockResolvedValue({
+    id: jobId,
+    email: "synthetic@example.test",
+    organizationId: null,
+    status: "completed",
+    domain: "example.test",
+    language: "ko",
+    pdfUrl: `https://blob.test/audits/audit-v3-${jobId}-1.pdf`,
+    result,
+    crewStatus: "not_requested",
+    crewResult: null,
+    createdAt: new Date("2026-10-03T00:00:00Z"),
+    completedAt: new Date("2026-10-03T00:01:00Z"),
+    errorMessage: null,
+  });
+  mocks.findMany.mockResolvedValue([]);
+
+  const response = await GET(
+    new Request(`https://findable.example/api/audit/${jobId}`) as never,
+    { params: Promise.resolve({ jobId }) }
+  );
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body.metricBasisChanged).toBe(false);
+  expect(body.adviceBasisChanged).toBe(true);
+  expect(body.pdfOutdated).toBe(true);
+  expect(body.pdfUrl).toBeNull();
+  expect(body.result.topRecommendations).toEqual([`네이버 글쓰기 — ${how}`]);
+  expect(body.result.geoActions[0].how).not.toContain("HyperCLOVA X");
 });
 
 it("withholds PDF and crew output on the real poll route while retaining search evidence", async () => {
@@ -172,6 +332,12 @@ it("does not expose a blended provisional score for eight brand AI answers plus 
   const searchRows = Array.from({ length: 7 }, (_, index) =>
     ["naver", "daum"].map((engineId) => ({
       engineId,
+      ...(engineId === "naver"
+        ? {
+            naverSource: "search_results",
+            naverSamplingVersion: "interleave-v1",
+          }
+        : {}),
       promptText: `brand-${index}`,
       promptKind: "brand",
       rawResponse: "synthetic search result",
@@ -217,6 +383,15 @@ it("does not expose a blended provisional score for eight brand AI answers plus 
   expect(body.result.metrics.answerBuckets.ai.adjudicated).toBe(8);
   expect(body.result.metrics.answerBuckets.search.adjudicated).toBe(14);
   expect(body.result.engineResponses).toHaveLength(22);
+  expect(
+    body.result.engineResponses.filter(
+      (row: { engineId: string }) => row.engineId === "naver"
+    )
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ naverSamplingVersion: "interleave-v1" }),
+    ])
+  );
   expect(body.result.geoActions).toEqual([]);
 });
 

@@ -49,6 +49,7 @@ vi.mock("./official-site-identity", () => ({
   resolveOfficialSiteIdentity: vi.fn(async () => ({ title: "Test Brand" })),
 }));
 vi.mock("@repo/ai/lib/engines", () => ({
+  NAVER_SEARCH_SAMPLING_VERSION: "interleave-v1",
   aggregateAudit,
   auditCost: vi.fn(() => ({
     totalKrw: 0,
@@ -107,7 +108,10 @@ vi.mock("./actions", () => ({
   actionsToStrings: vi.fn(() => []),
   buildGeoActions: vi.fn(() => []),
 }));
-vi.mock("./action-rules", () => ({ summarizeVerdicts: vi.fn(() => ({})) }));
+vi.mock("./action-rules", () => ({
+  hasCompleteNaverSearchBaseline: vi.fn(() => false),
+  summarizeVerdicts: vi.fn(() => ({})),
+}));
 vi.mock("./answer-buckets", () => ({
   answerShareOfVoice: vi.fn(() => null),
   classifyAnswer: vi.fn(() => "other"),
@@ -283,14 +287,14 @@ describe("runAuditJob offline lifecycle contracts", () => {
 
   it("commits AuditJob completed before entering the Tracking persistence boundary", async () => {
     const events: string[] = [];
-    // biome-ignore lint/suspicious/useAwait: the mocked Prisma/engine API must return a Promise
+    // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
     auditJobUpdate.mockImplementation(async ({ data }) => {
       if (data?.status === "completed") {
         events.push("audit-completed");
       }
       return {};
     });
-    // biome-ignore lint/suspicious/useAwait: the mocked Prisma/engine API must return a Promise
+    // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
     persistAuditTracking.mockImplementation(async () => {
       events.push("tracking-persist-start");
       return "persisted";
@@ -386,7 +390,7 @@ describe("runAuditJob offline lifecycle contracts", () => {
     });
     try {
       briefingEnabled = true;
-      // biome-ignore lint/suspicious/useAwait: the mocked Prisma/engine API must return a Promise
+      // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
       queryAllEngines.mockImplementation(async () => {
         // The first real scheduler batch completes late enough that the next
         // question cannot safely start (270s deadline, 35s minimum budget).
@@ -448,7 +452,7 @@ describe("runAuditJob offline lifecycle contracts", () => {
     vi.doMock("./normalize-stored-metrics", () => ({
       isPublishableAuditResult: () => true,
     }));
-    // biome-ignore lint/suspicious/useAwait: the mocked Prisma/engine API must return a Promise
+    // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
     queryAllEngines.mockImplementation(async () => {
       // One completed prompt leaves 51s before the 270s internal deadline;
       // the real scheduler then stops before starting another prompt.
@@ -519,7 +523,8 @@ describe("runAuditJob offline lifecycle contracts", () => {
     queryAllEngines.mockResolvedValue([response()]);
 
     let finalCommitStarted = false;
-    // biome-ignore lint/suspicious/useAwait: the mocked Prisma/engine API must return a Promise
+    let _lateCommitSettled = false;
+    // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
     auditJobUpdate.mockImplementation(async ({ data }) => {
       if (data?.status === "completed") {
         finalCommitStarted = true;
@@ -528,6 +533,7 @@ describe("runAuditJob offline lifecycle contracts", () => {
         // that this write did or did not commit until the database responds.
         return new Promise((resolve) =>
           setTimeout(() => {
+            _lateCommitSettled = true;
             resolve({});
           }, 300_000)
         );
@@ -621,7 +627,7 @@ describe("runAuditJob offline lifecycle contracts", () => {
     });
     let pdfUrlCommitAttempted = false;
     auditJobUpdate.mockImplementation(
-      // biome-ignore lint/suspicious/useAwait: the mocked Prisma/engine API must return a Promise
+      // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise
       async ({ data }: { data?: { pdfUrl?: string } }) => {
         if (data?.pdfUrl) {
           // Fault injection: the database write may have committed before the
