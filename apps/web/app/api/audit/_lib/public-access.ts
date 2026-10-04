@@ -12,9 +12,7 @@ export interface AuditJobVisibility {
 
 const ORG_EMAIL_PREFIX = "org:";
 
-export function canUseAnonymousAuditCache(
-  job: AuditJobVisibility
-): boolean {
+export function canUseAnonymousAuditCache(job: AuditJobVisibility): boolean {
   return (
     job.organizationId == null &&
     !job.email?.trim().toLowerCase().startsWith(ORG_EMAIL_PREFIX)

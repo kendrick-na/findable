@@ -1,10 +1,10 @@
 // /audit/[jobId] — Audit 결과 페이지 (PRD §13.1)
 
-import { database } from "@repo/database";
 import {
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { createMetadata } from "@repo/seo/metadata";
@@ -68,7 +68,9 @@ async function loadSummaryJob(jobId: string) {
         status: true,
       },
     });
-    if (!job || !(await canExposeAuditResult(job, await resolveIsOwner(job)))) {
+    if (
+      !(job && (await canExposeAuditResult(job, await resolveIsOwner(job))))
+    ) {
       return null;
     }
     return { ...job, result: withRecomputedAuditMetrics(job.result) };

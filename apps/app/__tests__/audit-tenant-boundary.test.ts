@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
-  canUseAnonymousAuditCache,
   canExposeAuditResult,
+  canUseAnonymousAuditCache,
 } from "../../web/app/api/audit/_lib/public-access";
 
 const POST_ROUTE = readFileSync(
@@ -62,13 +62,8 @@ describe("audit tenant boundary", () => {
       )
     ).toBe(false);
     expect(
-      canExposeAuditResult(
-        { email: "org:deleted", organizationId: null },
-        true
-      )
-    ).toBe(
-      true
-    );
+      canExposeAuditResult({ email: "org:deleted", organizationId: null }, true)
+    ).toBe(true);
     expect(
       canExposeAuditResult(
         { email: "org:private", organizationId: "org_private" },
