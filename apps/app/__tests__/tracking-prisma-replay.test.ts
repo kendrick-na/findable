@@ -704,6 +704,11 @@ describe("product Tracking replay through PrismaPg", () => {
         auditJobId: "job-manifest-partial",
         tagged: planned,
       })).toBe("completed");
+      const completeCoreRows = await database.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT count(*)::bigint AS count FROM "Tracking"
+         WHERE "trackingRowKey" LIKE 'job-manifest-complete|core|%'`
+      );
+      expect.soft(completeCoreRows).toEqual([{ count: 2n }]);
       const expectedManifest = {
         v: 1,
         brandId: "brand-replay",
@@ -794,6 +799,63 @@ describe("product Tracking replay through PrismaPg", () => {
           keys: ["job-manifest-briefing|briefing|0|naver-briefing"],
         },
       });
+
+      // A committed briefing manifest without its sole row is 0/1, not complete.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-manifest-briefing-missing', 'completed', 'org-replay', 'brand-replay',
+                 $1, $2::jsonb, '{"tracking":"completed","briefingTracking":"pending"}'::jsonb)`,
+        completedAt,
+        JSON.stringify({
+          briefingStatus: "completed",
+          briefingPrompt: "브랜드 효과",
+          engineResponses: [{
+            ...responses[0], trackingInputCaptured: true, promptIndex: 0,
+            promptText: "브랜드 효과", promptLang: "ko",
+          }],
+        })
+      );
+      expect(await persistAuditTracking({
+        ...input,
+        auditJobId: "job-manifest-briefing-missing",
+      })).toBe("completed");
+      const beforeMissingBriefing = await database.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT count(*)::bigint AS count FROM "Tracking"
+         WHERE "trackingRowKey" = 'job-manifest-briefing-missing|briefing|0|naver-briefing'`
+      );
+      expect.soft(beforeMissingBriefing).toEqual([{ count: 1n }]);
+      await database.$executeRawUnsafe(
+        `DELETE FROM "Tracking"
+         WHERE "trackingRowKey" = 'job-manifest-briefing-missing|briefing|0|naver-briefing'`
+      );
+      await database.$executeRawUnsafe(
+        `UPDATE "AuditJob" SET "postprocessing" = "postprocessing" ||
+           '{"briefingTracking":"reconciling","briefingTrackingReconcileAttempts":3,
+             "briefingTrackingReconcileToken":"third",
+             "briefingTrackingReconcileStartedAt":"2000-01-01T00:00:00Z"}'::jsonb
+         WHERE "id" = 'job-manifest-briefing-missing'`
+      );
+      await reconcileBriefingTracking("job-manifest-briefing-missing");
+      const missingBriefing = await database.$queryRawUnsafe<Array<{ count: bigint; postprocessing: Record<string, unknown> }>>(
+        `SELECT count(t."id")::bigint AS count, j."postprocessing"
+         FROM "AuditJob" j LEFT JOIN "Tracking" t
+           ON t."trackingRowKey" = 'job-manifest-briefing-missing|briefing|0|naver-briefing'
+         WHERE j."id" = 'job-manifest-briefing-missing'
+         GROUP BY j."postprocessing"`
+      );
+      expect.soft(missingBriefing).toEqual([{
+        count: 0n,
+        postprocessing: expect.objectContaining({
+          tracking: "completed",
+          briefingTracking: "retry_exhausted",
+          briefingTrackingManifest: {
+            v: 1,
+            brandId: "brand-replay",
+            trackedAt: completedAt.toISOString(),
+            keys: ["job-manifest-briefing-missing|briefing|0|naver-briefing"],
+          },
+        }),
+      }]);
 
       // A stale writer with the wrong claim token must roll its rows back.
       await database.$executeRawUnsafe(
