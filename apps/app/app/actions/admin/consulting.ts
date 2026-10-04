@@ -1,5 +1,9 @@
 "use server";
 
+import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, metricsOf, scoreOf } from "@repo/audit/run-quality";
 import { requireAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
@@ -147,7 +151,8 @@ function toAuditSnapshot(audit: {
   result: unknown;
   status: string;
 }): ConsultingAudit {
-  const result = recordOf(audit.result);
+  const correctedResult = withRecomputedAuditMetrics(audit.result);
+  const result = recordOf(correctedResult);
   const responses = Array.isArray(result?.engineResponses)
     ? result.engineResponses.flatMap((response) => {
         const row = recordOf(response);
@@ -168,8 +173,10 @@ function toAuditSnapshot(audit: {
         ];
       })
     : [];
-  const metrics = metricsOf(audit.result);
-  const sov = finiteNumber(metrics?.sov);
+  const metrics = metricsOf(correctedResult);
+  const sov = isPublishableAuditResult(correctedResult)
+    ? finiteNumber(metrics?.sov)
+    : null;
   const failedEngineIds = [
     ...(metrics?.errors?.map((error) => error.engineId) ?? []),
     ...responses.flatMap((response) =>
@@ -184,9 +191,9 @@ function toAuditSnapshot(audit: {
     completedAt: audit.completedAt,
     measuredAt: audit.completedAt ?? audit.createdAt,
     errorMessage: audit.errorMessage,
-    geoScore: scoreOf(audit.result),
+    geoScore: scoreOf(correctedResult),
     sov,
-    usable: isUsableRun(audit.result),
+    usable: isUsableRun(correctedResult),
     responseCount: responses.length,
     mentionedResponses: responses.filter((response) => response.brandMentioned)
       .length,

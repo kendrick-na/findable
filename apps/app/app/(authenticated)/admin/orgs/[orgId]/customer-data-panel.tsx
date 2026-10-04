@@ -87,18 +87,32 @@ function Metric({
 }
 
 function responseState(response: ConsultingEngineResponse) {
-  if (response.brandMentioned) {
-    return {
-      Icon: CheckCircle2Icon,
-      iconClassName: "text-emerald-300",
-      label: "브랜드 확인",
-    };
-  }
   if (response.errorMessage) {
     return {
       Icon: XCircleIcon,
       iconClassName: "text-red-300",
       label: "응답 오류",
+    };
+  }
+  if (response.mentionQuality === "unverified") {
+    return {
+      Icon: AlertTriangleIcon,
+      iconClassName: "text-amber-300",
+      label: "판정보류",
+    };
+  }
+  if (response.mentionQuality === "different_entity") {
+    return {
+      Icon: AlertTriangleIcon,
+      iconClassName: "text-amber-300",
+      label: "동명 다른 대상",
+    };
+  }
+  if (response.brandMentioned) {
+    return {
+      Icon: CheckCircle2Icon,
+      iconClassName: "text-emerald-300",
+      label: "브랜드 확인",
     };
   }
   return {
@@ -206,7 +220,7 @@ function AuditData({ brand }: { brand: ConsultingBrand }) {
         />
         <Metric
           icon={BarChart3Icon}
-          label="AI 언급률"
+          label="AI·검색 등장률"
           value={audit.sov === null ? "—" : `${number(audit.sov)}%`}
         />
         <Metric
@@ -226,8 +240,8 @@ function AuditData({ brand }: { brand: ConsultingBrand }) {
           <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
           <p>
             응답 데이터 {audit.responseCount}개는 정상 저장됐지만, 등록한
-            브랜드명 <b>{brand.name}</b>으로 확인된 응답이 없어 0점입니다.
-            사이트의 실제 표기·별칭과 등록 브랜드명을 먼저 대조하세요.
+            브랜드명 <b>{brand.name}</b>으로 확인된 응답이 없습니다. 사이트의
+            실제 표기·별칭과 등록 브랜드명을 먼저 대조하세요.
           </p>
         </div>
       ) : null}
@@ -527,7 +541,7 @@ export function CustomerDataPanel({ brands }: { brands: ConsultingBrand[] }) {
                       <th className="pb-2">시점</th>
                       <th>상태</th>
                       <th>GEO</th>
-                      <th>언급률</th>
+                      <th>AI·검색 등장률</th>
                       <th>응답</th>
                       <th>브랜드 확인</th>
                       <th>오류</th>
