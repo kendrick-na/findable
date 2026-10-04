@@ -8,6 +8,7 @@
 import {
   compareDatabaseTargets,
   parseTargetSpec,
+  safeErrorLabel,
 } from "./db-target-fingerprint";
 
 const specs = process.argv.slice(2);
@@ -28,7 +29,7 @@ if (specs.length < 2) {
     process.exitCode = verdict.allSameTarget ? 0 : 1;
   } catch (error: unknown) {
     process.stderr.write(
-      `[check-db-targets] failed: ${error instanceof Error ? error.message : "unknown"}\n`
+      `[check-db-targets] failed: ${safeErrorLabel(error)}\n`
     );
     process.exitCode = 2;
   }

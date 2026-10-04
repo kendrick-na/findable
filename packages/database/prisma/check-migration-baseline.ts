@@ -5,12 +5,17 @@
 //   (prisma.config.ts). 운영 대조는 W0-0 대상 attestation 이후 권한자만 한다.
 
 import { join } from "node:path";
+import { resolveEnvSpec, safeErrorLabel } from "./db-target-fingerprint";
 import { readMigrationBaseline } from "./migration-baseline-gate";
 
 async function main(): Promise<void> {
-  const connectionString = process.env.DATABASE_URL;
+  // Prefer `<env-file>#VAR[??VAR]` so operators never `source` a production env file.
+  const spec = process.argv[2];
+  const connectionString = spec
+    ? resolveEnvSpec(spec)
+    : process.env.DATABASE_URL;
   if (!connectionString) {
-    throw new Error("DATABASE_URL is not set");
+    throw new Error("connection not set (env spec or DATABASE_URL)");
   }
   const verdict = await readMigrationBaseline(
     connectionString,
@@ -24,7 +29,7 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   process.stderr.write(
-    `[check-migration-baseline] failed: ${error instanceof Error ? error.message : "unknown"}\n`
+    `[check-migration-baseline] failed: ${safeErrorLabel(error)}\n`
   );
   process.exitCode = 2;
 });

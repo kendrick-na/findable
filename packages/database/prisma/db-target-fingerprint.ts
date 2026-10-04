@@ -18,6 +18,26 @@ export interface DatabaseFingerprint {
 const short = (text: string) =>
   createHash("sha256").update(text).digest("hex").slice(0, 12);
 
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Prisma's `?schema=` selects where tables and _prisma_migrations live (default public). */
+export function connectionSchema(value: string): string {
+  const schema = new URL(value).searchParams.get("schema") || "public";
+  if (!IDENTIFIER.test(schema)) {
+    throw new Error("unsupported schema identifier");
+  }
+  return schema;
+}
+
+/** Error label without the message: URL parse errors can echo the raw value. */
+export function safeErrorLabel(error: unknown): string {
+  if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? `${error.name}(${code})` : error.name;
+  }
+  return "unknown";
+}
+
 export function fingerprintDatabaseUrl(value: string): DatabaseFingerprint {
   const url = new URL(value);
   const [first = "", ...rest] = url.hostname.toLowerCase().split(".");
@@ -27,7 +47,13 @@ export function fingerprintDatabaseUrl(value: string): DatabaseFingerprint {
   return {
     pooled,
     target: short(
-      [endpoint, rest.join("."), url.port || "5432", database].join("|")
+      [
+        endpoint,
+        rest.join("."),
+        url.port || "5432",
+        database,
+        connectionSchema(value),
+      ].join("|")
     ),
     role: short(decodeURIComponent(url.username)),
   };
@@ -89,18 +115,35 @@ export function parseEnvFile(path: string): Record<string, string> {
   return out;
 }
 
+/**
+ * `<env-file>#VAR` or `<env-file>#A??B` — first non-empty value, mirroring the
+ * runtime/CLI `??` fallbacks (e.g. migrate reads DATABASE_URL_UNPOOLED ?? DATABASE_URL).
+ */
+export function resolveEnvSpec(spec: string): string | undefined {
+  const hash = spec.lastIndexOf("#");
+  if (hash <= 0) {
+    throw new Error("env spec must be <env-file>#<VAR>[??<VAR>...]");
+  }
+  const env = parseEnvFile(spec.slice(0, hash));
+  for (const name of spec.slice(hash + 1).split("??")) {
+    const value = env[name.trim()];
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export function parseTargetSpec(spec: string): {
   label: string;
   value: string | undefined;
 } {
   const eq = spec.indexOf("=");
-  const hash = spec.lastIndexOf("#");
-  if (eq <= 0 || hash <= eq) {
-    throw new Error("target spec must be <label>=<env-file>#<VAR>");
+  if (eq <= 0) {
+    throw new Error("target spec must be <label>=<env-file>#<VAR>[??<VAR>]");
   }
-  const label = spec.slice(0, eq);
-  const file = spec.slice(eq + 1, hash);
-  const name = spec.slice(hash + 1);
-  const value = parseEnvFile(file)[name];
-  return { label, value: value ? value : undefined };
+  return {
+    label: spec.slice(0, eq),
+    value: resolveEnvSpec(spec.slice(eq + 1)),
+  };
 }

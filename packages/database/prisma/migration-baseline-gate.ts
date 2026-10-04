@@ -9,6 +9,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/client";
+import { connectionSchema } from "./db-target-fingerprint";
 
 export interface RepoMigration {
   checksum: string;
@@ -63,14 +64,17 @@ export function evaluateMigrationBaseline(
     const attempts = rows.filter((r) => r.migration_name === migration.name);
     const live = attempts.filter((r) => r.rolled_back_at === null);
     const finished = live.find((r) => r.finished_at !== null);
-    if (finished) {
+    // Prisma `migrate status` reports failed — and `migrate deploy` refuses
+    // (P3009) — while any unfinished row is not rolled back, even next to a
+    // finished one, so that state must not pass as applied.
+    if (live.some((r) => r.finished_at === null)) {
+      verdict.failed.push(migration.name);
+    } else if (finished) {
       if (finished.checksum === migration.checksum) {
         verdict.applied.push(migration.name);
       } else {
         verdict.checksumMismatch.push(migration.name);
       }
-    } else if (live.length > 0) {
-      verdict.failed.push(migration.name);
     } else {
       verdict.pending.push(migration.name);
       if (attempts.length > 0) {
@@ -105,6 +109,10 @@ export async function readMigrationBaseline(
   try {
     const rows = await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
+      // PrismaPg ignores ?schema=; follow Prisma's table location explicitly.
+      await tx.$executeRawUnsafe(
+        `SET LOCAL search_path TO "${connectionSchema(connectionString)}"`
+      );
       const table = await tx.$queryRawUnsafe<{ exists: boolean }[]>(
         `SELECT to_regclass('"_prisma_migrations"') IS NOT NULL AS exists`
       );

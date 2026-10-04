@@ -2,13 +2,18 @@
 //   읽기 전용(READ ONLY 트랜잭션). 누락된 Engine id만 출력하고 누락 시 exit 1.
 //   ⚠️ 운영 DB에 돌리는 것은 W0-0 대상 attestation 이후 권한자만 한다.
 
+import { resolveEnvSpec, safeErrorLabel } from "./db-target-fingerprint";
 import { ENGINE_SEED } from "./engine-seed-data";
 import { readEngineSeedState } from "./engine-seed-gate";
 
 async function main(): Promise<void> {
-  const connectionString = process.env.DATABASE_URL;
+  // Prefer `<env-file>#VAR[??VAR]` so operators never `source` a production env file.
+  const spec = process.argv[2];
+  const connectionString = spec
+    ? resolveEnvSpec(spec)
+    : process.env.DATABASE_URL;
   if (!connectionString) {
-    throw new Error("DATABASE_URL is not set");
+    throw new Error("connection not set (env spec or DATABASE_URL)");
   }
   const verdict = await readEngineSeedState(
     connectionString,
@@ -22,7 +27,7 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   process.stderr.write(
-    `[check-engine-seed] failed: ${error instanceof Error ? error.message : "unknown"}\n`
+    `[check-engine-seed] failed: ${safeErrorLabel(error)}\n`
   );
   process.exitCode = 2;
 });
