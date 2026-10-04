@@ -33,6 +33,8 @@ import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import {
   buildPaymentId,
+  cancelBillingKeySchedules,
+  deleteBillingKey,
   getPortOnePayment,
   isFailedEvent,
   isFullCancellationEvent,
@@ -161,7 +163,58 @@ async function handleFailedPayment(paymentId: string): Promise<Response> {
   }
 }
 
-/** 전액 취소 — 해당 결제에서 부여한 plan 만 회수한다. */
+/**
+ * 전액 환불된 결제가 조직의 **현재 정기결제 회차**(`billingLastPaymentId`)면 구독도 끝낸다
+ * (2026-10-05 컨트롤타워 승인).
+ *
+ * 왜: 권한만 회수하고 예약·빌링키를 남기면 다음 달 예약 결제가 그대로 청구된다(X4).
+ * 순서는 해지(unsubscribe)와 같다 — ① 예약 취소 → ② 빌링키 삭제 → ③ 조직 기록 정리.
+ * 두 PortOne 호출은 "이미 취소/삭제됨"을 성공으로 보므로 재전송에도 멱등이다.
+ * 실패하면 예외를 던져 호출부가 5xx 로 재전송을 받게 한다(반쯤 정리된 채로 200 금지).
+ * billingNextPaymentAt 은 남긴다 — 기간 종료 cron 이 남은 결제 출처를 마저 정리한다.
+ */
+async function cleanupRefundedSubscription(
+  paymentId: string
+): Promise<"not_current_subscription" | "cleaned" | "already_clean"> {
+  const org = await database.organization.findFirst({
+    where: { billingLastPaymentId: paymentId },
+    select: {
+      id: true,
+      billingCustomerId: true,
+      billingNextPaymentId: true,
+      billingProvider: true,
+      billingStatus: true,
+    },
+  });
+  if (!org) {
+    return "not_current_subscription";
+  }
+
+  const billingKey =
+    org.billingProvider === "portone" ? org.billingCustomerId : null;
+  if (
+    !billingKey &&
+    org.billingStatus === "canceled" &&
+    org.billingNextPaymentId === null
+  ) {
+    return "already_clean";
+  }
+  if (billingKey) {
+    await cancelBillingKeySchedules(billingKey);
+    await deleteBillingKey(billingKey);
+  }
+  await database.organization.updateMany({
+    where: { id: org.id, billingLastPaymentId: paymentId },
+    data: {
+      billingStatus: "canceled",
+      billingNextPaymentId: null,
+      ...(billingKey ? { billingCustomerId: null, billingProvider: null } : {}),
+    },
+  });
+  return "cleaned";
+}
+
+/** 전액 취소 — 해당 결제에서 부여한 plan 을 회수하고, 현재 구독 회차면 구독도 끝낸다. */
 async function handleCancelledPayment(paymentId: string): Promise<Response> {
   const userId = userIdFromPaymentId(paymentId);
   if (!userId) {
@@ -170,29 +223,9 @@ async function handleCancelledPayment(paymentId: string): Promise<Response> {
     });
     return done("cancel_no_uid_in_payment_id");
   }
+  let payment: Awaited<ReturnType<typeof getPortOnePayment>>;
   try {
-    const payment = await getPortOnePayment(paymentId);
-    if (payment.status !== "CANCELLED") {
-      log.warn("payments.webhook.cancel_not_final", {
-        paymentId,
-        status: payment.status,
-      });
-      return retryable(`cancel_not_final:${payment.status}`);
-    }
-    const result = await revokePlanFromPayment(userId, paymentId);
-    if (result.reason === "push_failed") {
-      log.error("payments.webhook.cancel_revoke_failed", {
-        userId,
-        paymentId,
-      });
-      return retryable("cancel_revoke_failed");
-    }
-    log.info("payments.webhook.cancel_processed", {
-      userId,
-      paymentId,
-      revoked: result.revoked,
-    });
-    return done(result.reason);
+    payment = await getPortOnePayment(paymentId);
   } catch (error) {
     log.error("payments.webhook.cancel_lookup_failed", {
       paymentId,
@@ -200,6 +233,106 @@ async function handleCancelledPayment(paymentId: string): Promise<Response> {
     });
     return retryable("cancel_lookup_failed");
   }
+  if (payment.status !== "CANCELLED") {
+    log.warn("payments.webhook.cancel_not_final", {
+      paymentId,
+      status: payment.status,
+    });
+    return retryable(`cancel_not_final:${payment.status}`);
+  }
+
+  // 회수와 구독 정리는 서로를 막지 않는다. 한쪽이 실패해도 다른 쪽은 끝내고 5xx 로 재전송을 받는다.
+  const result = await revokePlanFromPayment(userId, paymentId).catch(() => ({
+    revoked: false,
+    reason: "push_failed" as const,
+  }));
+  let cleanup: Awaited<ReturnType<typeof cleanupRefundedSubscription>>;
+  try {
+    cleanup = await cleanupRefundedSubscription(paymentId);
+  } catch (error) {
+    log.error("payments.webhook.refund_cleanup_failed", {
+      userId,
+      paymentId,
+      error: parseError(error),
+    });
+    return retryable("refund_cleanup_failed");
+  }
+  if (result.reason === "push_failed") {
+    log.error("payments.webhook.cancel_revoke_failed", {
+      userId,
+      paymentId,
+    });
+    return retryable("cancel_revoke_failed");
+  }
+  log.info("payments.webhook.cancel_processed", {
+    userId,
+    paymentId,
+    revoked: result.revoked,
+    subscription: cleanup,
+  });
+  return done(result.reason);
+}
+
+/**
+ * 환불 펜스 — 조직에 기록된 환불보다 **먼저 발급된** 결제의 늦은 Paid 는 권한을 주지 않는다(X8).
+ *
+ * 별도 환불 테이블이 없으므로(마이그레이션 없음) "기록된 환불"은 이렇게 판정한다:
+ *   조직이 canceled 이고, 마지막 결제(billingLastPaymentId)가 PortOne 에서 CANCELLED.
+ * 해지(unsubscribe)만 한 조직은 마지막 결제가 PAID 라 막히지 않는다.
+ */
+async function isOlderThanRecordedRefund(
+  userId: string,
+  paymentId: string
+): Promise<boolean> {
+  const user = await database.user.findUnique({
+    where: { id: userId },
+    select: {
+      organization: {
+        select: { billingLastPaymentId: true, billingStatus: true },
+      },
+    },
+  });
+  const lastPaymentId = user?.organization?.billingLastPaymentId;
+  if (
+    !lastPaymentId ||
+    lastPaymentId === paymentId ||
+    user?.organization?.billingStatus !== "canceled"
+  ) {
+    return false;
+  }
+  const issuedAt = paymentIssuedAtFromPaymentId(paymentId);
+  const refundedIssuedAt = paymentIssuedAtFromPaymentId(lastPaymentId);
+  if (!(issuedAt && refundedIssuedAt) || issuedAt > refundedIssuedAt) {
+    return false;
+  }
+  const last = await getPortOnePayment(lastPaymentId);
+  return last.status === "CANCELLED";
+}
+
+/**
+ * 부여 직후 재조회 — 부여가 끝나기 전에 전액 환불이 끝났으면 방금 준 권한을 되돌린다(X8).
+ * 환불 웹훅의 회수가 부여보다 먼저 끝나면 회수 대상이 아직 없어 권한이 남기 때문이다.
+ * 부분 취소는 남은 결제 대가가 있으므로 그대로 둔다.
+ * 반환값이 있으면 호출부는 그 응답으로 끝낸다(다음 회차 예약도 하지 않는다).
+ */
+async function undoGrantIfRefunded(
+  userId: string,
+  paymentId: string
+): Promise<Response | null> {
+  const latest = await getPortOnePayment(paymentId);
+  if (latest.status !== "CANCELLED") {
+    return null;
+  }
+  const undo = await revokePlanFromPayment(userId, paymentId);
+  if (undo.reason === "push_failed") {
+    log.error("payments.webhook.refunded_during_grant_revoke_failed", {
+      userId,
+      paymentId,
+    });
+    return retryable("refunded_during_grant_revoke_failed");
+  }
+  log.warn("payments.webhook.refunded_during_grant", { userId, paymentId });
+  return done("refunded_during_grant");
 }
 
 /**
@@ -374,12 +507,25 @@ export const POST = async (request: Request): Promise<Response> => {
       return done("amount_not_in_catalog");
     }
 
+    if (await isOlderThanRecordedRefund(userId, paymentId)) {
+      log.warn("payments.webhook.paid_before_recorded_refund", {
+        userId,
+        paymentId,
+      });
+      return done("paid_before_recorded_refund");
+    }
+
     // 3) 부여(멱등). 이미 verify 경로가 올렸어도 같은 값이라 안전하다.
     const granted = await grantPlanFromPayment(userId, plan, paymentId);
     if (!granted) {
       // Clerk push 실패 = 일시 장애일 수 있다 → 재전송으로 복구 기회를 준다.
       log.error("payments.webhook.grant_failed", { userId, paymentId, plan });
       return retryable("grant_failed");
+    }
+
+    const undone = await undoGrantIfRefunded(userId, paymentId);
+    if (undone) {
+      return undone;
     }
 
     try {

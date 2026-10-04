@@ -204,6 +204,12 @@ beforeEach(() => {
   Object.assign(fixture.organization, fixture.blank);
   fixture.state.failNextActiveWrite = false;
   vi.clearAllMocks();
+  fixture.cancelSchedules.mockImplementation(async () => undefined);
+  fixture.deleteBillingKey.mockImplementation(async () => undefined);
+  fixture.revoke.mockImplementation(async () => ({
+    revoked: true,
+    reason: "revoked",
+  }));
   fixture.pay.mockImplementation(async () => undefined);
   fixture.grant.mockImplementation(async () => true);
   fixture.schedule.mockImplementation(async () => undefined);
@@ -213,7 +219,10 @@ beforeEach(() => {
 });
 
 async function postEvent(
-  type: "Transaction.Paid" | "Transaction.Cancelled",
+  type:
+    | "Transaction.Paid"
+    | "Transaction.Cancelled"
+    | "Transaction.PartialCancelled",
   paymentId: string
 ): Promise<Response> {
   const { POST } = await import("@/app/webhooks/payments/route");
@@ -366,10 +375,7 @@ describe("post-charge webhook and re-entry [C1/P1-b]", () => {
     expect(fixture.revoke).not.toHaveBeenCalled();
   });
 
-  // KNOWN RED (not fixed here): a full refund revokes the plan but leaves the
-  // renewal schedule and billing key live; whether a refund also ends the
-  // subscription is a separate policy decision.
-  it.fails("X4 [known red]: a full refund webhook also cancels the next schedule and billing key", async () => {
+  it("X4: a full refund webhook also cancels the next schedule and billing key", async () => {
     expect(await confirm("starter", "refund-key")).toMatchObject({ ok: true });
     const firstPaymentId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
     fixture.getPayment.mockImplementation(async (id: string) => ({
@@ -382,11 +388,114 @@ describe("post-charge webhook and re-entry [C1/P1-b]", () => {
     expect(fixture.revoke).toHaveBeenCalledWith("user_owner-1", firstPaymentId);
     expect(fixture.cancelSchedules).toHaveBeenCalledWith("refund-key");
     expect(fixture.deleteBillingKey).toHaveBeenCalledWith("refund-key");
+    expect(fixture.cancelSchedules.mock.invocationCallOrder[0]).toBeLessThan(
+      fixture.deleteBillingKey.mock.invocationCallOrder[0] ?? 0
+    );
+    expect(fixture.organization).toMatchObject({
+      billingStatus: "canceled",
+      billingNextPaymentId: null,
+      billingCustomerId: null,
+      billingProvider: null,
+      billingLastPaymentId: firstPaymentId,
+    });
   });
 
-  // KNOWN RED (not fixed here): entitlement race, not a charge; needs a
-  // durable refund fence (spike ledger) to close.
-  it.fails("X8 [known red]: a Paid grant finishing after a refund revoke does not restore access", async () => {
+  it("X4-dup: a duplicate full refund webhook is idempotent", async () => {
+    expect(await confirm("starter", "refund-key")).toMatchObject({ ok: true });
+    const firstPaymentId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    fixture.getPayment.mockImplementation(async (id: string) => ({
+      ...paidPayment(id, "2026-10-04T00:00:00.000Z"),
+      status: "CANCELLED",
+    }));
+    expect(
+      (await postEvent("Transaction.Cancelled", firstPaymentId)).status
+    ).toBe(200);
+    const after = structuredClone(fixture.organization);
+    expect(
+      (await postEvent("Transaction.Cancelled", firstPaymentId)).status
+    ).toBe(200);
+    expect(fixture.cancelSchedules).toHaveBeenCalledTimes(1);
+    expect(fixture.deleteBillingKey).toHaveBeenCalledTimes(1);
+    expect(fixture.organization).toEqual(after);
+  });
+
+  it("X4-retry: a schedule-cancel failure returns 5xx, keeps the key, and the retry finishes cleanup", async () => {
+    expect(await confirm("starter", "refund-key")).toMatchObject({ ok: true });
+    const firstPaymentId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    const nextPaymentId = fixture.organization.billingNextPaymentId;
+    fixture.getPayment.mockImplementation(async (id: string) => ({
+      ...paidPayment(id, "2026-10-04T00:00:00.000Z"),
+      status: "CANCELLED",
+    }));
+    fixture.cancelSchedules.mockRejectedValueOnce(new Error("portone 503"));
+    expect(
+      (await postEvent("Transaction.Cancelled", firstPaymentId)).status
+    ).toBe(500);
+    expect(fixture.log.error).toHaveBeenCalledWith(
+      "payments.webhook.refund_cleanup_failed",
+      expect.objectContaining({ paymentId: firstPaymentId })
+    );
+    // No half state: the key is not deleted and the org record still points at it.
+    expect(fixture.deleteBillingKey).not.toHaveBeenCalled();
+    expect(fixture.organization).toMatchObject({
+      billingStatus: "active",
+      billingCustomerId: "refund-key",
+      billingNextPaymentId: nextPaymentId,
+    });
+
+    // PortOne re-sends the webhook.
+    expect(
+      (await postEvent("Transaction.Cancelled", firstPaymentId)).status
+    ).toBe(200);
+    expect(fixture.deleteBillingKey).toHaveBeenCalledWith("refund-key");
+    expect(fixture.organization).toMatchObject({
+      billingStatus: "canceled",
+      billingNextPaymentId: null,
+      billingCustomerId: null,
+    });
+  });
+
+  it("X4 control: a partial cancel leaves the subscription untouched", async () => {
+    expect(await confirm("starter", "partial-key")).toMatchObject({
+      ok: true,
+    });
+    const firstPaymentId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    const before = structuredClone(fixture.organization);
+    fixture.getPayment.mockImplementation(async (id: string) => ({
+      ...paidPayment(id, "2026-10-04T00:00:00.000Z"),
+      status: "PARTIAL_CANCELLED",
+    }));
+    expect(
+      (await postEvent("Transaction.PartialCancelled", firstPaymentId)).status
+    ).toBe(200);
+    expect(fixture.revoke).not.toHaveBeenCalled();
+    expect(fixture.cancelSchedules).not.toHaveBeenCalled();
+    expect(fixture.deleteBillingKey).not.toHaveBeenCalled();
+    expect(fixture.organization).toEqual(before);
+  });
+
+  it("X4 control: refunding a one-off payment revokes without touching billing", async () => {
+    expect(await confirm("starter", "keep-key")).toMatchObject({ ok: true });
+    const before = structuredClone(fixture.organization);
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const oneOffId = buildPaymentId(
+      "starter",
+      "user_owner-1",
+      Date.now() + 60_000
+    );
+    fixture.getPayment.mockImplementation(async (id: string) => ({
+      ...paidPayment(id, "2026-10-04T00:00:00.000Z"),
+      status: "CANCELLED",
+    }));
+    expect((await postEvent("Transaction.Cancelled", oneOffId)).status).toBe(
+      200
+    );
+    expect(fixture.revoke).toHaveBeenCalledWith("user_owner-1", oneOffId);
+    expect(fixture.cancelSchedules).not.toHaveBeenCalled();
+    expect(fixture.organization).toEqual(before);
+  });
+
+  it("X8: a Paid grant finishing after a refund revoke does not restore access", async () => {
     const { buildPaymentId } = await import("@repo/payments/catalog");
     const paymentId = buildPaymentId("starter", "user_owner-1");
     let cancelled = false;
@@ -417,5 +526,57 @@ describe("post-charge webhook and re-entry [C1/P1-b]", () => {
     releaseGrant?.();
     expect((await delayedPaid).status).toBe(200);
     expect(entitlementPaymentId).toBeNull();
+  });
+
+  it("X8-fence: a late Paid for a payment older than the recorded refund does not grant", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-04T00:00:00.000Z"));
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const olderId = buildPaymentId("starter", "user_owner-1");
+    vi.setSystemTime(new Date("2026-10-04T00:05:00.000Z"));
+    expect(await confirm("starter", "fence-key")).toMatchObject({ ok: true });
+    const refundedId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    fixture.getPayment.mockImplementation(async (id: string) => ({
+      ...paidPayment(id, "2026-10-04T00:00:00.000Z"),
+      status: id === refundedId ? "CANCELLED" : "PAID",
+    }));
+    expect((await postEvent("Transaction.Cancelled", refundedId)).status).toBe(
+      200
+    );
+    fixture.grant.mockClear();
+
+    expect((await postPaid(olderId)).status).toBe(200);
+    expect(fixture.grant).not.toHaveBeenCalled();
+
+    // A payment issued after the refund is a new purchase and still grants.
+    vi.setSystemTime(new Date("2026-10-04T00:10:00.000Z"));
+    const newerId = buildPaymentId("starter", "user_owner-1");
+    expect((await postPaid(newerId)).status).toBe(200);
+    expect(fixture.grant).toHaveBeenCalledWith(
+      "user_owner-1",
+      "starter",
+      newerId
+    );
+  });
+
+  it("X8 control: an unsubscribed (not refunded) org still grants a late older Paid", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-04T00:00:00.000Z"));
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const olderId = buildPaymentId("starter", "user_owner-1");
+    vi.setSystemTime(new Date("2026-10-04T00:05:00.000Z"));
+    expect(await confirm("starter", "unsub-key")).toMatchObject({ ok: true });
+    Object.assign(fixture.organization, {
+      billingStatus: "canceled",
+      billingCustomerId: null,
+      billingProvider: null,
+      billingNextPaymentId: null,
+    });
+    expect((await postPaid(olderId)).status).toBe(200);
+    expect(fixture.grant).toHaveBeenCalledWith(
+      "user_owner-1",
+      "starter",
+      olderId
+    );
   });
 });
