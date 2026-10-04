@@ -878,6 +878,7 @@ export function AuditResultView({
             adviceBasisChanged={job.adviceBasisChanged}
             locale={locale}
             metricBasisChanged={job.metricBasisChanged}
+            provisional={auditPublicationIssue(displayResult) !== null}
           />
       )}
       <CompletedView job={job} locale={locale} result={displayResult} />

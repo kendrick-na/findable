@@ -18,3 +18,13 @@ it("tells readers that the current figures may differ from immutable older copie
   expect(en).toContain("may be recalculated or withheld");
   expect(en).toContain("earlier emails or PDFs");
 });
+
+it("does not imply a provisional run displays corrected action advice", () => {
+  const ko = renderToStaticMarkup(
+    <AuditMetricBasisNotice adviceBasisChanged locale="ko" provisional />
+  );
+
+  expect(ko).toContain("실행 권고는 판정 보류로 공개하지 않습니다");
+  expect(ko).not.toContain("화면에서 제외하거나 수정했습니다");
+  expect(ko).not.toContain("수치가 재계산");
+});

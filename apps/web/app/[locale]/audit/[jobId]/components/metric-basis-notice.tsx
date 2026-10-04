@@ -3,18 +3,27 @@ export function AuditMetricBasisNotice({
   adviceBasisChanged = false,
   locale,
   metricBasisChanged = false,
+  provisional = false,
 }: {
   adviceBasisChanged?: boolean;
   locale: string;
   metricBasisChanged?: boolean;
+  provisional?: boolean;
 }) {
   const isKo = locale.startsWith("ko");
   const metricCopy = isKo
     ? "저장 이후 검증·집계 기준을 다시 적용하여 수치가 재계산되거나 표시가 보류될 수 있습니다."
     : "Verification or calculation rules were reapplied after this run was saved, so figures may be recalculated or withheld.";
-  const adviceCopy = isKo
-    ? "저장된 일부 실행 권고는 현재 근거 기준에 맞지 않아 화면에서 제외하거나 수정했습니다."
-    : "Some saved action recommendations were removed or revised because they do not meet current evidence standards.";
+  let adviceCopy: string;
+  if (provisional) {
+    adviceCopy = isKo
+      ? "이 회차의 실행 권고는 판정 보류로 공개하지 않습니다. 저장된 일부 권고도 현재 근거 기준에 맞지 않아 재사용하지 않습니다."
+      : "Action recommendations for this run are withheld pending verification. Some saved advice also does not meet current evidence standards and will not be reused.";
+  } else {
+    adviceCopy = isKo
+      ? "저장된 일부 실행 권고는 현재 근거 기준에 맞지 않아 화면에서 제외하거나 수정했습니다."
+      : "Some saved action recommendations were removed or revised because they do not meet current evidence standards.";
+  }
   return (
     <aside
       aria-label={

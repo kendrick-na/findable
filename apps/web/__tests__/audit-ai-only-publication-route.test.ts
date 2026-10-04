@@ -189,6 +189,58 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
   expect(body.result.topRecommendations).toEqual([]);
 });
 
+it("withholds a v3 PDF when a stored action is revised but its string recommendation survives", async () => {
+  const jobId = "77777777-7777-4777-8777-777777777777";
+  const how =
+    "매주(주 1회) 올리면 네이버 AI 브리핑이나 HyperCLOVA X 가 우리를 인용·언급한다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.";
+  const result = withRecomputedAuditMetrics({
+    brandName: "Synthetic",
+    domain: "example.test",
+    mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    metrics: { sov: 100 },
+    engineResponses: Array.from({ length: 10 }, () => ({
+      engineId: "chatgpt",
+      promptKind: "brand",
+      brandMentioned: true,
+      mentionQuality: "confirmed",
+      isStub: false,
+      errorMessage: null,
+    })),
+    geoActions: [{ kind: "naver_blog", title: "네이버 글쓰기", how }],
+    topRecommendations: [`네이버 글쓰기 — ${how}`],
+  });
+  mocks.findUnique.mockResolvedValue({
+    id: jobId,
+    email: "synthetic@example.test",
+    organizationId: null,
+    status: "completed",
+    domain: "example.test",
+    language: "ko",
+    pdfUrl: `https://blob.test/audits/audit-v3-${jobId}-1.pdf`,
+    result,
+    crewStatus: "not_requested",
+    crewResult: null,
+    createdAt: new Date("2026-10-03T00:00:00Z"),
+    completedAt: new Date("2026-10-03T00:01:00Z"),
+    errorMessage: null,
+  });
+  mocks.findMany.mockResolvedValue([]);
+
+  const response = await GET(
+    new Request(`https://findable.example/api/audit/${jobId}`) as never,
+    { params: Promise.resolve({ jobId }) }
+  );
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body.metricBasisChanged).toBe(false);
+  expect(body.adviceBasisChanged).toBe(true);
+  expect(body.pdfOutdated).toBe(true);
+  expect(body.pdfUrl).toBeNull();
+  expect(body.result.topRecommendations).toEqual([`네이버 글쓰기 — ${how}`]);
+  expect(body.result.geoActions[0].how).not.toContain("HyperCLOVA X");
+});
+
 it("withholds PDF and crew output on the real poll route while retaining search evidence", async () => {
   const jobId = "11111111-1111-4111-8111-111111111111";
   const engineResponses = Array.from({ length: 7 }, (_, index) => [

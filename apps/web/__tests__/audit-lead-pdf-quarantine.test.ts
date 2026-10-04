@@ -84,6 +84,53 @@ it("does not email an old PDF when its stored recommendations are now filtered",
   expect(emailProps.pdfUrl).toBeUndefined();
 });
 
+it("omits a v3 PDF from lead email when only its source action needs a correction", async () => {
+  vi.clearAllMocks();
+  const jobId = "88888888-8888-4888-8888-888888888888";
+  const how =
+    "매주(주 1회) 올리면 네이버 AI 브리핑이나 HyperCLOVA X 가 우리를 인용·언급한다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.";
+  const result = withRecomputedAuditMetrics({
+    brandName: "Synthetic",
+    domain: "example.test",
+    mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    metrics: { sov: 100 },
+    engineResponses: Array.from({ length: 10 }, () => ({
+      engineId: "chatgpt",
+      promptKind: "brand",
+      brandMentioned: true,
+      mentionQuality: "confirmed",
+      isStub: false,
+      errorMessage: null,
+    })),
+    geoActions: [{ kind: "naver_blog", title: "네이버 글쓰기", how }],
+    topRecommendations: [`네이버 글쓰기 — ${how}`],
+  });
+  mocks.findUnique.mockResolvedValue({
+    email: "synthetic@example.test",
+    organizationId: null,
+    result,
+    pdfUrl: `https://blob.test/audits/audit-v3-${jobId}-1.pdf`,
+    crewResult: null,
+    status: "completed",
+  });
+  mocks.createLead.mockResolvedValue({});
+  mocks.sendEmail.mockResolvedValue({ data: { id: "synthetic-send-id" } });
+
+  const response = await POST(
+    new Request(`https://findable.example/api/audit/${jobId}/lead`, {
+      method: "POST",
+      body: JSON.stringify({ email: "recipient@example.com" }),
+    }),
+    { params: Promise.resolve({ jobId }) }
+  );
+  const emailProps = mocks.sendEmail.mock.calls[0]?.[0]?.react?.props as {
+    pdfUrl?: string;
+  };
+
+  expect(response.status).toBe(200);
+  expect(emailProps.pdfUrl).toBeUndefined();
+});
+
 it("emails only successfully measured AI/search sources, not failed attempts", async () => {
   vi.clearAllMocks();
   const jobId = "66666666-6666-4666-8666-666666666666";

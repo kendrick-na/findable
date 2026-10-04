@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(),
   metricBasisChanged: vi.fn(),
   adviceBasisChanged: vi.fn(),
+  publishable: vi.fn(),
 }));
 
 vi.mock("@repo/database", () => ({
@@ -73,7 +74,7 @@ vi.mock("@repo/email/templates/audit-report", () => ({
 }));
 vi.mock("@repo/audit/normalize-stored-metrics", () => ({
   withRecomputedAuditMetrics: (result: unknown) => result,
-  isPublishableAuditResult: () => true,
+  isPublishableAuditResult: mocks.publishable,
   auditPublicationIssue: () => null,
   publicAuditResult: (result: unknown) => result,
   hasStaleAuditPdf: () => false,
@@ -157,6 +158,7 @@ beforeEach(() => {
   mocks.streamChat.mockReturnValue(Response.json({ ok: true }));
   mocks.metricBasisChanged.mockReturnValue(false);
   mocks.adviceBasisChanged.mockReturnValue(false);
+  mocks.publishable.mockReturnValue(true);
 });
 
 describe("audit route tenant boundary", () => {
@@ -327,6 +329,23 @@ describe("audit route tenant boundary", () => {
     expect(html).toContain('data-testid="audit-metric-basis-notice"');
     expect(html).toContain("저장된 일부 실행 권고");
     expect(html).not.toContain("수치가 재계산");
+  });
+
+  test("provisional owner sees a correction without claiming actions are displayed", async () => {
+    mocks.adviceBasisChanged.mockReturnValue(true);
+    mocks.publishable.mockReturnValue(false);
+    mocks.auth.mockResolvedValue({ userId: "owner", orgId: "owner-org" });
+    mocks.currentUser.mockResolvedValue({
+      primaryEmailAddressId: "primary",
+      emailAddresses: [],
+    });
+    const html = renderToStaticMarkup(
+      await AuditResultPage({
+        params: Promise.resolve({ locale: "ko", jobId }),
+      })
+    );
+    expect(html).toContain("실행 권고는 판정 보류로 공개하지 않습니다");
+    expect(html).not.toContain("화면에서 제외하거나 수정했습니다");
   });
 
   test("owner API response sanitizes stored geo and crew claims at the server boundary", async () => {

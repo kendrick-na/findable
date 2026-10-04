@@ -566,14 +566,10 @@ export function hasStaleAuditPdf(
   if (!isPublishableAuditResult(corrected)) {
     return true;
   }
-  // The PDF template renders this legacy string projection verbatim. If the
-  // current display filter removes any stored recommendation, the immutable
-  // PDF may still contain the removed claim even when all metrics are equal.
-  if (Array.isArray(original.topRecommendations)) {
-    const filtered = filterStoredTopRecommendations(original.topRecommendations);
-    if (semanticJson(filtered) !== semanticJson(original.topRecommendations)) {
-      return true;
-    }
+  // The PDF renders topRecommendations derived from the saved actions. An
+  // action may be revised even when the string-only filter misses its claim.
+  if (hasFilteredStoredAuditAdvice(original)) {
+    return true;
   }
   if (hasChangedAnswerDisplay(original, corrected)) {
     return true;

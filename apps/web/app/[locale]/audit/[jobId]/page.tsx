@@ -112,6 +112,7 @@ const AuditResultPage = async ({ params }: AuditResultPageProps) => {
             adviceBasisChanged={summaryJob.adviceBasisChanged}
             locale={locale}
             metricBasisChanged={summaryJob.metricBasisChanged}
+            provisional={!isPublishableAuditResult(summaryJob.result)}
           />
         )}
         <AuditResultView

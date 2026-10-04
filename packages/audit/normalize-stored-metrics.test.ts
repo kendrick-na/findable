@@ -529,6 +529,21 @@ describe("saved audit metric normalization", () => {
     expect(hasStaleAuditPdf(result, result)).toBe(false);
   });
 
+  it("quarantines a v3 PDF when its source action has a revised historical claim", () => {
+    const how =
+      "매주(주 1회) 올리면 네이버 AI 브리핑이나 HyperCLOVA X 가 우리를 인용·언급한다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.";
+    const result = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+      geoActions: [{ kind: "naver_blog", title: "네이버 글쓰기", how }],
+      topRecommendations: [`네이버 글쓰기 — ${how}`],
+    });
+
+    expect(hasFilteredStoredAuditAdvice(result)).toBe(true);
+    expect(hasStaleAuditPdf(result, result)).toBe(true);
+  });
+
   it("distinguishes filtered historical advice from unchanged current advice", () => {
     expect(
       hasFilteredStoredAuditAdvice({
