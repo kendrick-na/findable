@@ -67,7 +67,7 @@ it("does not expose pre-verdict stored mention booleans as confirmed customer ev
   expect(audit?.usable).toBe(false);
   expect(audit?.geoScore).toBeNull();
   expect(audit?.sov).toBeNull();
-  expect(audit?.mentionedResponses).toBe(0);
+  expect(audit?.mentionedResponses).toBeNull();
   expect(audit?.engineResponses.every((row) => !row.brandMentioned)).toBe(true);
   const html = renderToStaticMarkup(
     <CustomerDataPanel brands={workspace?.brands ?? []} />
@@ -135,6 +135,12 @@ it("counts only confirmed brand-question AI and search rows in the admin summary
   const workspace = await getConsultingWorkspace("org-1");
   const audit = workspace?.brands[0]?.lastAudit;
   expect(audit?.usable).toBe(true);
-  expect(audit?.responseCount).toBe(16);
+  expect(audit?.responseCount).toBe(12);
   expect(audit?.mentionedResponses).toBe(11);
+  const html = renderToStaticMarkup(
+    <CustomerDataPanel brands={workspace?.brands ?? []} />
+  );
+  expect(html).toContain("브랜드 질문 시도");
+  expect(html).toContain("AI·검색 브랜드 확인");
+  expect(html).not.toContain("응답 데이터 16개");
 });

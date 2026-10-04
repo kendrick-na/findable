@@ -40,7 +40,7 @@ export interface ConsultingAudit {
   geoScore: number | null;
   id: string;
   measuredAt: Date;
-  mentionedResponses: number;
+  mentionedResponses: number | null;
   responseCount: number;
   sov: number | null;
   status: string;
@@ -211,9 +211,10 @@ function toAuditSnapshot(audit: {
     geoScore: scoreOf(correctedResult),
     sov,
     usable: isUsableRun(correctedResult),
-    responseCount: responses.length,
-    mentionedResponses:
-      answerBuckets.ai.confirmed + (answerBuckets.search?.confirmed ?? 0),
+    responseCount: answerBuckets.ai.total + (answerBuckets.search?.total ?? 0),
+    mentionedResponses: isPublishableAuditResult(correctedResult)
+      ? answerBuckets.ai.confirmed + (answerBuckets.search?.confirmed ?? 0)
+      : null,
     errorCount: failedEngineIds.length,
     failedEngineIds,
     engineResponses: responses,
