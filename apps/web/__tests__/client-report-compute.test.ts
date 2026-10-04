@@ -154,6 +154,9 @@ describe("고객 리포트 공개 고지", () => {
       isFrozenSnapshot: true,
       retiredEngineIds: ["hyperclova"],
       legacySyntheticEngineIds: ["naver"],
+      narrativeAttested: false,
+      pdfDownloadAttested: false,
+      publicationReviewRequired: true,
       measurementMix: {
         directAiAnswers: 16,
         retiredAnswers: 2,
@@ -190,6 +193,9 @@ describe("고객 리포트 공개 고지", () => {
       isFrozenSnapshot: true,
       retiredEngineIds: [],
       legacySyntheticEngineIds: [],
+      narrativeAttested: true,
+      pdfDownloadAttested: true,
+      publicationReviewRequired: false,
       measurementMix: {
         directAiAnswers: 16,
         retiredAnswers: 0,

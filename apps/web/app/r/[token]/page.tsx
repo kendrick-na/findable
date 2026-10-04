@@ -55,6 +55,18 @@ export async function generateMetadata({
 const SCALE_SCRIPT =
   "(function(){var r=document.documentElement;function f(){var w=r.clientWidth;r.style.setProperty('--fr-scale',String(Math.min(1,(w-24)/794)))}f();addEventListener('resize',f)})();";
 
+function PdfReviewHold({ visible }: { readonly visible: boolean }) {
+  if (!visible) {
+    return null;
+  }
+  return (
+    <aside className="fr-review-hold">
+      저장 PDF는 발행 근거와 파일 일치 여부를 재검수하는 동안 다운로드를
+      중지했습니다.
+    </aside>
+  );
+}
+
 export default async function ClientReportPage({
   params,
   searchParams,
@@ -68,7 +80,7 @@ export default async function ClientReportPage({
   }
 
   const { reportId, data, pdfUrl } = loaded;
-  const disclosure = clientReportDisclosure(data);
+  const disclosure = clientReportDisclosure(data, pdfUrl);
   if (reportId && !print) {
     const userAgent = (await headers()).get("user-agent");
     after(() => recordClientReportView(reportId, userAgent));
@@ -83,7 +95,7 @@ export default async function ClientReportPage({
           dangerouslySetInnerHTML={{ __html: SCALE_SCRIPT }}
         />
       )}
-      {!print && pdfUrl ? (
+      {!print && pdfUrl && disclosure.pdfDownloadAttested ? (
         <div className="fr-toolbar">
           <a download={clientReportPdfFilename(data)} href={pdfUrl}>
             PDF 내려받기 (발행 당시 파일)
@@ -114,17 +126,23 @@ export default async function ClientReportPage({
         </div>
       ) : null}
       {!print && disclosure.isFrozenSnapshot ? (
-        <ClientReportDisclosureNotice
-          legacySyntheticEngineIds={disclosure.legacySyntheticEngineIds}
-          measurementMix={disclosure.measurementMix}
-          print={print}
-          retiredEngineIds={disclosure.retiredEngineIds}
-        />
+        <>
+          <ClientReportDisclosureNotice
+            legacySyntheticEngineIds={disclosure.legacySyntheticEngineIds}
+            measurementMix={disclosure.measurementMix}
+            print={print}
+            retiredEngineIds={disclosure.retiredEngineIds}
+          />
+          <PdfReviewHold
+            visible={Boolean(pdfUrl) && !disclosure.pdfDownloadAttested}
+          />
+        </>
       ) : null}
       <main className="fr fr-stack">
         <ClientReport
           data={data}
           legacySyntheticEngineIds={disclosure.legacySyntheticEngineIds}
+          narrativeAttested={disclosure.narrativeAttested}
           printDisclosure={print ? disclosure : undefined}
           webUrl={webUrl}
         />

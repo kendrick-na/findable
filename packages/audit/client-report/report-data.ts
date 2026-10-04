@@ -114,6 +114,22 @@ export const clientReportDataSchema = z.object({
     clientSlug: z.string(),
     importedAt: z.string(),
   }),
+  publicationReview: z
+    .object({
+      narrativeApproved: z.boolean(),
+      pdfUrl: z.string().url().optional(),
+      pdfSha256: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      reviewedAt: z.string().datetime(),
+      reviewerUserId: z.string().min(1),
+      snapshotAuditId: z.string().min(1),
+      snapshotImportedAt: z.string().datetime(),
+      snapshotVersion: z.number().int().positive(),
+      templateVersion: z.string().min(1),
+    })
+    .optional(),
   config: clientReportConfigViewSchema,
   computed: computedSchema,
 });
@@ -121,6 +137,17 @@ export const clientReportDataSchema = z.object({
 export interface ClientReportData {
   computed: ClientReportComputed;
   config: ClientReportConfigView;
+  publicationReview?: {
+    narrativeApproved: boolean;
+    pdfUrl?: string;
+    pdfSha256?: string;
+    reviewedAt: string;
+    reviewerUserId: string;
+    snapshotAuditId: string;
+    snapshotImportedAt: string;
+    snapshotVersion: number;
+    templateVersion: string;
+  };
   schema: typeof CLIENT_REPORT_SCHEMA;
   schemaVersion: typeof CLIENT_REPORT_SCHEMA_VERSION;
   source: { auditId: string; clientSlug: string; importedAt: string };
@@ -131,8 +158,6 @@ export interface ClientReportData {
 export interface ClientReportDisclosure {
   /** Report.data is a point-in-time snapshot, not a live remeasurement. */
   isFrozenSnapshot: true;
-  /** Historical engine rows that must not be read as current measurements. */
-  retiredEngineIds: string[];
   /** Pre-cutover Naver rows were Findable's synthetic summary, not Naver AI. */
   legacySyntheticEngineIds: string[];
   measurementMix: {
@@ -141,31 +166,45 @@ export interface ClientReportDisclosure {
     legacySyntheticAnswers: number;
     searchExposureAnswers: number;
   };
+  /** Historical narrative can render only after a review bound to this template. */
+  narrativeAttested: boolean;
+  /** Stored PDF can be offered only after a snapshot-bound review records its exact URL and digest. */
+  pdfDownloadAttested: boolean;
+  publicationReviewRequired: boolean;
+  /** Historical engine rows that must not be read as current measurements. */
+  retiredEngineIds: string[];
 }
 
 const RETIRED_ENGINE_IDS = new Set(["hyperclova"]);
+const MEASURED_AT_RE = /^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/;
 
 /**
- * Public, policy-neutral disclosure for an already-issued report.
- * This deliberately does not invalidate the snapshot or its PDF URL.
+ * Public disclosure and quarantine decision for an already-issued report.
+ * Risky historical snapshots stay frozen but their narrative/PDF are withheld
+ * until a review is bound to the exact audit/import/version/template metadata.
  */
 export function clientReportDisclosure(
-  data: Pick<ClientReportData, "computed" | "config">
+  data: Pick<
+    ClientReportData,
+    | "computed"
+    | "config"
+    | "publicationReview"
+    | "source"
+    | "templateVersion"
+    | "version"
+  >,
+  currentPdfUrl?: string | null
 ): ClientReportDisclosure {
   const engineIds = new Set<string>([
     ...data.computed.answers.map((answer) => answer.engine),
     ...data.computed.engines.map((engine) => engine.id),
   ]);
-  const measuredAtMatch = /^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/.exec(
-    data.config.measured_at
-  );
+  const measuredAtMatch = MEASURED_AT_RE.exec(data.config.measured_at);
   const measuredAt = measuredAtMatch
     ? `${measuredAtMatch[1]}-${measuredAtMatch[2].padStart(2, "0")}-${measuredAtMatch[3].padStart(2, "0")}`
     : null;
   const legacyNaver =
-    engineIds.has("naver") &&
-    measuredAt !== null &&
-    measuredAt < "2026-09-29";
+    engineIds.has("naver") && measuredAt !== null && measuredAt < "2026-09-29";
   const measurementMix = {
     directAiAnswers: 0,
     retiredAnswers: 0,
@@ -183,10 +222,36 @@ export function clientReportDisclosure(
       measurementMix.directAiAnswers += 1;
     }
   }
+  const retiredEngineIds = [...RETIRED_ENGINE_IDS].filter((id) =>
+    engineIds.has(id)
+  );
+  const legacySyntheticEngineIds = legacyNaver ? ["naver"] : [];
+  const publicationReviewRequired =
+    retiredEngineIds.length > 0 || legacySyntheticEngineIds.length > 0;
+  const review = data.publicationReview;
+  const reviewMatchesSnapshot =
+    review !== undefined &&
+    review.templateVersion === data.templateVersion &&
+    review.snapshotAuditId === data.source.auditId &&
+    review.snapshotImportedAt === data.source.importedAt &&
+    review.snapshotVersion === data.version &&
+    Number.isFinite(new Date(review.reviewedAt).getTime()) &&
+    review.reviewerUserId.length > 0;
   return {
     isFrozenSnapshot: true,
-    retiredEngineIds: [...RETIRED_ENGINE_IDS].filter((id) => engineIds.has(id)),
-    legacySyntheticEngineIds: legacyNaver ? ["naver"] : [],
+    retiredEngineIds,
+    legacySyntheticEngineIds,
+    narrativeAttested:
+      !publicationReviewRequired ||
+      (reviewMatchesSnapshot && review.narrativeApproved),
+    pdfDownloadAttested:
+      !publicationReviewRequired ||
+      (reviewMatchesSnapshot &&
+        currentPdfUrl !== undefined &&
+        currentPdfUrl !== null &&
+        review.pdfUrl === currentPdfUrl &&
+        review.pdfSha256 !== undefined),
+    publicationReviewRequired,
     measurementMix,
   };
 }

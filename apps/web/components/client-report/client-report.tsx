@@ -8,18 +8,18 @@
 //   (유일한 예외: 파이썬 템플릿 안에서 하던 표시용 반올림 `ch.pct|round|int`).
 
 import {
-  ENGINE_MONO,
   currentEngineDisplayName,
   currentEngineDisplayText,
+  ENGINE_MONO,
   type EngineId,
   LABELS,
   type LabelId,
 } from "@repo/audit/client-report/compute";
 import { pyFloatStr, pyRound } from "@repo/audit/client-report/py-compat";
 import { formatOfficialPct } from "@repo/audit/client-report/render-strings";
-import {
-  type ClientReportData,
-  type ClientReportDisclosure,
+import type {
+  ClientReportData,
+  ClientReportDisclosure,
 } from "@repo/audit/client-report/report-data";
 import { ClientReportDisclosureNotice } from "./client-report-disclosure";
 
@@ -43,7 +43,11 @@ function safeAccuracyHeadline(
   return `전체 측정 ${total}건 중 ${accurate}건이 저장된 판별에서 ${brand}를 정확히 설명했습니다`;
 }
 
-function safeCoverSubtitle(custom: string, engineCount: number, answerCount: number): string {
+function safeCoverSubtitle(
+  custom: string,
+  engineCount: number,
+  answerCount: number
+): string {
   return custom.replace(
     /ChatGPT·Claude·Gemini\s+등\s+AI\s+\d+개\s+엔진,\s+\d+개\s+답변/g,
     `ChatGPT·Claude·Gemini와 검색을 포함한 ${engineCount}개 측정 채널, 전체 측정 ${answerCount}건`
@@ -133,20 +137,61 @@ function Foot({
 export interface ClientReportProps {
   readonly data: ClientReportData;
   readonly legacySyntheticEngineIds?: readonly string[];
+  readonly narrativeAttested?: boolean;
   readonly printDisclosure?: ClientReportDisclosure;
   /** 표지에 작게 찍는 웹 리포트 주소(PDF 에서 웹으로 돌아오는 길). */
   readonly webUrl: string | null;
 }
 
+function resolveNarrative(
+  config: ClientReportData["config"],
+  attested: boolean
+) {
+  if (attested) {
+    return {
+      causes: config.causes,
+      headlines: config.headlines ?? {},
+      insightsAccuracy: config.insights_accuracy,
+      insightsCitation: config.insights_citation,
+      insightsMatrix: config.insights_matrix,
+      playbook: config.playbook,
+      poc: config.poc,
+      why: config.why,
+    };
+  }
+  const notice =
+    "발행 당시 해석과 개선 제안은 근거·인과 표현을 재검수하는 동안 공개하지 않습니다. 측정 원문과 관찰값은 위 표에서 확인할 수 있습니다.";
+  return {
+    causes: [{ h: "원인 해석 재검수 중", p: notice }],
+    headlines: {},
+    insightsAccuracy: [notice],
+    insightsCitation: [notice],
+    insightsMatrix: [notice],
+    playbook: [{ p: "P0" as const, h: "개선 제안 재검수 중", d: notice }],
+    poc: [{ d: "보류", h: "재검수 후 제공", p: notice }],
+    why: [{ h: "발행 당시 서술 재검수 중", p: notice }],
+  };
+}
+
 export function ClientReport({
   data,
   legacySyntheticEngineIds = [],
+  narrativeAttested = true,
   printDisclosure,
   webUrl,
 }: ClientReportProps) {
   const c = data.config;
   const { answers, engines, per_q: perQ, channels, top, s } = data.computed;
-  const H = c.headlines ?? {};
+  const {
+    causes,
+    headlines: H,
+    insightsAccuracy,
+    insightsCitation,
+    insightsMatrix,
+    playbook,
+    poc,
+    why,
+  } = resolveNarrative(c, narrativeAttested);
   const officialPct = formatOfficialPct(s);
   const accuracyHeadline = safeAccuracyHeadline(H.p4, s.n, s.ok_n, c.brand);
   const coverSubtitle = safeCoverSubtitle(c.cover_sub, s.engines_total, s.n);
@@ -190,7 +235,8 @@ export function ClientReport({
         <div className="verdict">
           <div className="l">한 줄 결론</div>
           <div className="s">
-            전체 측정 {s.n}건 중 {s.ok_n}건이 저장된 판별에서 {c.brand}를 정확히 설명했습니다.
+            전체 측정 {s.n}건 중 {s.ok_n}건이 저장된 판별에서 {c.brand}를 정확히
+            설명했습니다.
           </div>
           <div className="nums">
             <div>
@@ -219,7 +265,11 @@ export function ClientReport({
             >
               <div className="eg">
                 <Mono engine={a.engine} />
-                {currentEngineDisplayName(a.engine, undefined, legacySyntheticEngineIds)}
+                {currentEngineDisplayName(
+                  a.engine,
+                  undefined,
+                  legacySyntheticEngineIds
+                )}
               </div>
               <div className="qt" {...rich(a.who)} />
               <div className="mk">{a.label === "ok" ? "정확" : "틀림"}</div>
@@ -239,7 +289,7 @@ export function ClientReport({
           <div>
             분석 답변
             <b>
-                {s.engines_total}개 엔진 · 전체 측정 {s.n}건
+              {s.engines_total}개 엔진 · 전체 측정 {s.n}건
             </b>
           </div>
         </div>
@@ -258,7 +308,7 @@ export function ClientReport({
           이 리포트를 만든 이유<span className="dot">.</span>
         </h1>
         <div className="why-grid">
-          {c.why.map((w, i) => (
+          {why.map((w, i) => (
             <div className="why-item" key={w.h}>
               <div className="n">{i + 1}</div>
               <div>
@@ -344,11 +394,7 @@ export function ClientReport({
         <Head brand={c.brand} sec="Section 1 · 정확도" />
         <div className="kicker">AI는 {c.brand}를 정확히 알고 있을까?</div>
         <h1 className="sec">
-          <span
-            {...rich(
-              accuracyHeadline
-            )}
-          />
+          <span {...rich(accuracyHeadline)} />
           <span className="dot">.</span>
         </h1>
         <div className="band">
@@ -467,7 +513,7 @@ export function ClientReport({
           </tbody>
         </table>
         <div className="ins">
-          {c.insights_accuracy.map((t) => (
+          {insightsAccuracy.map((t) => (
             <div key={t} {...rich(t)} />
           ))}
         </div>
@@ -558,7 +604,7 @@ export function ClientReport({
           ))}
         </div>
         <div className="ins">
-          {c.insights_matrix.map((t) => (
+          {insightsMatrix.map((t) => (
             <div key={t} {...rich(t)} />
           ))}
         </div>
@@ -773,7 +819,7 @@ export function ClientReport({
           </tbody>
         </table>
         <div className="ins">
-          {c.insights_citation.map((t) => (
+          {insightsCitation.map((t) => (
             <div key={t} {...rich(t)} />
           ))}
         </div>
@@ -797,12 +843,16 @@ export function ClientReport({
         <div className="kicker">왜 이런 결과가 나왔을까</div>
         <h1 className="sec">
           <span
-            {...rich(H.p8 ?? `AI가 ${c.brand}를 놓치는 이유는 세 가지입니다`)}
+            {...rich(
+              narrativeAttested
+                ? (H.p8 ?? `AI가 ${c.brand}를 놓치는 이유는 세 가지입니다`)
+                : "발행 당시 원인 해석을 재검수하고 있습니다"
+            )}
           />
           <span className="dot">.</span>
         </h1>
         <div className="causes">
-          {c.causes.map((x, i) => (
+          {causes.map((x, i) => (
             <div className="cause" key={x.h}>
               <div className="n">{i + 1}</div>
               <div>
@@ -855,7 +905,11 @@ export function ClientReport({
         <div className="kicker">바로 실천하는 개선 플레이북</div>
         <h1 className="sec">
           <span
-            {...rich(H.p9 ?? "AI가 어디서 읽든 같은 설명을 만나게 하세요")}
+            {...rich(
+              narrativeAttested
+                ? (H.p9 ?? "AI가 어디서 읽든 같은 설명을 만나게 하세요")
+                : "개선 제안은 근거 재검수 후 제공합니다"
+            )}
           />
           <span className="dot">.</span>
         </h1>
@@ -872,7 +926,7 @@ export function ClientReport({
                 <b>{grp}</b>
                 <span>{when}</span>
               </div>
-              {c.playbook
+              {playbook
                 .filter((x) => x.p === grp)
                 .map((x) => (
                   <div className="pb-item" key={x.h}>
@@ -917,7 +971,7 @@ export function ClientReport({
           않습니다.
         </div>
         <div className="tl">
-          {c.poc.map((x) => (
+          {poc.map((x) => (
             <div key={x.d}>
               <div className="d" {...rich(x.d)} />
               <div className="h" {...rich(x.h)} />

@@ -1,0 +1,172 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { ClientReportData } from "@repo/audit/client-report/report-data";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/client-report/load", () => ({
+  loadClientReport: vi.fn(),
+  recordClientReportView: vi.fn(),
+}));
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => new Headers({ "user-agent": "test" })),
+}));
+vi.mock("next/server", () => ({ after: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  notFound: vi.fn(() => {
+    throw new Error("not found");
+  }),
+}));
+
+import ClientReportPage from "../app/r/[token]/page";
+import { loadClientReport } from "../lib/client-report/load";
+
+const knowverse = JSON.parse(
+  readFileSync(
+    join(import.meta.dirname, "fixtures/client-report/knowverse.report.json"),
+    "utf8"
+  )
+) as ClientReportData;
+const oldPdfUrl = "https://example.test/issued/knowverse-old.pdf";
+const token = "a".repeat(43);
+
+beforeEach(() => {
+  vi.mocked(loadClientReport).mockResolvedValue({
+    data: knowverse,
+    pdfUrl: oldPdfUrl,
+    reportId: "historical-report",
+  });
+});
+
+it("does not expose an unattested historical PDF URL in the public web render", async () => {
+  const html = renderToStaticMarkup(
+    await ClientReportPage({
+      params: Promise.resolve({ token }),
+      searchParams: Promise.resolve({}),
+    })
+  );
+
+  expect(html).not.toContain(oldPdfUrl);
+  expect(html).toContain("발행본 안내");
+});
+
+it("does not present knowverse's causal claim as established fact in print", async () => {
+  const html = renderToStaticMarkup(
+    await ClientReportPage({
+      params: Promise.resolve({ token }),
+      searchParams: Promise.resolve({ print: "1" }),
+    })
+  );
+
+  expect(html).not.toContain("AI가 공식 사이트에 도달하지 못하면");
+  expect(html).toContain("발행본 안내");
+});
+
+it("restores the reviewed narrative and exact PDF only with snapshot-bound attestation", async () => {
+  const reviewed = {
+    ...knowverse,
+    publicationReview: {
+      narrativeApproved: true,
+      pdfUrl: oldPdfUrl,
+      pdfSha256: "a".repeat(64),
+      reviewedAt: "2026-10-04T10:00:00.000Z",
+      reviewerUserId: "admin-1",
+      snapshotAuditId: knowverse.source.auditId,
+      snapshotImportedAt: knowverse.source.importedAt,
+      snapshotVersion: knowverse.version,
+      templateVersion: knowverse.templateVersion,
+    },
+  };
+  vi.mocked(loadClientReport).mockResolvedValue({
+    data: reviewed,
+    pdfUrl: oldPdfUrl,
+    reportId: "historical-report",
+  });
+
+  const html = renderToStaticMarkup(
+    await ClientReportPage({
+      params: Promise.resolve({ token }),
+      searchParams: Promise.resolve({}),
+    })
+  );
+
+  expect(html).toContain(oldPdfUrl);
+  expect(html).toContain("AI가 공식 사이트에 도달하지 못하면");
+});
+
+it("does not accept an attestation for another template snapshot", async () => {
+  vi.mocked(loadClientReport).mockResolvedValue({
+    data: {
+      ...knowverse,
+      publicationReview: {
+        narrativeApproved: true,
+        pdfUrl: oldPdfUrl,
+        pdfSha256: "a".repeat(64),
+        reviewedAt: "2026-10-04T10:00:00.000Z",
+        reviewerUserId: "admin-1",
+        snapshotAuditId: knowverse.source.auditId,
+        snapshotImportedAt: knowverse.source.importedAt,
+        snapshotVersion: knowverse.version,
+        templateVersion: "another-template",
+      },
+    },
+    pdfUrl: oldPdfUrl,
+    reportId: "historical-report",
+  });
+
+  const html = renderToStaticMarkup(
+    await ClientReportPage({
+      params: Promise.resolve({ token }),
+      searchParams: Promise.resolve({}),
+    })
+  );
+
+  expect(html).not.toContain(oldPdfUrl);
+  expect(html).not.toContain("AI가 공식 사이트에 도달하지 못하면");
+});
+
+it("does not expose a PDF URL different from the reviewed artifact", async () => {
+  vi.mocked(loadClientReport).mockResolvedValue({
+    data: {
+      ...knowverse,
+      publicationReview: {
+        narrativeApproved: true,
+        pdfUrl: "https://example.test/issued/reviewed.pdf",
+        pdfSha256: "a".repeat(64),
+        reviewedAt: "2026-10-04T10:00:00.000Z",
+        reviewerUserId: "admin-1",
+        snapshotAuditId: knowverse.source.auditId,
+        snapshotImportedAt: knowverse.source.importedAt,
+        snapshotVersion: knowverse.version,
+        templateVersion: knowverse.templateVersion,
+      },
+    },
+    pdfUrl: oldPdfUrl,
+    reportId: "historical-report",
+  });
+
+  const html = renderToStaticMarkup(
+    await ClientReportPage({
+      params: Promise.resolve({ token }),
+      searchParams: Promise.resolve({}),
+    })
+  );
+
+  expect(html).not.toContain(oldPdfUrl);
+  expect(html).toContain("AI가 공식 사이트에 도달하지 못하면");
+});
+
+it.each([
+  false,
+  true,
+])("separates AI answers from search exposure on the %s back cover", async (print) => {
+  const html = renderToStaticMarkup(
+    await ClientReportPage({
+      params: Promise.resolve({ token }),
+      searchParams: Promise.resolve(print ? { print: "1" } : {}),
+    })
+  );
+
+  expect(html).not.toContain("네이버 등 AI가 우리 브랜드를 어떻게");
+  expect(html).toContain("AI 답변과 검색 노출을 구분해");
+});
