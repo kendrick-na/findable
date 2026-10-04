@@ -251,6 +251,14 @@ describe("audit route tenant boundary", () => {
     ])("%s returns 403 before side effects", async (_route, call) => {
       const response = await call();
       expect(response.status).toBe(403);
+      expect(mocks.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            email: true,
+            organizationId: true,
+          }),
+        })
+      );
       expect(mocks.reconcile).not.toHaveBeenCalled();
       expect(mocks.findMany).not.toHaveBeenCalled();
       expect(mocks.createLead).not.toHaveBeenCalled();
@@ -265,6 +273,14 @@ describe("audit route tenant boundary", () => {
       const html = renderToStaticMarkup(
         await AuditResultPage({
           params: Promise.resolve({ locale: "ko", jobId }),
+        })
+      );
+      expect(mocks.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            email: true,
+            organizationId: true,
+          }),
         })
       );
       expect(html).not.toContain("private.example");
@@ -327,6 +343,30 @@ describe("audit route tenant boundary", () => {
       })
     );
     expect(html).toContain("private.example");
+  });
+
+  test("Clerk failure fails closed for a workspace job before side effects", async () => {
+    mocks.auth.mockRejectedValue(new Error("clerk unavailable"));
+    const response = await pollAudit(request() as never, params);
+    expect(response.status).toBe(403);
+    expect(mocks.reconcile).not.toHaveBeenCalled();
+    expect(mocks.findMany).not.toHaveBeenCalled();
+    expect(mocks.updateJob).not.toHaveBeenCalled();
+  });
+
+  test("Clerk failure does not hide a deliberately public free result", async () => {
+    mocks.findUnique.mockResolvedValue({
+      ...privateJob,
+      email: "free@example.com",
+      organizationId: null,
+    });
+    mocks.auth.mockRejectedValue(new Error("clerk unavailable"));
+    const response = await pollAudit(request() as never, params);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      domain: "private.example",
+      isWorkspaceAudit: false,
+    });
   });
 
   test("SetNull legacy org marker remains readable by its active org", async () => {
