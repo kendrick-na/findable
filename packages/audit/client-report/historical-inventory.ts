@@ -169,9 +169,7 @@ export interface ReadOnlyInventoryClient {
 const utcIso = (column: string) =>
   `to_char(${column}, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
-export function readHistoricalReportInventory(
-  client: ReadOnlyInventoryClient
-) {
+export function readHistoricalReportInventory(client: ReadOnlyInventoryClient) {
   // Prisma DateTime columns are timestamp(3) WITHOUT time zone holding UTC; raw
   // aggregates come back as naive values the driver would read as local time, so
   // render them as explicit UTC ISO strings in SQL.
