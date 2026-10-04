@@ -25,6 +25,8 @@ interface AuditReportEmailProps {
   readonly geoScore: number; // 0~100
   readonly pdfUrl?: string;
   readonly resultUrl: string; // https://findable.co.kr/ko/audit/[jobId]
+  /** 네이버 검색 표본 방식 라벨(W1). 네이버 검색 행이 없으면 생략. */
+  readonly searchSamplingLabel?: string | null;
   readonly tierLabel: string; // "리더" / "경쟁 가능" / "막 시작" / "AI에서 안 보임"
   readonly topActions?: Array<{
     rank: number;
@@ -42,6 +44,7 @@ export const AuditReportEmail = ({
   enginesTotal,
   resultUrl,
   pdfUrl,
+  searchSamplingLabel = null,
   topActions = [],
 }: AuditReportEmailProps): React.JSX.Element => {
   let tierColor = "#ef4444";
@@ -102,6 +105,12 @@ export const AuditReportEmail = ({
                     ? "• AI·검색 채널별 확인 수는 이번 회차에서 산출할 수 없습니다."
                     : `• AI·검색 합산: 측정 성공 ${enginesTotal}곳 중 ${enginesMentioned}곳에서 브랜드 노출이 확인됐습니다.`}
                 </Text>
+                {searchSamplingLabel ? (
+                  <Text className="m-0 mb-1 text-xs text-zinc-500">
+                    • {searchSamplingLabel} — 표본 방식이 다른 회차와는 검색
+                    노출을 비교하지 않습니다.
+                  </Text>
+                ) : null}
                 <Text className="m-0 mb-4 text-sm text-zinc-700">
                   • GEO 점수 {geoScore}점 — {tierLabel}
                 </Text>

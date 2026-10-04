@@ -26,7 +26,10 @@ import { BrandSwitcher } from "./components/brand-switcher";
 import { DashboardAnswerBuckets } from "./components/dashboard-answer-buckets";
 import { DashboardDeepAnalysis } from "./components/dashboard-deep-analysis";
 import { DashboardEmptyState } from "./components/dashboard-empty-state-server";
-import { DashboardKpis } from "./components/dashboard-kpis";
+import {
+  DashboardKpis,
+  SearchSamplingTrendNote,
+} from "./components/dashboard-kpis";
 import { DashboardRunContext } from "./components/dashboard-run-context";
 import {
   DashboardSystemStatus,
@@ -47,6 +50,7 @@ import {
   buildDashboardData,
   buildTrackingDashboardData,
   invalidTrackingRunTimes,
+  trackingRunSearchSamplingVersions,
 } from "./lib/dashboard-data";
 import { buildTruthMirrorData } from "./lib/truth-mirror-data";
 import { getPrimaryEmail } from "./lib/user";
@@ -164,6 +168,21 @@ const DashboardNoResultState = ({
   return <DashboardEmptyState signedInEmail={signedInEmail} />;
 };
 
+/** Drops Tracking rows of unusable runs for the viewed brand only. */
+function withoutInvalidRuns<T extends { brandId: string; trackedAt: Date }>(
+  rows: T[],
+  brandId: string | null,
+  invalidRunTimes: Set<number>
+): T[] {
+  if (invalidRunTimes.size === 0) {
+    return rows;
+  }
+  return rows.filter(
+    (row) =>
+      row.brandId !== brandId || !invalidRunTimes.has(row.trackedAt.getTime())
+  );
+}
+
 const App = async ({ searchParams }: AppProperties) => {
   const { brand: selectedBrandId } = await searchParams;
   const user = await currentUser();
@@ -224,43 +243,50 @@ const App = async ({ searchParams }: AppProperties) => {
   // Tracking rows do not carry entity-verification status. A prior run with
   // skipped verdicts must not become a 0% baseline or a false trend point.
   // Read result JSON only for this brand's recent jobs, not all org jobs.
-  const qualityCandidateIds = initialTrackingData?.latestBrandId
+  // W1: the same read also yields each run's Naver search sampling version,
+  // so it includes the latest run (Tracking rows do not carry the version).
+  const brandRunJobIds = initialTrackingData?.latestBrandId
     ? jobsLite
         .filter(
           (job) =>
             job.brandId === initialTrackingData.latestBrandId &&
             job.status === "completed" &&
-            job.completedAt &&
-            job.completedAt.getTime() !==
-              initialTrackingData.latestMeasuredAt?.getTime()
+            job.completedAt
         )
         .map((job) => job.id)
     : [];
-  const qualityJobs = qualityCandidateIds.length
+  const brandRunJobs = brandRunJobIds.length
     ? await database.auditJob.findMany({
-        where: { ...(JOB_WHERE ?? {}), id: { in: qualityCandidateIds } },
+        where: { ...(JOB_WHERE ?? {}), id: { in: brandRunJobIds } },
         select: { id: true, result: true },
       })
     : [];
+  const brandRuns = brandRunJobs.map((job) => ({
+    completedAt:
+      jobsLite.find((candidate) => candidate.id === job.id)?.completedAt ??
+      null,
+    result: job.result,
+  }));
   const invalidRunTimes = invalidTrackingRunTimes(
-    qualityJobs.map((job) => ({
-      completedAt:
-        jobsLite.find((candidate) => candidate.id === job.id)?.completedAt ??
-        null,
-      result: job.result,
-    }))
+    brandRuns.filter(
+      (run) =>
+        run.completedAt?.getTime() !==
+        initialTrackingData?.latestMeasuredAt?.getTime()
+    )
   );
-  const trackingData =
-    initialTrackingData && invalidRunTimes.size > 0
-      ? buildTrackingDashboardData(
-          trackingRows.filter(
-            (row) =>
-              row.brandId !== initialTrackingData.latestBrandId ||
-              !invalidRunTimes.has(row.trackedAt.getTime())
-          ),
-          selectedBrandId
-        )
-      : initialTrackingData;
+  const runSearchSamplingVersions =
+    trackingRunSearchSamplingVersions(brandRuns);
+  const trackingData = initialTrackingData
+    ? buildTrackingDashboardData(
+        withoutInvalidRuns(
+          trackingRows,
+          initialTrackingData.latestBrandId,
+          invalidRunTimes
+        ),
+        selectedBrandId,
+        runSearchSamplingVersions
+      )
+    : null;
   // 🔴 D10(2026-08-07): 여기 있던 `Math.max(trackingData.totalCount, jobs.length)` 를 뺐다.
   //   원래 의도는 "이력 리스트(AuditJob)보다 총 횟수가 적게 보이는 혼란 방지"였는데,
   //   totalCount 가 **보고 있는 브랜드의 측정 횟수**로 바뀐 지금은 그 보정이
@@ -591,6 +617,7 @@ const App = async ({ searchParams }: AppProperties) => {
                   }
                   trend={data.trend}
                 />
+                <SearchSamplingTrendNote data={data} />
               </div>
             ) : null}
 

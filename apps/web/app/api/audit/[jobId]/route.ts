@@ -25,6 +25,7 @@ import {
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
+import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
 import { reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
@@ -89,6 +90,7 @@ async function loadHistory(job: {
           domain: r.domain,
           createdAt: r.createdAt,
           score: scoreOf(result),
+          searchSamplingVersion: searchSamplingVersionOf(r.result),
           usable: isUsableRun(result),
         };
       }),

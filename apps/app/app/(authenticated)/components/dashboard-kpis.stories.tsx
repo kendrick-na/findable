@@ -30,6 +30,10 @@ const base: DashboardData = {
   sovDeltaPoints: 4,
   totalCount: 34,
   trend: [],
+  comparisonBlockedReason: null,
+  previousMeasuredAt: null,
+  searchSamplingVersion: null,
+  trendExcludedRuns: 0,
 };
 
 const meta = {

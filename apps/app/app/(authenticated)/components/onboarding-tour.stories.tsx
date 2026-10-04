@@ -32,6 +32,10 @@ const REAL_DATA: DashboardData = {
   sovDeltaPoints: 4,
   totalCount: 34,
   trend: [],
+  comparisonBlockedReason: null,
+  previousMeasuredAt: null,
+  searchSamplingVersion: null,
+  trendExcludedRuns: 0,
 };
 
 /** 실제 대시보드 레이아웃을 흉내낸다 — `id="tour-kpis"` 등 앵커만 있으면 투어가 찾는다. */

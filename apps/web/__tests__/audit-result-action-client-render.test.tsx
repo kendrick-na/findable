@@ -178,7 +178,7 @@ async function waitForText(container: HTMLElement, text: string) {
 }
 
 afterEach(async () => {
-  await act(async () => {
+  await act(() => {
     root?.unmount();
   });
   root = undefined;
@@ -229,6 +229,41 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     expect(
       container.querySelectorAll("[data-testid='audit-metric-basis-notice']")
     ).toHaveLength(0);
+  });
+
+  it("renders 비교 불가 instead of a score delta when the Naver search sample changed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ...response,
+          history: {
+            comparisonBlockedReason: "search_sampling_changed",
+            currentSearchSamplingVersion: "interleave-v1",
+            deltaPoints: null,
+            previousAt: "2026-10-01T00:00:00.000Z",
+            previousJobId: "older-job",
+            previousScore: null,
+            previousSearchSamplingVersion: "legacy",
+            totalRuns: 2,
+          },
+        })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "비교 불가(측정 방식 변경)");
+    const badge = container.querySelector(
+      "[data-testid='previous-run-blocked']"
+    );
+    expect(badge?.textContent).toContain("검색 표본 v1");
+    expect(badge?.textContent).toContain("검색 표본 v2");
+    expect(container.textContent).not.toContain("지난번보다");
+    expect(container.textContent).not.toContain("지난번과 같아요");
   });
 
   it("shows an advice-only correction if SSR lookup missed it", async () => {
@@ -327,7 +362,7 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    await act(async () => {
+    await act(() => {
       root?.render(<AuditResultView jobId="fixture-job" locale={locale} />);
     });
     await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");

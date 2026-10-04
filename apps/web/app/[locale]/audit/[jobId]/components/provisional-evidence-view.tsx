@@ -2,6 +2,7 @@
 
 import type { AnswerBucketSummary } from "@repo/audit/answer-buckets";
 import type { AuditPublicationIssue } from "@repo/audit/normalize-stored-metrics";
+import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
 import {
   AnswerBucketBoard,
   type MatrixAnswer,
@@ -76,6 +77,9 @@ export function ProvisionalEvidenceView({
       <AnswerBucketBoard
         discoveryPromptCount={discoveryPromptCount}
         isKo={isKo}
+        searchSamplingVersion={searchSamplingVersionOf({
+          engineResponses: rows,
+        })}
         summary={summary}
       />
       <QuestionEngineMatrix brandDomain={domain} isKo={isKo} rows={rows} />

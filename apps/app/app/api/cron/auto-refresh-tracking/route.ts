@@ -42,6 +42,7 @@ import { buildAuditHistory } from "@repo/audit/history";
 import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
+import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
 import { type Plan, planCapabilities } from "@repo/auth/plan";
 import { database } from "@repo/database";
 import { resend } from "@repo/email";
@@ -108,6 +109,7 @@ async function compareWithPrevious(
         domain: r.domain,
         createdAt: r.createdAt,
         score: scoreOf(r.result),
+        searchSamplingVersion: searchSamplingVersionOf(r.result),
         usable: isUsableRun(r.result),
       })),
       jobId,

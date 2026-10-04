@@ -12,6 +12,10 @@ import {
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import {
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import { database } from "@repo/database";
 import { resend } from "@repo/email";
 import { AuditReportEmail } from "@repo/email/templates/audit-report";
@@ -243,6 +247,10 @@ export async function POST(
         enginesMentioned,
         enginesTotal,
         resultUrl: `${baseUrl}/ko/audit/${jobId}`,
+        searchSamplingLabel: searchSamplingLabel(
+          searchSamplingVersionOf(job.result),
+          true
+        ),
         pdfUrl:
           job.pdfUrl &&
           isCurrentAuditPdfUrl(job.pdfUrl) &&

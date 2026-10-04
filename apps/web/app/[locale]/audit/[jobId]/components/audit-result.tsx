@@ -33,8 +33,8 @@ import {
   type PromptKind,
   summarizeAnswerBuckets,
 } from "@repo/audit/answer-buckets";
-import type { BrandNameCheck } from "@repo/audit/brand-name-check";
 import { countBrandAiRecognition } from "@repo/audit/brand-ai-recognition";
+import type { BrandNameCheck } from "@repo/audit/brand-name-check";
 import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 import { engineDisplayName } from "@repo/audit/engine-labels";
 import {
@@ -56,6 +56,11 @@ import {
   PROVISIONAL_MAX_UNVERIFIED_SHARE,
 } from "@repo/audit/normalize-stored-metrics";
 import { detailedRankLabel } from "@repo/audit/rank-label";
+import {
+  searchSamplingBlockedCopy,
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { Button } from "@repo/design-system/components/ui/button";
 import {
@@ -77,20 +82,20 @@ import {
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActionDetails as TeaserActionDetails,
+  ActionLead as TeaserActionLead,
+} from "./action-teaser-cards";
+import {
   AnswerBucketBoard,
   AnswerBucketPill,
   BrandNameMismatchNotice,
   QuestionEngineMatrix,
 } from "./answer-buckets";
 import { CompetitorBenchmark } from "./competitor-benchmark";
+import { AuditMetricBasisNotice } from "./metric-basis-notice";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
 import { ProvisionalEvidenceView } from "./provisional-evidence-view";
 import { TruthMirror } from "./truth-mirror";
-import {
-  ActionDetails as TeaserActionDetails,
-  ActionLead as TeaserActionLead,
-} from "./action-teaser-cards";
-import { AuditMetricBasisNotice } from "./metric-basis-notice";
 
 interface Props {
   correctionNoticeShown?: boolean;
@@ -359,10 +364,13 @@ interface JobResponse {
    * 첫 측정이면 전부 null·totalRuns=1 → 배지가 아예 렌더되지 않는다.
    */
   history?: {
+    comparisonBlockedReason?: string | null;
+    currentSearchSamplingVersion?: string | null;
     deltaPoints: number | null;
     previousAt: string | null;
     previousJobId: string | null;
     previousScore: number | null;
+    previousSearchSamplingVersion?: string | null;
     totalRuns: number;
   } | null;
   isWorkspaceAudit?: boolean;
@@ -474,6 +482,27 @@ function PreviousRunBadge({
   history: JobResponse["history"];
   isKo: boolean;
 }) {
+  if (history?.comparisonBlockedReason) {
+    // W1 정책: 검색 표본 방식이 바뀐 직전 회차와는 점수 차이를 내지 않는다.
+    return (
+      <div
+        className="flex flex-col items-center gap-1 text-center"
+        data-testid="previous-run-blocked"
+      >
+        <span className="font-medium text-xs text-zinc-400">
+          {searchSamplingBlockedCopy(isKo)}
+        </span>
+        <span className="text-[11px] text-zinc-500">
+          {[
+            searchSamplingLabel(history.previousSearchSamplingVersion, isKo),
+            searchSamplingLabel(history.currentSearchSamplingVersion, isKo),
+          ]
+            .filter(Boolean)
+            .join(" → ")}
+        </span>
+      </div>
+    );
+  }
   const delta = history?.deltaPoints;
   if (!history || delta === null || delta === undefined) {
     return null;
@@ -1967,6 +1996,7 @@ function HeroSection({
       <AnswerBucketBoard
         discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
         isKo={isKo}
+        searchSamplingVersion={searchSamplingVersionOf(result)}
         summary={buckets}
       />
 

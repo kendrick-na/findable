@@ -26,6 +26,10 @@ import {
 } from "@repo/audit/answer-buckets";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
 import { engineDisplayName, engineNote } from "@repo/audit/engine-labels";
+import {
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { AlertCircle, ChevronDown } from "lucide-react";
 import { useState } from "react";
@@ -93,11 +97,14 @@ export function AnswerBucketBoard({
   summary,
   isKo,
   discoveryPromptCount,
+  searchSamplingVersion,
 }: {
   summary: AnswerBucketSummary;
   isKo: boolean;
   /** 러너가 만든 이름 없는 질문 수. undefined = 그 기능 이전 회차(말하지 않는다). */
   discoveryPromptCount?: number;
+  /** 이 회차 네이버 검색 표본 방식(`searchSamplingVersionOf`). 라벨로만 쓴다. */
+  searchSamplingVersion?: string | null;
 }) {
   const { ai } = summary;
   return (
@@ -185,24 +192,78 @@ export function AnswerBucketBoard({
             </li>
           )
         )}
-        {Object.entries(summary.searchByEngine ?? {}).length > 0 && (
-          <li className="break-keep" data-testid="search-exposure-line">
-            <span className="font-medium text-zinc-300">
-              {Object.entries(summary.searchByEngine ?? {})
-                .map(
-                  ([id, g]) =>
-                    `${engineDisplayName(id, isKo)} ${g.confirmed}/${g.adjudicated}`
-                )
-                .join(" · ")}
-            </span>{" "}
-            —{" "}
-            {isKo
-              ? "AI 답변이 아니라 검색 결과에 우리 브랜드·공식 도메인이 나왔는지 본 값이라 AI 비율과 따로 셌어요."
-              : "Whether search results show your brand or official domain — not AI answers, so counted separately."}
-          </li>
-        )}
+        <SearchExposureLine
+          isKo={isKo}
+          searchByEngine={summary.searchByEngine}
+          searchSamplingVersion={searchSamplingVersion}
+        />
       </ul>
     </div>
+  );
+}
+
+function legacySummaryToggleCopy(open: boolean, isKo: boolean): string {
+  if (open) {
+    return isKo ? "요약 접기" : "Hide summary";
+  }
+  return isKo ? "당시 요약 보기" : "Show that summary";
+}
+
+/** 검색 노출 한 줄 — AI 비율과 따로 센 값 + 네이버 표본 방식 라벨. */
+function SearchExposureLine({
+  searchByEngine,
+  isKo,
+  searchSamplingVersion,
+}: {
+  searchByEngine: AnswerBucketSummary["searchByEngine"] | undefined;
+  isKo: boolean;
+  searchSamplingVersion?: string | null;
+}) {
+  const entries = Object.entries(searchByEngine ?? {});
+  if (entries.length === 0) {
+    return null;
+  }
+  return (
+    <li className="break-keep" data-testid="search-exposure-line">
+      <span className="font-medium text-zinc-300">
+        {entries
+          .map(
+            ([id, g]) =>
+              `${engineDisplayName(id, isKo)} ${g.confirmed}/${g.adjudicated}`
+          )
+          .join(" · ")}
+      </span>{" "}
+      —{" "}
+      {isKo
+        ? "AI 답변이 아니라 검색 결과에 우리 브랜드·공식 도메인이 나왔는지 본 값이라 AI 비율과 따로 셌어요."
+        : "Whether search results show your brand or official domain — not AI answers, so counted separately."}
+      {entries.some(([id]) => id === "naver") &&
+        searchSamplingVersion !== undefined && (
+          <SearchSamplingTag isKo={isKo} version={searchSamplingVersion} />
+        )}
+    </li>
+  );
+}
+
+/** 네이버 검색 노출 값 옆의 작은 표본 방식 라벨(W1 정책: 방식이 다르면 비교 안 함). */
+export function SearchSamplingTag({
+  version,
+  isKo,
+}: {
+  version: string | null | undefined;
+  isKo: boolean;
+}) {
+  const label = searchSamplingLabel(version, isKo);
+  if (!label) {
+    return null;
+  }
+  return (
+    <span
+      className="ml-1.5 inline-block rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500"
+      data-testid="search-sampling-label"
+    >
+      {label}
+    </span>
   );
 }
 
@@ -245,6 +306,7 @@ export interface MatrixAnswer {
   excerpt: string;
   isStub: boolean;
   mentionQuality?: string | null;
+  naverSamplingVersion?: string | null;
   naverSource?: string | null;
   promptKind?: PromptKind | null;
   promptText?: string | null;
@@ -342,13 +404,7 @@ function LegacyNaverRow({
             onClick={() => setOpen((v) => !v)}
             type="button"
           >
-            {open
-              ? isKo
-                ? "요약 접기"
-                : "Hide summary"
-              : isKo
-                ? "당시 요약 보기"
-                : "Show that summary"}
+            {legacySummaryToggleCopy(open, isKo)}
           </button>
         )}
         {open && (
@@ -476,6 +532,17 @@ function EngineLegend({ rows, isKo }: { rows: MatrixAnswer[]; isKo: boolean }) {
   const notes = [...new Set(rows.map((r) => r.engineId))]
     .map((id) => engineNote(id, isKo))
     .filter((note): note is string => Boolean(note));
+  const samplingLabel = searchSamplingLabel(
+    searchSamplingVersionOf({ engineResponses: rows }),
+    isKo
+  );
+  if (samplingLabel) {
+    notes.push(
+      isKo
+        ? `${samplingLabel} — 표본 방식이 다른 회차와는 검색 노출 수를 비교하지 않아요.`
+        : `${samplingLabel} — search exposure is not compared with runs that used another sampling method.`
+    );
+  }
   if (notes.length === 0) {
     return null;
   }

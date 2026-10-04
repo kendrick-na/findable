@@ -1,5 +1,9 @@
 import type { MetricKey } from "@repo/audit/metric-dictionary";
 import { directionHint, METRICS } from "@repo/audit/metric-dictionary";
+import {
+  searchSamplingBlockedCopy,
+  searchSamplingLabel,
+} from "@repo/audit/search-sampling-version";
 import { cn } from "@repo/design-system/lib/utils";
 import {
   ArrowDownRight,
@@ -372,6 +376,9 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
     sentiment,
     trend,
   } = data;
+  // W1 정책: 직전 회차와 네이버 검색 표본 방식이 달라 비교를 막았는가.
+  const comparisonBlocked = data.comparisonBlockedReason !== null;
+  const samplingLabel = searchSamplingLabel(data.searchSamplingVersion, true);
 
   /*
    * 측정 기록은 있는데(`totalCount > 0`) **히어로 3장이 전부 값이 없는** 경우.
@@ -421,12 +428,11 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
-          badge={
-            sovDeltaPoints !== null && sovDeltaPoints !== 0 ? (
-              <SovDeltaBadge delta={sovDeltaPoints} />
-            ) : undefined
-          }
-          hint={measurementCoverageHint(coverage, latestSov)}
+          badge={sovBadge(sovDeltaPoints, comparisonBlocked)}
+          hint={withSamplingLabel(
+            measurementCoverageHint(coverage, latestSov),
+            samplingLabel
+          )}
           // 🔴 **라벨을 값의 축에 맞춘다** (N-46 · 👤 Ⓐ안 · 라이브 실측으로 확정).
           //   라벨은 `recognition`(엔진 축 · **곳**)인데 값은 `sov`(응답 축 · **%**)였다.
           //   라이브에서 *"AI가 우리를 아나? **95%**"* 밑에 *"7곳 중 **7곳**"*(=100%)이 붙어
@@ -451,7 +457,11 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
           // 🔴 방향은 지표 사전이 단독으로 정한다 — 화면이 "낮을수록 좋음"을
           //   직접 써넣으면 사전과 갈라질 수 있다(같은 수치 2벌 금지와 같은 규율).
           directionNote={directionHint("rank")}
-          hint={positionHint(averageMentionPosition, previousMentionPosition)}
+          hint={positionHint(
+            averageMentionPosition,
+            previousMentionPosition,
+            comparisonBlocked
+          )}
           href={
             data.latestBrandId
               ? `/compare?brand=${data.latestBrandId}`
@@ -490,7 +500,11 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
         <KpiCard
           comparison={
             sentiment
-              ? sentimentComparison(sentiment, previousSentiment)
+              ? sentimentComparison(
+                  sentiment,
+                  previousSentiment,
+                  comparisonBlocked
+                )
               : undefined
           }
           hint={sentimentHint(sentiment)}
@@ -637,10 +651,14 @@ const GLOSSARY_KEYS = [
 //   1단계(경쟁사 평균)는 /compare 가 이미 렌더링 중.
 function positionHint(
   position: number | null,
-  previous: number | null
+  previous: number | null,
+  comparisonBlocked = false
 ): string {
   if (position === null) {
     return "AI가 우리를 언급하면 순위를 알려드려요";
+  }
+  if (comparisonBlocked) {
+    return searchSamplingBlockedCopy(true);
   }
   if (previous === null) {
     return "비교는 2회차 측정부터 보여드려요";
@@ -663,8 +681,13 @@ function positionHint(
 // `export` — 테스트가 **실제 함수**를 검사하게 한다(복제하면 갈라진다).
 export function sentimentComparison(
   current: SentimentSummary,
-  previous: SentimentSummary | null
+  previous: SentimentSummary | null,
+  comparisonBlocked = false
 ): string {
+  if (comparisonBlocked) {
+    // W1 정책: 검색 표본 방식이 바뀐 직전 회차와는 비교하지 않는다(「2회차부터」도 아니다).
+    return searchSamplingBlockedCopy(true);
+  }
   if (!previous) {
     // 순위 카드와 같은 안내(positionHint) — 3장의 어투를 맞춘다.
     return "비교는 2회차 측정부터 보여드려요";
@@ -696,6 +719,54 @@ function sentimentHint(summary: SentimentSummary | null): string {
   ];
   return `${parts.join(" · ")} · 총 ${summary.total}건`;
 }
+
+/** 등장률 카드 배지 — 비교가 막혔으면 숫자 대신 「비교 불가(측정 방식 변경)」. */
+function sovBadge(delta: number | null, comparisonBlocked: boolean) {
+  if (comparisonBlocked) {
+    return (
+      <span
+        className="mb-1 inline-flex items-center rounded-full border border-transparent bg-[color:var(--findable-surface-3,#18191a)] px-2 py-0.5 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs"
+        data-testid="sov-comparison-blocked"
+      >
+        {searchSamplingBlockedCopy(true)}
+      </span>
+    );
+  }
+  return delta !== null && delta !== 0 ? (
+    <SovDeltaBadge delta={delta} />
+  ) : undefined;
+}
+
+/** 등장률에는 네이버 검색 노출이 섞인다 → 이번 회차의 검색 표본 방식을 함께 적는다. */
+function withSamplingLabel(hint: string, label: string | null): string {
+  return label ? `${hint} · ${label}` : hint;
+}
+
+/**
+ * 추세선 아래 한 줄 — 검색 표본 방식이 다른 회차를 선에서 뺐다면 그 사실을 말한다.
+ * 조용히 짧아진 선은 「측정을 덜 했나?」로 읽힌다.
+ */
+export const SearchSamplingTrendNote = ({ data }: { data: DashboardData }) => {
+  const label = searchSamplingLabel(data.searchSamplingVersion, true);
+  if (data.trendExcludedRuns === 0 && !label) {
+    return null;
+  }
+  return (
+    <p
+      className="mt-2 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs"
+      data-testid="search-sampling-trend-note"
+    >
+      {[
+        label,
+        data.trendExcludedRuns > 0
+          ? `측정 방식이 다른 이전 ${data.trendExcludedRuns}회는 추세에서 뺐어요(${searchSamplingBlockedCopy(true)})`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
+    </p>
+  );
+};
 
 // 델타는 측정 간 차이이며 조치 효과가 아니다. 상승/하락 모두 중립색으로 표시한다.
 const SovDeltaBadge = ({ delta }: { delta: number }) => {

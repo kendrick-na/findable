@@ -50,6 +50,10 @@ const base: DashboardData = {
   sovDeltaPoints: null,
   totalCount: 7,
   trend: [],
+  comparisonBlockedReason: null,
+  previousMeasuredAt: null,
+  searchSamplingVersion: null,
+  trendExcludedRuns: 0,
 };
 
 describe("순위 카드 — 모집단을 밝힌다", () => {
