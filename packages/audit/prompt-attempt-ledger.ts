@@ -1,6 +1,16 @@
-export type PromptAttemptOutcome = "completed" | "failed" | "unverified";
+export type PromptAttemptOutcome =
+  | "abandoned"
+  | "completed"
+  | "failed"
+  | "unverified";
+
+export interface AuthoritativeJobLease {
+  leaseToken: string;
+  leaseUntil: Date;
+}
 
 export interface PromptAttempt {
+  attemptNo: number;
   auditJobId: string;
   brandId: string;
   finishedAt: Date | null;
@@ -12,6 +22,7 @@ export interface PromptAttempt {
   selectedAt: Date;
   selectionSeq: number;
   startedAt: Date | null;
+  startedLeaseToken: string | null;
 }
 
 interface ReservePromptPlanInput {
@@ -60,25 +71,7 @@ export function reservePromptPlan({
     .sort((a, b) => a.planIndex - b.planIndex);
 
   if (existing.length > 0) {
-    assertUnique(
-      existing.map((attempt) => attempt.promptId),
-      "attempt prompt"
-    );
-    assertUnique(
-      existing.map((attempt) => String(attempt.planIndex)),
-      "attempt plan index"
-    );
-    const planSizes = new Set(existing.map((attempt) => attempt.planSize));
-    const planSize = existing[0]?.planSize ?? 0;
-    if (
-      planSizes.size !== 1 ||
-      !Number.isSafeInteger(planSize) ||
-      planSize < 1 ||
-      existing.length !== planSize ||
-      existing.some((attempt, index) => attempt.planIndex !== index)
-    ) {
-      throw new Error("Incomplete prompt plan");
-    }
+    assertExistingPlan(existing, prompts, limit);
     return existing;
   }
 
@@ -121,10 +114,11 @@ export function reservePromptPlan({
       if (aSequence !== bSequence) {
         return aSequence - bSequence;
       }
-      return a.id.localeCompare(b.id);
+      return compareStableIds(a.id, b.id);
     })
     .slice(0, limit)
     .map((prompt, planIndex) => ({
+      attemptNo: 1,
       auditJobId,
       brandId,
       promptId: prompt.id,
@@ -134,6 +128,7 @@ export function reservePromptPlan({
       leaseToken,
       selectedAt,
       startedAt: null,
+      startedLeaseToken: null,
       finishedAt: null,
       outcome: null,
     }));
@@ -143,15 +138,31 @@ export function takeOverPromptPlan(input: {
   attempts: PromptAttempt[];
   auditJobId: string;
   brandId: string;
-  expiredLeaseToken: string;
-  newLeaseToken: string;
+  expiredLease: AuthoritativeJobLease;
+  currentLease: AuthoritativeJobLease;
+  now: Date;
 }): PromptAttempt[] {
+  const expiredLeaseToken = input.expiredLease.leaseToken;
+  const newLeaseToken = input.currentLease.leaseToken;
   if (
-    input.expiredLeaseToken.length === 0 ||
-    input.newLeaseToken.length === 0 ||
-    input.expiredLeaseToken === input.newLeaseToken
+    expiredLeaseToken.length === 0 ||
+    newLeaseToken.length === 0 ||
+    expiredLeaseToken === newLeaseToken
   ) {
     throw new Error("Lease takeover requires distinct non-empty tokens");
+  }
+  if (
+    !(
+      Number.isFinite(input.now.getTime()) &&
+      Number.isFinite(input.expiredLease.leaseUntil.getTime()) &&
+      Number.isFinite(input.currentLease.leaseUntil.getTime())
+    ) ||
+    input.now.getTime() <= input.expiredLease.leaseUntil.getTime() ||
+    input.now.getTime() > input.currentLease.leaseUntil.getTime()
+  ) {
+    throw new Error(
+      "Lease takeover requires an expired old lease and live current lease"
+    );
   }
 
   const plan = input.attempts
@@ -168,48 +179,56 @@ export function takeOverPromptPlan(input: {
     plan.some(
       (attempt) =>
         attempt.finishedAt === null &&
-        attempt.leaseToken !== input.expiredLeaseToken &&
-        attempt.leaseToken !== input.newLeaseToken
+        attempt.leaseToken !== expiredLeaseToken &&
+        attempt.leaseToken !== newLeaseToken
     )
   ) {
     throw new Error("Prompt plan has a different live lease");
   }
 
   return plan.map((attempt) =>
-    attempt.finishedAt === null &&
-    attempt.leaseToken === input.expiredLeaseToken
-      ? { ...attempt, leaseToken: input.newLeaseToken }
+    attempt.finishedAt === null && attempt.leaseToken === expiredLeaseToken
+      ? { ...attempt, leaseToken: newLeaseToken }
       : attempt
   );
 }
 
 export function markPromptAttemptStarted(
   attempt: PromptAttempt,
-  liveLeaseToken: string,
+  liveLease: AuthoritativeJobLease,
   startedAt: Date
 ): PromptAttempt {
   if (
-    attempt.leaseToken !== liveLeaseToken ||
+    !isLiveLease(liveLease, startedAt) ||
+    attempt.leaseToken !== liveLease.leaseToken ||
     attempt.startedAt !== null ||
     !Number.isFinite(startedAt.getTime())
   ) {
     return attempt;
   }
-  return { ...attempt, startedAt };
+  return { ...attempt, startedAt, startedLeaseToken: liveLease.leaseToken };
 }
 
 export function finishPromptAttempt(
   attempt: PromptAttempt,
-  liveLeaseToken: string,
+  liveLease: AuthoritativeJobLease,
   finishedAt: Date,
   outcome: PromptAttemptOutcome
 ): PromptAttempt {
   if (
-    attempt.leaseToken !== liveLeaseToken ||
+    !isLiveLease(liveLease, finishedAt) ||
+    attempt.leaseToken !== liveLease.leaseToken ||
     attempt.startedAt === null ||
+    attempt.startedLeaseToken === null ||
     attempt.finishedAt !== null ||
     !Number.isFinite(finishedAt.getTime()) ||
     finishedAt.getTime() < attempt.startedAt.getTime()
+  ) {
+    return attempt;
+  }
+  if (
+    attempt.startedLeaseToken !== liveLease.leaseToken &&
+    outcome !== "abandoned"
   ) {
     return attempt;
   }
@@ -222,6 +241,22 @@ export function isDispatchAttempt(attempt: PromptAttempt): boolean {
 
 export function isSuccessfulMeasurement(attempt: PromptAttempt): boolean {
   return attempt.finishedAt !== null && attempt.outcome === "completed";
+}
+
+function isLiveLease(lease: AuthoritativeJobLease, now: Date): boolean {
+  return (
+    lease.leaseToken.length > 0 &&
+    Number.isFinite(lease.leaseUntil.getTime()) &&
+    Number.isFinite(now.getTime()) &&
+    now.getTime() <= lease.leaseUntil.getTime()
+  );
+}
+
+function compareStableIds(a: string, b: string): number {
+  if (a === b) {
+    return 0;
+  }
+  return a < b ? -1 : 1;
 }
 
 function assertUnique(values: string[], label: string): void {
@@ -244,5 +279,50 @@ function assertSelectionSequences(attempts: PromptAttempt[]): void {
     attempts.length
   ) {
     throw new Error("Duplicate brand selection sequence");
+  }
+}
+
+function assertExistingPlan(
+  existing: PromptAttempt[],
+  prompts: Array<{ id: string }>,
+  limit: number
+): void {
+  assertUnique(
+    existing.map((attempt) => attempt.promptId),
+    "attempt prompt"
+  );
+  assertUnique(
+    existing.map((attempt) => String(attempt.planIndex)),
+    "attempt plan index"
+  );
+  const planSize = existing[0]?.planSize ?? 0;
+  if (
+    new Set(existing.map((attempt) => attempt.planSize)).size !== 1 ||
+    !Number.isSafeInteger(planSize) ||
+    planSize < 1 ||
+    existing.length !== planSize ||
+    existing.some((attempt, index) => attempt.planIndex !== index)
+  ) {
+    throw new Error("Incomplete prompt plan");
+  }
+  if (planSize > limit) {
+    throw new Error("Existing prompt plan exceeds current limit");
+  }
+  const currentPromptIds = new Set(prompts.map((prompt) => prompt.id));
+  if (existing.some((attempt) => !currentPromptIds.has(attempt.promptId))) {
+    throw new Error("Existing prompt plan references a missing prompt");
+  }
+  if (
+    new Set(existing.map((attempt) => attempt.selectedAt.getTime())).size !== 1
+  ) {
+    throw new Error("Prompt plan has inconsistent selectedAt values");
+  }
+  const unfinishedLeaseTokens = new Set(
+    existing
+      .filter((attempt) => attempt.finishedAt === null)
+      .map((attempt) => attempt.leaseToken)
+  );
+  if (unfinishedLeaseTokens.size > 1) {
+    throw new Error("Prompt plan has multiple unfinished leases");
   }
 }

@@ -1,6 +1,7 @@
 /* @vitest-environment node */
 
 import {
+  type AuthoritativeJobLease,
   finishPromptAttempt,
   isDispatchAttempt,
   isSuccessfulMeasurement,
@@ -14,6 +15,11 @@ import { describe, expect, test } from "vitest";
 const prompts = Array.from({ length: 9 }, (_, index) => ({
   id: `p${index + 1}`,
 }));
+
+const lease = (
+  leaseToken: string,
+  leaseUntil = "2026-10-04T09:10:00.000Z"
+): AuthoritativeJobLease => ({ leaseToken, leaseUntil: new Date(leaseUntil) });
 
 const reserve = (
   auditJobId: string,
@@ -36,12 +42,12 @@ describe("prompt attempt ledger state model", () => {
     const failed = first.map((attempt) => {
       const started = markPromptAttemptStarted(
         attempt,
-        "job-1-lease",
+        lease("job-1-lease"),
         new Date("2026-10-04T09:01:00.000Z")
       );
       return finishPromptAttempt(
         started,
-        "job-1-lease",
+        lease("job-1-lease"),
         new Date("2026-10-04T09:02:00.000Z"),
         "failed"
       );
@@ -70,21 +76,21 @@ describe("prompt attempt ledger state model", () => {
     const [selected] = reserve("job-1", [], 1);
     const staleStart = markPromptAttemptStarted(
       selected,
-      "stale-lease",
+      lease("stale-lease"),
       new Date("2026-10-04T09:01:00.000Z")
     );
     expect(staleStart).toEqual(selected);
 
     const started = markPromptAttemptStarted(
       selected,
-      "job-1-lease",
+      lease("job-1-lease"),
       new Date("2026-10-04T09:01:00.000Z")
     );
     expect(isDispatchAttempt(started)).toBe(true);
     expect(
       markPromptAttemptStarted(
         started,
-        "job-1-lease",
+        lease("job-1-lease"),
         new Date("2026-10-04T09:03:00.000Z")
       )
     ).toEqual(started);
@@ -92,7 +98,7 @@ describe("prompt attempt ledger state model", () => {
     expect(
       finishPromptAttempt(
         started,
-        "stale-lease",
+        lease("stale-lease"),
         new Date("2026-10-04T09:02:00.000Z"),
         "completed"
       )
@@ -100,7 +106,7 @@ describe("prompt attempt ledger state model", () => {
 
     const finished = finishPromptAttempt(
       started,
-      "job-1-lease",
+      lease("job-1-lease"),
       new Date("2026-10-04T09:02:00.000Z"),
       "completed"
     );
@@ -112,7 +118,7 @@ describe("prompt attempt ledger state model", () => {
     expect(
       finishPromptAttempt(
         selected,
-        "job-1-lease",
+        lease("job-1-lease"),
         new Date("2026-10-04T09:02:00.000Z"),
         "completed"
       )
@@ -121,12 +127,12 @@ describe("prompt attempt ledger state model", () => {
     for (const outcome of ["failed", "unverified"] as const) {
       const started = markPromptAttemptStarted(
         selected,
-        "job-1-lease",
+        lease("job-1-lease"),
         new Date("2026-10-04T09:01:00.000Z")
       );
       const finished = finishPromptAttempt(
         started,
-        "job-1-lease",
+        lease("job-1-lease"),
         new Date("2026-10-04T09:02:00.000Z"),
         outcome
       );
@@ -177,15 +183,16 @@ describe("prompt attempt ledger state model", () => {
     const [selected, selectedLater] = reserve("job-1", [], 2);
     const started = markPromptAttemptStarted(
       selected,
-      "job-1-lease",
+      lease("job-1-lease"),
       new Date("2026-10-04T09:01:00.000Z")
     );
     const takenOver = takeOverPromptPlan({
       attempts: [started, selectedLater],
       auditJobId: "job-1",
       brandId: "brand-1",
-      expiredLeaseToken: "job-1-lease",
-      newLeaseToken: "job-1-lease-2",
+      expiredLease: lease("job-1-lease", "2026-10-04T09:01:00.000Z"),
+      currentLease: lease("job-1-lease-2", "2026-10-04T09:10:00.000Z"),
+      now: new Date("2026-10-04T09:02:00.000Z"),
     });
 
     expect(takenOver.map((attempt) => attempt.leaseToken)).toEqual([
@@ -195,7 +202,7 @@ describe("prompt attempt ledger state model", () => {
     expect(
       finishPromptAttempt(
         takenOver[0],
-        "job-1-lease",
+        lease("job-1-lease"),
         new Date("2026-10-04T09:02:00.000Z"),
         "completed"
       )
@@ -203,17 +210,83 @@ describe("prompt attempt ledger state model", () => {
     expect(
       finishPromptAttempt(
         takenOver[0],
-        "job-1-lease-2",
+        lease("job-1-lease-2"),
         new Date("2026-10-04T09:02:00.000Z"),
-        "unverified"
+        "completed"
+      )
+    ).toEqual(takenOver[0]);
+    expect(
+      finishPromptAttempt(
+        takenOver[0],
+        lease("job-1-lease-2"),
+        new Date("2026-10-04T09:02:00.000Z"),
+        "abandoned"
       ).outcome
-    ).toBe("unverified");
+    ).toBe("abandoned");
     expect(
       markPromptAttemptStarted(
         takenOver[1],
-        "job-1-lease-2",
+        lease("job-1-lease-2"),
         new Date("2026-10-04T09:02:00.000Z")
       ).startedAt
     ).toEqual(new Date("2026-10-04T09:02:00.000Z"));
+  });
+
+  test("만료된 권위 lease는 인계 전에도 started/finished를 쓸 수 없다", () => {
+    const [selected] = reserve("job-1", [], 1);
+    const expired = lease("job-1-lease", "2026-10-04T09:00:30.000Z");
+
+    expect(
+      markPromptAttemptStarted(
+        selected,
+        expired,
+        new Date("2026-10-04T09:01:00.000Z")
+      )
+    ).toEqual(selected);
+  });
+
+  test("아직 살아 있는 lease나 만료된 새 lease로 takeover하지 않는다", () => {
+    const plan = reserve("job-1", [], 1);
+    const now = new Date("2026-10-04T09:02:00.000Z");
+
+    expect(() =>
+      takeOverPromptPlan({
+        attempts: plan,
+        auditJobId: "job-1",
+        brandId: "brand-1",
+        expiredLease: lease("job-1-lease", "2026-10-04T09:03:00.000Z"),
+        currentLease: lease("job-1-lease-2"),
+        now,
+      })
+    ).toThrow("expired old lease and live current lease");
+    expect(() =>
+      takeOverPromptPlan({
+        attempts: plan,
+        auditJobId: "job-1",
+        brandId: "brand-1",
+        expiredLease: lease("job-1-lease", "2026-10-04T09:01:00.000Z"),
+        currentLease: lease("job-1-lease-2", "2026-10-04T09:01:30.000Z"),
+        now,
+      })
+    ).toThrow("expired old lease and live current lease");
+  });
+
+  test("resume은 삭제 질문·축소 limit·혼합 unfinished lease를 fail-closed한다", () => {
+    const plan = reserve("job-1", [], 2);
+    expect(() =>
+      reservePromptPlan({
+        attempts: plan,
+        auditJobId: "job-1",
+        brandId: "brand-1",
+        leaseToken: "job-1-lease",
+        limit: 2,
+        prompts: prompts.slice(1),
+        selectedAt: new Date("2026-10-04T09:00:00.000Z"),
+      })
+    ).toThrow("missing prompt");
+    expect(() => reserve("job-1", plan, 1)).toThrow("exceeds current limit");
+    expect(() =>
+      reserve("job-1", [{ ...plan[0], leaseToken: "lease-a" }, plan[1]], 2)
+    ).toThrow("multiple unfinished leases");
   });
 });
