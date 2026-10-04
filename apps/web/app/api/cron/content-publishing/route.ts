@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { database } from "@repo/database";
 import { resend } from "@repo/email";
 import { NewsletterArticleEmail } from "@repo/email/templates/newsletter-article";
-import { denyIfNotCron } from "@repo/security/cron";
+import { denyIfNotCron, denyIfVercelPreview } from "@repo/security/cron";
 import { Receiver } from "@upstash/qstash";
 import { revalidatePath } from "next/cache";
 import type { NextRequest } from "next/server";
@@ -14,6 +14,11 @@ const webUrl = process.env.NEXT_PUBLIC_WEB_URL ?? "https://www.findable.co.kr";
 const signingSecret = process.env.CRON_SECRET ?? "";
 
 async function denyIfNotPublishingCron(request: NextRequest) {
+  // The QStash branch below bypasses denyIfNotCron, so refuse Preview first.
+  const preview = denyIfVercelPreview();
+  if (preview) {
+    return preview;
+  }
   const signature = request.headers.get("upstash-signature");
   if (signature) {
     const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;

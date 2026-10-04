@@ -36,14 +36,40 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 /**
+ * Vercel Preview 에서는 cron·측정 트리거를 **인증과 무관하게** 거절한다(2026-10-05).
+ *
+ * Preview 는 어느 DB 를 쓰는지 보장되지 않는다(프로덕션 DB 를 공유할 수도 있다).
+ * 거기서 cron 이 돌면 측정·결제 만료·뉴스레터 발송이 실데이터에 실행된다.
+ * Vercel 은 Preview 에서 cron 을 스케줄하지 않지만 URL 직접 호출은 막지 않는다.
+ *
+ * @returns Preview 면 403 Response, 아니면 null.
+ */
+export function denyIfVercelPreview(
+  env: Record<string, string | undefined> = process.env
+): Response | null {
+  if (env.VERCEL_ENV === "preview") {
+    return new Response("Cron is disabled on Vercel Preview deployments", {
+      status: 403,
+    });
+  }
+  return null;
+}
+
+/**
  * cron 요청이 진짜 Vercel 스케줄러인지 판정.
  *
  * Vercel 은 `CRON_SECRET` 이 설정돼 있으면 그 값을 `Authorization: Bearer <값>` 으로
  * 자동 전송한다(공식). 우리는 그 값만 신뢰한다.
  *
- * @returns 통과면 null, 막으면 그대로 반환할 401 Response.
+ * Preview 배포에서는 먼저 `denyIfVercelPreview` 로 403 을 돌려준다.
+ *
+ * @returns 통과면 null, 막으면 그대로 반환할 401/403 Response.
  */
 export function denyIfNotCron(request: Request): Response | null {
+  const preview = denyIfVercelPreview();
+  if (preview) {
+    return preview;
+  }
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get("authorization");
 
