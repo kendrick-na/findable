@@ -193,6 +193,7 @@ export async function reconcileAuditTracking(
 
     const status = await persistAuditTracking({
       auditJobId: jobId,
+      trackingClaimToken: claimToken,
       organizationId: job.organizationId,
       brandId: job.brandId,
       completedAt: job.completedAt,

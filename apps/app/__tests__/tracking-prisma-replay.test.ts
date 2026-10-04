@@ -157,6 +157,14 @@ describe("product Tracking replay through PrismaPg", () => {
       }
       const completedAt = new Date("2026-10-04T00:00:00.000Z");
       const responses = [{ engineId: "naver-briefing" as const, rawResponse: "provider result", brandMentioned: false, mentionPosition: 1, mentionListSize: 3, sentiment: "neutral" as const, shareOfVoice: 1, errorMessage: null, isStub: false, citedSources: [], durationMs: 1, usage: { inputTokens: 11, outputTokens: 7, costModel: "token" as const } }];
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "completedAt", "postprocessing")
+         VALUES ('job-replay', 'completed', $1, '{"briefingTracking":"pending"}'::jsonb),
+                ('job-replay-2', 'completed', $1, '{"briefingTracking":"pending"}'::jsonb),
+                ('job-core', 'completed', $1, '{"tracking":"pending"}'::jsonb),
+                ('job-core-2', 'completed', $1, '{"tracking":"pending"}'::jsonb)`,
+        completedAt
+      );
       const input = {
         auditJobId: "job-replay",
         trackingAxis: "briefing" as const,
@@ -631,6 +639,187 @@ describe("product Tracking replay through PrismaPg", () => {
       expect(lateWins[1].postprocessing).toMatchObject({
         tracking: "completed",
       });
+
+      // RED: one missing Engine seed must not turn a two-key audit into a
+      // successful one-row Tracking write.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "Engine" ("id", "name", "provider", "language")
+         VALUES ('chatgpt', 'ChatGPT', 'naver', 'ko')`
+      );
+      const planned = tagCoreResponses(
+        [[
+          { ...responses[0], engineId: "chatgpt" },
+          { ...responses[0], engineId: "gemini", rawResponse: "gemini result" },
+        ]],
+        [{ text: "브랜드 추천", lang: "ko", kind: "brand" }]
+      );
+      const snapshot = JSON.stringify({
+        engineResponses: planned.map((row) => ({
+          ...row,
+          trackingInputCaptured: true,
+        })),
+      });
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-two-engines-one-seed', 'completed', 'org-replay', 'brand-replay',
+                 $1, $2::jsonb, '{"tracking":"pending"}'::jsonb)`,
+        completedAt,
+        snapshot
+      );
+      expect.soft(await reconcileAuditTracking("job-two-engines-one-seed")).toBe("failed");
+      const subset = await database.$queryRawUnsafe<Array<{ count: bigint; state: string }>>(
+        `SELECT count(t."id")::bigint AS count, j."postprocessing"->>'tracking' AS state
+         FROM "AuditJob" j LEFT JOIN "Tracking" t
+           ON t."trackingRowKey" IN ('job-two-engines-one-seed|core|0|chatgpt',
+                                      'job-two-engines-one-seed|core|0|gemini')
+         WHERE j."id" = 'job-two-engines-one-seed'
+         GROUP BY j."postprocessing"`
+      );
+      expect.soft(subset).toEqual([{ count: 0n, state: "unknown" }]);
+
+      // The immutable manifest must be committed in the same transaction as
+      // the complete keyed row set, not inferred later from current Engines.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "Engine" ("id", "name", "provider", "language")
+         VALUES ('gemini', 'Gemini', 'naver', 'ko')`
+      );
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-manifest-complete', 'completed', 'org-replay', 'brand-replay',
+                 $1, $2::jsonb, '{"tracking":"pending"}'::jsonb),
+                ('job-manifest-partial', 'completed', 'org-replay', 'brand-replay',
+                 $1, $2::jsonb, '{"tracking":"pending"}'::jsonb)`,
+        completedAt,
+        snapshot
+      );
+      const completeInput = {
+        ...input,
+        auditJobId: "job-manifest-complete",
+        trackingAxis: "core" as const,
+        tagged: planned,
+      };
+      expect(await persistAuditTracking(completeInput)).toBe("completed");
+      expect(await persistAuditTracking({
+        ...completeInput,
+        auditJobId: "job-manifest-partial",
+        tagged: planned,
+      })).toBe("completed");
+      const expectedManifest = {
+        v: 1,
+        brandId: "brand-replay",
+        trackedAt: completedAt.toISOString(),
+        keys: [
+          "job-manifest-complete|core|0|chatgpt",
+          "job-manifest-complete|core|0|gemini",
+        ],
+      };
+      const completeBeforeCrash = await database.$queryRawUnsafe<Array<{ postprocessing: Record<string, unknown> }>>(
+        `SELECT "postprocessing" FROM "AuditJob" WHERE "id" = 'job-manifest-complete'`
+      );
+      expect.soft(completeBeforeCrash[0].postprocessing).toMatchObject({
+        trackingManifest: expectedManifest,
+      });
+      // Simulate a lost row after a genuine two-key manifest commit.
+      await database.$executeRawUnsafe(
+        `DELETE FROM "Tracking" WHERE "trackingRowKey" = 'job-manifest-partial|core|0|gemini'`
+      );
+      await database.$executeRawUnsafe(
+        `UPDATE "AuditJob"
+         SET "postprocessing" = "postprocessing" ||
+           jsonb_build_object('tracking', 'reconciling',
+                              'trackingReconcileAttempts', 3,
+                              'trackingReconcileToken', 'third',
+                              'trackingReconcileStartedAt', '2000-01-01T00:00:00Z')
+         WHERE "id" = $1`,
+        "job-manifest-complete"
+      );
+      await database.$executeRawUnsafe(
+        `UPDATE "AuditJob"
+         SET "postprocessing" = "postprocessing" ||
+           jsonb_build_object('tracking', 'reconciling',
+                              'trackingReconcileAttempts', 3,
+                              'trackingReconcileToken', 'third',
+                              'trackingReconcileStartedAt', '2000-01-01T00:00:00Z')
+         WHERE "id" = $1`,
+        "job-manifest-partial"
+      );
+      await reconcileAuditTracking("job-manifest-complete");
+      await reconcileAuditTracking("job-manifest-partial");
+      const manifestStates = await database.$queryRawUnsafe<Array<{ id: string; state: string }>>(
+        `SELECT "id", "postprocessing"->>'tracking' AS state
+         FROM "AuditJob" WHERE "id" LIKE 'job-manifest-%' ORDER BY "id"`
+      );
+      expect.soft(manifestStates).toEqual([
+        { id: "job-manifest-complete", state: "completed" },
+        { id: "job-manifest-partial", state: "retry_exhausted" },
+      ]);
+
+      // The briefing axis owns a different manifest and cannot alter core.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-manifest-briefing', 'completed', 'org-replay', 'brand-replay',
+                 $1, $2::jsonb, '{"tracking":"completed","briefingTracking":"pending"}'::jsonb)`,
+        completedAt,
+        JSON.stringify({
+          briefingStatus: "completed",
+          briefingPrompt: "브랜드 효과",
+          engineResponses: [{
+            ...responses[0], trackingInputCaptured: true, promptIndex: 0,
+            promptText: "브랜드 효과", promptLang: "ko",
+          }],
+        })
+      );
+      expect(await persistAuditTracking({
+        ...input,
+        auditJobId: "job-manifest-briefing",
+      })).toBe("completed");
+      await database.$executeRawUnsafe(
+        `UPDATE "AuditJob" SET "postprocessing" = "postprocessing" ||
+           '{"briefingTracking":"reconciling","briefingTrackingReconcileAttempts":3,
+             "briefingTrackingReconcileToken":"third",
+             "briefingTrackingReconcileStartedAt":"2000-01-01T00:00:00Z"}'::jsonb
+         WHERE "id" = 'job-manifest-briefing'`
+      );
+      await reconcileBriefingTracking("job-manifest-briefing");
+      const briefingManifest = await database.$queryRawUnsafe<Array<{ postprocessing: Record<string, unknown> }>>(
+        `SELECT "postprocessing" FROM "AuditJob" WHERE "id" = 'job-manifest-briefing'`
+      );
+      expect.soft(briefingManifest[0].postprocessing).toMatchObject({
+        tracking: "completed",
+        briefingTracking: "completed",
+        briefingTrackingManifest: {
+          v: 1,
+          brandId: "brand-replay",
+          trackedAt: completedAt.toISOString(),
+          keys: ["job-manifest-briefing|briefing|0|naver-briefing"],
+        },
+      });
+
+      // A stale writer with the wrong claim token must roll its rows back.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-manifest-lost-token', 'completed', 'org-replay', 'brand-replay',
+                 $1, $2::jsonb,
+                 '{"tracking":"reconciling","trackingReconcileToken":"winner"}'::jsonb)`,
+        completedAt,
+        snapshot
+      );
+      expect(await persistAuditTracking({
+        ...completeInput,
+        auditJobId: "job-manifest-lost-token",
+        trackingClaimToken: "loser",
+      })).toBe("failed");
+      const lostToken = await database.$queryRawUnsafe<Array<{ count: bigint; postprocessing: Record<string, unknown> }>>(
+        `SELECT count(t."id")::bigint AS count, j."postprocessing"
+         FROM "AuditJob" j LEFT JOIN "Tracking" t
+           ON t."trackingRowKey" LIKE 'job-manifest-lost-token|core|%'
+         WHERE j."id" = 'job-manifest-lost-token'
+         GROUP BY j."postprocessing"`
+      );
+      expect.soft(lostToken).toEqual([{
+        count: 0n,
+        postprocessing: { tracking: "reconciling", trackingReconcileToken: "winner" },
+      }]);
     } finally {
       await database.$disconnect();
     }

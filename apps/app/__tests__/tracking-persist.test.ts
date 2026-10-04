@@ -14,7 +14,8 @@
  *   **LLM 호출 0 · 원가 0 · 결정적**으로 적재 규칙 전체를 검증할 수 있다.
  *
  * ## 검사하는 계약 (문구 아님)
- *   ① 성공 행만 적재한다(stub·error·빈 응답·미실재 엔진 제외)
+ *   ① 성공 행만 적재한다(stub·error·빈 응답 제외). 성공한 엔진의 seed가
+ *      없으면 부분집합을 완료로 쓰지 않고 전체 write를 실패 처리한다.
  *   ② 쓸 행이 하나도 없으면 **아무것도 쓰지 않는다**(빈 트랜잭션 금지)
  *   ③ 부모 org 가 없으면 **전부 skip**(고아 row 방지 — relationMode="prisma" 라 FK 가 안 막는다)
  *   ④ 같은 프롬프트 텍스트는 **upsert 로 하나의 promptId**(시계열 선 분열 방지)
@@ -130,11 +131,11 @@ beforeEach(() => {
 /* ── 계약 검사 ──────────────────────────────────────────────── */
 
 describe("persistAuditTracking — 적재 규칙 (원가 0원)", () => {
-  test("성공 행만 적재한다 — stub·error·빈응답·미실재엔진은 제외", async () => {
+  test("성공 행만 적재한다 — stub·error·빈응답은 제외", async () => {
     await run([
       row({ engineId: "chatgpt" }), // ✅
       row({ engineId: "claude" }), // ✅
-      row({ engineId: "gemini" }), // ❌ Engine 테이블에 없음
+      row({ isStub: true, engineId: "gemini" }), // ❌ stub (seed 없음)
       row({ isStub: true, engineId: "perplexity" }), // ❌ stub
       row({ errorMessage: "429", engineId: "perplexity" }), // ❌ 실패
       row({ promptText: "   ", engineId: "perplexity" }), // ❌ 빈 프롬프트
@@ -145,6 +146,12 @@ describe("persistAuditTracking — 적재 규칙 (원가 0원)", () => {
       "chatgpt",
       "claude",
     ]);
+  });
+
+  test("성공 응답의 Engine seed가 없으면 부분집합을 완료하지 않는다", async () => {
+    await expect(run([row(), row({ engineId: "gemini" })])).resolves.toBe("failed");
+    expect(state.transactionRan).toBe(false);
+    expect(state.trackingRows).toHaveLength(0);
   });
 
   test("🔴 쓸 행이 없으면 트랜잭션 자체를 열지 않는다", async () => {
