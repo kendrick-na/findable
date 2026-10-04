@@ -89,10 +89,13 @@ vi.mock("@repo/seo/metadata", () => ({ createMetadata: () => ({}) }));
 vi.mock("../../web/app/[locale]/audit/[jobId]/components/audit-result", () => ({
   AuditResultView: () => null,
 }));
-vi.mock("../../web/app/[locale]/audit/[jobId]/components/audit-summary-ssr", () => ({
-  AuditSummarySsr: ({ job }: { job: { domain: string } }) =>
-    createElement("span", { "data-testid": "ssr-summary" }, job.domain),
-}));
+vi.mock(
+  "../../web/app/[locale]/audit/[jobId]/components/audit-summary-ssr",
+  () => ({
+    AuditSummarySsr: ({ job }: { job: { domain: string } }) =>
+      createElement("span", { "data-testid": "ssr-summary" }, job.domain),
+  })
+);
 
 import AuditResultPage from "../../web/app/[locale]/audit/[jobId]/page";
 import { POST as runBriefing } from "../../web/app/api/audit/[jobId]/briefing/route";
@@ -199,6 +202,12 @@ describe("audit route tenant boundary", () => {
   describe.each([
     ["anonymous", null, null, privateJob],
     ["other active org", "other-org", "viewer@example.com", privateJob],
+    [
+      "matching email in another active org",
+      "other-org",
+      "owner@example.com",
+      { ...privateJob, email: "owner@example.com" },
+    ],
     ["SetNull org marker", null, null, { ...privateJob, organizationId: null }],
   ])("%s", (_label, orgId, email, job) => {
     beforeEach(() => {
