@@ -161,7 +161,9 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
     );
     expect(naver?.guide?.engines).toEqual(["naver"]);
     expect(naver?.verification).not.toContain("HyperCLOVA");
-    expect(naver?.verification).toContain("같은 질문에 네이버 검색 노출");
+    expect(naver?.verification).toContain(
+      "같은 한국어 질문에 네이버 검색 노출"
+    );
     expect(naver?.guide?.remeasureMetric).toContain("네이버 검색 노출");
     expect(naver?.guide?.failCondition).toContain("노출이 확인된 질문 수");
   });
@@ -191,7 +193,9 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
       naverSearchMeasured: undefined,
     }).find((a) => a.kind === "naver_blog");
     expect(naver?.verification).toContain("기준선");
-    expect(naver?.guide?.remeasureMetric).toContain("기준선 없음");
+    expect(naver?.verification).toContain("확인하지 못했습니다");
+    expect(naver?.verification).not.toContain("미측정 또는 일부");
+    expect(naver?.guide?.remeasureMetric).toContain("기준선 확인 전");
   });
 });
 
