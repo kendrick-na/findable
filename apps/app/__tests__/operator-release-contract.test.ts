@@ -54,8 +54,17 @@ describe("운영 릴리스 계약", () => {
     expect(WEB_PACKAGE).toContain("verify-production-source.js");
   });
 
-  it("웹의 독립 Vercel 빌드가 Prisma client를 먼저 생성한다", () => {
+  it("독립 빌드와 앱 테스트가 Prisma client를 먼저 생성한다", () => {
     expect(JSON.parse(WEB_PACKAGE).scripts.build).toMatch(
+      /^pnpm --filter @repo\/database build && /
+    );
+    expect(JSON.parse(APP_PACKAGE).scripts.build).toMatch(
+      /^pnpm --filter @repo\/database build && /
+    );
+    expect(JSON.parse(APP_PACKAGE).scripts.test).toMatch(
+      /^pnpm --filter @repo\/database build && /
+    );
+    expect(JSON.parse(APP_PACKAGE).scripts["test:pg"]).toMatch(
       /^pnpm --filter @repo\/database build && /
     );
   });

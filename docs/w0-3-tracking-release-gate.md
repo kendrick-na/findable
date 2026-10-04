@@ -38,7 +38,7 @@
 3. checkpoint/postprocessing 필드, `Tracking.trackingRowKey` 컬럼 및 `Tracking_trackingRowKey_key` unique index를 확인한다. 기존 legacy row의 `NULL` key는 보존되어야 한다.
 4. migration 후 Prisma client/schema drift가 없는지 확인한다.
 5. 아래 테스트를 통과시킨 뒤에만 reconciler/cron 코드를 RELEASE 후보로 올린다.
-   - `apps/app/__tests__/tracking-prisma-replay.test.ts`
+   - `pnpm --filter app test:pg` (Prisma client를 먼저 생성하고 `tracking-prisma-replay`·`audit-revalidation-postgres`를 실행)
    - `packages/audit/reconcile-audit-tracking.test.ts`
    - `packages/audit/sweep-audit-tracking.test.ts`
    - `pnpm --filter @repo/audit typecheck`

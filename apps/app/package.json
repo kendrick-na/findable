@@ -3,10 +3,11 @@
   "private": true,
   "scripts": {
     "dev": "bun --bun next dev -p 3000",
-    "build": "node scripts/verify-production-source.js && bun --bun next build",
+    "build": "pnpm --filter @repo/database build && node scripts/verify-production-source.js && bun --bun next build",
     "start": "bun --bun next start",
     "analyze": "ANALYZE=true npm run build",
-    "test": "NODE_ENV=test vitest run",
+    "test": "pnpm --filter @repo/database build && NODE_ENV=test vitest run",
+    "test:pg": "pnpm --filter @repo/database build && NODE_ENV=test vitest run --config vitest.pg.config.mts",
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
     "storybook": "storybook dev -p 6008",
