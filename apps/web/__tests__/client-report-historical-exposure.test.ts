@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  CLIENT_REPORT_TEMPLATE_VERSION,
   type ClientReportData,
   clientReportDisclosure,
 } from "@repo/audit/client-report/report-data";
@@ -23,6 +24,10 @@ vi.mock("next/navigation", () => ({
 
 import ClientReportPage from "../app/r/[token]/page";
 import { loadClientReport } from "../lib/client-report/load";
+import {
+  hashClientReportPdfBytes,
+  hashClientReportSnapshot,
+} from "../lib/client-report/publication-integrity";
 
 const knowverse = JSON.parse(
   readFileSync(
@@ -32,6 +37,10 @@ const knowverse = JSON.parse(
 ) as ClientReportData;
 const oldPdfUrl = "https://example.test/issued/knowverse-old.pdf";
 const token = "a".repeat(43);
+const currentTemplateSnapshot = {
+  ...knowverse,
+  templateVersion: CLIENT_REPORT_TEMPLATE_VERSION,
+};
 
 beforeEach(() => {
   vi.mocked(loadClientReport).mockResolvedValue({
@@ -79,11 +88,13 @@ it("does not trust a self-attested review embedded in public report JSON", async
     publicationReview: {
       narrativeApproved: true,
       pdfUrl: oldPdfUrl,
-      pdfSha256: "a".repeat(64),
+      pdfSha256: hashClientReportPdfBytes(new TextEncoder().encode("old-pdf")),
+      reportId: "historical-report",
       reviewedAt: "2026-10-04T10:00:00.000Z",
       reviewerUserId: "admin-1",
       snapshotAuditId: knowverse.source.auditId,
       snapshotImportedAt: knowverse.source.importedAt,
+      snapshotSha256: hashClientReportSnapshot(knowverse),
       snapshotVersion: knowverse.version,
       templateVersion: knowverse.templateVersion,
     },
@@ -107,10 +118,142 @@ it("does not trust a self-attested review embedded in public report JSON", async
 });
 
 it("requires a separately trusted review and verified PDF digest to unlock", () => {
+  const pdfBytes = new TextEncoder().encode("old-pdf");
   const publicationReview = {
     narrativeApproved: true,
     pdfUrl: oldPdfUrl,
-    pdfSha256: "a".repeat(64),
+    pdfSha256: hashClientReportPdfBytes(pdfBytes),
+    reportId: "historical-report",
+    reviewedAt: "2026-10-04T10:00:00.000Z",
+    reviewerUserId: "admin-1",
+    snapshotAuditId: currentTemplateSnapshot.source.auditId,
+    snapshotImportedAt: currentTemplateSnapshot.source.importedAt,
+    snapshotSha256: hashClientReportSnapshot(currentTemplateSnapshot),
+    snapshotVersion: currentTemplateSnapshot.version,
+    templateVersion: currentTemplateSnapshot.templateVersion,
+  };
+  const reviewed = { ...currentTemplateSnapshot, publicationReview };
+
+  expect(
+    clientReportDisclosure(reviewed, oldPdfUrl, publicationReview)
+      .pdfDownloadAttested
+  ).toBe(false);
+  expect(
+    clientReportDisclosure(reviewed, oldPdfUrl, publicationReview, {
+      pdfSha256: hashClientReportPdfBytes(pdfBytes),
+      reportId: "historical-report",
+      snapshotSha256: hashClientReportSnapshot(reviewed),
+    })
+  ).toMatchObject({ narrativeAttested: true, pdfDownloadAttested: true });
+});
+
+it("requires a new review after the renderer template version changes", () => {
+  const oldReview = {
+    narrativeApproved: true,
+    reportId: "historical-report",
+    reviewedAt: "2026-10-04T10:00:00.000Z",
+    reviewerUserId: "admin-1",
+    snapshotAuditId: knowverse.source.auditId,
+    snapshotImportedAt: knowverse.source.importedAt,
+    snapshotSha256: hashClientReportSnapshot(knowverse),
+    snapshotVersion: knowverse.version,
+    templateVersion: knowverse.templateVersion,
+  };
+
+  expect(
+    clientReportDisclosure(knowverse, null, oldReview, {
+      reportId: "historical-report",
+      snapshotSha256: hashClientReportSnapshot(knowverse),
+    }).narrativeAttested
+  ).toBe(false);
+});
+
+it("rejects a review after one narrative character changes", () => {
+  const snapshotSha256 = hashClientReportSnapshot(currentTemplateSnapshot);
+  const publicationReview = {
+    narrativeApproved: true,
+    reportId: "historical-report",
+    reviewedAt: "2026-10-04T10:00:00.000Z",
+    reviewerUserId: "admin-1",
+    snapshotAuditId: currentTemplateSnapshot.source.auditId,
+    snapshotImportedAt: currentTemplateSnapshot.source.importedAt,
+    snapshotSha256,
+    snapshotVersion: currentTemplateSnapshot.version,
+    templateVersion: currentTemplateSnapshot.templateVersion,
+  };
+  const mutated = {
+    ...currentTemplateSnapshot,
+    config: {
+      ...currentTemplateSnapshot.config,
+      why: currentTemplateSnapshot.config.why.map((item, index) =>
+        index === 0 ? { ...item, p: `${item.p}!` } : item
+      ),
+    },
+  };
+
+  expect(
+    clientReportDisclosure(mutated, null, publicationReview, {
+      reportId: "historical-report",
+      snapshotSha256: hashClientReportSnapshot(mutated),
+    }).narrativeAttested
+  ).toBe(false);
+});
+
+it("does not reuse a review for another report id", () => {
+  const publicationReview = {
+    narrativeApproved: true,
+    reportId: "historical-report",
+    reviewedAt: "2026-10-04T10:00:00.000Z",
+    reviewerUserId: "admin-1",
+    snapshotAuditId: currentTemplateSnapshot.source.auditId,
+    snapshotImportedAt: currentTemplateSnapshot.source.importedAt,
+    snapshotSha256: hashClientReportSnapshot(currentTemplateSnapshot),
+    snapshotVersion: currentTemplateSnapshot.version,
+    templateVersion: currentTemplateSnapshot.templateVersion,
+  };
+
+  expect(
+    clientReportDisclosure(currentTemplateSnapshot, null, publicationReview, {
+      reportId: "another-report",
+      snapshotSha256: hashClientReportSnapshot(currentTemplateSnapshot),
+    }).narrativeAttested
+  ).toBe(false);
+});
+
+it("rejects a PDF digest calculated from different artifact bytes", () => {
+  const reviewedBytes = new TextEncoder().encode("reviewed-pdf");
+  const replacedBytes = new TextEncoder().encode("replaced-pdf");
+  const publicationReview = {
+    narrativeApproved: true,
+    pdfSha256: hashClientReportPdfBytes(reviewedBytes),
+    pdfUrl: oldPdfUrl,
+    reportId: "historical-report",
+    reviewedAt: "2026-10-04T10:00:00.000Z",
+    reviewerUserId: "admin-1",
+    snapshotAuditId: currentTemplateSnapshot.source.auditId,
+    snapshotImportedAt: currentTemplateSnapshot.source.importedAt,
+    snapshotSha256: hashClientReportSnapshot(currentTemplateSnapshot),
+    snapshotVersion: currentTemplateSnapshot.version,
+    templateVersion: currentTemplateSnapshot.templateVersion,
+  };
+
+  expect(
+    clientReportDisclosure(
+      currentTemplateSnapshot,
+      oldPdfUrl,
+      publicationReview,
+      {
+        pdfSha256: hashClientReportPdfBytes(replacedBytes),
+        reportId: "historical-report",
+        snapshotSha256: hashClientReportSnapshot(currentTemplateSnapshot),
+      }
+    )
+  ).toMatchObject({ narrativeAttested: true, pdfDownloadAttested: false });
+});
+
+it("keeps legacy review records without content binding quarantined", () => {
+  const legacyReview = {
+    narrativeApproved: true,
     reviewedAt: "2026-10-04T10:00:00.000Z",
     reviewerUserId: "admin-1",
     snapshotAuditId: knowverse.source.auditId,
@@ -118,20 +261,11 @@ it("requires a separately trusted review and verified PDF digest to unlock", () 
     snapshotVersion: knowverse.version,
     templateVersion: knowverse.templateVersion,
   };
-  const reviewed = { ...knowverse, publicationReview };
 
-  expect(
-    clientReportDisclosure(reviewed, oldPdfUrl, publicationReview)
-      .pdfDownloadAttested
-  ).toBe(false);
-  expect(
-    clientReportDisclosure(
-      reviewed,
-      oldPdfUrl,
-      publicationReview,
-      "a".repeat(64)
-    )
-  ).toMatchObject({ narrativeAttested: true, pdfDownloadAttested: true });
+  expect(clientReportDisclosure(knowverse, null, legacyReview)).toMatchObject({
+    narrativeAttested: false,
+    pdfDownloadAttested: false,
+  });
 });
 
 it("does not accept an attestation for another template snapshot", async () => {
@@ -141,11 +275,15 @@ it("does not accept an attestation for another template snapshot", async () => {
       publicationReview: {
         narrativeApproved: true,
         pdfUrl: oldPdfUrl,
-        pdfSha256: "a".repeat(64),
+        pdfSha256: hashClientReportPdfBytes(
+          new TextEncoder().encode("old-pdf")
+        ),
+        reportId: "historical-report",
         reviewedAt: "2026-10-04T10:00:00.000Z",
         reviewerUserId: "admin-1",
         snapshotAuditId: knowverse.source.auditId,
         snapshotImportedAt: knowverse.source.importedAt,
+        snapshotSha256: hashClientReportSnapshot(knowverse),
         snapshotVersion: knowverse.version,
         templateVersion: "another-template",
       },
@@ -172,11 +310,15 @@ it("does not expose a PDF URL different from the reviewed artifact", async () =>
       publicationReview: {
         narrativeApproved: true,
         pdfUrl: "https://example.test/issued/reviewed.pdf",
-        pdfSha256: "a".repeat(64),
+        pdfSha256: hashClientReportPdfBytes(
+          new TextEncoder().encode("reviewed-pdf")
+        ),
+        reportId: "historical-report",
         reviewedAt: "2026-10-04T10:00:00.000Z",
         reviewerUserId: "admin-1",
         snapshotAuditId: knowverse.source.auditId,
         snapshotImportedAt: knowverse.source.importedAt,
+        snapshotSha256: hashClientReportSnapshot(knowverse),
         snapshotVersion: knowverse.version,
         templateVersion: knowverse.templateVersion,
       },

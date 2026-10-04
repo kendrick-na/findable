@@ -165,7 +165,7 @@ describe("고객 리포트 공개 고지", () => {
     });
   });
 
-  it("현재 엔진만 있는 동결 리포트는 과거 엔진 경고를 만들지 않는다", () => {
+  it("현재 엔진·현재 템플릿이어도 별도 신뢰 검수 없이는 서술을 열지 않는다", () => {
     const data = parseClientReportData(read("knowverse.report.json"));
     expect(data).not.toBeNull();
     if (!data) return;
@@ -193,9 +193,9 @@ describe("고객 리포트 공개 고지", () => {
       isFrozenSnapshot: true,
       retiredEngineIds: [],
       legacySyntheticEngineIds: [],
-      narrativeAttested: true,
-      pdfDownloadAttested: true,
-      publicationReviewRequired: false,
+      narrativeAttested: false,
+      pdfDownloadAttested: false,
+      publicationReviewRequired: true,
       measurementMix: {
         directAiAnswers: 16,
         retiredAnswers: 0,
@@ -247,7 +247,7 @@ describe("고객 리포트 공개 고지", () => {
     });
   });
 
-  it("안전 템플릿보다 오래되거나 알 수 없는 스냅숏은 엔진 구성과 무관하게 재검수를 요구한다", () => {
+  it("템플릿 버전 문자열을 고쳐도 스냅숏은 스스로 격리를 풀 수 없다", () => {
     const data = parseClientReportData(read("techdd.report.json"));
     expect(data).not.toBeNull();
     if (!data) {
@@ -278,9 +278,50 @@ describe("고객 리포트 공개 고지", () => {
         templateVersion: CLIENT_REPORT_TEMPLATE_VERSION,
       })
     ).toMatchObject({
-      narrativeAttested: true,
-      publicationReviewRequired: false,
+      narrativeAttested: false,
+      publicationReviewRequired: true,
     });
+  });
+
+  it("옛 운영자 config를 오늘 다시 import해도 검수 전 서술은 격리한다", () => {
+    const config = read<ClientReportConfig>("knowverse.config.json");
+    const audit = read<ClientReportAudit>("knowverse.audit.min.json");
+    const rebuilt = buildClientReportData({
+      config,
+      audit,
+      slug: "knowverse-reimported",
+      version: 2,
+      importedAt: new Date("2026-10-04T12:00:00Z"),
+    });
+    const currentRowsOnly = {
+      ...rebuilt,
+      config: { ...rebuilt.config, measured_at: "2026.10.04" },
+      computed: {
+        ...rebuilt.computed,
+        answers: rebuilt.computed.answers.filter(
+          (answer) => !["hyperclova", "naver"].includes(answer.engine)
+        ),
+        engines: rebuilt.computed.engines.filter(
+          (engine) => !["hyperclova", "naver"].includes(engine.id)
+        ),
+      },
+    };
+
+    const disclosure = clientReportDisclosure(currentRowsOnly);
+    expect(rebuilt.templateVersion).toBe(CLIENT_REPORT_TEMPLATE_VERSION);
+    expect(disclosure).toMatchObject({
+      narrativeAttested: false,
+      publicationReviewRequired: true,
+    });
+    const html = renderToStaticMarkup(
+      createElement(ClientReport, {
+        data: currentRowsOnly,
+        narrativeAttested: disclosure.narrativeAttested,
+        webUrl: null,
+      })
+    );
+    expect(html).not.toContain("AI가 공식 사이트에 도달하지 못하면");
+    expect(html).toContain("발행 당시 해석과 개선 제안은");
   });
 
   it("Naver는 현재 생성본에서 AI 답변으로 과장하지 않는다", () => {

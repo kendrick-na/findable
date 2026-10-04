@@ -122,10 +122,15 @@ export const clientReportDataSchema = z.object({
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      reportId: z.string().min(1).optional(),
       reviewedAt: z.string().datetime(),
       reviewerUserId: z.string().min(1),
       snapshotAuditId: z.string().min(1),
       snapshotImportedAt: z.string().datetime(),
+      snapshotSha256: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       snapshotVersion: z.number().int().positive(),
       templateVersion: z.string().min(1),
     })
@@ -138,10 +143,12 @@ export interface PublicationReview {
   narrativeApproved: boolean;
   pdfSha256?: string;
   pdfUrl?: string;
+  reportId?: string;
   reviewedAt: string;
   reviewerUserId: string;
   snapshotAuditId: string;
   snapshotImportedAt: string;
+  snapshotSha256?: string;
   snapshotVersion: number;
   templateVersion: string;
 }
@@ -178,6 +185,15 @@ export interface ClientReportDisclosure {
   retiredEngineIds: string[];
 }
 
+export interface PublicationVerification {
+  /** SHA-256 calculated server-side from the currently fetched PDF bytes. */
+  pdfSha256?: string;
+  /** Trusted DB identity of the report being rendered. */
+  reportId: string;
+  /** SHA-256 calculated server-side from the currently loaded snapshot. */
+  snapshotSha256: string;
+}
+
 const RETIRED_ENGINE_IDS = new Set(["hyperclova"]);
 const MEASURED_AT_RE = /^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/;
 
@@ -198,7 +214,7 @@ export function clientReportDisclosure(
   >,
   currentPdfUrl?: string | null,
   trustedPublicationReview?: PublicationReview,
-  verifiedPdfSha256?: string | null
+  verification?: PublicationVerification
 ): ClientReportDisclosure {
   const engineIds = new Set<string>([
     ...data.computed.answers.map((answer) => answer.engine),
@@ -235,23 +251,23 @@ export function clientReportDisclosure(
     engineIds.has(id)
   );
   const legacySyntheticEngineIds = legacyNaver ? ["naver"] : [];
-  // The 2026-10-04 template is the first version whose public renderer
-  // quarantines every operator-authored narrative surface. Older and unknown
-  // snapshots therefore require a separately trusted review even if their
-  // engine rows look current.
-  const publicationReviewRequired =
-    data.templateVersion !== CLIENT_REPORT_TEMPLATE_VERSION ||
-    retiredEngineIds.length > 0 ||
-    legacySyntheticEngineIds.length > 0;
   // Report.data is customer-facing mutable JSON, so an embedded review cannot
-  // authorize its own publication. Only an append-only, role-checked source may
-  // provide this separate argument.
+  // authorize its own publication. Template metadata in that same JSON is also
+  // provenance only: changing it or re-importing an old config must not unlock
+  // operator-authored claims. Every snapshot therefore needs a separately
+  // trusted, append-only, role-checked review before narrative/PDF publication.
   const review = trustedPublicationReview;
   const reviewMatchesSnapshot =
     review !== undefined &&
+    verification !== undefined &&
+    review.reportId !== undefined &&
+    review.snapshotSha256 !== undefined &&
+    review.templateVersion === CLIENT_REPORT_TEMPLATE_VERSION &&
     review.templateVersion === data.templateVersion &&
+    review.reportId === verification.reportId &&
     review.snapshotAuditId === data.source.auditId &&
     review.snapshotImportedAt === data.source.importedAt &&
+    review.snapshotSha256 === verification.snapshotSha256 &&
     review.snapshotVersion === data.version &&
     Number.isFinite(new Date(review.reviewedAt).getTime()) &&
     review.reviewerUserId.length > 0;
@@ -259,18 +275,17 @@ export function clientReportDisclosure(
     isFrozenSnapshot: true,
     retiredEngineIds,
     legacySyntheticEngineIds,
-    narrativeAttested:
-      !publicationReviewRequired ||
-      (reviewMatchesSnapshot && review.narrativeApproved),
+    narrativeAttested: Boolean(
+      reviewMatchesSnapshot && review.narrativeApproved
+    ),
     pdfDownloadAttested:
-      !publicationReviewRequired ||
-      (reviewMatchesSnapshot &&
-        currentPdfUrl !== undefined &&
-        currentPdfUrl !== null &&
-        review.pdfUrl === currentPdfUrl &&
-        review.pdfSha256 !== undefined &&
-        verifiedPdfSha256 === review.pdfSha256),
-    publicationReviewRequired,
+      reviewMatchesSnapshot &&
+      currentPdfUrl !== undefined &&
+      currentPdfUrl !== null &&
+      review.pdfUrl === currentPdfUrl &&
+      review.pdfSha256 !== undefined &&
+      verification.pdfSha256 === review.pdfSha256,
+    publicationReviewRequired: true,
     measurementMix,
   };
 }
