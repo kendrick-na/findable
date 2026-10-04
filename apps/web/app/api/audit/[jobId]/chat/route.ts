@@ -23,6 +23,7 @@ import {
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { isVercelPreview } from "@repo/audit/preview-guard";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -33,6 +34,10 @@ import { canExposeAuditResult } from "../../_lib/public-access";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+/** Fixed Preview reply. No job data, no provider call. */
+const PREVIEW_COPILOT_STUB_TEXT =
+  "[미리보기 환경] 이 배포에서는 AI 코파일럿을 호출하지 않습니다. 실제 답변은 운영 환경에서 확인해 주세요.";
 
 interface RouteParams {
   params: Promise<{ jobId: string }>;
@@ -118,7 +123,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (!isCopilotConfigured()) {
+    // Preview answers with a stub below, so it needs no provider key.
+    if (!(isVercelPreview() || isCopilotConfigured())) {
       return NextResponse.json(
         { error: "코파일럿이 아직 설정되지 않았습니다. (AI Gateway 미인증)" },
         { status: 503 }
@@ -155,6 +161,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { error: "유효한 messages가 없습니다." },
         { status: 400 }
       );
+    }
+
+    // Vercel Preview: streamCopilotResponse is a paid LLM call. Answer with a
+    //   fixed text stream (same content-type as the real one) before any DB or
+    //   provider access, so the chat UI still works end to end.
+    if (isVercelPreview()) {
+      return new Response(PREVIEW_COPILOT_STUB_TEXT, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
     }
 
     const job = await database.auditJob.findUnique({

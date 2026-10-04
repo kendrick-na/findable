@@ -234,7 +234,7 @@ function interleave(
  * 정적 폴백 — LLM 실패·비확신 시 generateAuditPrompts와 같은 골격을 제안으로 낸다.
  *   최소한 고정 4개 수준은 항상 보장(마법사가 빈 화면이 되지 않게).
  */
-function staticFallback(brandName: string): PromptSuggestions {
+export function staticFallback(brandName: string): PromptSuggestions {
   // ⚠️ 폴백도 유형을 갖는다 — LLM 이 실패해도 묶음 화면이 「직접 추가」 한 덩어리가 되지 않게.
   //   유형은 문장의 실제 의도에 맞춘다(추측 라벨을 붙이면 처방이 어긋난다).
   const prompts: SuggestedPrompt[] = [

@@ -1,4 +1,3 @@
-import { suggestCompetitors } from "@repo/ai/lib/competitor-suggest";
 import { currentUser } from "@repo/auth/server";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
@@ -10,6 +9,7 @@ import {
 } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 import { hasCompletedSetup } from "@/lib/onboarding";
+import { suggestCompetitorsUnlessPreview } from "@/lib/preview/ai-guards";
 import type { SiteReadinessRunStatus } from "@/lib/site-readiness/types";
 import { AssignBrandForm } from "../features/brand/assign-brand-form";
 import { getPrimaryEmail } from "../lib/user";
@@ -106,7 +106,7 @@ const WelcomePage = async ({
   //   ⚠️ 후보만 만든다 — 기본 선택은 화면(welcome-flow.tsx)이 결정한다.
   const suggestedCompetitors =
     (organization?.onboardingStep ?? 2) < 5
-      ? await suggestCompetitors({
+      ? await suggestCompetitorsUnlessPreview({
           brandName: brand.name,
           domain: brand.domain,
           industry: brand.industry,

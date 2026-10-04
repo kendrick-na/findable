@@ -1,6 +1,5 @@
 "use server";
 
-import { generateContentDraft } from "@repo/ai";
 import { actionTargetKey } from "@repo/audit/actions";
 import { checkContentQuality } from "@repo/audit/content-quality";
 import { isAdmin, requireAdmin } from "@repo/auth/admin";
@@ -12,6 +11,7 @@ import { z } from "zod";
 import { latestContentBrief } from "@/lib/content/latest-brief";
 import { contentSlug, contentSlugAfterDraftEdit } from "@/lib/content/slug";
 import { scopedBrandById } from "@/lib/db/scoped";
+import { generateContentDraftUnlessPreview } from "@/lib/preview/ai-guards";
 
 export interface ContentActionResult {
   contentId?: string;
@@ -179,7 +179,7 @@ async function assertPublishableCoverImage(url: string | null) {
     signal: AbortSignal.timeout(10_000),
   });
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!response.ok || !contentType.startsWith("image/")) {
+  if (!(response.ok && contentType.startsWith("image/"))) {
     throw new Error(
       "대표 이미지를 공개 URL에서 확인할 수 없습니다. 배포 후 다시 승인해 주세요."
     );
@@ -202,7 +202,7 @@ export async function generateDraftFromLatestAction(input: {
   if (!brief) {
     return { error: "먼저 브랜드 측정을 실행해야 초안을 만들 수 있습니다." };
   }
-  const draft = await generateContentDraft({
+  const draft = await generateContentDraftUnlessPreview({
     action: brief.action,
     brand: { name: brand.name, domain: brand.domain },
     locale: input.locale,

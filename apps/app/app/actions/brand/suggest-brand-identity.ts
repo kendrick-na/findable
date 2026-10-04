@@ -2,6 +2,7 @@
 
 import { lookupStaticBrandName } from "@repo/ai/lib/brand-identity";
 import { resolveIndustryProfile } from "@repo/ai/lib/industry-profile";
+import { isVercelPreview } from "@repo/audit/preview-guard";
 
 export interface SuggestedBrandIdentity {
   industry: string | null;
@@ -15,6 +16,11 @@ export const suggestBrandIdentity = async (
   const name = lookupStaticBrandName(domain);
   if (!name) {
     return { name: null, industry: null };
+  }
+  // Vercel Preview: resolveIndustryProfile may fall through to a paid LLM.
+  //   Keep the free dictionary name and leave the industry for the user.
+  if (isVercelPreview()) {
+    return { name, industry: null };
   }
 
   try {

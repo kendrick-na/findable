@@ -1,12 +1,17 @@
 "use server";
 
-import { resolveBrandIdentity } from "@repo/ai/lib/brand-identity";
+import {
+  lookupStaticBrandName,
+  resolveBrandIdentity,
+} from "@repo/ai/lib/brand-identity";
 import {
   normalizeTopic,
   type PromptSuggestions,
   type SuggestedPrompt,
+  staticFallback,
   suggestTrackingPrompts,
 } from "@repo/ai/lib/prompt-suggestions";
+import { isVercelPreview } from "@repo/audit/preview-guard";
 import { planCapabilities } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { database } from "@repo/database";
@@ -46,6 +51,14 @@ export const suggestPromptsAction = async (input: {
   const brand = await scopedBrandById(input.brandId);
   if (!brand) {
     return { error: "브랜드를 찾을 수 없습니다." };
+  }
+
+  // Vercel Preview: no LLM call (brand identity + suggestion are both paid).
+  //   Deterministic static suggestions so the wizard still renders end to end.
+  if (isVercelPreview()) {
+    const brandName =
+      lookupStaticBrandName(brand.domain) ?? (brand.name || brand.domain);
+    return { ok: true, suggestions: staticFallback(brandName) };
   }
 
   try {

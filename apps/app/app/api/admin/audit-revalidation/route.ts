@@ -6,6 +6,7 @@
 // ⚠️ 판정기(LLM) 호출 비용이 든다 — 한 번에 최대 MAX_JOBS 건.
 // ⚠️ 원문이 잘린 행은 「판별 불가」로 두고 응답에 recommendRemeasure=true(재측정 권장).
 
+import { isVercelPreview } from "@repo/audit/preview-guard";
 import { revalidateStoredAuditResult } from "@repo/audit/revalidate-stored-audit";
 import { requireAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
@@ -103,7 +104,18 @@ async function applyRevalidatedResult(
   );
 }
 
-export async function POST(request: Request) {
+export function POST(request: Request) {
+  // Vercel Preview: even a dry-run calls the paid mention-verdict LLM, and a
+  //   stubbed verdict must never be written over a stored result. Refuse.
+  if (isVercelPreview()) {
+    return Promise.resolve(
+      NextResponse.json({ error: "disabled_on_preview" }, { status: 403 })
+    );
+  }
+  return revalidate(request);
+}
+
+async function revalidate(request: Request) {
   let adminId: string;
   try {
     adminId = await requireAdmin();
