@@ -26,58 +26,28 @@ const BodySchema = z.object({
   includeCurrentVersion: z.boolean().default(false),
 });
 
-export async function POST(request: Request) {
-  let adminId: string;
-  try {
-    adminId = await requireAdmin();
-  } catch {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
-  const parsed = BodySchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: "invalid_body" }, { status: 400 });
-  }
-  const { apply, includeCurrentVersion, jobIds } = parsed.data;
-  log.warn("admin.audit_revalidation.start", {
-    adminId,
-    apply,
-    includeCurrentVersion,
-    jobCount: jobIds.length,
-  });
-
-  const outcomes: Record<string, unknown>[] = [];
-  for (const jobId of jobIds) {
-    try {
-      const job = await database.auditJob.findUnique({
-        where: { id: jobId },
-        select: { id: true, result: true, status: true },
-      });
-      if (!job || job.status !== "completed") {
-        outcomes.push({ jobId, status: "skipped", reason: "not_completed" });
-        continue;
-      }
-      const outcome = await revalidateStoredAuditResult(job.result, {
-        includeCurrentVersion,
-      });
-      if (outcome.status === "skipped") {
-        outcomes.push({ jobId, ...outcome });
-        continue;
-      }
-      if (apply) {
-        const next = outcome.result as Record<string, unknown>;
-        const revalidatedCoreRows = Array.isArray(next.engineResponses)
-          ? next.engineResponses.filter(
-              (row) =>
-                !row ||
-                typeof row !== "object" ||
-                (row as { engineId?: unknown }).engineId !== "naver-briefing"
-            )
-          : [];
-        // Revalidation owns only its verdict-derived leaves. A briefing claim
-        // or completion may mutate the same JSON concurrently; replacing the
-        // snapshot would erase that state and can resurrect processing.
-        const applied = await database.$executeRawUnsafe(
-          `UPDATE "AuditJob"
+/**
+ * Writes only the verdict-derived leaves, fenced on the exact stored snapshot.
+ * Returns the affected row count (1 = applied).
+ */
+async function applyRevalidatedResult(
+  jobId: string,
+  storedResult: unknown,
+  next: Record<string, unknown>
+): Promise<number> {
+  const revalidatedCoreRows = Array.isArray(next.engineResponses)
+    ? next.engineResponses.filter(
+        (row) =>
+          !row ||
+          typeof row !== "object" ||
+          (row as { engineId?: unknown }).engineId !== "naver-briefing"
+      )
+    : [];
+  // Revalidation owns only its verdict-derived leaves. A briefing claim
+  // or completion may mutate the same JSON concurrently; replacing the
+  // snapshot would erase that state and can resurrect processing.
+  return await database.$executeRawUnsafe(
+    `UPDATE "AuditJob"
            SET "result" =
              jsonb_set(
                jsonb_set(
@@ -120,17 +90,59 @@ export async function POST(request: Request) {
                IS DISTINCT FROM 'processing'
              AND "result" = $10::jsonb
              AND jsonb_typeof(COALESCE("result"->'engineResponses', '[]'::jsonb)) = 'array'`,
-          JSON.stringify(revalidatedCoreRows),
-          JSON.stringify(next.metrics ?? {}),
-          next.mentionVerdictVersion,
-          JSON.stringify(next.revalidation ?? null),
-          JSON.stringify(next.geoActions ?? []),
-          JSON.stringify(next.topRecommendations ?? []),
-          next.regionScoresOutdated === true,
-          next.actionsOutdated === true,
-          jobId,
-          JSON.stringify(job.result)
-        );
+    JSON.stringify(revalidatedCoreRows),
+    JSON.stringify(next.metrics ?? {}),
+    next.mentionVerdictVersion,
+    JSON.stringify(next.revalidation ?? null),
+    JSON.stringify(next.geoActions ?? []),
+    JSON.stringify(next.topRecommendations ?? []),
+    next.regionScoresOutdated === true,
+    next.actionsOutdated === true,
+    jobId,
+    JSON.stringify(storedResult)
+  );
+}
+
+export async function POST(request: Request) {
+  let adminId: string;
+  try {
+    adminId = await requireAdmin();
+  } catch {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  const parsed = BodySchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+  }
+  const { apply, includeCurrentVersion, jobIds } = parsed.data;
+  log.warn("admin.audit_revalidation.start", {
+    adminId,
+    apply,
+    includeCurrentVersion,
+    jobCount: jobIds.length,
+  });
+
+  const outcomes: Record<string, unknown>[] = [];
+  for (const jobId of jobIds) {
+    try {
+      const job = await database.auditJob.findUnique({
+        where: { id: jobId },
+        select: { id: true, result: true, status: true },
+      });
+      if (!job || job.status !== "completed") {
+        outcomes.push({ jobId, status: "skipped", reason: "not_completed" });
+        continue;
+      }
+      const outcome = await revalidateStoredAuditResult(job.result, {
+        includeCurrentVersion,
+      });
+      if (outcome.status === "skipped") {
+        outcomes.push({ jobId, ...outcome });
+        continue;
+      }
+      if (apply) {
+        const next = outcome.result as Record<string, unknown>;
+        const applied = await applyRevalidatedResult(jobId, job.result, next);
         if (applied !== 1) {
           outcomes.push({
             jobId,

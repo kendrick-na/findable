@@ -330,6 +330,40 @@ async function checkUsageGate(
   return { blocked: true, existingJobId: recent.id, isPartner };
 }
 
+function usageGateError(gate: Extract<GateResult, { blocked: true }>): string {
+  let gateError = "이미 24시간 내 이 도메인의 무료 진단을 받으셨습니다.";
+  if (gate.retryStop) {
+    gateError = gate.isPartner
+      ? "반복 실패로 추가 과금을 멈췄습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요."
+      : "진단이 반복 실패해 재시도를 멈췄습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요.";
+  } else if (gate.isPartner) {
+    gateError =
+      "파트너 계정은 하루 1회 측정할 수 있습니다. 내일 다시 측정하거나 심층 분석을 이용해 주세요.";
+  }
+  return gateError;
+}
+
+function logTierRouting(tier: UsageTier, email: string): void {
+  if (tier === "admin") {
+    log.info("audit.request.admin_bypass", {
+      email: maskEmail(email),
+    });
+  } else if (tier === "partner") {
+    log.info("audit.request.partner_daily", {
+      email: maskEmail(email),
+    });
+  }
+}
+
+/** Stored and queried with the same normalized key (IPv6 /64). */
+function requestIpKey(request: NextRequest): string | null {
+  const rawIp =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    null;
+  return rawIp ? normalizeIpKey(rawIp) : null;
+}
+
 export async function POST(request: NextRequest) {
   const invocationStartedAtMs = Date.now();
   // ⓪ BotID — 방어 4층의 첫 관문. 파싱·DB 조회보다 **먼저** 둔다(봇에 원가 0).
@@ -368,23 +402,11 @@ export async function POST(request: NextRequest) {
     // 무료 측정은 본체 7엔진 × 4프롬프트 = 28 호출(실측 150~300원). CrewAI 심층분석은
     // 버튼(승인/유료)이라, 아래 게이트들이 파트너 동시 사용 시 429(측정 끊김)를 막는다.
     const tier = resolveTier(payload.email);
-    if (tier === "admin") {
-      log.info("audit.request.admin_bypass", {
-        email: maskEmail(payload.email),
-      });
-    } else if (tier === "partner") {
-      log.info("audit.request.partner_daily", {
-        email: maskEmail(payload.email),
-      });
-    }
+    logTierRouting(tier, payload.email);
 
     // IP 는 게이트 판정과 적재에 모두 쓰이므로 여기서 한 번만 구한다.
     // ⚠️ 저장값도 **정규화 키**로 통일해야 쿼터 집계가 맞는다(IPv6 /64).
-    const rawIp =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      request.headers.get("x-real-ip") ??
-      null;
-    const ipKey = rawIp ? normalizeIpKey(rawIp) : null;
+    const ipKey = requestIpKey(request);
 
     // ① 도메인 캐시 — 이메일 우회를 무력화하는 원가 방어 1순위(리서치 §5a).
     //    admin 은 강제 재측정을 위해 우회. 캐시 히트는 예산 검사보다 먼저 처리해야
@@ -468,15 +490,7 @@ export async function POST(request: NextRequest) {
 
     const gate = await checkUsageGate(payload.email, payload.domain, tier);
     if (gate.blocked) {
-      let gateError = "이미 24시간 내 이 도메인의 무료 진단을 받으셨습니다.";
-      if (gate.retryStop) {
-        gateError = gate.isPartner
-          ? "반복 실패로 추가 과금을 멈췄습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요."
-          : "진단이 반복 실패해 재시도를 멈췄습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요.";
-      } else if (gate.isPartner) {
-        gateError =
-          "파트너 계정은 하루 1회 측정할 수 있습니다. 내일 다시 측정하거나 심층 분석을 이용해 주세요.";
-      }
+      const gateError = usageGateError(gate);
       log.info("audit.request.rate_limited", {
         email: maskEmail(payload.email),
         existingJobId: gate.existingJobId,

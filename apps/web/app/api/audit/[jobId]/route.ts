@@ -24,7 +24,7 @@ import {
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { reconcileStaleAuditJob } from "@repo/audit/stale-job";
-import { database } from "@repo/database";
+import { type AuditJob, database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import type { NextRequest } from "next/server";
@@ -115,14 +115,13 @@ function sanitizePublicAuditResult(result: unknown): Record<string, unknown> {
   };
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Polling route must keep authorization, reconciliation, history, and publication checks ordered.
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const startedAt = performance.now();
   const { jobId } = await params;
   log.debug("audit.poll.received", { jobId });
 
   try {
-    if (!jobId || typeof jobId !== "string" || jobId.length < 10) {
+    if (!isPlausibleJobId(jobId)) {
       log.warn("audit.poll.invalid_id", { jobId });
       return NextResponse.json(
         { error: "잘못된 jobId입니다." },
@@ -180,15 +179,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const reconciledStatus = await reconcileStaleAuditJob(job);
     if (reconciledStatus && reconciledStatus !== job.status) {
-      const refreshed = await database.auditJob.findUnique({
-        where: { id: job.id },
-        select: { status: true, completedAt: true, errorMessage: true },
-      });
-      if (refreshed) {
-        job.status = refreshed.status;
-        job.completedAt = refreshed.completedAt;
-        job.errorMessage = refreshed.errorMessage;
-      }
+      await refreshReconciledJob(job);
     }
 
     // 히스토리는 **완료된 job 에서만** 조회한다. 이 라우트는 진행 중 1초 간격으로
@@ -198,24 +189,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const history =
       job.status === "completed" ? await loadHistory(job) : EMPTY_HISTORY;
     const historyMs = Math.round(performance.now() - historyStartedAt);
-    if (performance.now() - startedAt > 1500) {
-      log.warn("audit.poll.slow", {
-        jobId,
-        jobLookupMs,
-        historyMs,
-        ownerMs,
-        totalMs: Math.round(performance.now() - startedAt),
-      });
-    }
+    logSlowPoll({ jobId, startedAt, jobLookupMs, historyMs, ownerMs });
 
     const result = withRecomputedAuditMetrics(job.result);
     const publishable = isPublishableAuditResult(result);
     const safeResult = sanitizePublicAuditResult(result);
-    const pdfOutdated = Boolean(
-      job.pdfUrl &&
-        (!isCurrentAuditPdfUrl(job.pdfUrl) ||
-          hasStaleAuditPdf(job.result, result))
-    );
+    const pdfOutdated = isPdfOutdated(job.pdfUrl, job.result, result);
     return NextResponse.json({
       jobId: job.id,
       // 세션L L-1: 결과 소유권 연결용. 무료 진단은 "이 진단에 쓴 이메일로 가입해야"
@@ -259,4 +238,58 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       { status: 500 }
     );
   }
+}
+
+function isPlausibleJobId(jobId: string): boolean {
+  return !(!jobId || typeof jobId !== "string" || jobId.length < 10);
+}
+
+/** Re-read only the fields stale-job reconciliation can change. */
+async function refreshReconciledJob(
+  job: Pick<AuditJob, "id" | "status" | "completedAt" | "errorMessage">
+): Promise<void> {
+  const refreshed = await database.auditJob.findUnique({
+    where: { id: job.id },
+    select: { status: true, completedAt: true, errorMessage: true },
+  });
+  if (refreshed) {
+    job.status = refreshed.status;
+    job.completedAt = refreshed.completedAt;
+    job.errorMessage = refreshed.errorMessage;
+  }
+}
+
+function logSlowPoll({
+  jobId,
+  startedAt,
+  jobLookupMs,
+  historyMs,
+  ownerMs,
+}: {
+  jobId: string;
+  startedAt: number;
+  jobLookupMs: number;
+  historyMs: number;
+  ownerMs: number;
+}): void {
+  if (performance.now() - startedAt > 1500) {
+    log.warn("audit.poll.slow", {
+      jobId,
+      jobLookupMs,
+      historyMs,
+      ownerMs,
+      totalMs: Math.round(performance.now() - startedAt),
+    });
+  }
+}
+
+function isPdfOutdated(
+  pdfUrl: string | null,
+  storedResult: unknown,
+  result: ReturnType<typeof withRecomputedAuditMetrics>
+): boolean {
+  return Boolean(
+    pdfUrl &&
+      (!isCurrentAuditPdfUrl(pdfUrl) || hasStaleAuditPdf(storedResult, result))
+  );
 }
