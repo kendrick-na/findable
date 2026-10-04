@@ -208,7 +208,7 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     });
     await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
     expect(container.textContent).toContain(
-      "이번 측정에서 AI 1곳 모두가 우리를 알아봤어요"
+      "측정한 AI 1곳 모두에서 이번 회차에 한 번 이상 우리 브랜드로 확인됐어요"
     );
     expect(container.textContent).not.toContain("AI 2곳 중 1곳");
     // Stored GEO SoV=50 mixes search; all ten AI answers in this fixture are confirmed.
@@ -240,7 +240,8 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
       root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
     });
     await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
-    expect(container.textContent).toContain("아는 AI는 1곳 중 0곳");
+    expect(container.textContent).toContain("이번 측정에서 우리 브랜드로 확인된 AI 답변은 없어요");
+    expect(container.textContent).toContain("판정보류·동명 회사는 아래 원문에서 구분");
     expect(container.textContent).not.toContain("AI 1곳 모두가 우리를 알아봤어요");
   });
 

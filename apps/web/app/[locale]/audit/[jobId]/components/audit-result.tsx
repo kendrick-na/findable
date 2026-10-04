@@ -4604,9 +4604,8 @@ function buildUpsellCopy({
   if (isKo) {
     if (isInvisible) {
       return {
-        headline: `지금 ${brandName}${objectParticle(brandName)} 아는 AI는 ${measuredCount}곳 중 0곳이에요`,
-        bodyCopy:
-          "지금은 기준점이 0이에요. 개선 작업을 한 뒤 다시 측정하면 올라갔는지 알 수 있어요. 무료 계정을 만들면 이 결과가 그 기준점으로 남아요.",
+        headline: `이번 측정에서 우리 브랜드로 확인된 AI 답변은 없어요`,
+        bodyCopy: `AI ${measuredCount}곳의 브랜드 질문에서 확인된 답변은 0건이에요. 모른다는 답변·다른 회사를 설명한 답변·판정보류는 서로 달라요. 판정보류·동명 회사는 아래 원문에서 구분해 보고, 다음 측정에서 변화를 확인하세요.`,
       };
     }
     const headline = aiConfirmedRate === null
@@ -4615,16 +4614,15 @@ function buildUpsellCopy({
     return {
       headline,
       bodyCopy: isFullCoverage
-        ? `이번 측정에서 AI ${measuredCount}곳 모두가 우리를 알아봤어요. 이 상태가 유지되는지는 다음 측정과 비교하세요. 무료 계정에서는 회차별 결과를 관리할 수 있어요.`
-        : `이번 측정에서 AI ${measuredCount}곳 중 ${mentionedCount}곳이 우리를 알아봤어요. 무료 계정에서 회차별 변화를 비교할 수 있어요.`,
+        ? `측정한 AI ${measuredCount}곳 모두에서 이번 회차에 한 번 이상 우리 브랜드로 확인됐어요. 이 상태가 유지되는지는 다음 측정과 비교하세요. 무료 계정에서는 회차별 결과를 관리할 수 있어요.`
+        : `이번 측정에서 AI ${measuredCount}곳 중 ${mentionedCount}곳의 답변에서 한 번 이상 우리 브랜드로 확인됐어요. 무료 계정에서 회차별 변화를 비교할 수 있어요.`,
     };
   }
 
   if (isInvisible) {
     return {
-      headline: `0 of ${measuredCount} AI engines know ${brandName} today`,
-      bodyCopy:
-        "Your baseline is zero. You'll only know if the fixes worked by measuring again. A free account keeps this as that baseline.",
+      headline: `No AI answer in this run was confirmed as ${brandName}`,
+      bodyCopy: `Across ${measuredCount} measured AI engines, no brand-question answer was confirmed. Unknown, namesake and unverified answers need different follow-ups; inspect the answers below before remeasuring.`,
     };
   }
   return {
@@ -4632,8 +4630,8 @@ function buildUpsellCopy({
       ? `No adjudicated AI answers are available for ${brandName}`
       : `${brandName} appeared in ${aiConfirmedRate}% of adjudicated AI answers`,
     bodyCopy: isFullCoverage
-      ? `All ${measuredCount} measured engines recognize your brand today. The question is whether that holds — and whether competitors are gaining. Only your next run can tell. A free account keeps today as your baseline.`
-      : `${mentionedCount} of ${measuredCount} engines recognize your brand today. Whether that number is growing only shows against your next run. A free account keeps this result on your dashboard.`,
+      ? `At least one brand-question answer from each of ${measuredCount} measured AI engines matched your brand in this run. Remeasure under the same conditions to see whether that holds.`
+      : `At least one brand-question answer from ${mentionedCount} of ${measuredCount} measured AI engines matched your brand in this run. Remeasure under the same conditions to check for change.`,
   };
 }
 
