@@ -253,6 +253,15 @@ export async function POST(
       }),
     });
 
+    if (sendResult.error || !sendResult.data?.id) {
+      log.error("lead.email_failed", {
+        jobId,
+        error: sendResult.error?.name ?? "missing_provider_id",
+        statusCode: sendResult.error?.statusCode,
+      });
+      return NextResponse.json({ ok: true, emailSent: false });
+    }
+
     log.info("lead.email_sent", {
       jobId,
       email: maskEmail(email),

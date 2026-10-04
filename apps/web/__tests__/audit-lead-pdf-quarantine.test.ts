@@ -143,3 +143,50 @@ it("emails only successfully measured AI/search sources, not failed attempts", a
   expect(response.status).toBe(200);
   expect(emailProps).toMatchObject({ enginesMentioned: 1, enginesTotal: 2 });
 });
+
+it("does not claim an email was sent when Resend returns an error result", async () => {
+  vi.clearAllMocks();
+  const jobId = "77777777-7777-4777-8777-777777777777";
+  const result = withRecomputedAuditMetrics({
+    brandName: "Synthetic",
+    domain: "example.test",
+    mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    metrics: { sov: 0 },
+    engineResponses: Array.from({ length: 10 }, () => ({
+      engineId: "chatgpt",
+      brandMentioned: false,
+      mentionQuality: "unknown_brand",
+      isStub: false,
+      errorMessage: null,
+    })),
+  });
+  mocks.findUnique.mockResolvedValue({
+    email: "synthetic@example.test",
+    organizationId: null,
+    result,
+    pdfUrl: null,
+    crewResult: null,
+    status: "completed",
+  });
+  mocks.createLead.mockResolvedValue({});
+  mocks.sendEmail.mockResolvedValue({
+    data: null,
+    error: {
+      name: "rate_limit_exceeded",
+      message: "Rate limited",
+      statusCode: 429,
+    },
+    headers: null,
+  });
+
+  const response = await POST(
+    new Request(`https://findable.example/api/audit/${jobId}/lead`, {
+      method: "POST",
+      body: JSON.stringify({ email: "recipient@example.com" }),
+    }),
+    { params: Promise.resolve({ jobId }) }
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ ok: true, emailSent: false });
+  expect(mocks.sendEmail).toHaveBeenCalledOnce();
+});
