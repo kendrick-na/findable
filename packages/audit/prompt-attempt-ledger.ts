@@ -7,6 +7,7 @@ export interface PromptAttempt {
   leaseToken: string;
   outcome: PromptAttemptOutcome | null;
   planIndex: number;
+  planSize: number;
   promptId: string;
   selectedAt: Date;
   selectionSeq: number;
@@ -37,6 +38,20 @@ export function reservePromptPlan({
   selectedAt,
   limit,
 }: ReservePromptPlanInput): PromptAttempt[] {
+  if (
+    attempts.some(
+      (attempt) =>
+        attempt.auditJobId === auditJobId && attempt.brandId !== brandId
+    )
+  ) {
+    throw new Error("Audit job belongs to another brand");
+  }
+
+  const brandAttempts = attempts.filter(
+    (attempt) => attempt.brandId === brandId
+  );
+  assertSelectionSequences(brandAttempts);
+
   const existing = attempts
     .filter(
       (attempt) =>
@@ -53,6 +68,17 @@ export function reservePromptPlan({
       existing.map((attempt) => String(attempt.planIndex)),
       "attempt plan index"
     );
+    const planSizes = new Set(existing.map((attempt) => attempt.planSize));
+    const planSize = existing[0]?.planSize ?? 0;
+    if (
+      planSizes.size !== 1 ||
+      !Number.isSafeInteger(planSize) ||
+      planSize < 1 ||
+      existing.length !== planSize ||
+      existing.some((attempt, index) => attempt.planIndex !== index)
+    ) {
+      throw new Error("Incomplete prompt plan");
+    }
     return existing;
   }
 
@@ -68,9 +94,6 @@ export function reservePromptPlan({
     "prompt"
   );
 
-  const brandAttempts = attempts.filter(
-    (attempt) => attempt.brandId === brandId
-  );
   const latestSelectionByPrompt = new Map<string, number>();
   let maxSelectionSeq = 0;
 
@@ -107,12 +130,57 @@ export function reservePromptPlan({
       promptId: prompt.id,
       selectionSeq: maxSelectionSeq + planIndex + 1,
       planIndex,
+      planSize: Math.min(limit, prompts.length),
       leaseToken,
       selectedAt,
       startedAt: null,
       finishedAt: null,
       outcome: null,
     }));
+}
+
+export function takeOverPromptPlan(input: {
+  attempts: PromptAttempt[];
+  auditJobId: string;
+  brandId: string;
+  expiredLeaseToken: string;
+  newLeaseToken: string;
+}): PromptAttempt[] {
+  if (
+    input.expiredLeaseToken.length === 0 ||
+    input.newLeaseToken.length === 0 ||
+    input.expiredLeaseToken === input.newLeaseToken
+  ) {
+    throw new Error("Lease takeover requires distinct non-empty tokens");
+  }
+
+  const plan = input.attempts
+    .filter(
+      (attempt) =>
+        attempt.auditJobId === input.auditJobId &&
+        attempt.brandId === input.brandId
+    )
+    .sort((a, b) => a.planIndex - b.planIndex);
+  if (plan.length === 0) {
+    throw new Error("Prompt plan not found");
+  }
+  if (
+    plan.some(
+      (attempt) =>
+        attempt.finishedAt === null &&
+        attempt.leaseToken !== input.expiredLeaseToken &&
+        attempt.leaseToken !== input.newLeaseToken
+    )
+  ) {
+    throw new Error("Prompt plan has a different live lease");
+  }
+
+  return plan.map((attempt) =>
+    attempt.finishedAt === null &&
+    attempt.leaseToken === input.expiredLeaseToken
+      ? { ...attempt, leaseToken: input.newLeaseToken }
+      : attempt
+  );
 }
 
 export function markPromptAttemptStarted(
@@ -159,5 +227,22 @@ export function isSuccessfulMeasurement(attempt: PromptAttempt): boolean {
 function assertUnique(values: string[], label: string): void {
   if (new Set(values).size !== values.length) {
     throw new Error(`Duplicate ${label} is not allowed`);
+  }
+}
+
+function assertSelectionSequences(attempts: PromptAttempt[]): void {
+  for (const attempt of attempts) {
+    if (
+      !Number.isSafeInteger(attempt.selectionSeq) ||
+      attempt.selectionSeq < 1
+    ) {
+      throw new Error("Prompt attempt selectionSeq must be a positive integer");
+    }
+  }
+  if (
+    new Set(attempts.map((attempt) => attempt.selectionSeq)).size !==
+    attempts.length
+  ) {
+    throw new Error("Duplicate brand selection sequence");
   }
 }

@@ -7,6 +7,7 @@ import {
   markPromptAttemptStarted,
   type PromptAttempt,
   reservePromptPlan,
+  takeOverPromptPlan,
 } from "@repo/audit/prompt-attempt-ledger";
 import { describe, expect, test } from "vitest";
 
@@ -140,5 +141,79 @@ describe("prompt attempt ledger state model", () => {
     expect(first.map((attempt) => attempt.promptId)).toEqual(["p1", "p2"]);
     expect(second.map((attempt) => attempt.promptId)).toEqual(["p3", "p4"]);
     expect(second.map((attempt) => attempt.selectionSeq)).toEqual([3, 4]);
+  });
+
+  test("원자 예약으로 생길 수 없는 부분·중복 sequence 계획은 fail-closed한다", () => {
+    const plan = reserve("job-1", [], 3);
+
+    expect(() => reserve("job-1", plan.slice(0, 2), 3)).toThrow(
+      "Incomplete prompt plan"
+    );
+    expect(() =>
+      reserve("job-2", [
+        plan[0],
+        { ...plan[1], auditJobId: "job-other", selectionSeq: 1 },
+      ])
+    ).toThrow("Duplicate brand selection sequence");
+  });
+
+  test("같은 auditJobId가 다른 브랜드에 나타나면 새 계획을 만들지 않는다", () => {
+    const [foreign] = reserve("job-1", [], 1);
+
+    expect(() =>
+      reservePromptPlan({
+        attempts: [foreign],
+        auditJobId: "job-1",
+        brandId: "brand-2",
+        leaseToken: "brand-2-lease",
+        limit: 1,
+        prompts,
+        selectedAt: new Date("2026-10-04T09:00:00.000Z"),
+      })
+    ).toThrow("Audit job belongs to another brand");
+  });
+
+  test("만료 lease 인계는 미완료 행을 새 fence로 옮겨 zombie write를 막는다", () => {
+    const [selected, selectedLater] = reserve("job-1", [], 2);
+    const started = markPromptAttemptStarted(
+      selected,
+      "job-1-lease",
+      new Date("2026-10-04T09:01:00.000Z")
+    );
+    const takenOver = takeOverPromptPlan({
+      attempts: [started, selectedLater],
+      auditJobId: "job-1",
+      brandId: "brand-1",
+      expiredLeaseToken: "job-1-lease",
+      newLeaseToken: "job-1-lease-2",
+    });
+
+    expect(takenOver.map((attempt) => attempt.leaseToken)).toEqual([
+      "job-1-lease-2",
+      "job-1-lease-2",
+    ]);
+    expect(
+      finishPromptAttempt(
+        takenOver[0],
+        "job-1-lease",
+        new Date("2026-10-04T09:02:00.000Z"),
+        "completed"
+      )
+    ).toEqual(takenOver[0]);
+    expect(
+      finishPromptAttempt(
+        takenOver[0],
+        "job-1-lease-2",
+        new Date("2026-10-04T09:02:00.000Z"),
+        "unverified"
+      ).outcome
+    ).toBe("unverified");
+    expect(
+      markPromptAttemptStarted(
+        takenOver[1],
+        "job-1-lease-2",
+        new Date("2026-10-04T09:02:00.000Z")
+      ).startedAt
+    ).toEqual(new Date("2026-10-04T09:02:00.000Z"));
   });
 });
