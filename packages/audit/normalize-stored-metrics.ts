@@ -493,8 +493,41 @@ export function hasRecomputedAuditMetricsChanged(
     "verifiedCount",
     "unverifiedCount",
   ];
-  return displayed.some(
-    (key) => semanticJson(stored[key]) !== semanticJson(current[key])
+  return (
+    displayed.some(
+      (key) => semanticJson(stored[key]) !== semanticJson(current[key])
+    ) || hasChangedAnswerDisplay(original, corrected)
+  );
+}
+
+/** Fields corrected on read that the one-page PDF renders per answer. */
+function hasChangedAnswerDisplay(
+  original: unknown,
+  corrected: unknown
+): boolean {
+  if (!(isRecord(original) && isRecord(corrected))) {
+    return false;
+  }
+  const savedRows = original.engineResponses;
+  const currentRows = corrected.engineResponses;
+  if (!(Array.isArray(savedRows) && Array.isArray(currentRows))) {
+    return false;
+  }
+  const projection = (rows: unknown[]) =>
+    rows.map((row) => {
+      if (!isRecord(row)) {
+        return row;
+      }
+      return {
+        brandMentioned: row.brandMentioned,
+        mentionQuality: row.mentionQuality,
+        mentionPosition: row.mentionPosition,
+        sov: row.sov,
+      };
+    });
+  return (
+    semanticJson(projection(savedRows)) !==
+    semanticJson(projection(currentRows))
   );
 }
 
@@ -517,6 +550,9 @@ export function hasStaleAuditPdf(
     if (semanticJson(filtered) !== semanticJson(original.topRecommendations)) {
       return true;
     }
+  }
+  if (hasChangedAnswerDisplay(original, corrected)) {
+    return true;
   }
   const oldMetrics = original.metrics;
   const newMetrics = corrected.metrics;

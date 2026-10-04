@@ -83,6 +83,57 @@ it("discloses a changed stored metric basis even when no PDF exists", async () =
   expect(body.result.metrics.sov).not.toBe(100);
 });
 
+it("hides a versioned PDF whose answer-level SoV is stale despite equal aggregate metrics", async () => {
+  const jobId = "66666666-6666-4666-8666-666666666666";
+  const corrected = withRecomputedAuditMetrics({
+    brandName: "Synthetic",
+    domain: "example.test",
+    mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    metrics: { sov: 0 },
+    engineResponses: Array.from({ length: 10 }, () => ({
+      engineId: "chatgpt",
+      promptKind: "brand",
+      brandMentioned: false,
+      mentionQuality: "absent",
+      sov: 0,
+      isStub: false,
+      errorMessage: null,
+    })),
+  });
+  mocks.findUnique.mockResolvedValue({
+    id: jobId,
+    email: "synthetic@example.test",
+    organizationId: null,
+    status: "completed",
+    domain: "example.test",
+    language: "ko",
+    pdfUrl: `https://blob.test/audits/audit-v3-${jobId}-1.pdf`,
+    result: {
+      ...corrected,
+      engineResponses: corrected.engineResponses.map((row, index) =>
+        index === 0 ? { ...row, sov: 1 } : row
+      ),
+    },
+    crewStatus: "not_requested",
+    crewResult: null,
+    createdAt: new Date("2026-10-03T00:00:00Z"),
+    completedAt: new Date("2026-10-03T00:01:00Z"),
+    errorMessage: null,
+  });
+  mocks.findMany.mockResolvedValue([]);
+
+  const response = await GET(
+    new Request(`https://findable.example/api/audit/${jobId}`) as never,
+    { params: Promise.resolve({ jobId }) }
+  );
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body.pdfOutdated).toBe(true);
+  expect(body.pdfUrl).toBeNull();
+  expect(body.metricBasisChanged).toBe(true);
+});
+
 it("withholds an old PDF when only its stored recommendations are now filtered", async () => {
   const jobId = "44444444-4444-4444-8444-444444444444";
   const result = withRecomputedAuditMetrics({

@@ -61,6 +61,27 @@ describe("saved audit metric normalization", () => {
     expect(hasRecomputedAuditMetricsChanged(original, corrected)).toBe(true);
     expect(hasRecomputedAuditMetricsChanged(corrected, corrected)).toBe(false);
   });
+
+  it("quarantines a PDF when a per-answer SoV changes despite equal aggregate metrics", () => {
+    const corrected = withRecomputedAuditMetrics({
+      domain: "example.test",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 0 },
+      engineResponses: rows(10, 0, { sov: 0 }),
+    });
+    expect(isPublishableAuditResult(corrected)).toBe(true);
+    const saved = {
+      ...corrected,
+      engineResponses: corrected.engineResponses.map((row, index) =>
+        index === 0 ? { ...row, sov: 1 } : row
+      ),
+    };
+    const reread = withRecomputedAuditMetrics(saved);
+    expect(saved.metrics).toEqual(reread.metrics);
+    expect(saved.engineResponses[0]?.sov).toBe(1);
+    expect(reread.engineResponses[0]?.sov).toBe(0);
+    expect(hasStaleAuditPdf(saved, reread)).toBe(true);
+  });
   it("recognizes only current versioned audit PDF URLs", () => {
     expect(
       isCurrentAuditPdfUrl(
@@ -409,6 +430,7 @@ describe("saved audit metric normalization", () => {
       engineResponses: Array.from({ length: 10 }, () => ({
         engineId: "chatgpt",
         brandMentioned: false,
+        sov: 0,
       })),
     };
     const corrected = withRecomputedAuditMetrics(original);
