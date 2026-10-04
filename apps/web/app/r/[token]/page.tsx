@@ -88,6 +88,10 @@ export default async function ClientReportPage({
           <a download={clientReportPdfFilename(data)} href={pdfUrl}>
             PDF 내려받기 (발행 당시 파일)
           </a>
+          <p className="fr-pdf-notice">
+            발행 당시 PDF 파일에는 현재 웹 리포트의 발행본 안내가 반영되지 않을
+            수 있습니다.
+          </p>
         </div>
       ) : null}
       {!print && disclosure.isFrozenSnapshot ? (
