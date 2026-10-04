@@ -1,3 +1,4 @@
+import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -79,30 +80,29 @@ vi.mock("@repo/audit/normalize-stored-metrics", () => ({
 }));
 vi.mock("next/og", () => ({
   ImageResponse: class {
-    element: React.ReactElement;
-    constructor(element: React.ReactElement) {
+    element: ReactElement;
+    constructor(element: ReactElement) {
       this.element = element;
     }
   },
 }));
 vi.mock("@repo/seo/metadata", () => ({ createMetadata: () => ({}) }));
-vi.mock("../app/[locale]/audit/[jobId]/components/audit-result", () => ({
+vi.mock("../../web/app/[locale]/audit/[jobId]/components/audit-result", () => ({
   AuditResultView: () => null,
 }));
-vi.mock("../app/[locale]/audit/[jobId]/components/audit-summary-ssr", () => ({
-  AuditSummarySsr: ({ job }: { job: { domain: string } }) => (
-    <span data-testid="ssr-summary">{job.domain}</span>
-  ),
+vi.mock("../../web/app/[locale]/audit/[jobId]/components/audit-summary-ssr", () => ({
+  AuditSummarySsr: ({ job }: { job: { domain: string } }) =>
+    createElement("span", { "data-testid": "ssr-summary" }, job.domain),
 }));
 
-import AuditResultPage from "../app/[locale]/audit/[jobId]/page";
-import { POST as runBriefing } from "../app/api/audit/[jobId]/briefing/route";
-import { POST as chat } from "../app/api/audit/[jobId]/chat/route";
-import { POST as runCrew } from "../app/api/audit/[jobId]/crew/route";
-import { POST as sendLead } from "../app/api/audit/[jobId]/lead/route";
-import { GET as pollAudit } from "../app/api/audit/[jobId]/route";
-import { POST as createAudit } from "../app/api/audit/route";
-import { GET as auditOg } from "../app/api/og/audit/[jobId]/route";
+import AuditResultPage from "../../web/app/[locale]/audit/[jobId]/page";
+import { POST as runBriefing } from "../../web/app/api/audit/[jobId]/briefing/route";
+import { POST as chat } from "../../web/app/api/audit/[jobId]/chat/route";
+import { POST as runCrew } from "../../web/app/api/audit/[jobId]/crew/route";
+import { POST as sendLead } from "../../web/app/api/audit/[jobId]/lead/route";
+import { GET as pollAudit } from "../../web/app/api/audit/[jobId]/route";
+import { POST as createAudit } from "../../web/app/api/audit/route";
+import { GET as auditOg } from "../../web/app/api/og/audit/[jobId]/route";
 
 const jobId = "11111111-1111-4111-8111-111111111111";
 const params = { params: Promise.resolve({ jobId }) };
@@ -270,7 +270,7 @@ describe("audit route tenant boundary", () => {
       try {
         const image = await auditOg(request(), params);
         const html = renderToStaticMarkup(
-          (image as unknown as { element: React.ReactElement }).element
+          (image as unknown as { element: ReactElement }).element
         );
         expect(html).not.toContain("Secret");
         expect(html).not.toContain("private.example");
