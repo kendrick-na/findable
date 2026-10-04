@@ -267,6 +267,29 @@ export async function schedulePaymentWithBillingKey(input: {
 }
 
 /**
+ * 예약 취소가 "이미 끝난" 상태를 뜻하는 PortOne 오류 type.
+ * 근거(2026-10-05 공식 문서 확인, RevokePaymentSchedulesError):
+ *   https://developers.portone.io/api/rest-v2/payment.paymentSchedule
+ * 빌링키가 이미 삭제·부재면 그 키로 남은 예약도 청구할 수 없으므로 같은 결과로 본다.
+ */
+const ALREADY_REVOKED_SCHEDULE_ERRORS = new Set<unknown>([
+  "PAYMENT_SCHEDULE_NOT_FOUND",
+  "PAYMENT_SCHEDULE_ALREADY_REVOKED",
+  "BILLING_KEY_ALREADY_DELETED",
+  "BILLING_KEY_NOT_FOUND",
+]);
+
+/**
+ * 빌링키 삭제가 "이미 끝난" 상태를 뜻하는 PortOne 오류 type.
+ * 근거(2026-10-05 공식 문서 확인, DeleteBillingKeyError):
+ *   https://developers.portone.io/api/rest-v2/payment.billingKey
+ */
+const ALREADY_DELETED_BILLING_KEY_ERRORS = new Set<unknown>([
+  "BILLING_KEY_ALREADY_DELETED",
+  "BILLING_KEY_NOT_FOUND",
+]);
+
+/**
  * 이 빌링키에 걸린 **결제 예약을 전부 취소**한다(해지 1단계).
  * 🔴 빌링키 삭제보다 **먼저** 부를 것 — 순서가 바뀌면 남은 예약이 계속 청구를 시도한다.
  */
@@ -291,8 +314,8 @@ export async function cancelBillingKeySchedules(
   // 예약이 하나도 없으면 404/400 이 올 수 있다 — 해지 자체는 계속 진행해야 하므로 삼킨다.
   if (!res.ok && res.status !== 404) {
     const data = await res.json().catch(() => ({}));
-    // 취소할 예약이 없다는 뜻이면 정상으로 본다.
-    if (data.type !== "PAYMENT_SCHEDULE_NOT_FOUND") {
+    // 취소할 예약이 없거나 이미 취소된 상태면 정상으로 본다(환불 웹훅 재전송에도 멱등).
+    if (!ALREADY_REVOKED_SCHEDULE_ERRORS.has(data.type)) {
       throw new Error(
         `PortOne schedule cancel failed: ${data.code ?? res.status} ${data.message ?? ""}`
       );
@@ -321,6 +344,10 @@ export async function deleteBillingKey(billingKey: string): Promise<void> {
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    // 이미 삭제된 키는 성공으로 본다 — 환불 정리·해지가 재시도될 때 멈추지 않게.
+    if (ALREADY_DELETED_BILLING_KEY_ERRORS.has(data.type)) {
+      return;
+    }
     throw new Error(
       `PortOne billing key delete failed: ${data.code ?? res.status} ${data.message ?? ""}`
     );
