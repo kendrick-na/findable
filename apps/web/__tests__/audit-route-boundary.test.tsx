@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   streamChat: vi.fn(),
   sendEmail: vi.fn(),
   metricBasisChanged: vi.fn(),
+  adviceBasisChanged: vi.fn(),
 }));
 
 vi.mock("@repo/database", () => ({
@@ -77,6 +78,7 @@ vi.mock("@repo/audit/normalize-stored-metrics", () => ({
   publicAuditResult: (result: unknown) => result,
   hasStaleAuditPdf: () => false,
   hasRecomputedAuditMetricsChanged: mocks.metricBasisChanged,
+  hasFilteredStoredAuditAdvice: mocks.adviceBasisChanged,
   isCurrentAuditPdfUrl: () => true,
 }));
 vi.mock("next/og", () => ({
@@ -154,6 +156,7 @@ beforeEach(() => {
   mocks.reconcile.mockResolvedValue(null);
   mocks.streamChat.mockReturnValue(Response.json({ ok: true }));
   mocks.metricBasisChanged.mockReturnValue(false);
+  mocks.adviceBasisChanged.mockReturnValue(false);
 });
 
 describe("audit route tenant boundary", () => {
@@ -258,6 +261,7 @@ describe("audit route tenant boundary", () => {
 
     test("SSR omits private summary", async () => {
       mocks.metricBasisChanged.mockReturnValue(true);
+      mocks.adviceBasisChanged.mockReturnValue(true);
       const html = renderToStaticMarkup(
         await AuditResultPage({
           params: Promise.resolve({ locale: "ko", jobId }),
@@ -306,6 +310,23 @@ describe("audit route tenant boundary", () => {
     );
     expect(html).toContain("private.example");
     expect(html).toContain('data-testid="audit-metric-basis-notice"');
+  });
+
+  test("owner sees an advice-only correction without a false metric claim", async () => {
+    mocks.adviceBasisChanged.mockReturnValue(true);
+    mocks.auth.mockResolvedValue({ userId: "owner", orgId: "owner-org" });
+    mocks.currentUser.mockResolvedValue({
+      primaryEmailAddressId: "primary",
+      emailAddresses: [],
+    });
+    const html = renderToStaticMarkup(
+      await AuditResultPage({
+        params: Promise.resolve({ locale: "ko", jobId }),
+      })
+    );
+    expect(html).toContain('data-testid="audit-metric-basis-notice"');
+    expect(html).toContain("저장된 일부 실행 권고");
+    expect(html).not.toContain("수치가 재계산");
   });
 
   test("owner API response sanitizes stored geo and crew claims at the server boundary", async () => {

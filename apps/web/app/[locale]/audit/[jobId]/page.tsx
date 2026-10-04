@@ -1,6 +1,7 @@
 // /audit/[jobId] — Audit 결과 페이지 (PRD §13.1)
 
 import {
+  hasFilteredStoredAuditAdvice,
   hasRecomputedAuditMetricsChanged,
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
@@ -80,6 +81,7 @@ async function loadSummaryJob(jobId: string) {
       ...job,
       result,
       metricBasisChanged: hasRecomputedAuditMetricsChanged(job.result, result),
+      adviceBasisChanged: hasFilteredStoredAuditAdvice(job.result),
     };
   } catch (error) {
     log.error("audit.ssr_summary.failed", { error: parseError(error) });
@@ -105,11 +107,17 @@ const AuditResultPage = async ({ params }: AuditResultPageProps) => {
         {summaryJob && isPublishableAuditResult(summaryJob.result) && (
           <AuditSummarySsr job={summaryJob} locale={locale} />
         )}
-        {summaryJob?.metricBasisChanged && (
-          <AuditMetricBasisNotice locale={locale} />
+        {(summaryJob?.metricBasisChanged || summaryJob?.adviceBasisChanged) && (
+          <AuditMetricBasisNotice
+            adviceBasisChanged={summaryJob.adviceBasisChanged}
+            locale={locale}
+            metricBasisChanged={summaryJob.metricBasisChanged}
+          />
         )}
         <AuditResultView
-          correctionNoticeShown={summaryJob?.metricBasisChanged ?? false}
+          correctionNoticeShown={Boolean(
+            summaryJob?.metricBasisChanged || summaryJob?.adviceBasisChanged
+          )}
           jobId={jobId}
           locale={locale}
         />

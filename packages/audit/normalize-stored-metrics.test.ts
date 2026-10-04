@@ -8,6 +8,7 @@ import {
   auditPublicationIssue,
   auditPublicationStatus,
   citationPrescriptionsRestricted,
+  hasFilteredStoredAuditAdvice,
   hasRecomputedAuditMetricsChanged,
   hasStaleAuditPdf,
   isCurrentAuditPdfUrl,
@@ -526,6 +527,31 @@ describe("saved audit metric normalization", () => {
     });
 
     expect(hasStaleAuditPdf(result, result)).toBe(false);
+  });
+
+  it("distinguishes filtered historical advice from unchanged current advice", () => {
+    expect(
+      hasFilteredStoredAuditAdvice({
+        geoActions: [{ kind: "prompt_gap", title: "Safe recommendation" }],
+        topRecommendations: ["Safe recommendation"],
+      })
+    ).toBe(false);
+    expect(
+      hasFilteredStoredAuditAdvice({
+        geoActions: [
+          {
+            kind: "rank_strategy",
+            title: "Legacy ranking advice",
+            source: "Princeton Table 2 +115%",
+          },
+        ],
+      })
+    ).toBe(true);
+    expect(
+      hasFilteredStoredAuditAdvice({
+        topRecommendations: ["Princeton Table 2 +115% expected lift"],
+      })
+    ).toBe(true);
   });
 
   it("quarantines legacy verdicts instead of exposing their stale scores or actions", () => {

@@ -11,7 +11,10 @@ import {
   isDiscoveryAnswer,
   summarizeAnswerBuckets,
 } from "./answer-buckets";
-import { filterStoredTopRecommendations } from "./action-display-filter";
+import {
+  filterStoredGeoActions,
+  filterStoredTopRecommendations,
+} from "./action-display-filter";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
 import { questionCoverage } from "./question-coverage";
 
@@ -528,6 +531,27 @@ function hasChangedAnswerDisplay(
   return (
     semanticJson(projection(savedRows)) !==
     semanticJson(projection(currentRows))
+  );
+}
+
+/** Report when previously saved advice is suppressed or revised at display time. */
+export function hasFilteredStoredAuditAdvice(original: unknown): boolean {
+  if (!isRecord(original)) {
+    return false;
+  }
+  if (
+    Array.isArray(original.geoActions) &&
+    semanticJson(
+      filterStoredGeoActions(original.geoActions as Record<string, unknown>[])
+    ) !==
+      semanticJson(original.geoActions)
+  ) {
+    return true;
+  }
+  return (
+    Array.isArray(original.topRecommendations) &&
+    semanticJson(filterStoredTopRecommendations(original.topRecommendations)) !==
+      semanticJson(original.topRecommendations)
   );
 }
 

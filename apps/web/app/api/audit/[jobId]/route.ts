@@ -16,6 +16,7 @@ import {
 } from "@repo/audit/history";
 import { maskEmail } from "@repo/audit/mask";
 import {
+  hasFilteredStoredAuditAdvice,
   hasRecomputedAuditMetricsChanged,
   hasStaleAuditPdf,
   isCurrentAuditPdfUrl,
@@ -214,6 +215,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       job.result,
       result
     );
+    const adviceBasisChanged = hasFilteredStoredAuditAdvice(job.result);
     const publishable = isPublishableAuditResult(result);
     const safeResult = sanitizePublicAuditResult(result);
     const pdfOutdated = Boolean(
@@ -245,6 +247,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       pdfUrl: pdfOutdated || !publishable ? null : job.pdfUrl,
       pdfOutdated,
       metricBasisChanged,
+      adviceBasisChanged,
       result: safeResult,
       crewStatus: job.crewStatus,
       crewResult: publishable ? sanitizeStoredCrewResult(job.crewResult) : null,

@@ -368,6 +368,7 @@ interface JobResponse {
   jobId: string;
   language: string;
   metricBasisChanged?: boolean;
+  adviceBasisChanged?: boolean;
   pdfOutdated?: boolean;
   pdfUrl: string | null;
   result: JobResult | null;
@@ -871,8 +872,13 @@ export function AuditResultView({
 
   return (
     <>
-      {job.metricBasisChanged && !correctionNoticeShown && (
-        <AuditMetricBasisNotice locale={locale} />
+      {(job.metricBasisChanged || job.adviceBasisChanged) &&
+        !correctionNoticeShown && (
+          <AuditMetricBasisNotice
+            adviceBasisChanged={job.adviceBasisChanged}
+            locale={locale}
+            metricBasisChanged={job.metricBasisChanged}
+          />
       )}
       <CompletedView job={job} locale={locale} result={displayResult} />
       {auditPublicationIssue(displayResult) === null && (

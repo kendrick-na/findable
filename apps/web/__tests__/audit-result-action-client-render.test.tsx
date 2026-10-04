@@ -212,7 +212,7 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     await act(() => {
       root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
     });
-    await waitForText(container, "검증·집계 기준이 변경");
+    await waitForText(container, "검증·집계 기준을 다시 적용");
     expect(container.querySelectorAll("[data-testid='audit-metric-basis-notice']"))
       .toHaveLength(1);
 
@@ -223,6 +223,23 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     });
     expect(container.querySelectorAll("[data-testid='audit-metric-basis-notice']"))
       .toHaveLength(0);
+  });
+
+  it("shows an advice-only correction if SSR lookup missed it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ...response, adviceBasisChanged: true }))
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "저장된 일부 실행 권고");
+    expect(container.textContent).not.toContain("수치가 재계산");
+    expect(container.querySelectorAll("[data-testid='audit-metric-basis-notice']"))
+      .toHaveLength(1);
   });
 
   it("네이버 검색 노출을 무료 업셀의 AI 엔진 수에 넣지 않는다", async () => {

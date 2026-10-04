@@ -164,7 +164,7 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
     status: "completed",
     domain: "example.test",
     language: "ko",
-    pdfUrl: "https://example.test/old-report.pdf",
+    pdfUrl: "https://example.test/audits/audit-v3-advice-only.pdf",
     result,
     crewStatus: "not_requested",
     crewResult: null,
@@ -184,6 +184,7 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
   expect(body.pdfUrl).toBeNull();
   expect(body.pdfOutdated).toBe(true);
   expect(body.metricBasisChanged).toBe(false);
+  expect(body.adviceBasisChanged).toBe(true);
   expect(body.result.geoActions).toEqual([]);
   expect(body.result.topRecommendations).toEqual([]);
 });
