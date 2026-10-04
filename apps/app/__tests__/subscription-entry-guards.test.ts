@@ -9,7 +9,6 @@
  * Policy (control tower, 2026-10-05): fail closed — an org that is active/past_due
  * (or still holds a billing key) cannot start a new subscription; only the paying
  * member or an org admin may cancel.
- * KNOWN RED on main: cases marked it.fails reproduce the harm (fixed next commit).
  * @vitest-environment node
  */
 
@@ -308,7 +307,7 @@ describe("controls", () => {
 });
 
 describe("policy gates [policy-gate]", () => {
-  it.fails("G1: active org intent is refused without issueId/channel key", async () => {
+  it("G1: active org intent is refused without issueId/channel key", async () => {
     setOrg({
       billingStatus: "active",
       billingCustomerId: "old-key",
@@ -320,7 +319,7 @@ describe("policy gates [policy-gate]", () => {
     expect(result).not.toHaveProperty("billingChannelKey");
   });
 
-  it.fails("G2: active org calling confirm directly is charged zero times", async () => {
+  it("G2: active org calling confirm directly is charged zero times", async () => {
     setOrg({
       billingStatus: "active",
       billingCustomerId: "old-key",
@@ -332,7 +331,7 @@ describe("policy gates [policy-gate]", () => {
     expect(org().billingCustomerId).toBe("old-key");
   });
 
-  it.fails("G4a: past_due org intent is refused without issueId/channel key", async () => {
+  it("G4a: past_due org intent is refused without issueId/channel key", async () => {
     setOrg({
       billingStatus: "past_due",
       billingCustomerId: "existing-key",
@@ -344,7 +343,7 @@ describe("policy gates [policy-gate]", () => {
     expect(intent).not.toHaveProperty("billingChannelKey");
   });
 
-  it.fails("G4b: past_due org direct confirm is refused before charging", async () => {
+  it("G4b: past_due org direct confirm is refused before charging", async () => {
     setOrg({
       billingStatus: "past_due",
       billingCustomerId: "existing-key",
@@ -355,7 +354,7 @@ describe("policy gates [policy-gate]", () => {
     expect(confirmation).toHaveProperty("error");
   });
 
-  it.fails("G6: active org one-off checkout intent is refused without paymentId", async () => {
+  it("G6: active org one-off checkout intent is refused without paymentId", async () => {
     setOrg({
       billingStatus: "active",
       billingCustomerId: "old-key",
@@ -366,7 +365,7 @@ describe("policy gates [policy-gate]", () => {
     expect(result).not.toHaveProperty("paymentId");
   });
 
-  it.fails("G7: a non-paying org:member cannot cancel the owner's key", async () => {
+  it("G7: a non-paying org:member cannot cancel the owner's key", async () => {
     fixture.session.userId = "user_member-2";
     fixture.session.orgRole = "org:member";
     fixture.session.has.mockReturnValue(false);
@@ -410,7 +409,7 @@ describe("policy gates [policy-gate]", () => {
     expect(fixture.cancelSchedules).toHaveBeenCalledWith("owner-key");
   });
 
-  it.fails("H4: legacy org without a last payment id is cancellable by admin only", async () => {
+  it("H4: legacy org without a last payment id is cancellable by admin only", async () => {
     setOrg({
       billingStatus: "active",
       billingCustomerId: "legacy-key",
@@ -473,7 +472,7 @@ describe("policy gates [policy-gate]", () => {
     expect(org().billingCustomerId).toBeNull();
   });
 
-  it.fails("X2: an org still holding a billing key cannot start a second charge", async () => {
+  it("X2: an org still holding a billing key cannot start a second charge", async () => {
     setOrg({
       billingStatus: "trialing",
       billingCustomerId: "old-key",
@@ -489,7 +488,7 @@ describe("policy gates [policy-gate]", () => {
 });
 
 describe("double-charge harms [harm]", () => {
-  it.fails("G3: two concurrent confirms start exactly one charge", async () => {
+  it("G3: two concurrent confirms start exactly one charge", async () => {
     let releasePayment: () => void = () => undefined;
     const paymentBarrier = new Promise<void>((resolve) => {
       releasePayment = resolve;
@@ -524,7 +523,7 @@ describe("double-charge harms [harm]", () => {
     });
   });
 
-  it.fails("C1: retry after a post-charge DB failure does not re-charge with a new id", async () => {
+  it("C1: retry after a post-charge DB failure does not re-charge with a new id", async () => {
     expect(await actions.createSubscribeIntent("starter")).toMatchObject({
       ok: true,
     });
@@ -614,7 +613,7 @@ describe("double-charge harms [harm]", () => {
     expect(secondId).not.toBe(firstId);
   });
 
-  it.fails("C1 control: an unknown charge outcome keeps the claim (fail closed)", async () => {
+  it("C1 control: an unknown charge outcome keeps the claim (fail closed)", async () => {
     fixture.pay.mockRejectedValueOnce(new Error("timeout"));
     fixture.getPayment.mockRejectedValue(new Error("lookup outage"));
     expect(
@@ -629,7 +628,7 @@ describe("double-charge harms [harm]", () => {
     expect(fixture.pay).toHaveBeenCalledTimes(1);
   });
 
-  it.fails("C1 control: a stale claim whose charge FAILED at PortOne is released", async () => {
+  it("C1 control: a stale claim whose charge FAILED at PortOne is released", async () => {
     const staleId = fixture.buildPaymentId(
       "starter",
       "user_owner-1",
@@ -650,7 +649,7 @@ describe("double-charge harms [harm]", () => {
     expect(fixture.pay.mock.calls[0]?.[0].paymentId).not.toBe(staleId);
   });
 
-  it.fails("C1 control: a stale claim whose charge is PAID stays blocked for recovery", async () => {
+  it("C1 control: a stale claim whose charge is PAID stays blocked for recovery", async () => {
     const staleId = fixture.buildPaymentId(
       "starter",
       "user_owner-1",

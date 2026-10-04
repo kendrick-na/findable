@@ -3,7 +3,6 @@
  * future charges. Ported from spike/payment-ledger-safety-20261004
  * (subscription-duplicate-schedule-red.test.ts) and adapted to main.
  * Real subscription actions; DB and PortOne are in-memory doubles.
- * KNOWN RED on main: cases marked it.fails reproduce the harm (fixed next commit).
  * @vitest-environment node
  */
 
@@ -189,7 +188,7 @@ beforeEach(() => {
 });
 
 describe("duplicate subscription schedule [R4 harm]", () => {
-  it.fails("a Growth request during Starter is refused before charging and leaves one schedule", async () => {
+  it("a Growth request during Starter is refused before charging and leaves one schedule", async () => {
     expect(await confirmSubscription("starter", "starter-key")).toMatchObject({
       ok: true,
       plan: "starter",

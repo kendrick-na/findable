@@ -2,6 +2,7 @@
 
 import { grantPlanFromPayment } from "@repo/auth/plan-grant";
 import { auth, currentUser } from "@repo/auth/server";
+import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import {
@@ -54,7 +55,7 @@ export type CheckoutIntentResult =
 export const createCheckoutIntent = async (
   plan: PayablePlan
 ): Promise<CheckoutIntentResult> => {
-  const { userId } = await auth();
+  const { userId, orgId } = await auth();
   if (!userId) {
     return { error: "로그인 후 이용해 주세요." };
   }
@@ -62,6 +63,21 @@ export const createCheckoutIntent = async (
   const amount = amountForPlan(plan);
   if (!amount) {
     return { error: "결제할 수 없는 플랜입니다." };
+  }
+
+  // 🔒 정기결제 중(active·past_due)인 조직은 단건 결제로 같은 기간을 또 결제하지 않는다
+  //   (2026-10-05 컨트롤타워 승인 정책 — fail-closed).
+  if (orgId) {
+    const org = await database.organization.findUnique({
+      where: { id: orgId },
+      select: { billingStatus: true },
+    });
+    if (org?.billingStatus === "active" || org?.billingStatus === "past_due") {
+      return {
+        error:
+          "이미 정기결제 중인 조직입니다. 플랜 변경은 상담으로 문의해 주세요.",
+      };
+    }
   }
 
   if (!isPortOneConfigured()) {

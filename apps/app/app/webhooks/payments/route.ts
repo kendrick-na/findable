@@ -39,6 +39,7 @@ import {
   isPaidEvent,
   nextBillingDate,
   parseWebhookBody,
+  paymentIssuedAtFromPaymentId,
   planForAmount,
   RENEWAL_FAILURE_GRACE_DAYS,
   renewalGraceEndsAt,
@@ -245,12 +246,23 @@ async function scheduleFollowingSubscription(input: {
       org.billingNextPaymentId === input.paymentId
     )
   ) {
+    if (org?.billingNextPaymentId === input.paymentId) {
+      // subscribe action 이 청구 전에 선점한 첫 결제(빌링키 미기록)가 결제됐다.
+      // 정상 흐름이면 곧 action 이 기록한다. 계속 남아 있으면 조직 기록 복구가 필요하다.
+      log.warn("payments.webhook.subscription_paid_unrecorded", {
+        userId: input.userId,
+        paymentId: input.paymentId,
+        billingStatus: org.billingStatus,
+      });
+    }
     return;
   }
 
+  // paidAt 이 없으면 회차 ID에 새겨진 청구 예정 시각을 쓴다. 현재 시각을 쓰면 웹훅이
+  // 재전송될 때마다 다음 회차 ID가 달라져 예약이 두 건 생긴다(이중 청구).
   const paidAt = input.payment.paidAt
     ? new Date(input.payment.paidAt)
-    : new Date();
+    : (paymentIssuedAtFromPaymentId(input.paymentId) ?? new Date());
   const safePaidAt = Number.isNaN(paidAt.getTime()) ? new Date() : paidAt;
   const nextPaymentAt = nextBillingDate(safePaidAt);
   // 다음 청구 시각으로 ID를 고정한다. 웹훅이 재전송돼도 PortOne에는 같은 예약만 요청한다.

@@ -6,7 +6,6 @@
  * Signature, PortOne, DB, and Clerk are doubles; the action, webhook route,
  * parser, and catalog are real. Ledger-only cases (claims, attempts, shadow
  * tombstones, kill switch) are not ported because main has none of them.
- * KNOWN RED on main: cases marked it.fails reproduce the harm (fixed next commit).
  * @vitest-environment node
  */
 
@@ -240,7 +239,7 @@ const confirm = async (plan: "starter" | "growth", key: string) => {
 };
 
 describe("post-charge webhook and re-entry [C1/P1-b]", () => {
-  it.fails("P1-b [harm]: after the orphan first charge's Paid webhook, another plan confirm does not charge again", async () => {
+  it("P1-b [harm]: after the orphan first charge's Paid webhook, another plan confirm does not charge again", async () => {
     fixture.state.failNextActiveWrite = true;
     const first = await confirm("starter", "first-key");
     expect(first).toHaveProperty("error");
@@ -282,7 +281,7 @@ describe("post-charge webhook and re-entry [C1/P1-b]", () => {
     expect(fixture.organization.billingNextPaymentId).toBe(nextPaymentId);
   });
 
-  it.fails("O1: a Paid webhook for an unrecorded first charge raises an operator alert", async () => {
+  it("O1: a Paid webhook for an unrecorded first charge raises an operator alert", async () => {
     fixture.state.failNextActiveWrite = true;
     expect(await confirm("starter", "first-key")).toHaveProperty("error");
     const firstPaymentId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
@@ -310,7 +309,7 @@ describe("post-charge webhook and re-entry [C1/P1-b]", () => {
     expect(fixture.log.warn).not.toHaveBeenCalled();
   });
 
-  it.fails("X6 [harm]: a renewal Paid without paidAt retried later re-schedules the same next id", async () => {
+  it("X6 [harm]: a renewal Paid without paidAt retried later re-schedules the same next id", async () => {
     expect(await confirm("starter", "stable-key")).toMatchObject({
       ok: true,
       renewalScheduled: true,

@@ -118,6 +118,8 @@ describe("(a) 해지한 구독", () => {
     mocks.auth.mockResolvedValue({ userId: SUBSCRIBER, orgId: "org-sub" });
     mocks.orgFindUnique.mockResolvedValue({
       billingCustomerId: "billing-key-test",
+      // 해지는 결제한 멤버 본인 또는 관리자만 가능하다(G7 정책).
+      billingLastPaymentId: SUB_PAYMENT_ID,
       billingProvider: "portone",
     });
     mocks.cancelBillingKeySchedules.mockResolvedValue(undefined);
