@@ -55,6 +55,10 @@ import {
   type AutoRefreshOrganization,
   loadAutoRefreshOrganizations,
 } from "@/lib/billing/auto-refresh-eligibility";
+import {
+  expireCancelledSubscriptions,
+  expireOneOffPaymentGrants,
+} from "@/lib/billing/period-end-expiry";
 import { expireLapsedRenewalGrants } from "@/lib/billing/renewal-grace";
 
 export const maxDuration = 300;
@@ -270,6 +274,44 @@ async function sendDigests(digestByOrg: DigestByOrg): Promise<number> {
   return sent;
 }
 
+const NO_EXPIRY = { expired: 0, scanned: 0, failed: 0 };
+
+/**
+ * 결제 권한 만료 단계 — 측정 대상 선정 **전에** 돈다(만료된 조직이 한 번 더 측정되지 않게).
+ *
+ * 결제 권한은 Clerk 에만 있으므로(위 planExpiresAt 단계로는 안 내려간다) 각 단계가 Clerk
+ * 결제 출처를 지운다. 단계마다 실패를 가둔다 — 측정 cron 은 계속 돌고, 남은 대상은 다음
+ * 실행(30분 뒤)에서 다시 시도한다. Clerk 실패는 권한을 늘리지 않는다(지우지 못했을 뿐).
+ *   - renewalGrace: 갱신 결제 실패 7일 유예가 끝난 조직 → expired
+ *   - cancelledPeriodEnd: 해지 후 이미 결제한 기간이 끝난 조직 → expired (유예 없음)
+ *   - oneOffPeriodEnd: 1회 결제 후 1개월이 지난 결제 권한
+ */
+async function expirePaymentAccess(now: Date) {
+  let renewalGrace = NO_EXPIRY;
+  let cancelledPeriodEnd = NO_EXPIRY;
+  let oneOffPeriodEnd = NO_EXPIRY;
+  try {
+    renewalGrace = await expireLapsedRenewalGrants(now);
+  } catch (error) {
+    log.error("billing.renewal_grace.scan_failed", { error: String(error) });
+  }
+  try {
+    cancelledPeriodEnd = await expireCancelledSubscriptions(now);
+  } catch (error) {
+    log.error("billing.period_end.cancelled_scan_failed", {
+      error: String(error),
+    });
+  }
+  try {
+    oneOffPeriodEnd = await expireOneOffPaymentGrants(now);
+  } catch (error) {
+    log.error("billing.period_end.one_off_scan_failed", {
+      error: String(error),
+    });
+  }
+  return { renewalGrace, cancelledPeriodEnd, oneOffPeriodEnd };
+}
+
 export const GET = async (request: NextRequest) => {
   const invocationStartedAtMs = Date.now();
   // 🔒 원가가 나가기 전에 먼저 막는다(측정 1건 ~87원).
@@ -299,19 +341,11 @@ export const GET = async (request: NextRequest) => {
     log.info("cron.plan.expired_downgraded", { count: expired.count });
   }
 
-  // 0-b) 갱신 결제 실패 유예(7일)가 끝난 조직의 결제 권한을 회수한다.
-  //   결제 권한은 Clerk 에만 있으므로(위 planExpiresAt 단계로는 안 내려간다) 여기서
-  //   Clerk 결제 출처를 지우고 billingStatus 를 expired 로 닫는다.
-  //   실패해도 측정 cron 은 계속 돈다 — 남은 조직은 다음 실행에서 다시 시도한다.
-  let renewalGrace = { expired: 0, scanned: 0, failed: 0 };
-  try {
-    renewalGrace = await expireLapsedRenewalGrants(new Date(now));
-  } catch (error) {
-    log.error("billing.renewal_grace.scan_failed", { error: String(error) });
-  }
+  // 0-b) 결제 권한 만료(갱신 실패 유예 · 해지 기간 끝 · 1회 결제 1개월).
+  const paymentExpiry = await expirePaymentAccess(new Date(now));
 
   // 1) 자동 갱신 허용 플랜의 org — 화면과 같은 실효 플랜(결제·유예·초대·관리자·파트너).
-  //   0-b 뒤에 둬야 방금 유예가 끝난 조직이 이번 실행에서 측정되지 않는다.
+  //   0-b 뒤에 둬야 방금 권한이 끝난 조직이 이번 실행에서 측정되지 않는다.
   const orgs = await loadAutoRefreshOrganizations(new Date(now));
 
   // 2) 브랜드별 마지막 측정 시각 → 주기 경과분만 수집.
@@ -417,8 +451,17 @@ export const GET = async (request: NextRequest) => {
 
   const digestsSent = await sendDigests(digestByOrg);
 
-  const result = { dueCount: due.length, triggered, digestsSent, renewalGrace };
-  if (triggered > 0 || renewalGrace.expired > 0) {
+  const result = {
+    dueCount: due.length,
+    triggered,
+    digestsSent,
+    ...paymentExpiry,
+  };
+  const paymentExpired =
+    paymentExpiry.renewalGrace.expired +
+    paymentExpiry.cancelledPeriodEnd.expired +
+    paymentExpiry.oneOffPeriodEnd.expired;
+  if (triggered > 0 || paymentExpired > 0) {
     log.info("cron.auto-refresh.triggered", result);
   }
   return Response.json({ ok: true, ...result });

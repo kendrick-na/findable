@@ -237,6 +237,6 @@ describe("배포 경로", () => {
     expect(source).toContain(
       'import { expireLapsedRenewalGrants } from "@/lib/billing/renewal-grace";'
     );
-    expect(source).toContain("await expireLapsedRenewalGrants(new Date(now))");
+    expect(source).toContain("await expireLapsedRenewalGrants(now)");
   });
 });

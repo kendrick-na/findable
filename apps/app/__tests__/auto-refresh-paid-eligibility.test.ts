@@ -109,6 +109,18 @@ vi.mock("@/lib/billing/renewal-grace", () => ({
     failed: 0,
   })),
 }));
+vi.mock("@/lib/billing/period-end-expiry", () => ({
+  expireCancelledSubscriptions: vi.fn(async () => ({
+    expired: 0,
+    scanned: 0,
+    failed: 0,
+  })),
+  expireOneOffPaymentGrants: vi.fn(async () => ({
+    expired: 0,
+    scanned: 0,
+    failed: 0,
+  })),
+}));
 
 const { GET } = await import("../app/api/cron/auto-refresh-tracking/route");
 
