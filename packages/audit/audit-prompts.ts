@@ -82,6 +82,11 @@ export interface RunPrompt {
   /** 없으면 브랜드 이름 질문(폴백 4개). 저장 질문은 실행 전 분류한다. */
   kind?: PromptKind;
   lang: "ko" | "en";
+  /**
+   * 저장 Prompt.id — PROMPT_ATTEMPT_LEDGER_ENABLED 일 때만 채운다(원장 행과 연결).
+   * 플래그 off 면 항상 undefined 라 checkpoint JSON 이 기존과 같다.
+   */
+  promptId?: string;
   text: string;
 }
 

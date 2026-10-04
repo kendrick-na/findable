@@ -13,6 +13,11 @@ const runBriefingForAuditJob = vi.fn();
 const generateAuditPrompts = vi.fn();
 const generateAuditPdf = vi.fn();
 const keys = vi.fn();
+const promptFindMany = vi.fn();
+const transaction = vi.fn();
+// Any access to the W1 ledger tables through the root client is recorded so the
+// flag-off contract ("never touches PromptAttempt before the migration") is provable.
+const ledgerTableAccess = vi.fn();
 const realContracts = vi.hoisted(() => ({ enabled: false }));
 let briefingEnabled = false;
 const log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
@@ -25,8 +30,17 @@ vi.mock("@repo/database", () => ({
       findUnique: auditJobFindUnique,
     },
     $executeRawUnsafe: executeRawUnsafe,
+    $transaction: transaction,
     brand: { findUnique: vi.fn() },
-    prompt: { findMany: vi.fn(), create: vi.fn(), upsert: vi.fn() },
+    prompt: { findMany: promptFindMany, create: vi.fn(), upsert: vi.fn() },
+    get promptAttempt() {
+      ledgerTableAccess("promptAttempt");
+      return {};
+    },
+    get promptAttemptReset() {
+      ledgerTableAccess("promptAttemptReset");
+      return {};
+    },
   },
 }));
 vi.mock("@repo/observability/log", () => ({ log }));
@@ -67,6 +81,7 @@ vi.mock("@repo/ai/lib/mention-verdict", () => ({
   verifyMentions,
 }));
 vi.mock("./audit-prompts", () => ({
+  classifySavedPromptKind: () => "brand",
   englishPromptName: vi.fn(() => "Test Brand"),
   generateAuditPrompts,
   generateDiscoveryPrompts: vi.fn(() => []),
@@ -227,6 +242,100 @@ beforeEach(() => {
 });
 
 describe("runAuditJob offline lifecycle contracts", () => {
+  // Runs first: later cases swap scheduler/budget modules with vi.doMock.
+  describe("W1 prompt attempt ledger flag", () => {
+    const savedPrompts = [
+      { id: "prompt-a", text: "saved a", language: "en", trackings: [] },
+      { id: "prompt-b", text: "saved b", language: "en", trackings: [] },
+    ];
+    const savedCheckpointPrompts = () =>
+      auditJobUpdate.mock.calls
+        .map(([call]) => call?.data?.checkpoint?.prompts)
+        .find(Array.isArray) as Record<string, unknown>[] | undefined;
+
+    it("flag off (default): never touches the ledger tables or transactions and stores no promptId", async () => {
+      promptFindMany.mockResolvedValue(savedPrompts);
+      const runAuditJob = await loadRunner();
+
+      await runAuditJob(input);
+
+      expect(ledgerTableAccess).not.toHaveBeenCalled();
+      expect(transaction).not.toHaveBeenCalled();
+      expect(terminalCalls().length).toBeGreaterThan(0);
+      const prompts = savedCheckpointPrompts();
+      expect(prompts?.map((prompt) => prompt.text)).toEqual([
+        "saved a",
+        "saved b",
+      ]);
+      expect(prompts?.some((prompt) => "promptId" in prompt)).toBe(false);
+    });
+
+    it("flag on: reserves, starts and finishes each saved question inside fenced transactions", async () => {
+      keys.mockImplementation(() => ({
+        AUDIT_BRIEFING_IN_MAIN_ENABLED: false,
+        AUDIT_DUAL_WRITE_ENABLED: true,
+        PROMPT_ATTEMPT_LEDGER_ENABLED: true,
+      }));
+      promptFindMany.mockResolvedValue(savedPrompts);
+      const sql: string[] = [];
+      const createMany = vi.fn(() => Promise.resolve({ count: 2 }));
+      const tx = {
+        $executeRaw: vi.fn((strings: TemplateStringsArray) => {
+          sql.push(strings.join("?"));
+          return Promise.resolve(1);
+        }),
+        $queryRaw: vi.fn(() => Promise.resolve([{ id: input.jobId }])),
+        auditJob: {
+          findMany: vi.fn(() => Promise.resolve([])),
+          updateMany: auditJobUpdateMany,
+        },
+        promptAttempt: {
+          findMany: vi.fn(() => Promise.resolve([])),
+          createMany,
+        },
+        promptAttemptReset: { findMany: vi.fn(async () => []) },
+      };
+      transaction.mockImplementation(
+        async (fn: (client: typeof tx) => unknown) => fn(tx)
+      );
+      queryPromptsSequentially.mockImplementation(
+        async (
+          prompts: unknown[],
+          query: (prompt: unknown, index: number) => Promise<unknown>,
+          options: { onCompleted?: (all: unknown[]) => Promise<void> }
+        ) => {
+          const results: unknown[] = [];
+          for (const [index, prompt] of prompts.entries()) {
+            results.push(await query(prompt, index));
+            await options.onCompleted?.([...results]);
+          }
+          return results;
+        }
+      );
+      const runAuditJob = await loadRunner();
+
+      await runAuditJob(input);
+
+      expect(ledgerTableAccess).not.toHaveBeenCalled();
+      expect(createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({ promptId: "prompt-a", planIndex: 0 }),
+          expect.objectContaining({ promptId: "prompt-b", planIndex: 1 }),
+        ],
+      });
+      expect(
+        savedCheckpointPrompts()?.map((prompt) => prompt.promptId)
+      ).toEqual(["prompt-a", "prompt-b"]);
+      expect(sql.filter((text) => text.includes('"startedAt" ='))).toHaveLength(
+        2
+      );
+      expect(
+        sql.filter((text) => text.includes('"finishedAt" ='))
+      ).toHaveLength(2);
+      expect(terminalCalls().length).toBeGreaterThan(0);
+    });
+  });
+
   it("fails a zero-prompt run before completed storage", async () => {
     generateAuditPrompts.mockReturnValue([]);
     const runAuditJob = await loadRunner();

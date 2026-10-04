@@ -24,9 +24,11 @@ export async function claimAuditExecution(
 export async function saveQuestionCheckpoint(
   jobId: string,
   leaseToken: string,
-  checkpoint: AuditCheckpoint
+  checkpoint: AuditCheckpoint,
+  // 원장 예약 transaction 안에서 같은 연결로 저장할 때만 tx 를 넘긴다.
+  client: Pick<typeof database, "auditJob"> = database
 ): Promise<void> {
-  const written = await database.auditJob.updateMany({
+  const written = await client.auditJob.updateMany({
     where: { id: jobId, status: "processing", leaseToken },
     data: { checkpoint: checkpoint as never },
   });
