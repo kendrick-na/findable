@@ -22,8 +22,116 @@ import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { isTrackableResponse } from "./tracking-eligibility";
 
+// Postgres stores text as UTF-8: a lone UTF-16 surrogate (e.g. an emoji cut in
+// half by a provider) comes back as U+FFFD, and NUL is rejected outright. Store
+// the value the database will actually keep, so a row always reads back equal
+// to what was written (2026-10-05: the replay guard treated that drift as a
+// payload conflict and rolled back the whole Tracking write).
+const LONE_SURROGATE_RE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+export function toStorableText(value: string): string {
+  return value.replace(LONE_SURROGATE_RE, "\uFFFD").replaceAll("\u0000", "");
+}
+
+const REPLAY_COMPARED_FIELDS = [
+  "rawResponse",
+  "engineId",
+  "promptId",
+  "shareOfVoice",
+  "inputTokens",
+  "outputTokens",
+  "costKrw",
+  "costBasis",
+  "brandId",
+] as const;
+
+function sameStoredValue(a: unknown, b: unknown): boolean {
+  const left = a ?? null;
+  const right = b ?? null;
+  return left === right || (Number.isNaN(left) && Number.isNaN(right));
+}
+
+/** Field names (never values) that differ between a replay and the first write. */
+export function replayPayloadMismatch(
+  written: Record<(typeof REPLAY_COMPARED_FIELDS)[number], unknown> & {
+    trackedAt: Date;
+  },
+  stored: Record<(typeof REPLAY_COMPARED_FIELDS)[number], unknown> & {
+    trackedAt: Date;
+  }
+): string[] {
+  const fields: string[] = REPLAY_COMPARED_FIELDS.filter(
+    (field) => !sameStoredValue(written[field], stored[field])
+  );
+  if (written.trackedAt.getTime() !== stored.trackedAt.getTime()) {
+    fields.push("trackedAt");
+  }
+  return fields;
+}
+
+type ReplayComparable = Record<
+  (typeof REPLAY_COMPARED_FIELDS)[number],
+  unknown
+> & {
+  trackedAt: Date;
+};
+
+async function findExistingRowKeys(
+  tx: {
+    tracking: {
+      findMany(args: {
+        where: { trackingRowKey: { in: string[] } };
+        select: { trackingRowKey: true };
+      }): Promise<{ trackingRowKey: string | null }[]>;
+    };
+  },
+  candidateKeys: (string | null)[]
+): Promise<Set<string | null>> {
+  const keys = candidateKeys.filter(
+    (key): key is string => typeof key === "string"
+  );
+  if (keys.length === 0) {
+    return new Set();
+  }
+  const rows = await tx.tracking.findMany({
+    where: { trackingRowKey: { in: keys } },
+    select: { trackingRowKey: true },
+  });
+  return new Set(rows.map((row) => row.trackingRowKey));
+}
+
+function assertReplaysMatchFirstWrite(
+  stored: (ReplayComparable & {
+    engineId: string;
+    trackingRowKey: string | null;
+  })[],
+  written: Map<string, ReplayComparable>,
+  preexistingKeys: Set<string | null>
+): void {
+  for (const row of stored) {
+    if (!preexistingKeys.has(row.trackingRowKey)) {
+      continue;
+    }
+    const first = written.get(row.trackingRowKey as string);
+    const mismatched = first ? replayPayloadMismatch(first, row) : [];
+    if (mismatched.length > 0) {
+      log.warn("audit.tracking.idempotency_conflict", {
+        trackingRowKey: row.trackingRowKey,
+        engineId: row.engineId,
+        fields: mismatched,
+      });
+      throw new Error(
+        `Tracking idempotency payload conflict for ${row.trackingRowKey}`
+      );
+    }
+  }
+}
+
 /** runner가 flat 이전에 각 응답에 태깅해 넘겨주는 항목. promptText로 promptId를 잇는다. */
 export interface TaggedEngineResponse extends EngineResponse {
+  /** Stable prompt ordinal within the audit axis. */
+  promptIndex?: number;
   /**
    * 브랜드 이름 질문인지, 이름 없는 질문(discovery)인지(2026-09-29).
    * 러너는 discovery 행을 이 함수에 넘기지 않는다(시계열 분모 보호).
@@ -33,14 +141,16 @@ export interface TaggedEngineResponse extends EngineResponse {
   promptLang: "ko" | "en";
   /** 이 응답을 만든 프롬프트 원문. flat() 후 소실되므로 runner가 태깅해 보존. */
   promptText: string;
-  /** Stable prompt ordinal within the audit axis. */
-  promptIndex?: number;
 }
 
 /** The runner's core path uses the same stable prompt ordinal as the key writer. */
 export function tagCoreResponses(
   responsesByPrompt: EngineResponse[][],
-  prompts: Array<{ text: string; lang: "ko" | "en"; kind?: "brand" | "discovery" }>
+  prompts: Array<{
+    text: string;
+    lang: "ko" | "en";
+    kind?: "brand" | "discovery";
+  }>
 ): TaggedEngineResponse[] {
   return responsesByPrompt.flatMap((responses, promptIndex) =>
     responses.map((response) => ({
@@ -56,10 +166,6 @@ export function tagCoreResponses(
 export interface PersistAuditTrackingInput {
   /** Stable AuditJob identity. Required for exactly-once dual-write. */
   auditJobId?: string;
-  /** Reconciler lease token; absent only for the first pending writer. */
-  trackingClaimToken?: string;
-  /** Distinguishes core prompt rows from the separate briefing axis. */
-  trackingAxis?: "core" | "briefing";
   brandId: string;
   /** AuditJob 완료 시각. Tracking.trackedAt에 동일 적용(시계열 정합). */
   completedAt: Date;
@@ -79,6 +185,10 @@ export interface PersistAuditTrackingInput {
   promptIsAutoGenerated?: boolean;
   /** flat 이전에 promptText/promptLang로 태깅된 전체 엔진 응답. */
   tagged: TaggedEngineResponse[];
+  /** Distinguishes core prompt rows from the separate briefing axis. */
+  trackingAxis?: "core" | "briefing";
+  /** Reconciler lease token; absent only for the first pending writer. */
+  trackingClaimToken?: string;
 }
 
 /**
@@ -194,7 +304,10 @@ export async function persistAuditTracking(
           promptId: textToPromptId.get(r.promptText) as string,
           engineId: r.engineId,
           // D6[확인필요]: 지금은 full 저장(AuditJob excerpt는 1500자 절단). 용량 실측 후 절단 검토.
-          rawResponse: r.rawResponse,
+          rawResponse:
+            typeof r.rawResponse === "string"
+              ? toStorableText(r.rawResponse)
+              : r.rawResponse,
           brandMentioned: r.brandMentioned,
           mentionPosition: r.mentionPosition,
           // 순위의 분모(세션N-10). 신규 측정부터 채워진다(기존 행은 null).
@@ -216,6 +329,12 @@ export async function persistAuditTracking(
               : null,
         };
       });
+      // Only keys that already existed are replays; rows inserted by this
+      // createMany are compared against themselves and can never conflict.
+      const preexistingKeys = await findExistingRowKeys(
+        tx,
+        rows.map((row) => row.trackingRowKey)
+      );
       await tx.tracking.createMany({ data: rows, skipDuplicates: true });
 
       // A duplicate key is an idempotent replay only if its immutable payload
@@ -258,30 +377,7 @@ export async function persistAuditTracking(
         const expected = new Map(
           keyedRows.map((row) => [row.trackingRowKey, row])
         );
-        for (const row of existing) {
-          const first = expected.get(row.trackingRowKey as string);
-          if (
-            first &&
-            (first.rawResponse !== row.rawResponse ||
-              first.engineId !== row.engineId ||
-              first.promptId !== row.promptId ||
-              first.shareOfVoice !== row.shareOfVoice ||
-              first.inputTokens !== row.inputTokens ||
-              first.outputTokens !== row.outputTokens ||
-              first.costKrw !== row.costKrw ||
-              first.costBasis !== row.costBasis ||
-              first.brandId !== row.brandId ||
-              first.trackedAt.getTime() !== row.trackedAt.getTime())
-          ) {
-            log.warn("audit.tracking.idempotency_conflict", {
-              trackingRowKey: row.trackingRowKey,
-              engineId: row.engineId,
-            });
-            throw new Error(
-              `Tracking idempotency payload conflict for ${row.trackingRowKey}`
-            );
-          }
-        }
+        assertReplaysMatchFirstWrite(existing, expected, preexistingKeys);
       }
       if (auditJobId) {
         const stageKey =

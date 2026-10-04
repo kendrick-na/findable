@@ -51,6 +51,7 @@ import { log } from "@repo/observability/log";
 import { denyIfNotCron } from "@repo/security/cron";
 import type { NextRequest } from "next/server";
 import { env } from "@/env";
+import { expireLapsedRenewalGrants } from "@/lib/billing/renewal-grace";
 
 export const maxDuration = 300;
 
@@ -307,6 +308,17 @@ export const GET = async (request: NextRequest) => {
     log.info("cron.plan.expired_downgraded", { count: expired.count });
   }
 
+  // 0-b) 갱신 결제 실패 유예(7일)가 끝난 조직의 결제 권한을 회수한다.
+  //   결제 권한은 Clerk 에만 있으므로(위 planExpiresAt 단계로는 안 내려간다) 여기서
+  //   Clerk 결제 출처를 지우고 billingStatus 를 expired 로 닫는다.
+  //   실패해도 측정 cron 은 계속 돈다 — 남은 조직은 다음 실행에서 다시 시도한다.
+  let renewalGrace = { expired: 0, scanned: 0, failed: 0 };
+  try {
+    renewalGrace = await expireLapsedRenewalGrants(new Date(now));
+  } catch (error) {
+    log.error("billing.renewal_grace.scan_failed", { error: String(error) });
+  }
+
   // 1) 자동 갱신 허용 플랜의 org (DB plan 진실). free 는 autoRefreshHours=null 이라 제외.
   const autoPlans = (
     ["starter", "growth", "scale", "enterprise"] as Plan[]
@@ -425,8 +437,8 @@ export const GET = async (request: NextRequest) => {
 
   const digestsSent = await sendDigests(digestByOrg);
 
-  const result = { dueCount: due.length, triggered, digestsSent };
-  if (triggered > 0) {
+  const result = { dueCount: due.length, triggered, digestsSent, renewalGrace };
+  if (triggered > 0 || renewalGrace.expired > 0) {
     log.info("cron.auto-refresh.triggered", result);
   }
   return Response.json({ ok: true, ...result });
