@@ -20,8 +20,8 @@ import type * as React from "react";
 interface AuditReportEmailProps {
   readonly brandName: string;
   readonly domain: string;
-  readonly enginesMentioned: number; // 4
-  readonly enginesTotal: number; // 7
+  readonly enginesMentioned: number | null;
+  readonly enginesTotal: number | null;
   readonly geoScore: number; // 0~100
   readonly pdfUrl?: string;
   readonly resultUrl: string; // https://findable.co.kr/ko/audit/[jobId]
@@ -44,14 +44,14 @@ export const AuditReportEmail = ({
   pdfUrl,
   topActions = [],
 }: AuditReportEmailProps): React.JSX.Element => {
-  const tierColor =
-    geoScore >= 76
-      ? "#10b981"
-      : geoScore >= 51
-        ? "#3b82f6"
-        : geoScore >= 26
-          ? "#f59e0b"
-          : "#ef4444";
+  let tierColor = "#ef4444";
+  if (geoScore >= 76) {
+    tierColor = "#10b981";
+  } else if (geoScore >= 51) {
+    tierColor = "#3b82f6";
+  } else if (geoScore >= 26) {
+    tierColor = "#f59e0b";
+  }
   const previewText = `${brandName} GEO 점수 ${geoScore}/100 — ${tierLabel}`;
 
   return (
@@ -98,8 +98,9 @@ export const AuditReportEmail = ({
                   📊 핵심 결과
                 </Text>
                 <Text className="m-0 mb-1 text-sm text-zinc-700">
-                  • AI 엔진 {enginesTotal}개 중 {enginesMentioned}개에서 우리
-                  브랜드가 등장했습니다.
+                  {enginesTotal === null || enginesMentioned === null
+                    ? "• AI·검색 채널별 확인 수는 이번 회차에서 산출할 수 없습니다."
+                    : `• AI·검색 합산: 측정 성공 ${enginesTotal}곳 중 ${enginesMentioned}곳에서 브랜드 노출이 확인됐습니다.`}
                 </Text>
                 <Text className="m-0 mb-4 text-sm text-zinc-700">
                   • GEO 점수 {geoScore}점 — {tierLabel}

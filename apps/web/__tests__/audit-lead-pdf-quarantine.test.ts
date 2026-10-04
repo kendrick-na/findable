@@ -83,3 +83,63 @@ it("does not email an old PDF when its stored recommendations are now filtered",
   expect(body.emailSent).toBe(true);
   expect(emailProps.pdfUrl).toBeUndefined();
 });
+
+it("emails only successfully measured AI/search sources, not failed attempts", async () => {
+  vi.clearAllMocks();
+  const jobId = "66666666-6666-4666-8666-666666666666";
+  const result = withRecomputedAuditMetrics({
+    brandName: "Synthetic",
+    domain: "example.test",
+    mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    metrics: { sov: 0 },
+    engineResponses: [
+      ...Array.from({ length: 10 }, () => ({
+        engineId: "chatgpt",
+        brandMentioned: false,
+        mentionQuality: "unknown_brand",
+        isStub: false,
+        errorMessage: null,
+      })),
+      {
+        engineId: "naver",
+        brandMentioned: true,
+        mentionQuality: "confirmed",
+        isStub: false,
+        errorMessage: null,
+      },
+      {
+        engineId: "perplexity",
+        brandMentioned: false,
+        mentionQuality: "unknown_brand",
+        isStub: false,
+        errorMessage: "429",
+      },
+    ],
+    geoActions: [],
+    topRecommendations: [],
+  });
+  mocks.findUnique.mockResolvedValue({
+    email: "synthetic@example.test",
+    organizationId: null,
+    result,
+    pdfUrl: null,
+    crewResult: null,
+    status: "completed",
+  });
+  mocks.createLead.mockResolvedValue({});
+  mocks.sendEmail.mockResolvedValue({ data: { id: "synthetic-send-id" } });
+
+  const response = await POST(
+    new Request(`https://findable.example/api/audit/${jobId}/lead`, {
+      method: "POST",
+      body: JSON.stringify({ email: "recipient@example.com" }),
+    }),
+    { params: Promise.resolve({ jobId }) }
+  );
+  const emailProps = mocks.sendEmail.mock.calls[0]?.[0]?.react?.props as {
+    enginesMentioned?: number;
+    enginesTotal?: number;
+  };
+  expect(response.status).toBe(200);
+  expect(emailProps).toMatchObject({ enginesMentioned: 1, enginesTotal: 2 });
+});
