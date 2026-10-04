@@ -566,6 +566,61 @@ model AuditJob {
 }
 
 // ──────────────────────────────────────────────────
+// 저장 질문 시도 원장 (W1 PromptAttempt, migration 20261005_prompt_attempt_ledger)
+//   성공 Tracking 과 분리된 "어떤 Job 이 어떤 저장 질문을 골랐고 결과가 어땠나" 기록.
+//   실패한 질문이 매 실행 다시 뽑혀 다른 저장 질문을 굶기는 문제(failure starvation)를
+//   selectionSeq 순환 + 연속 실패 cooldown/needs-attention 으로 막는다.
+//   ⚠️ PROMPT_ATTEMPT_LEDGER_ENABLED="true" 일 때만 읽고 쓴다(기본 off).
+//   ⚠️ 의도적으로 Brand/Prompt/AuditJob 과 Prisma relation 을 두지 않는다:
+//     relationMode="prisma" 에서 relation 을 걸면 Prompt/Brand 삭제 때 Prisma 가 이
+//     테이블을 연쇄 조회·삭제한다 → migration 적용 전 배포에서 기존 삭제 경로가 깨진다.
+//     고아 행은 선택 로직이 현재 저장 질문과 교집합만 보므로 무해하다.
+// ──────────────────────────────────────────────────
+
+enum PromptAttemptOutcome {
+  completed
+  failed
+  unverified
+  abandoned
+}
+
+model PromptAttempt {
+  id                String                @id @default(uuid())
+  auditJobId        String
+  brandId           String
+  promptId          String
+  // 브랜드 안에서 단조 증가하는 내구 선택 순서. 순환 기준(성공 Tracking 시각 아님).
+  selectionSeq      Int
+  planIndex         Int
+  planSize          Int
+  // dispatch 횟수. 만료 lease 인계 후 재호출하면 +1.
+  attemptNo         Int                   @default(1)
+  // 이 행을 갱신할 수 있는 현재 fence(AuditJob.leaseToken 과 같아야 한다).
+  leaseToken        String
+  selectedAt        DateTime
+  startedAt         DateTime?
+  startedLeaseToken String?
+  finishedAt        DateTime?
+  outcome           PromptAttemptOutcome?
+
+  @@unique([auditJobId, promptId])
+  @@unique([auditJobId, planIndex])
+  @@unique([brandId, selectionSeq])
+  @@index([brandId, promptId, selectionSeq])
+}
+
+// 연속 실패 수동 초기화 표식 — 이 시각 이전에 선택된 시도는 연속 실패 계산에서 제외.
+model PromptAttemptReset {
+  id       String   @id @default(uuid())
+  brandId  String
+  promptId String
+  reason   String?
+  resetAt  DateTime @default(now())
+
+  @@index([brandId, promptId])
+}
+
+// ──────────────────────────────────────────────────
 // 사이트 SEO/GEO 기술 준비도 측정
 //   온보딩 완료·도메인 변경·수동 재측정이 모두 같은 실행 이력에 쌓인다.
 //   report는 당시 관측 근거의 스냅샷이라 소급 변경하지 않는다.

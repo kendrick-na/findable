@@ -182,6 +182,8 @@ export function readAuditCheckpoint(
         object(prompt) &&
         typeof prompt.text === "string" &&
         (prompt.lang === "ko" || prompt.lang === "en") &&
+        (prompt.promptId === undefined ||
+          typeof prompt.promptId === "string") &&
         (prompt.kind === undefined ||
           prompt.kind === "brand" ||
           prompt.kind === "discovery")

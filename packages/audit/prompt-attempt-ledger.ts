@@ -29,9 +29,20 @@ interface ReservePromptPlanInput {
   attempts: PromptAttempt[];
   auditJobId: string;
   brandId: string;
+  /**
+   * Jobs that are no longer running (completed/failed). Their rows that were
+   * selected but never dispatched are reclaimed: they do not push the prompt
+   * to the back of the rotation, because no provider attempt happened.
+   */
+  inactiveAuditJobIds?: readonly string[];
   leaseToken: string;
   limit: number;
-  prompts: Array<{ id: string }>;
+  /**
+   * `lastTrackedAt` is only a tie-break among prompts with the same durable
+   * selection order (e.g. the first ledger run after the flag is enabled). It
+   * never back-fills selection history from Tracking.
+   */
+  prompts: Array<{ id: string; lastTrackedAt?: Date | null }>;
   selectedAt: Date;
 }
 
@@ -48,7 +59,9 @@ export function reservePromptPlan({
   attempts,
   selectedAt,
   limit,
+  inactiveAuditJobIds = [],
 }: ReservePromptPlanInput): PromptAttempt[] {
+  const inactiveJobs = new Set(inactiveAuditJobIds);
   if (
     attempts.some(
       (attempt) =>
@@ -98,6 +111,9 @@ export function reservePromptPlan({
       throw new Error("Prompt attempt selectionSeq must be a positive integer");
     }
     maxSelectionSeq = Math.max(maxSelectionSeq, attempt.selectionSeq);
+    if (attempt.startedAt === null && inactiveJobs.has(attempt.auditJobId)) {
+      continue;
+    }
     latestSelectionByPrompt.set(
       attempt.promptId,
       Math.max(
@@ -113,6 +129,11 @@ export function reservePromptPlan({
       const bSequence = latestSelectionByPrompt.get(b.id) ?? 0;
       if (aSequence !== bSequence) {
         return aSequence - bSequence;
+      }
+      const aTracked = a.lastTrackedAt?.getTime() ?? 0;
+      const bTracked = b.lastTrackedAt?.getTime() ?? 0;
+      if (aTracked !== bTracked) {
+        return aTracked - bTracked;
       }
       return compareStableIds(a.id, b.id);
     })
@@ -193,6 +214,12 @@ export function takeOverPromptPlan(input: {
   );
 }
 
+/**
+ * Durably mark that Findable is about to dispatch the paid call. A row that a
+ * previous (expired, taken-over) lease already started is re-dispatched by the
+ * current lease: `attemptNo` counts dispatches, so the earlier attempt is kept
+ * as a count instead of being silently overwritten.
+ */
 export function markPromptAttemptStarted(
   attempt: PromptAttempt,
   liveLease: AuthoritativeJobLease,
@@ -201,12 +228,19 @@ export function markPromptAttemptStarted(
   if (
     !isLiveLease(liveLease, startedAt) ||
     attempt.leaseToken !== liveLease.leaseToken ||
-    attempt.startedAt !== null ||
+    attempt.finishedAt !== null ||
+    attempt.startedLeaseToken === liveLease.leaseToken ||
     !Number.isFinite(startedAt.getTime())
   ) {
     return attempt;
   }
-  return { ...attempt, startedAt, startedLeaseToken: liveLease.leaseToken };
+  return {
+    ...attempt,
+    attemptNo:
+      attempt.startedAt === null ? attempt.attemptNo : attempt.attemptNo + 1,
+    startedAt,
+    startedLeaseToken: liveLease.leaseToken,
+  };
 }
 
 export function finishPromptAttempt(
