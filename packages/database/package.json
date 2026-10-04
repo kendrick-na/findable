@@ -9,7 +9,8 @@
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "smoke:content-platform": "bun --env-file=../../.env.local prisma/smoke-content-platform.ts",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "check:engine-seed": "bun prisma/check-engine-seed.ts"
+    "check:engine-seed": "bun prisma/check-engine-seed.ts",
+    "check:migration-baseline": "bun prisma/check-migration-baseline.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.4.2",
