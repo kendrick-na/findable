@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ClientReportData } from "@repo/audit/client-report/report-data";
+import {
+  type ClientReportData,
+  clientReportDisclosure,
+} from "@repo/audit/client-report/report-data";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 
@@ -59,10 +62,12 @@ it("does not present knowverse's causal claim as established fact in print", asy
   );
 
   expect(html).not.toContain("AI가 공식 사이트에 도달하지 못하면");
+  expect(html).not.toContain("20일 뒤, AI의 대답이");
+  expect(html).not.toContain("수정 문구까지 함께 만들어 드립니다");
   expect(html).toContain("발행본 안내");
 });
 
-it("restores the reviewed narrative and exact PDF only with snapshot-bound attestation", async () => {
+it("does not trust a self-attested review embedded in public report JSON", async () => {
   const reviewed = {
     ...knowverse,
     publicationReview: {
@@ -90,8 +95,37 @@ it("restores the reviewed narrative and exact PDF only with snapshot-bound attes
     })
   );
 
-  expect(html).toContain(oldPdfUrl);
-  expect(html).toContain("AI가 공식 사이트에 도달하지 못하면");
+  expect(html).not.toContain(oldPdfUrl);
+  expect(html).not.toContain("AI가 공식 사이트에 도달하지 못하면");
+  expect(html).toContain("발행 당시 해석과 개선 제안은");
+});
+
+it("requires a separately trusted review and verified PDF digest to unlock", () => {
+  const publicationReview = {
+    narrativeApproved: true,
+    pdfUrl: oldPdfUrl,
+    pdfSha256: "a".repeat(64),
+    reviewedAt: "2026-10-04T10:00:00.000Z",
+    reviewerUserId: "admin-1",
+    snapshotAuditId: knowverse.source.auditId,
+    snapshotImportedAt: knowverse.source.importedAt,
+    snapshotVersion: knowverse.version,
+    templateVersion: knowverse.templateVersion,
+  };
+  const reviewed = { ...knowverse, publicationReview };
+
+  expect(
+    clientReportDisclosure(reviewed, oldPdfUrl, publicationReview)
+      .pdfDownloadAttested
+  ).toBe(false);
+  expect(
+    clientReportDisclosure(
+      reviewed,
+      oldPdfUrl,
+      publicationReview,
+      "a".repeat(64)
+    )
+  ).toMatchObject({ narrativeAttested: true, pdfDownloadAttested: true });
 });
 
 it("does not accept an attestation for another template snapshot", async () => {
@@ -153,7 +187,7 @@ it("does not expose a PDF URL different from the reviewed artifact", async () =>
   );
 
   expect(html).not.toContain(oldPdfUrl);
-  expect(html).toContain("AI가 공식 사이트에 도달하지 못하면");
+  expect(html).not.toContain("AI가 공식 사이트에 도달하지 못하면");
 });
 
 it.each([

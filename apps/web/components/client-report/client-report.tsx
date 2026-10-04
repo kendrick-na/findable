@@ -173,6 +173,51 @@ function resolveNarrative(
   };
 }
 
+const REVIEW_HOLD =
+  "발행 당시 해석과 개선 제안은 근거·인과 표현을 재검수하는 동안 공개하지 않습니다.";
+
+function resolveReviewCopy(attested: boolean) {
+  if (!attested) {
+    return {
+      finalBody: REVIEW_HOLD,
+      finalHeading: "발행본 해석 재검수 중",
+      nextDeck: REVIEW_HOLD,
+      nextDraftBody: REVIEW_HOLD,
+      nextDraftHeading: "개선 제안",
+      nextGiveTitle: "후속 제공 항목 재검수",
+      nextHeading: "발행 당시 후속 계획을 재검수하고 있습니다",
+      nextKicker: "후속 계획 재검수",
+      nextMeasureBody: REVIEW_HOLD,
+      nextMeasureHeading: "후속 측정",
+      playbookCtaBody: REVIEW_HOLD,
+      playbookCtaButton: "재검수 후 제공",
+      playbookCtaHeading: "개선 제안 재검수 중",
+      tocNext: "후속 계획 재검수",
+      tocPlaybook: "개선 제안 재검수",
+    };
+  }
+  return {
+    finalBody:
+      "Findable이 AI 검색 현황을 직접 진단하고, 무엇부터 고칠지 알려드립니다.",
+    finalHeading: "AI가 우리 브랜드를 어떻게 말하는지 궁금하다면?",
+    nextDeck:
+      "이번 리포트와 같은 질문·같은 엔진으로 다시 측정해 전후를 비교합니다. 변화는 관찰 결과로만 보고하며 매출 효과로 단정하지 않습니다.",
+    nextDraftBody: "P0·P1 항목의 수정 문구와 발행용 소개글 초안을 드립니다.",
+    nextDraftHeading: "수정안과 문구 초안",
+    nextGiveTitle: "PoC 기간 동안 Findable이 드리는 것",
+    nextHeading: "20일 뒤, AI의 대답이 달라졌는지 확인합니다",
+    nextKicker: "20일 개선·재측정 계획",
+    nextMeasureBody: "같은 조건의 전후 비교 리포트와 30분 해석 미팅.",
+    nextMeasureHeading: "재측정 리포트",
+    playbookCtaBody:
+      "P0·P1 항목의 구체적인 수정 문구와 외부 발행용 소개글 초안을 Findable이 준비합니다.",
+    playbookCtaButton: "20일 개선 PoC 알아보기 →",
+    playbookCtaHeading: "수정 문구까지 함께 만들어 드립니다",
+    tocNext: "20일 개선·재측정 계획",
+    tocPlaybook: "바로 실천하는 개선 플레이북",
+  };
+}
+
 export function ClientReport({
   data,
   legacySyntheticEngineIds = [],
@@ -192,6 +237,7 @@ export function ClientReport({
     poc,
     why,
   } = resolveNarrative(c, narrativeAttested);
+  const reviewCopy = resolveReviewCopy(narrativeAttested);
   const officialPct = formatOfficialPct(s);
   const accuracyHeadline = safeAccuracyHeadline(H.p4, s.n, s.ok_n, c.brand);
   const coverSubtitle = safeCoverSubtitle(c.cover_sub, s.engines_total, s.n);
@@ -208,8 +254,8 @@ export function ClientReport({
     ["Section 3", `AI가 바라보는 ${c.brand}`, 6],
     ["Section 4", "AI가 인용하는 콘텐츠", 7],
     ["Section 5", "왜 이런 결과가 나왔을까", 8],
-    ["Playbook", "바로 실천하는 개선 플레이북", 9],
-    ["Next", "20일 개선·재측정 계획", 10],
+    ["Playbook", reviewCopy.tocPlaybook, 9],
+    ["Next", reviewCopy.tocNext, 10],
   ];
   const stateName = { ok: "양호", warn: "보완", bad: "부족" } as const;
 
@@ -939,12 +985,9 @@ export function ClientReport({
         </div>
         <div className="cta">
           <div>
-            <h4>수정 문구까지 함께 만들어 드립니다</h4>
-            <p>
-              P0·P1 항목의 구체적인 수정 문구와 외부 발행용 소개글 초안을
-              Findable이 준비합니다.
-            </p>
-            <span className="btn">20일 개선 PoC 알아보기 →</span>
+            <h4>{reviewCopy.playbookCtaHeading}</h4>
+            <p>{reviewCopy.playbookCtaBody}</p>
+            <span className="btn">{reviewCopy.playbookCtaButton}</span>
           </div>
           <img alt="" className="fmark" src={ASSET.fMark} />
         </div>
@@ -959,17 +1002,12 @@ export function ClientReport({
       {/* 10 계획 */}
       <section className="page">
         <Head brand={c.brand} sec="Next" />
-        <div className="kicker">20일 개선·재측정 계획</div>
+        <div className="kicker">{reviewCopy.nextKicker}</div>
         <h1 className="big">
-          20일 뒤, AI의 대답이
-          <br />
-          달라졌는지 확인합니다<span className="dot">.</span>
+          {reviewCopy.nextHeading}
+          <span className="dot">.</span>
         </h1>
-        <div className="deck">
-          이번 리포트와 <b>같은 질문·같은 엔진</b>으로 다시 측정해 전후를
-          비교합니다. 변화는 관찰 결과로만 보고하며 매출 효과로 단정하지
-          않습니다.
-        </div>
+        <div className="deck">{reviewCopy.nextDeck}</div>
         <div className="tl">
           {poc.map((x) => (
             <div key={x.d}>
@@ -980,7 +1018,7 @@ export function ClientReport({
           ))}
         </div>
         <h3 className="sq" style={{ marginTop: "12mm" }}>
-          PoC 기간 동안 Findable이 드리는 것
+          {reviewCopy.nextGiveTitle}
         </h3>
         <div className="give">
           <div>
@@ -988,21 +1026,18 @@ export function ClientReport({
             <p>모든 측정 답변 원문과 판별 사유, 인용 출처를 표로 공유합니다.</p>
           </div>
           <div>
-            <h4>수정안과 문구 초안</h4>
-            <p>P0·P1 항목의 수정 문구와 발행용 소개글 초안을 드립니다.</p>
+            <h4>{reviewCopy.nextDraftHeading}</h4>
+            <p>{reviewCopy.nextDraftBody}</p>
           </div>
           <div>
-            <h4>재측정 리포트</h4>
-            <p>같은 조건의 전후 비교 리포트와 30분 해석 미팅.</p>
+            <h4>{reviewCopy.nextMeasureHeading}</h4>
+            <p>{reviewCopy.nextMeasureBody}</p>
           </div>
         </div>
         <div className="cta">
           <div>
-            <h4>AI가 우리 브랜드를 어떻게 말하는지 궁금하다면?</h4>
-            <p>
-              Findable이 AI 검색 현황을 직접 진단하고, 무엇부터 고칠지
-              알려드립니다.
-            </p>
+            <h4>{reviewCopy.finalHeading}</h4>
+            <p>{reviewCopy.finalBody}</p>
             <span className="btn">findable.co.kr</span>
           </div>
           <img alt="" className="fmark" src={ASSET.fMark} />

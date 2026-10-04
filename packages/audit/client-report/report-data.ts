@@ -134,20 +134,23 @@ export const clientReportDataSchema = z.object({
   computed: computedSchema,
 });
 
+export interface PublicationReview {
+  narrativeApproved: boolean;
+  pdfSha256?: string;
+  pdfUrl?: string;
+  reviewedAt: string;
+  reviewerUserId: string;
+  snapshotAuditId: string;
+  snapshotImportedAt: string;
+  snapshotVersion: number;
+  templateVersion: string;
+}
+
 export interface ClientReportData {
   computed: ClientReportComputed;
   config: ClientReportConfigView;
-  publicationReview?: {
-    narrativeApproved: boolean;
-    pdfUrl?: string;
-    pdfSha256?: string;
-    reviewedAt: string;
-    reviewerUserId: string;
-    snapshotAuditId: string;
-    snapshotImportedAt: string;
-    snapshotVersion: number;
-    templateVersion: string;
-  };
+  /** Archival metadata only. Public rendering must use a separately trusted review. */
+  publicationReview?: PublicationReview;
   schema: typeof CLIENT_REPORT_SCHEMA;
   schemaVersion: typeof CLIENT_REPORT_SCHEMA_VERSION;
   source: { auditId: string; clientSlug: string; importedAt: string };
@@ -193,7 +196,9 @@ export function clientReportDisclosure(
     | "templateVersion"
     | "version"
   >,
-  currentPdfUrl?: string | null
+  currentPdfUrl?: string | null,
+  trustedPublicationReview?: PublicationReview,
+  verifiedPdfSha256?: string | null
 ): ClientReportDisclosure {
   const engineIds = new Set<string>([
     ...data.computed.answers.map((answer) => answer.engine),
@@ -228,7 +233,10 @@ export function clientReportDisclosure(
   const legacySyntheticEngineIds = legacyNaver ? ["naver"] : [];
   const publicationReviewRequired =
     retiredEngineIds.length > 0 || legacySyntheticEngineIds.length > 0;
-  const review = data.publicationReview;
+  // Report.data is customer-facing mutable JSON, so an embedded review cannot
+  // authorize its own publication. Only an append-only, role-checked source may
+  // provide this separate argument.
+  const review = trustedPublicationReview;
   const reviewMatchesSnapshot =
     review !== undefined &&
     review.templateVersion === data.templateVersion &&
@@ -250,7 +258,8 @@ export function clientReportDisclosure(
         currentPdfUrl !== undefined &&
         currentPdfUrl !== null &&
         review.pdfUrl === currentPdfUrl &&
-        review.pdfSha256 !== undefined),
+        review.pdfSha256 !== undefined &&
+        verifiedPdfSha256 === review.pdfSha256),
     publicationReviewRequired,
     measurementMix,
   };
