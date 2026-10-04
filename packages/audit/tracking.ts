@@ -192,12 +192,22 @@ export interface PersistAuditTrackingInput {
 }
 
 /**
+ * - "completed": rows written (or idempotently replayed).
+ * - "not_applicable": nothing trackable to write; terminal, never retried.
+ * - "failed": a real write/dependency problem; the reconciler may retry.
+ */
+export type PersistAuditTrackingStatus =
+  | "completed"
+  | "failed"
+  | "not_applicable";
+
+/**
  * audit 엔진 응답을 Tracking으로 적재. best-effort: 실패해도 throw하지 않는다
  *   (audit status는 이미 completed라 무영향). 단 내부는 $transaction으로 원자적.
  */
 export async function persistAuditTracking(
   input: PersistAuditTrackingInput
-): Promise<"completed" | "failed"> {
+): Promise<PersistAuditTrackingStatus> {
   const {
     organizationId,
     brandId,
@@ -239,7 +249,12 @@ export async function persistAuditTracking(
         brandId,
         totalTagged: tagged.length,
       });
-      return "failed";
+      // Nothing to write is not a write error. An immutable snapshot with no
+      // trackable answer (all stub/error/unverified/blank) can never produce
+      // rows on retry, so report the same terminal non-write the reconciler
+      // uses (`classifyTrackingReplay` → "not_applicable"). Dashboards and
+      // the sweep must not read this as a failure or keep retrying it.
+      return "not_applicable";
     }
     if (usable.some((row) => !validEngineIds.has(row.engineId))) {
       log.warn("audit.tracking.engine_seed_missing", {

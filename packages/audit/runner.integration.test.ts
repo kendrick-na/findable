@@ -394,6 +394,28 @@ describe("runAuditJob offline lifecycle contracts", () => {
     );
   });
 
+  it("records a nothing-to-write Tracking outcome as not_applicable, not failed", async () => {
+    persistAuditTracking.mockResolvedValue("not_applicable");
+    const runAuditJob = await loadRunner();
+
+    await runAuditJob(input);
+
+    expect(executeRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('"postprocessing"'),
+      "tracking",
+      "not_applicable",
+      input.jobId,
+      "pending"
+    );
+    expect(executeRawUnsafe).not.toHaveBeenCalledWith(
+      expect.stringContaining('"postprocessing"'),
+      "tracking",
+      "failed",
+      input.jobId,
+      "pending"
+    );
+  });
+
   it("commits AuditJob completed before entering the Tracking persistence boundary", async () => {
     const events: string[] = [];
     // biome-ignore lint/suspicious/useAwait: mock stands in for an async Prisma/engine API and must return a Promise

@@ -155,12 +155,12 @@ async function replayAuditTrackingSnapshot({
       database,
       jobId,
       claimToken,
-      status === "completed" ? "completed" : "unknown"
+      status === "failed" ? "unknown" : status
     );
     if (updated !== 1) {
       log.warn("audit.tracking.reconcile_lost_claim", { jobId, updated });
     }
-    return status;
+    return status === "not_applicable" ? "skipped" : status;
   } catch (error) {
     log.warn("audit.tracking.reconcile_retry", { jobId, error: String(error) });
     try {

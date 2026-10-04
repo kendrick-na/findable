@@ -157,7 +157,15 @@ describe("persistAuditTracking — 적재 규칙 (원가 0원)", () => {
   });
 
   test("🔴 쓸 행이 없으면 트랜잭션 자체를 열지 않는다", async () => {
-    await run([row({ isStub: true }), row({ errorMessage: "fail" })]);
+    // Nothing to write is a terminal non-write, not a failure: dashboards
+    // and the reconcile sweep must not treat it as an error or retry it.
+    await expect(
+      run([
+        row({ isStub: true }),
+        row({ errorMessage: "fail" }),
+        row({ engineId: "claude", mentionQuality: "unverified" }),
+      ])
+    ).resolves.toBe("not_applicable");
 
     expect(state.transactionRan).toBe(false);
     expect(state.trackingRows).toHaveLength(0);
@@ -166,7 +174,10 @@ describe("persistAuditTracking — 적재 규칙 (원가 0원)", () => {
   test("🔴 부모 org 가 없으면 전부 skip — 고아 row 를 만들지 않는다", async () => {
     state.orgExists = false;
 
-    await run([row(), row({ engineId: "claude" })]);
+    // A missing parent org is a dependency problem, not "nothing to write".
+    await expect(run([row(), row({ engineId: "claude" })])).resolves.toBe(
+      "failed"
+    );
 
     expect(state.transactionRan).toBe(false);
     expect(state.trackingRows).toHaveLength(0);

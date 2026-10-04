@@ -110,6 +110,45 @@ describe("reconcileAuditTracking", () => {
     );
   });
 
+  it("finalizes a nothing-to-write replay as not_applicable instead of retrying", async () => {
+    findUnique.mockResolvedValue({
+      status: "completed",
+      organizationId: "org-1",
+      brandId: "brand-1",
+      completedAt: new Date("2026-10-04T00:00:00Z"),
+      result: {
+        engineResponses: [
+          {
+            engineId: "chatgpt",
+            promptIndex: 0,
+            promptText: "브랜드 추천",
+            promptLang: "ko",
+            trackingInputCaptured: true,
+            rawResponse: "result",
+            citedSources: [],
+            brandMentioned: true,
+            isStub: false,
+            errorMessage: null,
+            shareOfVoice: 1,
+          },
+        ],
+      },
+      postprocessing: { tracking: "failed" },
+    });
+    persistAuditTracking.mockResolvedValue("not_applicable");
+    executeRawUnsafe.mockResolvedValue(1);
+
+    await expect(reconcileAuditTracking("job-empty")).resolves.toBe("skipped");
+    expect(executeRawUnsafe).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("trackingReconcileToken"),
+      "job-empty",
+      expect.any(String),
+      "not_applicable",
+      3
+    );
+  });
+
   it("does not guess keys for legacy snapshots", async () => {
     findUnique.mockResolvedValue({
       status: "completed",
@@ -125,6 +164,7 @@ describe("reconcileAuditTracking", () => {
 
   it.each([
     "skipped",
+    "not_applicable",
     "completed",
     undefined,
   ])("does not replay a job whose durable marker is %s", async (tracking) => {
