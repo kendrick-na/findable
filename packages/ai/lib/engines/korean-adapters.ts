@@ -178,6 +178,9 @@ export const hyperclovaAdapter: EngineAdapter = async (query) => {
 //    ⛔ 예전 D-008(검색 결과 + HyperCLOVA 합성으로 Cue: 재현)은 폐지 — 아래 naverAdapter 주석.
 // ─────────────────────────────────────────────
 
+/** Stored with each new Naver search row; older unmarked rows are not comparable. */
+export const NAVER_SEARCH_SAMPLING_VERSION = "interleave-v1";
+
 interface NaverSearchItem {
   bloggername?: string;
   description?: string;

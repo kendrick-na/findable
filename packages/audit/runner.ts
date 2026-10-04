@@ -19,6 +19,7 @@ import { resolveBrandIdentity } from "@repo/ai/lib/brand-identity";
 import {
   aggregateAudit,
   auditCost,
+  NAVER_SEARCH_SAMPLING_VERSION,
   partitionCitedSources,
   queryAllEngines,
 } from "@repo/ai/lib/engines";
@@ -737,7 +738,12 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         // 답변 4분류(+판정 보류) — 저장해 두면 화면·API 가 같은 판정을 읽는다.
         answerBucket: classifyAnswer(r),
         // 네이버 행은 이제 검색 결과 원문이다(2026-09-29). 이 표시가 없는 과거 행은 합성 요약.
-        ...(r.engineId === "naver" ? { naverSource: "search_results" } : {}),
+        ...(r.engineId === "naver"
+          ? {
+              naverSource: "search_results",
+              naverSamplingVersion: NAVER_SEARCH_SAMPLING_VERSION,
+            }
+          : {}),
         engineId: r.engineId,
         brandMentioned: r.brandMentioned,
         mentionPosition: r.mentionPosition,

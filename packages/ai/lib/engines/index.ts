@@ -20,8 +20,9 @@ import type {
   EngineResponse,
 } from "./types";
 
-export * from "./cost";
 export * from "./aggregate";
+export * from "./cost";
+export { NAVER_SEARCH_SAMPLING_VERSION } from "./korean-adapters";
 export * from "./types";
 
 const ADAPTERS: Record<EngineId, EngineAdapter> = {

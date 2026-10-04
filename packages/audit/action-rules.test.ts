@@ -188,6 +188,8 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
     );
     expect(naver?.guide?.remeasureMetric).toContain("네이버 검색 노출");
     expect(naver?.guide?.failCondition).toContain("기준선을 확보");
+    expect(naver?.verification).toContain("표본 방식");
+    expect(naver?.verification).toContain("효과로 해석하지 마세요");
   });
 
   it("해외 시장이면 네이버 카드를 내지 않는다", () => {

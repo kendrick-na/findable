@@ -576,6 +576,8 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
       naverRemeasureMetric =
         "같은 한국어 질문에서 네이버 검색 노출이 확인된 질문 수 (이번 회차 비교 가능한 전체 기준선 없음)";
     }
+    naverVerification +=
+      " 두 회차의 네이버 검색 표본 방식까지 동일한지 확인하세요. 방식이 확인되지 않거나 다르면 노출 증감이나 작업 효과로 해석하지 마세요.";
     out.push(
       card(
         "naver_blog",

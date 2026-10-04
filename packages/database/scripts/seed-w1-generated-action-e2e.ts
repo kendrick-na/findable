@@ -1,5 +1,6 @@
 /** Disposable local DB fixture: product generator -> persisted JSON -> public UI. */
 import { PrismaPg } from "@prisma/adapter-pg";
+import { NAVER_SEARCH_SAMPLING_VERSION } from "../../ai/lib/engines/korean-adapters";
 import {
   hasCompleteNaverSearchBaseline,
   summarizeVerdicts,
@@ -52,6 +53,7 @@ const searchRows = aiRows.map((row) => ({
   ...row,
   engineId: "naver",
   naverSource: "search_results",
+  naverSamplingVersion: NAVER_SEARCH_SAMPLING_VERSION,
   brandMentioned: false,
   mentionQuality: "absent",
   mentionPosition: null,
