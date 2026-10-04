@@ -256,3 +256,78 @@ export async function revokePlanFromPayment(
     ? { revoked: true, reason: "revoked" }
     : { revoked: false, reason: "push_failed" };
 }
+
+/**
+ * 이용 기간이 끝난 결제 출처를 스택에서 모두 제거한다(갱신 실패 유예 만료용).
+ *
+ * 환불(`paymentGrantAfterRefund`)과 달리 결제 한 건이 아니라 여러 건을 지운다.
+ * 정기결제는 회차마다 같은 plan 출처가 쌓이므로, 마지막 회차만 지우면 직전 회차의
+ * 같은 plan 으로 "복구"되어 권한이 남는다. 그래서 끝난 출처를 한꺼번에 걸러낸다.
+ * 현재 출처가 지워질 때만 plan 을 남은 맨 위 출처(없으면 free)로 내린다.
+ */
+export function paymentGrantAfterExpiry(
+  currentPlan: Plan,
+  privateMetadata: Record<string, unknown> | null | undefined,
+  isExpired: (paymentId: string) => boolean
+): PaymentGrantResult & { expired: boolean } {
+  const stack = paymentGrantStack(privateMetadata);
+  const currentPaymentId =
+    typeof privateMetadata?.[PAYMENT_GRANT_ID_KEY] === "string"
+      ? privateMetadata[PAYMENT_GRANT_ID_KEY]
+      : null;
+  const currentExpired =
+    currentPaymentId !== null && isExpired(currentPaymentId);
+  const remaining = stack.filter(
+    (grant) => grant.paymentId === null || !isExpired(grant.paymentId)
+  );
+  if (!currentExpired && remaining.length === stack.length) {
+    return {
+      plan: currentPlan,
+      privateMetadata: privateMetadata ?? null,
+      expired: false,
+    };
+  }
+  return {
+    plan: currentExpired ? (remaining[0]?.plan ?? "free") : currentPlan,
+    privateMetadata: privateMetadataForStack(remaining),
+    expired: true,
+  };
+}
+
+/**
+ * 갱신 결제 실패 후 유예가 끝난 사용자의 결제 권한을 회수한다(cron 전용).
+ * 결제와 무관한 권한(파트너·초대코드·관리자)은 grantPlan 이 출처를 비우므로 건드리지 않는다.
+ */
+export async function expirePaymentGrants(
+  userId: string,
+  isExpired: (paymentId: string) => boolean
+): Promise<{
+  expired: boolean;
+  reason: "nothing_to_expire" | "push_failed" | "expired";
+}> {
+  let privateMetadata: Record<string, unknown> | undefined;
+  let currentPlan: Plan;
+  try {
+    const clerk = await clerkClient();
+    const user = await clerk.users.getUser(userId);
+    privateMetadata = user.privateMetadata as
+      | Record<string, unknown>
+      | undefined;
+    currentPlan = normalizePlan(user.publicMetadata.plan);
+  } catch {
+    return { expired: false, reason: "push_failed" };
+  }
+
+  const next = paymentGrantAfterExpiry(currentPlan, privateMetadata, isExpired);
+  if (!next.expired) {
+    return { expired: false, reason: "nothing_to_expire" };
+  }
+  const pushed = await updatePlanMetadata({
+    userId,
+    plan: next.plan,
+    privateMetadata: next.privateMetadata,
+  });
+  return pushed
+    ? { expired: true, reason: "expired" }
+    : { expired: false, reason: "push_failed" };
+}
