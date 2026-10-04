@@ -5,7 +5,12 @@ const executeRawUnsafe = vi.fn();
 const persistAuditTracking = vi.fn();
 
 vi.mock("@repo/database", () => ({
-  database: { auditJob: { findUnique }, $executeRawUnsafe: executeRawUnsafe },
+  database: {
+    auditJob: { findUnique },
+    $executeRawUnsafe: executeRawUnsafe,
+    organization: { findUnique: vi.fn(async () => ({ id: "org-1" })) },
+    engine: { findMany: vi.fn(async () => [{ id: "chatgpt" }]) },
+  },
 }));
 vi.mock("./tracking", async () => ({
   persistAuditTracking,
@@ -94,7 +99,8 @@ describe("reconcileAuditTracking", () => {
       expect.stringContaining("trackingReconcileToken"),
       "job-1",
       expect.any(String),
-      "completed"
+      "completed",
+      3
     );
   });
 

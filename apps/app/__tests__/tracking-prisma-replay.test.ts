@@ -289,6 +289,150 @@ describe("product Tracking replay through PrismaPg", () => {
       } finally {
         await secondWorker.$disconnect();
       }
+
+      // Ten old snapshots cannot be keyed. They must not monopolize LIMIT 10
+      // and prevent a newer, valid core run from ever making progress.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         SELECT 'job-terminal-' || n::text, 'completed', 'org-replay', 'brand-replay',
+                $1::timestamptz - interval '1 hour' + (n || ' seconds')::interval,
+                '{"engineResponses":[{"engineId":"naver-briefing","promptText":"legacy"}]}'::jsonb,
+                '{"tracking":"pending"}'::jsonb
+         FROM generate_series(1, 10) AS n`,
+        completedAt
+      );
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-after-terminals', 'completed', 'org-replay', 'brand-replay', $1, $2::jsonb, '{"tracking":"pending"}'::jsonb)`,
+        completedAt,
+        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, trackingInputCaptured: true })) })
+      );
+      const sweepAt = new Date("2026-10-04T01:00:00.000Z");
+      await sweepAuditTrackingReconciliation(sweepAt);
+      await sweepAuditTrackingReconciliation(sweepAt);
+      const terminalStates = await database.$queryRawUnsafe<Array<{ state: string; count: bigint }>>(
+        `SELECT "postprocessing"->>'tracking' AS state, count(*)::bigint AS count
+         FROM "AuditJob" WHERE "id" LIKE 'job-terminal-%' GROUP BY 1`
+      );
+      expect(terminalStates).toEqual([{ state: "unreplayable", count: 10n }]);
+      const newerState = await database.$queryRawUnsafe<Array<{ state: string }>>(
+        `SELECT "postprocessing"->>'tracking' AS state FROM "AuditJob" WHERE "id" = 'job-after-terminals'`
+      );
+      expect(newerState).toEqual([{ state: "completed" }]);
+
+      // Removed org and an immutable all-stub snapshot are terminal, not
+      // repeatable database failures.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-removed-org', 'completed', 'org-removed', 'brand-replay', $1, $2::jsonb, '{"tracking":"pending"}'::jsonb),
+                ('job-all-stub', 'completed', 'org-replay', 'brand-replay', $1, $3::jsonb, '{"tracking":"pending"}'::jsonb)`,
+        completedAt,
+        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, trackingInputCaptured: true })) }),
+        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, isStub: true, trackingInputCaptured: true })) })
+      );
+      await expect(reconcileAuditTracking("job-removed-org")).resolves.toBe("skipped");
+      await expect(reconcileAuditTracking("job-all-stub")).resolves.toBe("skipped");
+      const notApplicable = await database.$queryRawUnsafe<Array<{ id: string; state: string }>>(
+        `SELECT "id", "postprocessing"->>'tracking' AS state FROM "AuditJob"
+         WHERE "id" IN ('job-removed-org', 'job-all-stub') ORDER BY "id"`
+      );
+      expect(notApplicable).toEqual([
+        { id: "job-all-stub", state: "not_applicable" },
+        { id: "job-removed-org", state: "not_applicable" },
+      ]);
+
+      // A missing Engine seed is potentially repairable. Retry only after
+      // nextAttemptAt, and stop after the bounded third attempt.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-seed-later', 'completed', 'org-replay', 'brand-replay', $1, $2::jsonb, '{"tracking":"pending"}'::jsonb)`,
+        completedAt,
+        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, engineId: "engine-not-seeded", trackingInputCaptured: true })) })
+      );
+      await expect(reconcileAuditTracking("job-seed-later")).resolves.toBe("failed");
+      await expect(reconcileAuditTracking("job-seed-later")).resolves.toBe("skipped");
+      const retryState = await database.$queryRawUnsafe<Array<{ attempts: number; state: string; nextAt: string }>>(
+        `SELECT ("postprocessing"->>'trackingReconcileAttempts')::int AS attempts,
+                "postprocessing"->>'tracking' AS state,
+                "postprocessing"->>'trackingNextAttemptAt' AS "nextAt"
+         FROM "AuditJob" WHERE "id" = 'job-seed-later'`
+      );
+      expect(retryState[0]).toMatchObject({ attempts: 1, state: "unknown" });
+      expect(Date.parse(retryState[0].nextAt)).toBeGreaterThan(Date.now());
+      await sweepAuditTrackingReconciliation(new Date());
+      const deferredRetry = await database.$queryRawUnsafe<Array<{ attempts: number }>>(
+        `SELECT ("postprocessing"->>'trackingReconcileAttempts')::int AS attempts
+         FROM "AuditJob" WHERE "id" = 'job-seed-later'`
+      );
+      expect(deferredRetry).toEqual([{ attempts: 1 }]);
+      for (let attempt = 2; attempt <= 3; attempt++) {
+        await database.$executeRawUnsafe(
+          `UPDATE "AuditJob" SET "postprocessing" = jsonb_set("postprocessing", '{trackingNextAttemptAt}', to_jsonb('2000-01-01T00:00:00Z'::text), true)
+           WHERE "id" = 'job-seed-later'`
+        );
+        await expect(reconcileAuditTracking("job-seed-later")).resolves.toBe("failed");
+      }
+      const exhausted = await database.$queryRawUnsafe<Array<{ attempts: number; state: string }>>(
+        `SELECT ("postprocessing"->>'trackingReconcileAttempts')::int AS attempts,
+                "postprocessing"->>'tracking' AS state FROM "AuditJob" WHERE "id" = 'job-seed-later'`
+      );
+      expect(exhausted).toEqual([{ attempts: 3, state: "retry_exhausted" }]);
+
+      // Briefing uses the same terminal classification without touching core.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-briefing-removed-org', 'completed', 'org-removed', 'brand-replay', $1, $2::jsonb,
+                 '{"tracking":"completed","briefingTracking":"pending"}'::jsonb)`,
+        completedAt,
+        JSON.stringify({ briefingStatus: "completed", briefingPrompt: "브랜드 효과", engineResponses: [{
+          ...responses[0], trackingInputCaptured: true, promptIndex: 0, promptText: "브랜드 효과", promptLang: "ko",
+        }] })
+      );
+      await expect(reconcileBriefingTracking("job-briefing-removed-org")).resolves.toBe("skipped");
+      const briefingTerminal = await database.$queryRawUnsafe<Array<{ postprocessing: Record<string, unknown> }>>(
+        `SELECT "postprocessing" FROM "AuditJob" WHERE "id" = 'job-briefing-removed-org'`
+      );
+      expect(briefingTerminal[0].postprocessing).toMatchObject({ tracking: "completed", briefingTracking: "not_applicable" });
+
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-malformed-core', 'completed', 'org-replay', 'brand-replay', $1,
+                 '{"engineResponses":[null]}'::jsonb, '{"tracking":"pending"}'::jsonb),
+                ('job-malformed-briefing', 'completed', 'org-replay', 'brand-replay', $1,
+                 '{"briefingStatus":"completed","briefingPrompt":"브랜드 효과","engineResponses":[null]}'::jsonb,
+                 '{"briefingTracking":"pending"}'::jsonb)`,
+        completedAt
+      );
+      await expect(reconcileAuditTracking("job-malformed-core")).resolves.toBe("skipped");
+      await expect(reconcileBriefingTracking("job-malformed-briefing")).resolves.toBe("skipped");
+      const malformed = await database.$queryRawUnsafe<Array<{ id: string; postprocessing: Record<string, unknown> }>>(
+        `SELECT "id", "postprocessing" FROM "AuditJob" WHERE "id" LIKE 'job-malformed-%' ORDER BY "id"`
+      );
+      expect(malformed[0].postprocessing).toMatchObject({ briefingTracking: "unreplayable" });
+      expect(malformed[1].postprocessing).toMatchObject({ tracking: "unreplayable" });
+
+      // Even due legacy unknowns must not take every slot ahead of a new
+      // pending run. Pending has priority, while retries remain age-bounded.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         SELECT 'job-legacy-unknown-' || n::text, 'completed', 'org-replay', 'brand-replay',
+                $1::timestamptz - interval '2 hours',
+                '{"engineResponses":[{"engineId":"naver-briefing","promptText":"legacy"}]}'::jsonb,
+                '{"tracking":"unknown","trackingNextAttemptAt":"2000-01-01T00:00:00Z"}'::jsonb
+         FROM generate_series(1, 10) AS n`,
+        completedAt
+      );
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-new-pending', 'completed', 'org-replay', 'brand-replay', $1, $2::jsonb, '{"tracking":"pending"}'::jsonb)`,
+        completedAt,
+        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, trackingInputCaptured: true })) })
+      );
+      await sweepAuditTrackingReconciliation(sweepAt);
+      const fairState = await database.$queryRawUnsafe<Array<{ state: string }>>(
+        `SELECT "postprocessing"->>'tracking' AS state FROM "AuditJob" WHERE "id" = 'job-new-pending'`
+      );
+      expect(fairState).toEqual([{ state: "completed" }]);
     } finally {
       await database.$disconnect();
     }

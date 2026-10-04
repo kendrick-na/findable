@@ -35,28 +35,42 @@ export async function sweepAuditTrackingReconciliation(
   try {
     candidates = await withTimeout(
       database.$queryRawUnsafe<Array<{ id: string; corePending: boolean; briefingPending: boolean }>>(
-        `SELECT "id",
-           ("postprocessing"->>'tracking' IN ('pending', 'unknown')
-             OR ("postprocessing"->>'tracking' = 'reconciling'
-               AND ("postprocessing"->>'trackingReconcileStartedAt')::timestamptz < $1)) AS "corePending",
-           ("postprocessing"->>'briefingTracking' IN ('pending', 'unknown')
-             OR ("postprocessing"->>'briefingTracking' = 'reconciling'
-               AND ("postprocessing"->>'briefingTrackingReconcileStartedAt')::timestamptz < $1)) AS "briefingPending"
-         FROM "AuditJob"
-         WHERE "status" = 'completed'
-           AND "completedAt" < $1
-           AND (
-             "postprocessing"->>'tracking' IN ('pending', 'unknown')
-             OR ("postprocessing"->>'tracking' = 'reconciling'
-                 AND ("postprocessing"->>'trackingReconcileStartedAt')::timestamptz < $1)
-             OR "postprocessing"->>'briefingTracking' IN ('pending', 'unknown')
-             OR ("postprocessing"->>'briefingTracking' = 'reconciling'
-                 AND ("postprocessing"->>'briefingTrackingReconcileStartedAt')::timestamptz < $1)
-           )
-         ORDER BY "completedAt" ASC
+        `WITH eligible AS (
+           SELECT "id", "completedAt",
+             "postprocessing"->>'tracking' AS "coreStage",
+             "postprocessing"->>'briefingTracking' AS "briefingStage",
+             ("postprocessing"->>'tracking' = 'pending'
+               OR ("postprocessing"->>'tracking' IN ('unknown', 'failed')
+                 AND ("postprocessing"->>'trackingNextAttemptAt' IS NULL
+                   OR ("postprocessing"->>'trackingNextAttemptAt')::timestamptz <= $3))
+               OR ("postprocessing"->>'tracking' = 'reconciling'
+                 AND ("postprocessing"->>'trackingReconcileStartedAt')::timestamptz < $1)) AS "corePending",
+             ("postprocessing"->>'briefingTracking' = 'pending'
+               OR ("postprocessing"->>'briefingTracking' IN ('unknown', 'failed')
+                 AND ("postprocessing"->>'briefingTrackingNextAttemptAt' IS NULL
+                   OR ("postprocessing"->>'briefingTrackingNextAttemptAt')::timestamptz <= $3))
+               OR ("postprocessing"->>'briefingTracking' = 'reconciling'
+                 AND ("postprocessing"->>'briefingTrackingReconcileStartedAt')::timestamptz < $1)) AS "briefingPending"
+           FROM "AuditJob"
+           WHERE "status" = 'completed' AND "completedAt" < $1
+             AND ("postprocessing"->>'tracking' IN ('pending', 'unknown', 'failed', 'reconciling')
+               OR "postprocessing"->>'briefingTracking' IN ('pending', 'unknown', 'failed', 'reconciling'))
+         ), ranked AS (
+           SELECT "id", "corePending", "briefingPending", "completedAt",
+             CASE WHEN "coreStage" = 'pending' OR "briefingStage" = 'pending' THEN 0 ELSE 1 END AS "queueClass",
+             row_number() OVER (
+               PARTITION BY CASE WHEN "coreStage" = 'pending' OR "briefingStage" = 'pending' THEN 0 ELSE 1 END
+               ORDER BY "completedAt" ASC, "id" ASC
+             ) AS "queueRank"
+           FROM eligible
+           WHERE "corePending" OR "briefingPending"
+         )
+         SELECT "id", "corePending", "briefingPending" FROM ranked
+         ORDER BY "queueRank" ASC, "queueClass" ASC, "completedAt" ASC, "id" ASC
          LIMIT $2`,
         agedBefore,
-        AUDIT_TRACKING_RECONCILE_MAX_ROWS
+        AUDIT_TRACKING_RECONCILE_MAX_ROWS,
+        now
       ),
       RECONCILE_OPERATION_TIMEOUT_MS
     );

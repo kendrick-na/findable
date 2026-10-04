@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
+import { classifyTrackingReplay, TRACKING_RECONCILE_MAX_ATTEMPTS } from "./tracking-replay-policy";
 
 type ReconcileDatabase = Pick<typeof database, "$executeRawUnsafe">;
 
@@ -15,15 +16,18 @@ export async function claimBriefingTracking(
   const staleBefore = new Date(startedAt.getTime() - 10 * 60 * 1000);
   const claimed = await db.$executeRawUnsafe(
     `UPDATE "AuditJob"
-     SET "postprocessing" = jsonb_set(jsonb_set(jsonb_set(
+     SET "postprocessing" = jsonb_set(jsonb_set(jsonb_set(jsonb_set(
        COALESCE("postprocessing", '{}'::jsonb),
        '{briefingTracking}', '"reconciling"', true),
        '{briefingTrackingReconcileStartedAt}', to_jsonb($2::text), true),
-       '{briefingTrackingReconcileToken}', to_jsonb($3::text), true)
+       '{briefingTrackingReconcileToken}', to_jsonb($3::text), true),
+       '{briefingTrackingReconcileAttempts}', to_jsonb(COALESCE(("postprocessing"->>'briefingTrackingReconcileAttempts')::int, 0) + 1), true)
      WHERE "id" = $1 AND "status" = 'completed'
-       AND "result"->>'briefingStatus' = 'completed'
        AND (
-         "postprocessing"->>'briefingTracking' IN ('pending', 'unknown')
+         ("postprocessing"->>'briefingTracking' IN ('pending', 'unknown', 'failed')
+           AND ("postprocessing"->>'briefingTracking' = 'pending'
+             OR "postprocessing"->>'briefingTrackingNextAttemptAt' IS NULL
+             OR ("postprocessing"->>'briefingTrackingNextAttemptAt')::timestamptz <= $2::timestamptz))
          OR ("postprocessing"->>'briefingTracking' = 'reconciling'
            AND ("postprocessing"->>'briefingTrackingReconcileStartedAt')::timestamptz < $4::timestamptz)
        )`,
@@ -39,21 +43,30 @@ export async function finalizeBriefingTracking(
   db: ReconcileDatabase,
   jobId: string,
   token: string,
-  status: "completed" | "unknown"
+  status: "completed" | "unknown" | "not_applicable" | "unreplayable"
 ): Promise<number> {
   return db.$executeRawUnsafe(
     `UPDATE "AuditJob"
-     SET "postprocessing" = jsonb_set(jsonb_set(jsonb_set(
+     SET "postprocessing" = jsonb_set(jsonb_set(jsonb_set(jsonb_set(
        COALESCE("postprocessing", '{}'::jsonb),
-       '{briefingTracking}', to_jsonb($3::text), true),
+       '{briefingTracking}',
+       to_jsonb(CASE WHEN $3::text = 'unknown'
+         AND COALESCE(("postprocessing"->>'briefingTrackingReconcileAttempts')::int, 0) >= $4
+         THEN 'retry_exhausted' ELSE $3::text END), true),
        '{briefingTrackingReconcileStartedAt}', 'null', true),
-       '{briefingTrackingReconcileToken}', 'null', true)
+       '{briefingTrackingReconcileToken}', 'null', true),
+       '{briefingTrackingNextAttemptAt}',
+       CASE WHEN $3::text = 'unknown'
+         AND COALESCE(("postprocessing"->>'briefingTrackingReconcileAttempts')::int, 0) < $4
+         THEN to_jsonb((now() + interval '1 minute' * COALESCE(("postprocessing"->>'briefingTrackingReconcileAttempts')::int, 1))::text)
+         ELSE 'null'::jsonb END, true)
      WHERE "id" = $1 AND "status" = 'completed'
        AND "postprocessing"->>'briefingTracking' = 'reconciling'
        AND "postprocessing"->>'briefingTrackingReconcileToken' = $2`,
     jobId,
     token,
-    status
+    status,
+    TRACKING_RECONCILE_MAX_ATTEMPTS
   );
 }
 
@@ -72,24 +85,32 @@ export async function reconcileBriefingTracking(
       postprocessing: true,
     },
   });
-  if (!job || job.status !== "completed" || !job.organizationId ||
-    !job.brandId || !job.completedAt || !job.result) return "skipped";
+  if (!job || job.status !== "completed") return "skipped";
 
   const marker = job.postprocessing && typeof job.postprocessing === "object" &&
     !Array.isArray(job.postprocessing)
       ? (job.postprocessing as { briefingTracking?: unknown }).briefingTracking
       : undefined;
-  if (marker !== "pending" && marker !== "unknown" && marker !== "reconciling") return "skipped";
+  if (marker !== "pending" && marker !== "unknown" && marker !== "failed" && marker !== "reconciling") return "skipped";
 
   const token = await claimBriefingTracking(database, jobId);
   if (!token) return "skipped";
+  if (!job.organizationId || !job.brandId) {
+    await finalizeBriefingTracking(database, jobId, token, "not_applicable");
+    return "skipped";
+  }
+  if (!job.completedAt || !job.result) {
+    await finalizeBriefingTracking(database, jobId, token, "unreplayable");
+    return "skipped";
+  }
   const result = job.result as {
     briefingStatus?: unknown;
     briefingPrompt?: unknown;
     engineResponses?: Array<Record<string, unknown>>;
   };
-  const tagged: TaggedEngineResponse[] = (result.engineResponses ?? [])
-    .filter((row) => row.engineId === "naver-briefing" &&
+  const tagged: TaggedEngineResponse[] = (Array.isArray(result.engineResponses) ? result.engineResponses : [])
+    .filter((row) => row !== null && typeof row === "object" && !Array.isArray(row) &&
+      row.engineId === "naver-briefing" &&
       row.trackingInputCaptured === true && row.promptIndex === 0 &&
       typeof row.promptText === "string" && row.promptText === result.briefingPrompt &&
       (row.promptLang === "ko" || row.promptLang === "en") &&
@@ -105,22 +126,37 @@ export async function reconcileBriefingTracking(
 
   if (result.briefingStatus !== "completed" || tagged.length !== 1) {
     log.warn("audit.briefing.tracking_unreplayable_snapshot", { jobId });
-    await finalizeBriefingTracking(database, jobId, token, "unknown");
+    await finalizeBriefingTracking(database, jobId, token, "unreplayable");
     return "skipped";
   }
 
-  const status = await persistAuditTracking({
-    auditJobId: jobId,
-    organizationId: job.organizationId,
-    brandId: job.brandId,
-    completedAt: job.completedAt,
-    trackingAxis: "briefing",
-    promptIsAutoGenerated: false,
-    tagged,
-  });
-  const updated = await finalizeBriefingTracking(
-    database, jobId, token, status === "completed" ? "completed" : "unknown"
-  );
-  if (updated !== 1) log.warn("audit.briefing.tracking_lost_claim", { jobId });
-  return status;
+  try {
+    const replayability = await classifyTrackingReplay(job.organizationId, tagged);
+    if (replayability !== "ready") {
+      await finalizeBriefingTracking(
+        database, jobId, token,
+        replayability === "retry" ? "unknown" : replayability
+      );
+      return replayability === "retry" ? "failed" : "skipped";
+    }
+
+    const status = await persistAuditTracking({
+      auditJobId: jobId,
+      organizationId: job.organizationId,
+      brandId: job.brandId,
+      completedAt: job.completedAt,
+      trackingAxis: "briefing",
+      promptIsAutoGenerated: false,
+      tagged,
+    });
+    const updated = await finalizeBriefingTracking(
+      database, jobId, token, status === "completed" ? "completed" : "unknown"
+    );
+    if (updated !== 1) log.warn("audit.briefing.tracking_lost_claim", { jobId });
+    return status;
+  } catch (error) {
+    log.warn("audit.briefing.tracking_retry", { jobId, error: String(error) });
+    await finalizeBriefingTracking(database, jobId, token, "unknown");
+    return "failed";
+  }
 }

@@ -7,6 +7,7 @@ describe("tracking eligibility", () => {
     const base = {
       engineId: "perplexity",
       promptText: "브랜드 추천",
+      rawResponse: "브랜드 답변",
       errorMessage: null,
       isStub: false,
       mentionQuality: "confirmed",
@@ -25,5 +26,6 @@ describe("tracking eligibility", () => {
     expect(isTrackableResponse({ ...base, isStub: true }, validEngines)).toBe(
       false
     );
+    expect(isTrackableResponse({ ...base, rawResponse: "  " }, validEngines)).toBe(false);
   });
 });

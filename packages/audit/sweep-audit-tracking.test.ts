@@ -22,7 +22,8 @@ describe("sweepAuditTrackingReconciliation", () => {
     expect(queryRaw).toHaveBeenCalledWith(
       expect.stringContaining("postprocessing"),
       new Date("2026-10-03T23:50:00.000Z"),
-      10
+      10,
+      new Date("2026-10-04T00:00:00.000Z")
     );
     expect(reconcile).toHaveBeenNthCalledWith(2, "job-raced");
     expect(reconcileBriefing).not.toHaveBeenCalled();
