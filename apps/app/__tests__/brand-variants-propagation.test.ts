@@ -42,9 +42,10 @@ describe("브랜드 별칭과 운영자 리포트 경로", () => {
     expect(AUTO_REFRESH).toContain("brandVariants:");
   });
 
-  it("웹 자동 재측정도 저장된 브랜드 별칭을 러너에 전달한다", () => {
-    expect(WEB_AUTO_REFRESH).toContain("entityVariants: true");
-    expect(WEB_AUTO_REFRESH).toContain("brandVariants:");
+  it("웹 자동 재측정은 폐기돼 러너를 실행하지 않는다 (앱 cron 이 유일한 경로)", () => {
+    expect(WEB_AUTO_REFRESH).toContain("denyIfNotCron");
+    expect(WEB_AUTO_REFRESH).toContain("status: 410");
+    expect(WEB_AUTO_REFRESH).not.toContain("runAuditJob");
   });
 
   it("저장 별칭과 도메인 기반 추론 별칭을 함께 사용한다", () => {
