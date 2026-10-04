@@ -23,6 +23,7 @@ import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { briefingCandidatePrompts } from "./briefing-query";
 import { keys } from "./keys";
+import { assertNotVercelPreview } from "./preview-guard";
 import { reconcileBriefingTracking } from "./reconcile-briefing-tracking";
 
 interface BriefingRunInput {
@@ -342,6 +343,8 @@ export async function runBriefingForAuditJob(
     if (!input.attemptId) {
       await claimBriefingAttempt(jobId, attemptId);
     }
+    // Naver briefing is a paid Browserbase crawl with no stub; refuse on Preview.
+    assertNotVercelPreview("Naver AI briefing measurement");
 
     const jobBefore = await loadBriefingSourceJob(jobId);
     const resultProcessing = jobBefore.result as unknown as StoredResult;

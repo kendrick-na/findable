@@ -18,6 +18,7 @@ import {
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "./normalize-stored-metrics";
+import { assertNotVercelPreview } from "./preview-guard";
 
 interface CrewRunInput {
   jobId: string;
@@ -62,6 +63,8 @@ export async function runCrewForAuditJob(input: CrewRunInput): Promise<void> {
   const { jobId } = input;
 
   try {
+    // Crew is paid AI with no stub; a Preview fails the request instead.
+    assertNotVercelPreview("Crew deep analysis");
     await database.auditJob.update({
       where: { id: jobId },
       data: { crewStatus: "processing", crewStartedAt: new Date() },

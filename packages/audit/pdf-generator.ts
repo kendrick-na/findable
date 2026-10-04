@@ -17,6 +17,7 @@
 import { log } from "@repo/observability/log";
 import { put } from "@repo/storage";
 import { type AuditPdfData, renderAuditPdfHtml } from "./pdf-template";
+import { assertNotVercelPreview } from "./preview-guard";
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
@@ -131,6 +132,8 @@ export async function generateAuditPdf(
   data: AuditPdfData,
   signal?: AbortSignal
 ): Promise<GeneratePdfResult> {
+  // No Chromium launch and no public Blob write from a Preview deployment.
+  assertNotVercelPreview("Audit PDF generation and Blob upload");
   const overallStartedAt = Date.now();
   const html = renderAuditPdfHtml(data);
   throwIfAborted(signal);
