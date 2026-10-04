@@ -55,4 +55,20 @@ describe("pickRotatingPrompts", () => {
     const picked = pickRotatingPrompts(rows, 8);
     expect(picked).toHaveLength(5);
   });
+
+  test("동일 측정 시각이면 DB 반환 순서와 무관하게 같은 질문을 고른다", () => {
+    const rows: Row[] = [
+      { id: "z", lastTrackedAt: null },
+      { id: "b", lastTrackedAt: null },
+      { id: "a", lastTrackedAt: null },
+    ];
+
+    expect(pickRotatingPrompts(rows, 2).map((row) => row.id)).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(
+      pickRotatingPrompts([...rows].reverse(), 2).map((row) => row.id)
+    ).toEqual(["a", "b"]);
+  });
 });
