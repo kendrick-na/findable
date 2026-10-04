@@ -51,7 +51,11 @@ function inputOf(f: Fixture): ActionInput {
         .map((r) => r.engineId)
     ).size,
     marketScope: f.marketScope,
-    naverSearchMeasured: hasCompleteNaverSearchBaseline(f.engineResponses),
+    naverSearchMeasured: hasCompleteNaverSearchBaseline(
+      f.engineResponses,
+      f.engineResponses.filter((response) => response.engineId === "naver")
+        .length
+    ),
     verdicts: summarizeVerdicts(f.engineResponses, {
       brandDomain: f.domain,
       brandName: f.brandName,
@@ -70,10 +74,12 @@ describe("네이버 검색 전체 기준선", () => {
       errorMessage: "timeout",
       isStub: false,
     };
-    expect(hasCompleteNaverSearchBaseline([])).toBe(false);
-    expect(hasCompleteNaverSearchBaseline([failed])).toBe(false);
-    expect(hasCompleteNaverSearchBaseline([ok, failed])).toBe(false);
-    expect(hasCompleteNaverSearchBaseline([ok, ok])).toBe(true);
+    expect(hasCompleteNaverSearchBaseline([], 0)).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([failed], 1)).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([ok, failed], 2)).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([ok, ok], 2)).toBe(true);
+    // One successful row is not a complete baseline for two scheduled Korean questions.
+    expect(hasCompleteNaverSearchBaseline([ok], 2)).toBe(false);
   });
 });
 

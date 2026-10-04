@@ -67,7 +67,10 @@ const actions = buildGeoActions({
   enginesMeasured: 1,
   enginesMentioned: 1,
   marketScope: "korea",
-  naverSearchMeasured: hasCompleteNaverSearchBaseline(searchRows),
+  naverSearchMeasured: hasCompleteNaverSearchBaseline(
+    searchRows,
+    aiRows.length
+  ),
   verdicts,
 });
 if (!actions.some((action) => action.kind === "naver_blog")) {

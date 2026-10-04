@@ -456,19 +456,21 @@ export function isAwarenessLow(sig: RuleSignals): boolean {
   return sig.enginesMeasured > 0 && sig.enginesMentioned === 0;
 }
 
-/** 브랜드 질문의 네이버 검색 응답이 모두 성공했을 때만 전체 비교 기준선을 인정한다. */
+/** 예정된 한국어 브랜드 질문의 네이버 응답이 빠짐없이 성공해야 전체 기준선이다. */
 export function hasCompleteNaverSearchBaseline(
   responses: Array<{
     engineId: string;
     errorMessage?: string | null;
     isStub?: boolean | null;
-  }>
+  }>,
+  expectedRows: number
 ): boolean {
   const naverRows = responses.filter(
     (response) => response.engineId === "naver"
   );
   return (
-    naverRows.length > 0 &&
+    expectedRows > 0 &&
+    naverRows.length === expectedRows &&
     naverRows.every((response) => !(response.errorMessage || response.isStub))
   );
 }
