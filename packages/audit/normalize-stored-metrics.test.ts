@@ -569,6 +569,35 @@ describe("saved audit metric normalization", () => {
     ).toBe(true);
   });
 
+  it("preserves the publication decision across the public projection used by client fallback", () => {
+    const complete = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+    });
+    const provisional = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 70 },
+      engineResponses: [
+        ...rows(7, 7),
+        ...rows(3, 0, { mentionQuality: "unverified" }),
+      ],
+    });
+    const withheld = withRecomputedAuditMetrics({
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+    });
+
+    expect(auditPublicationStatus(complete)).toBe("published");
+    expect(auditPublicationStatus(provisional)).toBe("provisional");
+    expect(auditPublicationStatus(withheld)).toBe("withheld");
+    for (const result of [complete, provisional, withheld]) {
+      expect(auditPublicationIssue(publicAuditResult(result))).toBe(
+        auditPublicationIssue(result)
+      );
+    }
+  });
+
   it("quarantines legacy verdicts instead of exposing their stale scores or actions", () => {
     const normalized = withRecomputedAuditMetrics({
       brandName: "TechDD",
