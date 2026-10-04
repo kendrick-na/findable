@@ -12,6 +12,7 @@
 // briefingStatus·engineResponses는 result JSON을 공유하므로 read-modify-write
 // (최신 result 재조회 후 병합)로 다른 필드 덮어쓰기를 막는다.
 
+import { randomUUID } from "node:crypto";
 import { resolveBrandIdentity } from "@repo/ai/lib/brand-identity";
 import type { CitedSource, EngineResponse } from "@repo/ai/lib/engines";
 import { type aggregateAudit, queryAllEngines } from "@repo/ai/lib/engines";
@@ -23,7 +24,6 @@ import { log } from "@repo/observability/log";
 import { briefingCandidatePrompts } from "./briefing-query";
 import { keys } from "./keys";
 import { reconcileBriefingTracking } from "./reconcile-briefing-tracking";
-import { randomUUID } from "node:crypto";
 
 interface BriefingRunInput {
   attemptId?: string;
@@ -64,20 +64,20 @@ interface StoredEngineResponse {
   errorMessage: string | null;
   excerpt: string;
   isStub: boolean;
-  rawResponse?: string;
-  shareOfVoice?: number | null;
-  usage?: EngineResponse["usage"];
-  trackingInputCaptured?: boolean;
-  promptIndex?: number;
-  promptText?: string;
-  promptLang?: "ko" | "en";
   /** 순위의 분모(세션N-10). 도입 전 저장분은 undefined → 복원 시 null. */
   mentionListSize?: number | null;
   mentionPosition: number | null;
   /** 본류와 같은 4분류 판정. 브리핑도 "미노출"과 "다른 대상으로 앎"을 뭉개지 않는다. */
   mentionQuality?: EngineResponse["mentionQuality"];
+  promptIndex?: number;
+  promptLang?: "ko" | "en";
+  promptText?: string;
+  rawResponse?: string;
   sentiment: "positive" | "neutral" | "negative" | null;
+  shareOfVoice?: number | null;
   sov: number | null;
+  trackingInputCaptured?: boolean;
+  usage?: EngineResponse["usage"];
   /** 판정이 제외된 이유. 공개 리포트가 "모름"이라고 단정하지 않게 보존한다. */
   verdictReason?: "official_evidence_missing" | "judge_failed";
   verdictVia?: "rule" | "llm" | "skipped";
@@ -236,7 +236,9 @@ export async function runBriefingForAuditJob(
         attemptId,
         new Date().toISOString()
       );
-      if (claimed !== 1) throw new Error("브리핑 상태 claim을 획득하지 못했습니다.");
+      if (claimed !== 1) {
+        throw new Error("브리핑 상태 claim을 획득하지 못했습니다.");
+      }
     }
 
     const jobBefore = await database.auditJob.findUnique({
@@ -271,7 +273,11 @@ export async function runBriefingForAuditJob(
     // 넘겨 원 측정 때의 한/영 변형이 소실됐고("엔비디아"만 남고 "NVIDIA" 없음),
     // 브리핑이 영문 표기로 답하면 명백한 언급도 false로 판정됐다.
     // 본 러너(runner.ts)와 동일한 해석 체인으로 변형을 복원한다.
-    const identity = await resolveBrandIdentity(resultProcessing.domain, brand, signal);
+    const identity = await resolveBrandIdentity(
+      resultProcessing.domain,
+      brand,
+      signal
+    );
     const brandVariants = [...new Set([brand, ...identity.brandVariants])];
     // 🔴 업종별 질의(2026-09-29) — B2B·서비스 회사에 「효과」를 묻지 않는다.
     //   고정 질의는 `briefing-query.ts` 로 옮겼다(뷰티·건강·단서 없음 = 기존 그대로).
@@ -294,11 +300,15 @@ export async function runBriefingForAuditJob(
       },
       ["naver-briefing"] as never
     );
-    if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
 
     // 첫 질의가 미노출이면 다음 후보로 재시도 (하나라도 뜨면 채택).
     for (let i = 1; i < candidatePrompts.length; i++) {
-      if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
+      if (signal?.aborted) {
+        throw signal.reason ?? new DOMException("Aborted", "AbortError");
+      }
       const first = briefingResponses[0];
       const shown =
         first &&
@@ -358,12 +368,23 @@ export async function runBriefingForAuditJob(
     );
     const briefing = newStored[0];
     const trackingStage =
-      keys().AUDIT_DUAL_WRITE_ENABLED && jobBefore.organizationId && jobBefore.brandId &&
-      jobBefore.completedAt && briefing && !briefing.isStub && !briefing.errorMessage &&
+      keys().AUDIT_DUAL_WRITE_ENABLED &&
+      jobBefore.organizationId &&
+      jobBefore.brandId &&
+      jobBefore.completedAt &&
+      briefing &&
+      !briefing.isStub &&
+      !briefing.errorMessage &&
       Boolean(briefing.rawResponse)
         ? "pending"
         : "skipped";
-    await commitBriefingResult(jobId, attemptId, newStored, adoptedPrompt, trackingStage);
+    await commitBriefingResult(
+      jobId,
+      attemptId,
+      newStored,
+      adoptedPrompt,
+      trackingStage
+    );
 
     log.info("audit.briefing.completed", {
       jobId,
@@ -372,7 +393,9 @@ export async function runBriefingForAuditJob(
       errorMessage: briefing?.errorMessage ?? null,
     });
 
-    if (trackingStage === "pending") await reconcileBriefingTracking(jobId);
+    if (trackingStage === "pending") {
+      await reconcileBriefingTracking(jobId);
+    }
     return briefing && !briefing.isStub && !briefing.errorMessage
       ? "completed"
       : "failed";

@@ -68,7 +68,11 @@ describe("PDF abort cleanup contract", () => {
     launch.mockResolvedValue(browser);
     const { generateAuditPdf } = await import("./pdf-generator");
     const controller = new AbortController();
-    const pending = generateAuditPdf("job-page-aborted", pdfData, controller.signal);
+    const pending = generateAuditPdf(
+      "job-page-aborted",
+      pdfData,
+      controller.signal
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
     controller.abort(new DOMException("deadline", "AbortError"));
 
@@ -88,7 +92,11 @@ describe("PDF abort cleanup contract", () => {
     );
     const { generateAuditPdf } = await import("./pdf-generator");
     const controller = new AbortController();
-    const pending = generateAuditPdf("job-late-launch", pdfData, controller.signal);
+    const pending = generateAuditPdf(
+      "job-late-launch",
+      pdfData,
+      controller.signal
+    );
     await Promise.resolve();
     controller.abort(new DOMException("deadline", "AbortError"));
     await expect(pending).rejects.toThrow("deadline");

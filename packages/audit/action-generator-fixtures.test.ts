@@ -30,7 +30,10 @@ type Manifest = {
   }>;
 };
 
-const fixtureDir = new URL("./__fixtures__/action-generators/", import.meta.url);
+const fixtureDir = new URL(
+  "./__fixtures__/action-generators/",
+  import.meta.url
+);
 const fixtureNames = ["37088ab.json", "3618c25.json", "0dce32e.json"];
 const manifest = JSON.parse(
   readFileSync(new URL("manifest.json", fixtureDir), "utf8")
@@ -38,15 +41,16 @@ const manifest = JSON.parse(
 const generatorScriptSha256 = createHash("sha256")
   .update(
     readFileSync(
-      new URL("../../scripts/generate-audit-action-fixtures.mjs", import.meta.url)
+      new URL(
+        "../../scripts/generate-audit-action-fixtures.mjs",
+        import.meta.url
+      )
     )
   )
   .digest("hex");
 
 function readFixture(name: string): Fixture {
-  return JSON.parse(
-    readFileSync(new URL(name, fixtureDir), "utf8")
-  ) as Fixture;
+  return JSON.parse(readFileSync(new URL(name, fixtureDir), "utf8")) as Fixture;
 }
 
 describe("historical audit action generator fixtures", () => {
@@ -81,16 +85,20 @@ describe("historical audit action generator fixtures", () => {
       expect(fixture.provenance.generatorScript).toBe(
         "scripts/generate-audit-action-fixtures.mjs"
       );
-      expect(fixture.provenance.generatorScriptSha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(fixture.provenance.generatorScriptSha256).toMatch(
+        /^[0-9a-f]{64}$/
+      );
       expect(fixture.scenarios.map(({ id }) => id)).toEqual([
         "korea-no-owned",
         "global-no-owned",
         "both-no-owned",
         "both-owned",
       ]);
-      expect(fixture.scenarios.flatMap(({ cards }) => cards).every(
-        ({ kind }) => kind === "naver_blog" || kind === "content_fix"
-      )).toBe(true);
+      expect(
+        fixture.scenarios
+          .flatMap(({ cards }) => cards)
+          .every(({ kind }) => kind === "naver_blog" || kind === "content_fix")
+      ).toBe(true);
     }
   });
 
@@ -111,11 +119,16 @@ describe("historical audit action generator fixtures", () => {
                   .map(({ kind }) => kind as string)
               : scenario.cards.map(({ kind }) => kind as string);
         expect(filtered.map(({ kind }) => kind)).toEqual(expectedKinds);
-        if (fixture.provenance.commit === "3618c25b618c23de43b138530fc8ffa50399341f") {
+        if (
+          fixture.provenance.commit ===
+          "3618c25b618c23de43b138530fc8ffa50399341f"
+        ) {
           const naver = filtered.find(({ kind }) => kind === "naver_blog");
           if (expectedKinds.includes("naver_blog")) {
             expect(naver).toBeDefined();
-            expect(naver?.verification).toContain("같은 질문에 네이버 검색 노출");
+            expect(naver?.verification).toContain(
+              "같은 질문에 네이버 검색 노출"
+            );
             expect((naver?.guide as Record<string, unknown>)?.engines).toEqual([
               "naver",
             ]);

@@ -92,13 +92,24 @@ export async function reconcileBriefingTracking(
       postprocessing: true,
     },
   });
-  if (!job || job.status !== "completed") return "skipped";
+  if (!job || job.status !== "completed") {
+    return "skipped";
+  }
 
-  const marker = job.postprocessing && typeof job.postprocessing === "object" &&
+  const marker =
+    job.postprocessing &&
+    typeof job.postprocessing === "object" &&
     !Array.isArray(job.postprocessing)
       ? (job.postprocessing as { briefingTracking?: unknown }).briefingTracking
       : undefined;
-  if (marker !== "pending" && marker !== "unknown" && marker !== "failed" && marker !== "reconciling") return "skipped";
+  if (
+    marker !== "pending" &&
+    marker !== "unknown" &&
+    marker !== "failed" &&
+    marker !== "reconciling"
+  ) {
+    return "skipped";
+  }
 
   const stage = job.postprocessing as Record<string, unknown>;
   const attempts = stage.briefingTrackingReconcileAttempts;
@@ -122,12 +133,14 @@ export async function reconcileBriefingTracking(
     return "skipped";
   }
   const token = await claimBriefingTracking(database, jobId, now);
-  if (!token) return "skipped";
-  if (!job.organizationId || !job.brandId) {
+  if (!token) {
+    return "skipped";
+  }
+  if (!(job.organizationId && job.brandId)) {
     await finalizeBriefingTracking(database, jobId, token, "not_applicable");
     return "skipped";
   }
-  if (!job.completedAt || !job.result) {
+  if (!(job.completedAt && job.result)) {
     await finalizeBriefingTracking(database, jobId, token, "unreplayable");
     return "skipped";
   }
@@ -136,20 +149,34 @@ export async function reconcileBriefingTracking(
     briefingPrompt?: unknown;
     engineResponses?: Array<Record<string, unknown>>;
   };
-  const tagged: TaggedEngineResponse[] = (Array.isArray(result.engineResponses) ? result.engineResponses : [])
-    .filter((row) => row !== null && typeof row === "object" && !Array.isArray(row) &&
-      row.engineId === "naver-briefing" &&
-      row.trackingInputCaptured === true && row.promptIndex === 0 &&
-      typeof row.promptText === "string" && row.promptText === result.briefingPrompt &&
-      (row.promptLang === "ko" || row.promptLang === "en") &&
-      typeof row.rawResponse === "string" && row.rawResponse.length > 0 &&
-      row.isStub === false && !row.errorMessage)
+  const tagged: TaggedEngineResponse[] = (
+    Array.isArray(result.engineResponses) ? result.engineResponses : []
+  )
+    .filter(
+      (row) =>
+        row !== null &&
+        typeof row === "object" &&
+        !Array.isArray(row) &&
+        row.engineId === "naver-briefing" &&
+        row.trackingInputCaptured === true &&
+        row.promptIndex === 0 &&
+        typeof row.promptText === "string" &&
+        row.promptText === result.briefingPrompt &&
+        (row.promptLang === "ko" || row.promptLang === "en") &&
+        typeof row.rawResponse === "string" &&
+        row.rawResponse.length > 0 &&
+        row.isStub === false &&
+        !row.errorMessage
+    )
     .map((row) => ({
       ...(row as unknown as TaggedEngineResponse),
       citedSources: Array.isArray(row.citedSources) ? row.citedSources : [],
-      shareOfVoice: typeof row.shareOfVoice === "number" ? row.shareOfVoice : null,
-      usage: row.usage && typeof row.usage === "object"
-        ? row.usage as TaggedEngineResponse["usage"] : undefined,
+      shareOfVoice:
+        typeof row.shareOfVoice === "number" ? row.shareOfVoice : null,
+      usage:
+        row.usage && typeof row.usage === "object"
+          ? (row.usage as TaggedEngineResponse["usage"])
+          : undefined,
     }));
 
   if (result.briefingStatus !== "completed" || tagged.length !== 1) {
@@ -159,10 +186,15 @@ export async function reconcileBriefingTracking(
   }
 
   try {
-    const replayability = await classifyTrackingReplay(job.organizationId, tagged);
+    const replayability = await classifyTrackingReplay(
+      job.organizationId,
+      tagged
+    );
     if (replayability !== "ready") {
       await finalizeBriefingTracking(
-        database, jobId, token,
+        database,
+        jobId,
+        token,
         replayability === "retry" ? "unknown" : replayability
       );
       return replayability === "retry" ? "failed" : "skipped";
@@ -179,9 +211,14 @@ export async function reconcileBriefingTracking(
       tagged,
     });
     const updated = await finalizeBriefingTracking(
-      database, jobId, token, status === "completed" ? "completed" : "unknown"
+      database,
+      jobId,
+      token,
+      status === "completed" ? "completed" : "unknown"
     );
-    if (updated !== 1) log.warn("audit.briefing.tracking_lost_claim", { jobId });
+    if (updated !== 1) {
+      log.warn("audit.briefing.tracking_lost_claim", { jobId });
+    }
     return status;
   } catch (error) {
     log.warn("audit.briefing.tracking_retry", { jobId, error: String(error) });

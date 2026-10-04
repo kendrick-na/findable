@@ -4,10 +4,10 @@
 import type { AuditMetrics, EngineId } from "@repo/ai/lib/engines";
 import {
   ANSWER_BUCKET_COPY_KO,
-  type PromptKind,
   answerGroup,
   classifyAnswer,
   isDiscoveryAnswer,
+  type PromptKind,
 } from "./answer-buckets";
 import { engineDisplayName } from "./engine-labels";
 
@@ -84,8 +84,7 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
   // raw 길이를 쓰면 "28개 AI 엔진 = 112회 호출"로 부풀었음 → 고유화 + 오류 제외.
   const successfulRows = data.engineResponses.filter(
     (row) =>
-      !isDiscoveryAnswer(row) &&
-      !(row.errorMessage || row.isStub) &&
+      !(isDiscoveryAnswer(row) || row.errorMessage || row.isStub) &&
       answerGroup(row.engineId) !== "briefing" &&
       answerGroup(row.engineId) !== "retired"
   );

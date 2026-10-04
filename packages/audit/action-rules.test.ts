@@ -10,9 +10,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  crawlAccessAction,
   DONT_LIST,
   EVIDENCE_GRADE_LABEL,
-  crawlAccessAction,
   entityClarityAction,
   RULE_THRESHOLDS,
   summarizeVerdicts,

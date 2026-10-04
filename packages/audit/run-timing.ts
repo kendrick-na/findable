@@ -13,11 +13,11 @@ type Stage =
   | "aggregate"
   | "db_commit";
 interface Detail {
-  promptIndex?: number;
-  promptCount?: number;
-  engineId?: string;
-  engineCount?: number;
   chunkIndex?: number;
+  engineCount?: number;
+  engineId?: string;
+  promptCount?: number;
+  promptIndex?: number;
   responseCount?: number;
 }
 

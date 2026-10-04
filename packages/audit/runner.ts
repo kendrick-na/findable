@@ -28,7 +28,7 @@ import {
   MENTION_VERDICT_VERSION,
   verifyMentions,
 } from "@repo/ai/lib/mention-verdict";
-import { database, Prisma } from "@repo/database";
+import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { summarizeVerdicts } from "./action-rules";
@@ -57,6 +57,7 @@ import {
   makeAuditCheckpoint,
   readAuditCheckpoint,
 } from "./checkpoint";
+import { commitAuditResult } from "./commit-audit-result";
 import {
   type KnownCompetitor,
   parseKnownCompetitors,
@@ -84,28 +85,26 @@ import type { AuditPdfData } from "./pdf-template";
 import type { AuditPostprocessing } from "./postprocessing";
 import { RUNNER_PROMPT_LIMIT } from "./prompt-limits";
 import { pickRotatingPrompts } from "./prompt-rotation";
-import { runCheckpointedQuestions } from "./run-checkpointed-questions";
-import { createRunTiming } from "./run-timing";
-import {
-  persistAuditTracking,
-  tagCoreResponses,
-  type TaggedEngineResponse,
-} from "./tracking";
-import { commitAuditResult } from "./commit-audit-result";
 import {
   AUDIT_PDF_WORST_CASE_MS,
   AUDIT_POST_PROCESSING_RESERVE_MS,
   AUDIT_RUN_TIME_BUDGET_MS,
   createAuditRunBudget,
 } from "./run-budget";
+import { runCheckpointedQuestions } from "./run-checkpointed-questions";
+import { createRunTiming } from "./run-timing";
+import {
+  persistAuditTracking,
+  type TaggedEngineResponse,
+  tagCoreResponses,
+} from "./tracking";
 
 // A derived-stage write must not consume the remaining invocation deadline.
 // The database operation may still settle later; callers treat that outcome as
 // unknown and never attempt a compensating delete.
-const AUDIT_DERIVED_WRITE_TIMEOUT_MS = 5_000;
+const AUDIT_DERIVED_WRITE_TIMEOUT_MS = 5000;
 
 export interface AuditRunInput {
-  invocationStartedAtMs?: number;
   brandId?: string;
   brandName?: string;
   brandVariants?: string[];
@@ -115,6 +114,7 @@ export interface AuditRunInput {
    * ("기아"가 자동차인지 야구단인지). 없어도 동작하며, 있으면 판정 정확도가 올라간다.
    */
   industry?: string;
+  invocationStartedAtMs?: number;
   jobId: string;
   language: "ko" | "en" | "both";
   /**
@@ -145,7 +145,9 @@ async function awaitWithTimeout<T>(
       }),
     ]);
   } finally {
-    if (timer) clearTimeout(timer);
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }
 
@@ -1062,7 +1064,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         )
       );
     } catch (commitError) {
-      if (!completionCommitTimedOut) throw commitError;
+      if (!completionCommitTimedOut) {
+        throw commitError;
+      }
       log.warn("audit.job.commit_unknown", {
         jobId: input.jobId,
         error: parseError(commitError),
@@ -1135,7 +1139,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       const pdfController = new AbortController();
       const abortPdf = () =>
         pdfController.abort(
-          budget.signal.reason ?? new DOMException("PDF budget exceeded", "AbortError")
+          budget.signal.reason ??
+            new DOMException("PDF budget exceeded", "AbortError")
         );
       budget.signal.addEventListener("abort", abortPdf, { once: true });
       try {
@@ -1156,7 +1161,13 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             where: { id: input.jobId },
             data: { pdfUrl: pdf.pdfUrl },
           }),
-          Math.max(1, Math.min(AUDIT_POST_PROCESSING_RESERVE_MS, budget.stopStartingAtMs - Date.now()))
+          Math.max(
+            1,
+            Math.min(
+              AUDIT_POST_PROCESSING_RESERVE_MS,
+              budget.stopStartingAtMs - Date.now()
+            )
+          )
         );
         log.info("audit.pdf.generated", {
           jobId: input.jobId,
@@ -1174,7 +1185,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       }
     } else {
       const pdfStatus = pdfExpected ? "deferred" : "skipped";
-      log.warn("audit.pdf.skipped_unverified", { jobId: input.jobId, status: pdfStatus });
+      log.warn("audit.pdf.skipped_unverified", {
+        jobId: input.jobId,
+        status: pdfStatus,
+      });
       await updatePostprocessing("pdf", pdfStatus);
     }
 

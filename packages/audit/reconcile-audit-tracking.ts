@@ -95,10 +95,7 @@ export async function reconcileAuditTracking(
       postprocessing: true,
     },
   });
-  if (
-    !job ||
-    job.status !== "completed"
-  ) {
+  if (!job || job.status !== "completed") {
     return "skipped";
   }
   const trackingStage =
@@ -107,7 +104,12 @@ export async function reconcileAuditTracking(
     !Array.isArray(job.postprocessing)
       ? (job.postprocessing as { tracking?: unknown }).tracking
       : undefined;
-  if (trackingStage !== "pending" && trackingStage !== "unknown" && trackingStage !== "failed" && trackingStage !== "reconciling") {
+  if (
+    trackingStage !== "pending" &&
+    trackingStage !== "unknown" &&
+    trackingStage !== "failed" &&
+    trackingStage !== "reconciling"
+  ) {
     // The durable marker, not the current feature flag, decides whether this
     // AuditJob intended a Tracking dual-write. Missing/skipped/completed jobs
     // must never be guessed into new rows.
@@ -135,20 +137,24 @@ export async function reconcileAuditTracking(
     return "skipped";
   }
   const claimToken = await claimAuditTracking(database, jobId, now);
-  if (!claimToken) return "skipped";
+  if (!claimToken) {
+    return "skipped";
+  }
 
-  if (!job.organizationId || !job.brandId) {
+  if (!(job.organizationId && job.brandId)) {
     await finalizeAuditTracking(database, jobId, claimToken, "not_applicable");
     return "skipped";
   }
-  if (!job.completedAt || !job.result) {
+  if (!(job.completedAt && job.result)) {
     await finalizeAuditTracking(database, jobId, claimToken, "unreplayable");
     return "skipped";
   }
   const result = job.result as {
     engineResponses?: Array<Record<string, unknown>>;
   };
-  const tagged: TaggedEngineResponse[] = (Array.isArray(result.engineResponses) ? result.engineResponses : [])
+  const tagged: TaggedEngineResponse[] = (
+    Array.isArray(result.engineResponses) ? result.engineResponses : []
+  )
     .filter(
       (row) =>
         row !== null &&
@@ -182,10 +188,15 @@ export async function reconcileAuditTracking(
   }
 
   try {
-    const replayability = await classifyTrackingReplay(job.organizationId, tagged);
+    const replayability = await classifyTrackingReplay(
+      job.organizationId,
+      tagged
+    );
     if (replayability !== "ready") {
       await finalizeAuditTracking(
-        database, jobId, claimToken,
+        database,
+        jobId,
+        claimToken,
         replayability === "retry" ? "unknown" : replayability
       );
       return replayability === "retry" ? "failed" : "skipped";
@@ -202,9 +213,14 @@ export async function reconcileAuditTracking(
     });
 
     const updated = await finalizeAuditTracking(
-      database, jobId, claimToken, status === "completed" ? "completed" : "unknown"
+      database,
+      jobId,
+      claimToken,
+      status === "completed" ? "completed" : "unknown"
     );
-    if (updated !== 1) log.warn("audit.tracking.reconcile_lost_claim", { jobId, updated });
+    if (updated !== 1) {
+      log.warn("audit.tracking.reconcile_lost_claim", { jobId, updated });
+    }
     return status;
   } catch (error) {
     log.warn("audit.tracking.reconcile_retry", { jobId, error: String(error) });

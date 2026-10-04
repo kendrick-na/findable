@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  AUDIT_MIN_NEXT_PROMPT_BUDGET_MS,
   AUDIT_BRIEFING_WORST_CASE_MS,
+  AUDIT_MIN_NEXT_PROMPT_BUDGET_MS,
   AUDIT_PDF_WORST_CASE_MS,
   AUDIT_POST_PROCESSING_RESERVE_MS,
   AUDIT_RUN_TIME_BUDGET_MS,
@@ -41,7 +41,9 @@ describe("audit run budget", () => {
     expect(budget.hasBudgetFor(AUDIT_PDF_WORST_CASE_MS)).toBe(true);
     expect(budget.hasBudgetFor(AUDIT_BRIEFING_WORST_CASE_MS)).toBe(true);
     now.mockReturnValue(
-      AUDIT_RUN_TIME_BUDGET_MS - AUDIT_BRIEFING_WORST_CASE_MS - AUDIT_POST_PROCESSING_RESERVE_MS
+      AUDIT_RUN_TIME_BUDGET_MS -
+        AUDIT_BRIEFING_WORST_CASE_MS -
+        AUDIT_POST_PROCESSING_RESERVE_MS
     );
     expect(budget.hasBudgetFor(AUDIT_BRIEFING_WORST_CASE_MS)).toBe(false);
     budget.dispose();

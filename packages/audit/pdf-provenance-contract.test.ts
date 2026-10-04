@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AuditPdfData } from "./pdf-template";
 import { isCurrentAuditPdfUrl } from "./normalize-stored-metrics";
+import type { AuditPdfData } from "./pdf-template";
 
 const mocks = vi.hoisted(() => ({
   launch: vi.fn(),
@@ -52,7 +52,11 @@ describe("audit PDF provenance contract", () => {
 
     const { generateAuditPdf } = await import("./pdf-generator");
     const controller = new AbortController();
-    const result = await generateAuditPdf("job-123", pdfData, controller.signal);
+    const result = await generateAuditPdf(
+      "job-123",
+      pdfData,
+      controller.signal
+    );
 
     expect(mocks.put).toHaveBeenCalledWith(
       expect.stringMatching(/^audits\/audit-v3-job-123-\d+\.pdf$/),

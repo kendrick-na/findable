@@ -14,13 +14,15 @@
 //
 // HTML → PDF 변환 후 Vercel Blob에 public 업로드 → URL 반환.
 
-import { put } from "@repo/storage";
 import { log } from "@repo/observability/log";
+import { put } from "@repo/storage";
 import { type AuditPdfData, renderAuditPdfHtml } from "./pdf-template";
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
-    throw signal.reason ?? new DOMException("PDF generation aborted", "AbortError");
+    throw (
+      signal.reason ?? new DOMException("PDF generation aborted", "AbortError")
+    );
   }
 }
 

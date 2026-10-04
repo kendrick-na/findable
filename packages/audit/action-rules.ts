@@ -557,8 +557,7 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
           effortHours: { min: 2, max: 4, per: "week" },
           effectLag:
             "게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.",
-          remeasureMetric:
-            "같은 질문에서 네이버 검색 노출이 확인된 질문 수",
+          remeasureMetric: "같은 질문에서 네이버 검색 노출이 확인된 질문 수",
           failCondition:
             "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 검색 노출이 확인된 질문 수가 늘지 않으면, 주제를 더 좁히거나 제목·첫 문장을 고객 표현으로 바꾸세요.",
         }

@@ -1,6 +1,6 @@
 import { database } from "@repo/database";
-import { isTrackableResponse } from "./tracking-eligibility";
 import type { TaggedEngineResponse } from "./tracking";
+import { isTrackableResponse } from "./tracking-eligibility";
 
 export const TRACKING_RECONCILE_MAX_ATTEMPTS = 3;
 export const TRACKING_RECONCILE_RETRY_MS = 60_000;
@@ -103,7 +103,9 @@ export async function classifyTrackingReplay(
   organizationId: string,
   tagged: TaggedEngineResponse[]
 ): Promise<"ready" | "not_applicable" | "unreplayable" | "retry"> {
-  if (tagged.length === 0) return "unreplayable";
+  if (tagged.length === 0) {
+    return "unreplayable";
+  }
   const snapshotEngineIds = new Set(tagged.map((row) => row.engineId));
   const eligible = tagged.filter((row) =>
     isTrackableResponse(row, snapshotEngineIds)
@@ -117,7 +119,9 @@ export async function classifyTrackingReplay(
     where: { id: organizationId },
     select: { id: true },
   });
-  if (!organization) return "not_applicable";
+  if (!organization) {
+    return "not_applicable";
+  }
   const engines = await database.engine.findMany({ select: { id: true } });
   const validEngineIds = new Set(engines.map((engine) => engine.id));
   // A missing Engine seed can be repaired without changing the snapshot.

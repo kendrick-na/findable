@@ -329,9 +329,8 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
         // 조사 제거 과정에서 고유명사 끝 글자까지 떨어져 나올 수 있다
         // (예: `멜트헤일로` → `멜트헤일`). 등록명/별칭의 일부는 독립적인
         // 공식 사실이 아니므로, 그 자체로는 엔티티 근거가 될 수 없다.
-  return (
-          compact !== brandToken &&
-          !isRegisteredNameFragment(token, input)
+        return (
+          compact !== brandToken && !isRegisteredNameFragment(token, input)
         );
       })
   );

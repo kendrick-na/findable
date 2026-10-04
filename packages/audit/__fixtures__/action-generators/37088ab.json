@@ -39,11 +39,7 @@
                 "url": "https://seonews.co.kr/naver-ai-briefing-geo-202605/"
               }
             ],
-            "engines": [
-              "naver",
-              "naver-briefing",
-              "hyperclova"
-            ],
+            "engines": ["naver", "naver-briefing", "hyperclova"],
             "effortHours": {
               "min": 2,
               "max": 4,
@@ -70,9 +66,7 @@
                 "url": "https://ahrefs.com/blog/why-chatgpt-cites-pages/"
               }
             ],
-            "engines": [
-              "chatgpt"
-            ],
+            "engines": ["chatgpt"],
             "effortHours": {
               "min": 2,
               "max": 6,
@@ -104,9 +98,7 @@
                 "url": "https://ahrefs.com/blog/why-chatgpt-cites-pages/"
               }
             ],
-            "engines": [
-              "chatgpt"
-            ],
+            "engines": ["chatgpt"],
             "effortHours": {
               "min": 2,
               "max": 6,
@@ -138,11 +130,7 @@
                 "url": "https://seonews.co.kr/naver-ai-briefing-geo-202605/"
               }
             ],
-            "engines": [
-              "naver",
-              "naver-briefing",
-              "hyperclova"
-            ],
+            "engines": ["naver", "naver-briefing", "hyperclova"],
             "effortHours": {
               "min": 2,
               "max": 4,
@@ -169,9 +157,7 @@
                 "url": "https://ahrefs.com/blog/why-chatgpt-cites-pages/"
               }
             ],
-            "engines": [
-              "chatgpt"
-            ],
+            "engines": ["chatgpt"],
             "effortHours": {
               "min": 2,
               "max": 6,
@@ -203,11 +189,7 @@
                 "url": "https://seonews.co.kr/naver-ai-briefing-geo-202605/"
               }
             ],
-            "engines": [
-              "naver",
-              "naver-briefing",
-              "hyperclova"
-            ],
+            "engines": ["naver", "naver-briefing", "hyperclova"],
             "effortHours": {
               "min": 2,
               "max": 4,
@@ -234,9 +216,7 @@
                 "url": "https://ahrefs.com/blog/why-chatgpt-cites-pages/"
               }
             ],
-            "engines": [
-              "chatgpt"
-            ],
+            "engines": ["chatgpt"],
             "effortHours": {
               "min": 2,
               "max": 6,

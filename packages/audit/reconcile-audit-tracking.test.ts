@@ -36,18 +36,22 @@ describe("reconcileAuditTracking", () => {
       result: {
         briefingStatus: "completed",
         briefingPrompt: "브랜드 효과",
-        engineResponses: [{
-          engineId: "naver-briefing",
-          excerpt: "saved briefing",
-          brandMentioned: true,
-          isStub: false,
-          errorMessage: null,
-        }],
+        engineResponses: [
+          {
+            engineId: "naver-briefing",
+            excerpt: "saved briefing",
+            brandMentioned: true,
+            isStub: false,
+            errorMessage: null,
+          },
+        ],
       },
       postprocessing: { tracking: "completed", briefing: "not_required" },
     });
 
-    await expect(reconcileAuditTracking("job-briefing-crash")).resolves.toBe("skipped");
+    await expect(reconcileAuditTracking("job-briefing-crash")).resolves.toBe(
+      "skipped"
+    );
     expect(persistAuditTracking).not.toHaveBeenCalled();
   });
 
@@ -119,31 +123,32 @@ describe("reconcileAuditTracking", () => {
     expect(persistAuditTracking).not.toHaveBeenCalled();
   });
 
-  it.each(["skipped", "completed", undefined])(
-    "does not replay a job whose durable marker is %s",
-    async (tracking) => {
-      findUnique.mockResolvedValue({
-        status: "completed",
-        organizationId: "org-1",
-        brandId: "brand-1",
-        completedAt: new Date("2026-10-04T00:00:00Z"),
-        postprocessing: tracking ? { tracking } : null,
-        result: {
-          engineResponses: [
-            {
-              engineId: "chatgpt",
-              promptIndex: 0,
-              promptText: "브랜드 추천",
-              promptLang: "ko",
-              trackingInputCaptured: true,
-            },
-          ],
-        },
-      });
-      await expect(reconcileAuditTracking("job-marker")).resolves.toBe("skipped");
-      expect(persistAuditTracking).not.toHaveBeenCalled();
-    }
-  );
+  it.each([
+    "skipped",
+    "completed",
+    undefined,
+  ])("does not replay a job whose durable marker is %s", async (tracking) => {
+    findUnique.mockResolvedValue({
+      status: "completed",
+      organizationId: "org-1",
+      brandId: "brand-1",
+      completedAt: new Date("2026-10-04T00:00:00Z"),
+      postprocessing: tracking ? { tracking } : null,
+      result: {
+        engineResponses: [
+          {
+            engineId: "chatgpt",
+            promptIndex: 0,
+            promptText: "브랜드 추천",
+            promptLang: "ko",
+            trackingInputCaptured: true,
+          },
+        ],
+      },
+    });
+    await expect(reconcileAuditTracking("job-marker")).resolves.toBe("skipped");
+    expect(persistAuditTracking).not.toHaveBeenCalled();
+  });
 
   it("does not write when the pending-to-reconciling claim loses a race", async () => {
     findUnique.mockResolvedValue({

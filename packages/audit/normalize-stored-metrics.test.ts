@@ -213,24 +213,34 @@ describe("saved audit metric normalization", () => {
     for (const published of [true, false]) {
       const stored = {
         mentionVerdictVersion: MENTION_VERDICT_VERSION,
-        metrics: { verifiedCount: published ? 10 : 1, unverifiedCount: 0, sov: 10 },
-        engineResponses: [{
-          engineId: "chatgpt",
-          excerpt: "visible answer",
-          sov: 0,
-          shareOfVoice: 0.75,
-          usage: { inputTokens: 11, outputTokens: 7, costModel: "token" },
-          trackingInputCaptured: true,
-        }],
+        metrics: {
+          verifiedCount: published ? 10 : 1,
+          unverifiedCount: 0,
+          sov: 10,
+        },
+        engineResponses: [
+          {
+            engineId: "chatgpt",
+            excerpt: "visible answer",
+            sov: 0,
+            shareOfVoice: 0.75,
+            usage: { inputTokens: 11, outputTokens: 7, costModel: "token" },
+            trackingInputCaptured: true,
+          },
+        ],
       };
       const publicResult = publicAuditResult(stored);
       expect(publicResult.engineResponses[0]).toMatchObject({
         excerpt: "visible answer",
         sov: 0,
       });
-      expect(publicResult.engineResponses[0]).not.toHaveProperty("shareOfVoice");
+      expect(publicResult.engineResponses[0]).not.toHaveProperty(
+        "shareOfVoice"
+      );
       expect(publicResult.engineResponses[0]).not.toHaveProperty("usage");
-      expect(publicResult.engineResponses[0]).not.toHaveProperty("trackingInputCaptured");
+      expect(publicResult.engineResponses[0]).not.toHaveProperty(
+        "trackingInputCaptured"
+      );
       expect(stored.engineResponses[0].usage.inputTokens).toBe(11);
     }
   });

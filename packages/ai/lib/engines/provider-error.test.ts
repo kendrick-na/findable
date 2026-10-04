@@ -5,7 +5,9 @@ import { describeProviderError, isAbortError } from "./provider-error";
 describe("describeProviderError", () => {
   it("recognizes aborts without assigning a retryable provider status", () => {
     expect(isAbortError(new DOMException("deadline", "AbortError"))).toBe(true);
-    expect(describeProviderError(new DOMException("deadline", "AbortError"))).toEqual({
+    expect(
+      describeProviderError(new DOMException("deadline", "AbortError"))
+    ).toEqual({
       statusCode: null,
       providerCode: null,
       retryAfterSeconds: null,

@@ -11,8 +11,7 @@ export function isTrackableResponse(
   validEngineIds: ReadonlySet<string>
 ): boolean {
   return (
-    !response.isStub &&
-    !response.errorMessage &&
+    !(response.isStub || response.errorMessage) &&
     response.mentionQuality !== "unverified" &&
     validEngineIds.has(response.engineId) &&
     response.promptText.trim().length > 0 &&

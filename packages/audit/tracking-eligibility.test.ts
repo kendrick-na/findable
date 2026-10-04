@@ -26,6 +26,8 @@ describe("tracking eligibility", () => {
     expect(isTrackableResponse({ ...base, isStub: true }, validEngines)).toBe(
       false
     );
-    expect(isTrackableResponse({ ...base, rawResponse: "  " }, validEngines)).toBe(false);
+    expect(
+      isTrackableResponse({ ...base, rawResponse: "  " }, validEngines)
+    ).toBe(false);
   });
 });

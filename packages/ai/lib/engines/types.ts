@@ -123,13 +123,6 @@ export interface EngineUsage {
 
 export interface EngineResponse {
   brandMentioned: boolean;
-  /** Entity verification could not finish; never interpret as a confirmed absence. */
-  mentionQuality?:
-    | "confirmed"
-    | "different_entity"
-    | "unknown_brand"
-    | "absent"
-    | "unverified";
   citedSources: CitedSource[];
   durationMs: number;
   engineId: EngineId;
@@ -143,6 +136,13 @@ export interface EngineResponse {
    */
   mentionListSize: number | null;
   mentionPosition: number | null; // 1, 2, 3, ... 또는 null
+  /** Entity verification could not finish; never interpret as a confirmed absence. */
+  mentionQuality?:
+    | "confirmed"
+    | "different_entity"
+    | "unknown_brand"
+    | "absent"
+    | "unverified";
   rawResponse: string;
   sentiment: "positive" | "neutral" | "negative" | null;
   shareOfVoice: number | null; // 0.0 ~ 1.0

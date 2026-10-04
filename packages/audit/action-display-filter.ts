@@ -38,7 +38,7 @@ const LEGACY_CAUSAL_CLAIM_RE =
 const LEGACY_NAVER_EXTRAPOLATION_RE =
   /(?:49\.3\s*%|272건)[\s\S]*(?:매주|주\s*1회)[\s\S]*(?:인용될 수|언급될 수|인용합니다|언급합니다)|(?:매주|주\s*1회)[\s\S]*(?:인용될 수|언급될 수|인용합니다|언급합니다)[\s\S]*(?:49\.3\s*%|272건)/i;
 const LEGACY_NAVER_POSITIVE_SENTENCE_RE =
-  /(?:49\.3\s*%|272건|매주|주\s*1회)[^\.\n]*(?:인용될 수|언급될 수|인용합니다|언급합니다)|(?:인용될 수|언급될 수|인용합니다|언급합니다)[^\.\n]*(?:49\.3\s*%|272건|매주|주\s*1회)/i;
+  /(?:49\.3\s*%|272건|매주|주\s*1회)[^.\n]*(?:인용될 수|언급될 수|인용합니다|언급합니다)|(?:인용될 수|언급될 수|인용합니다|언급합니다)[^.\n]*(?:49\.3\s*%|272건|매주|주\s*1회)/i;
 const LEGACY_NAVER_POSITIVE_HOW_RE =
   /(?:매주|주\s*1회)[\s\S]{0,400}(?:절반\s*가까이|49\.3\s*%)[\s\S]{0,120}(?:인용|언급)[^—-]{0,20}[—-]\s*순위보다/i;
 const LEGACY_CONTENT_FIX_TEMPLATE_RE =
@@ -153,7 +153,12 @@ function projectStoredAction<T extends StoredActionLike>(action: T): T {
       ...projected,
       ...(typeof action.how === "string" &&
       LEGACY_NAVER_NOT_GUARANTEED_RE.test(action.how)
-        ? { how: action.how.replace(LEGACY_NAVER_NOT_GUARANTEED_RE, CURRENT_NAVER_NOT_GUARANTEED) }
+        ? {
+            how: action.how.replace(
+              LEGACY_NAVER_NOT_GUARANTEED_RE,
+              CURRENT_NAVER_NOT_GUARANTEED
+            ),
+          }
         : {}),
       ...(typeof action.verification === "string" &&
       action.verification.includes(LEGACY_NAVER_VERIFICATION)
@@ -170,17 +175,17 @@ function projectStoredAction<T extends StoredActionLike>(action: T): T {
               ...(guide as Record<string, unknown>),
               ...(shouldProjectNaverGuide ? { engines: ["naver"] } : {}),
               ...(typeof (guide as Record<string, unknown>).remeasureMetric ===
-              "string" &&
+                "string" &&
               LEGACY_NAVER_REMEASURE_RE.test(
                 (guide as Record<string, unknown>).remeasureMetric as string
               )
                 ? { remeasureMetric: CURRENT_NAVER_REMEASURE }
                 : {}),
               ...(typeof (guide as Record<string, unknown>).failCondition ===
-              "string" &&
-              ((guide as Record<string, unknown>).failCondition as string).includes(
-                "네이버 계열 답변에서 알아본 답변이 0건이면"
-              )
+                "string" &&
+              (
+                (guide as Record<string, unknown>).failCondition as string
+              ).includes("네이버 계열 답변에서 알아본 답변이 0건이면")
                 ? { failCondition: CURRENT_NAVER_FAIL_CONDITION }
                 : {}),
               ...(typeof legacyNotGuaranteed === "string" &&

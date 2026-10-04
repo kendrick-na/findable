@@ -7,34 +7,53 @@ export const AUDIT_TRACKING_RECONCILE_MIN_AGE_MS = 10 * 60 * 1000;
 export const AUDIT_TRACKING_RECONCILE_MAX_ROWS = 10;
 export const AUDIT_TRACKING_RECONCILE_MAX_DURATION_MS = 20_000;
 
-const RECONCILE_OPERATION_TIMEOUT_MS = 5_000;
+const RECONCILE_OPERATION_TIMEOUT_MS = 5000;
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("tracking reconcile timeout")), timeoutMs);
+        timer = setTimeout(
+          () => reject(new Error("tracking reconcile timeout")),
+          timeoutMs
+        );
         timer.unref?.();
       }),
     ]);
   } finally {
-    if (timer) clearTimeout(timer);
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }
 
 export async function sweepAuditTrackingReconciliation(
   now = new Date()
-): Promise<{ completed: number; skipped: number; failed: number; bounded: boolean }> {
+): Promise<{
+  completed: number;
+  skipped: number;
+  failed: number;
+  bounded: boolean;
+}> {
   const startedAt = Date.now();
   const agedBefore = new Date(
     now.getTime() - AUDIT_TRACKING_RECONCILE_MIN_AGE_MS
   );
-  let candidates: Array<{ id: string; corePending: boolean; briefingPending: boolean }>;
+  let candidates: Array<{
+    id: string;
+    corePending: boolean;
+    briefingPending: boolean;
+  }>;
   try {
     candidates = await withTimeout(
-      database.$queryRawUnsafe<Array<{ id: string; corePending: boolean; briefingPending: boolean }>>(
+      database.$queryRawUnsafe<
+        Array<{ id: string; corePending: boolean; briefingPending: boolean }>
+      >(
         `WITH eligible AS (
            SELECT "id", "completedAt",
              "postprocessing"->>'tracking' AS "coreStage",
@@ -91,19 +110,26 @@ export async function sweepAuditTrackingReconciliation(
     // reconcileAuditTracking re-reads the durable marker immediately before
     // writing. A stale candidate that became skipped/completed is harmless.
     try {
-      const remaining = AUDIT_TRACKING_RECONCILE_MAX_DURATION_MS - (Date.now() - startedAt);
+      const remaining =
+        AUDIT_TRACKING_RECONCILE_MAX_DURATION_MS - (Date.now() - startedAt);
       if (remaining <= 0) {
         bounded = true;
         break;
       }
       const results = await withTimeout(
         Promise.all([
-          ...(candidate.corePending ? [reconcileAuditTracking(candidate.id, now)] : []),
-          ...(candidate.briefingPending ? [reconcileBriefingTracking(candidate.id, now)] : []),
+          ...(candidate.corePending
+            ? [reconcileAuditTracking(candidate.id, now)]
+            : []),
+          ...(candidate.briefingPending
+            ? [reconcileBriefingTracking(candidate.id, now)]
+            : []),
         ]),
         Math.min(RECONCILE_OPERATION_TIMEOUT_MS, remaining)
       );
-      for (const result of results) counts[result] += 1;
+      for (const result of results) {
+        counts[result] += 1;
+      }
     } catch (error) {
       counts.failed += 1;
       log.warn("audit.tracking.reconcile_sweep_timeout", {
@@ -112,7 +138,9 @@ export async function sweepAuditTrackingReconciliation(
       });
     }
   }
-  if (candidates.length === AUDIT_TRACKING_RECONCILE_MAX_ROWS) bounded = true;
+  if (candidates.length === AUDIT_TRACKING_RECONCILE_MAX_ROWS) {
+    bounded = true;
+  }
   if (counts.completed || counts.failed || bounded) {
     log.info("audit.tracking.reconcile_sweep", { ...counts, bounded });
   }

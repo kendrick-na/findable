@@ -9,13 +9,7 @@ describe("commitAuditResult", () => {
     const postprocessing = { pdf: "pending" };
 
     await expect(
-      commitAuditResult(
-        database,
-        "job-1",
-        "lease-1",
-        result,
-        postprocessing
-      )
+      commitAuditResult(database, "job-1", "lease-1", result, postprocessing)
     ).resolves.toBe(true);
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({

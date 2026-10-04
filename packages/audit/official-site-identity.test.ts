@@ -11,8 +11,9 @@ describe("official site identity response", () => {
     controller.abort(new DOMException("deadline", "AbortError"));
 
     await expect(
-      import("./official-site-identity").then(({ resolveOfficialSiteIdentity }) =>
-        resolveOfficialSiteIdentity("https://example.com", controller.signal)
+      import("./official-site-identity").then(
+        ({ resolveOfficialSiteIdentity }) =>
+          resolveOfficialSiteIdentity("https://example.com", controller.signal)
       )
     ).rejects.toMatchObject({ name: "AbortError" });
   });
