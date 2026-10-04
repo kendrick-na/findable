@@ -210,6 +210,123 @@ function toStoredEngineResponse(
   };
 }
 
+async function claimBriefingAttempt(
+  jobId: string,
+  attemptId: string
+): Promise<void> {
+  const claimed = await database.$executeRawUnsafe(
+    `UPDATE "AuditJob"
+         SET "result" = jsonb_set(
+           jsonb_set(
+             jsonb_set(COALESCE("result", '{}'::jsonb), '{briefingStatus}', to_jsonb('processing'::text), true),
+             '{briefingAttemptId}', to_jsonb($2::text), true),
+           '{briefingStartedAt}', to_jsonb($3::text), true)
+         WHERE "id" = $1 AND "status" = 'completed'
+           AND COALESCE("result"->>'briefingStatus', 'not_requested') IN ('not_requested', 'failed')`,
+    jobId,
+    attemptId,
+    new Date().toISOString()
+  );
+  if (claimed !== 1) {
+    throw new Error("브리핑 상태 claim을 획득하지 못했습니다.");
+  }
+}
+
+function briefingTrackingStage(
+  job: {
+    organizationId: string | null;
+    brandId: string | null;
+    completedAt: Date | null;
+  },
+  briefing: StoredEngineResponse | undefined
+): "pending" | "skipped" {
+  return keys().AUDIT_DUAL_WRITE_ENABLED &&
+    job.organizationId &&
+    job.brandId &&
+    job.completedAt &&
+    briefing &&
+    !briefing.isStub &&
+    !briefing.errorMessage &&
+    Boolean(briefing.rawResponse)
+    ? "pending"
+    : "skipped";
+}
+
+async function loadBriefingSourceJob(jobId: string) {
+  const jobBefore = await database.auditJob.findUnique({
+    where: { id: jobId },
+    // 🔴 세션N-38: `organizationId`·`brandId` 를 함께 읽는다 — Tracking 적재용(아래 §시계열).
+    select: {
+      result: true,
+      domain: true,
+      language: true,
+      industry: true,
+      organizationId: true,
+      brandId: true,
+      completedAt: true,
+    },
+  });
+  if (!jobBefore?.result) {
+    throw new Error(
+      "AuditJob.result가 비어있습니다. 빠른 모드 Audit이 먼저 완료되어야 합니다."
+    );
+  }
+  return jobBefore;
+}
+
+async function assertBriefingResultStillPresent(jobId: string): Promise<void> {
+  const jobAfter = await database.auditJob.findUnique({
+    where: { id: jobId },
+    select: { result: true },
+  });
+  if (!jobAfter?.result) {
+    throw new Error("AuditJob.result가 사라졌습니다.");
+  }
+}
+
+function briefingLanguage(language: string | null): "ko" | "en" {
+  return language === "en" ? "en" : "ko";
+}
+
+/** 실패 상태 병합 — 최신 result 재조회 후 briefingStatus만 갱신. */
+async function mergeBriefingFailedStatus(
+  jobId: string,
+  attemptId: string
+): Promise<void> {
+  try {
+    const jobFail = await database.auditJob.findUnique({
+      where: { id: jobId },
+      select: { result: true },
+    });
+    if (jobFail?.result) {
+      await markBriefingStatus(jobId, attemptId, "failed");
+    }
+  } catch (mergeErr) {
+    log.error("audit.briefing.failed_status_merge_failed", {
+      jobId,
+      error: parseError(mergeErr),
+    });
+  }
+}
+
+/** 브리핑이 실제로 뜬 응답인지(stub·오류·빈 응답 제외). */
+function isBriefingShown(first: EngineResponse | undefined): boolean {
+  return Boolean(
+    first &&
+      !first.isStub &&
+      !first.errorMessage &&
+      first.rawResponse.length > 0
+  );
+}
+
+function briefingOutcome(
+  briefing: StoredEngineResponse | undefined
+): "completed" | "failed" {
+  return briefing && !briefing.isStub && !briefing.errorMessage
+    ? "completed"
+    : "failed";
+}
+
 /**
  * AuditJob의 기존 result에 네이버 AI 브리핑 측정을 추가하고 metrics 재계산 → DB 업데이트.
  */
@@ -223,42 +340,10 @@ export async function runBriefingForAuditJob(
     // Route가 이미 조건부 claim한 경우에는 그대로 사용한다. 본류 자동 실행처럼
     // attemptId가 없던 호출은 동일한 leaf-CAS 계약으로 claim을 만든다.
     if (!input.attemptId) {
-      const claimed = await database.$executeRawUnsafe(
-        `UPDATE "AuditJob"
-         SET "result" = jsonb_set(
-           jsonb_set(
-             jsonb_set(COALESCE("result", '{}'::jsonb), '{briefingStatus}', to_jsonb('processing'::text), true),
-             '{briefingAttemptId}', to_jsonb($2::text), true),
-           '{briefingStartedAt}', to_jsonb($3::text), true)
-         WHERE "id" = $1 AND "status" = 'completed'
-           AND COALESCE("result"->>'briefingStatus', 'not_requested') IN ('not_requested', 'failed')`,
-        jobId,
-        attemptId,
-        new Date().toISOString()
-      );
-      if (claimed !== 1) {
-        throw new Error("브리핑 상태 claim을 획득하지 못했습니다.");
-      }
+      await claimBriefingAttempt(jobId, attemptId);
     }
 
-    const jobBefore = await database.auditJob.findUnique({
-      where: { id: jobId },
-      // 🔴 세션N-38: `organizationId`·`brandId` 를 함께 읽는다 — Tracking 적재용(아래 §시계열).
-      select: {
-        result: true,
-        domain: true,
-        language: true,
-        industry: true,
-        organizationId: true,
-        brandId: true,
-        completedAt: true,
-      },
-    });
-    if (!jobBefore?.result) {
-      throw new Error(
-        "AuditJob.result가 비어있습니다. 빠른 모드 Audit이 먼저 완료되어야 합니다."
-      );
-    }
+    const jobBefore = await loadBriefingSourceJob(jobId);
     const resultProcessing = jobBefore.result as unknown as StoredResult;
 
     // 네이버 AI 브리핑은 "정보/정답형" 질의에서만 노출된다(2026-07-23 실측).
@@ -267,7 +352,7 @@ export async function runBriefingForAuditJob(
     // 단일 질의는 미노출 위험이 있어 노출률 높은 순으로 여러 유형을 순차 시도하고
     // 브리핑이 실제로 뜬(errorMessage 없고 응답 존재) 첫 결과를 채택한다.
     // (Browserbase 무료 동시성 1이라 병렬 대신 순차 — 뜨면 즉시 중단해 호출 절약.)
-    const language = jobBefore.language === "en" ? "en" : "ko";
+    const language = briefingLanguage(jobBefore.language);
     const brand = resultProcessing.brandName;
     // 언급 판정용 브랜드 변형 복원(2026-07-30 결함감사 §20): 기존엔 [brand] 하나만
     // 넘겨 원 측정 때의 한/영 변형이 소실됐고("엔비디아"만 남고 "NVIDIA" 없음),
@@ -310,12 +395,7 @@ export async function runBriefingForAuditJob(
         throw signal.reason ?? new DOMException("Aborted", "AbortError");
       }
       const first = briefingResponses[0];
-      const shown =
-        first &&
-        !first.isStub &&
-        !first.errorMessage &&
-        first.rawResponse.length > 0;
-      if (shown) {
+      if (isBriefingShown(first)) {
         break;
       }
       // 🔴 재시도해도 안 풀리는 실패면 **즉시 멈춘다**(세션N-39).
@@ -354,30 +434,13 @@ export async function runBriefingForAuditJob(
     });
 
     // read-modify-write: crew 자동 실행 등으로 result가 바뀌었을 수 있어 최신 재조회.
-    const jobAfter = await database.auditJob.findUnique({
-      where: { id: jobId },
-      select: { result: true },
-    });
-    if (!jobAfter?.result) {
-      throw new Error("AuditJob.result가 사라졌습니다.");
-    }
-    const latest = jobAfter.result as unknown as StoredResult;
+    await assertBriefingResultStillPresent(jobId);
 
     const newStored = briefingResponses.map((response, index) =>
       toStoredEngineResponse(response, index, adoptedPrompt, language)
     );
     const briefing = newStored[0];
-    const trackingStage =
-      keys().AUDIT_DUAL_WRITE_ENABLED &&
-      jobBefore.organizationId &&
-      jobBefore.brandId &&
-      jobBefore.completedAt &&
-      briefing &&
-      !briefing.isStub &&
-      !briefing.errorMessage &&
-      Boolean(briefing.rawResponse)
-        ? "pending"
-        : "skipped";
+    const trackingStage = briefingTrackingStage(jobBefore, briefing);
     await commitBriefingResult(
       jobId,
       attemptId,
@@ -396,30 +459,13 @@ export async function runBriefingForAuditJob(
     if (trackingStage === "pending") {
       await reconcileBriefingTracking(jobId);
     }
-    return briefing && !briefing.isStub && !briefing.errorMessage
-      ? "completed"
-      : "failed";
+    return briefingOutcome(briefing);
   } catch (error) {
     log.error("audit.briefing.failed", {
       jobId,
       error: parseError(error),
     });
-    // 실패 상태 병합 — 최신 result 재조회 후 briefingStatus만 갱신.
-    try {
-      const jobFail = await database.auditJob.findUnique({
-        where: { id: jobId },
-        select: { result: true },
-      });
-      if (jobFail?.result) {
-        const latest = jobFail.result as unknown as StoredResult;
-        await markBriefingStatus(jobId, attemptId, "failed");
-      }
-    } catch (mergeErr) {
-      log.error("audit.briefing.failed_status_merge_failed", {
-        jobId,
-        error: parseError(mergeErr),
-      });
-    }
+    await mergeBriefingFailedStatus(jobId, attemptId);
     return "failed";
   }
 }

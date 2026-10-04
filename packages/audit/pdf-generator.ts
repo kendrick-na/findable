@@ -71,7 +71,7 @@ async function runPdfStage<T>(
       error: error instanceof Error ? error.message : String(error),
     });
     if (signal?.aborted && cleanupLateResult) {
-      void operationPromise.then(cleanupLateResult).catch(() => undefined);
+      operationPromise.then(cleanupLateResult).catch(() => undefined);
     }
     throw error;
   } finally {

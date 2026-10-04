@@ -66,6 +66,45 @@ export interface StartMeasureResult {
 }
 
 /**
+ * Only a recent timeout failure's checkpoint for the same brand/org/domain is
+ * resumable. Any unreadable or foreign checkpoint is ignored (logged).
+ */
+function readResumableCheckpoint(
+  failed: {
+    id: string;
+    checkpoint: Parameters<typeof readAuditCheckpoint>[0];
+    errorMessage: string | null;
+    createdAt: Date;
+  } | null,
+  scope: { brandId: string; domain: string; organizationId: string }
+): ReturnType<typeof readAuditCheckpoint> {
+  let resumedCheckpoint: ReturnType<typeof readAuditCheckpoint> = null;
+  if (
+    failed?.checkpoint &&
+    Date.now() - failed.createdAt.getTime() <= MAX_CHECKPOINT_AGE_MS &&
+    RESUMABLE_TIMEOUT_RE.test(failed.errorMessage ?? "")
+  ) {
+    try {
+      resumedCheckpoint = readAuditCheckpoint(failed.checkpoint, {
+        brandId: scope.brandId,
+        domain: scope.domain,
+        language: "both",
+        organizationId: scope.organizationId,
+      });
+      if (resumedCheckpoint) {
+        assertCheckpointProvenance(resumedCheckpoint, failed.createdAt);
+      }
+    } catch (error) {
+      log.warn("admin.measure_one.checkpoint_ignored", {
+        jobId: failed.id,
+        error: String(error),
+      });
+    }
+  }
+  return resumedCheckpoint;
+}
+
+/**
  * 측정을 **시작만** 하고 즉시 반환한다(타임아웃 회피).
  *
  * 🔴 실행은 호출부가 `after(() => runMeasureJob(...))` 로 이어받는다 —
@@ -136,29 +175,11 @@ export async function startMeasureOne(
       status: "failed",
     },
   });
-  let resumedCheckpoint: ReturnType<typeof readAuditCheckpoint> = null;
-  if (
-    failed?.checkpoint &&
-    Date.now() - failed.createdAt.getTime() <= MAX_CHECKPOINT_AGE_MS &&
-    RESUMABLE_TIMEOUT_RE.test(failed.errorMessage ?? "")
-  ) {
-    try {
-      resumedCheckpoint = readAuditCheckpoint(failed.checkpoint, {
-        brandId: brand.id,
-        domain: brand.domain,
-        language: "both",
-        organizationId,
-      });
-      if (resumedCheckpoint) {
-        assertCheckpointProvenance(resumedCheckpoint, failed.createdAt);
-      }
-    } catch (error) {
-      log.warn("admin.measure_one.checkpoint_ignored", {
-        jobId: failed.id,
-        error: String(error),
-      });
-    }
-  }
+  const resumedCheckpoint = readResumableCheckpoint(failed, {
+    brandId: brand.id,
+    domain: brand.domain,
+    organizationId,
+  });
   if (resumedCheckpoint && failed) {
     const newerCompleted = await database.auditJob.findFirst({
       select: { id: true },

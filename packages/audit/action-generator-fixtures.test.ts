@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { filterStoredGeoActions } from "./action-display-filter";
 
-type Fixture = {
+interface Fixture {
   provenance: {
     commit: string;
     sourceFiles: string[];
@@ -14,21 +14,21 @@ type Fixture = {
   };
   scenarios: Array<{
     id: string;
-    cards: Array<Record<string, unknown>>;
+    cards: Record<string, unknown>[];
   }>;
-};
+}
 
-type Manifest = {
-  generatorScript: string;
-  generatorScriptSha256: string;
-  inputSha256: string;
-  sourceFiles: string[];
+interface Manifest {
   commits: Array<{
     commit: string;
     fixture: string;
     sourceBlobs: Record<string, string>;
   }>;
-};
+  generatorScript: string;
+  generatorScriptSha256: string;
+  inputSha256: string;
+  sourceFiles: string[];
+}
 
 const fixtureDir = new URL(
   "./__fixtures__/action-generators/",
@@ -51,6 +51,21 @@ const generatorScriptSha256 = createHash("sha256")
 
 function readFixture(name: string): Fixture {
   return JSON.parse(readFileSync(new URL(name, fixtureDir), "utf8")) as Fixture;
+}
+
+function expectedVisibleKinds(
+  commit: string,
+  cards: Record<string, unknown>[]
+): string[] {
+  if (commit === "37088ab82dc98330fb2a6747a4afae292fbcf210") {
+    return [];
+  }
+  if (commit === "3618c25b618c23de43b138530fc8ffa50399341f") {
+    return cards
+      .filter(({ kind }) => kind === "naver_blog")
+      .map(({ kind }) => kind as string);
+  }
+  return cards.map(({ kind }) => kind as string);
 }
 
 describe("historical audit action generator fixtures", () => {
@@ -108,16 +123,10 @@ describe("historical audit action generator fixtures", () => {
 
       for (const scenario of fixture.scenarios) {
         const filtered = filterStoredGeoActions(scenario.cards);
-        const expectedKinds =
-          fixture.provenance.commit ===
-          "37088ab82dc98330fb2a6747a4afae292fbcf210"
-            ? []
-            : fixture.provenance.commit ===
-                "3618c25b618c23de43b138530fc8ffa50399341f"
-              ? scenario.cards
-                  .filter(({ kind }) => kind === "naver_blog")
-                  .map(({ kind }) => kind as string)
-              : scenario.cards.map(({ kind }) => kind as string);
+        const expectedKinds = expectedVisibleKinds(
+          fixture.provenance.commit,
+          scenario.cards
+        );
         expect(filtered.map(({ kind }) => kind)).toEqual(expectedKinds);
         if (
           fixture.provenance.commit ===

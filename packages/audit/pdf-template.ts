@@ -1,7 +1,7 @@
 // 무료 Audit 1페이지 PDF의 HTML 템플릿
 // Pretendard CDN 폰트 사용. Puppeteer가 페이지 로드 후 PDF로 변환.
 
-import type { AuditMetrics, EngineId } from "@repo/ai/lib/engines";
+import type { AuditMetrics } from "@repo/ai/lib/engines";
 import {
   ANSWER_BUCKET_COPY_KO,
   answerGroup,
@@ -357,7 +357,3 @@ function dedupeByEngine<T extends { engineId: string }>(rows: T[]): T[] {
   }
   return result;
 }
-
-// EngineId 사용 — 컴파일러 의존성 유지용 (안 쓰면 import 제거됨)
-const _typeAnchor: EngineId = "chatgpt";
-void _typeAnchor;

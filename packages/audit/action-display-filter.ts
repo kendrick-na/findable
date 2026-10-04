@@ -80,10 +80,10 @@ const CURRENT_NAVER_NOT_GUARANTEED =
 const LEGACY_NAVER_REMEASURE_RE = /^AI가 제대로 알아본 답변 수(?:\s|\()/;
 const CURRENT_NAVER_REMEASURE =
   "같은 질문에서 네이버 검색 노출이 확인된 질문 수";
-const LEGACY_NAVER_FAIL_CONDITION =
-  "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 계열 답변에서 알아본 답변이 0건이면, 주제를 더 좁히거나 질문 문구를 고객 표현으로 바꾸세요.";
 const CURRENT_NAVER_FAIL_CONDITION =
   "Findable 내부 기준으로 3개월(글 12편 안팎) 뒤에도 네이버 검색 노출이 확인된 질문 수가 늘지 않으면, 주제를 더 좁히거나 제목·첫 문장을 고객 표현으로 바꾸세요.";
+
+const SENTENCE_SPLIT_RE = /[\n.!?。！？]/;
 
 function actionText(action: StoredActionLike): string {
   return [
@@ -103,101 +103,115 @@ function hasUnnegatedLegacySentence(
   legacyPattern: RegExp
 ): boolean {
   return text
-    .split(/[\n.!?。！？]/)
+    .split(SENTENCE_SPLIT_RE)
     .some(
       (sentence) =>
         legacyPattern.test(sentence) && !LEGACY_NEGATION_RE.test(sentence)
     );
 }
 
+function projectCrawlAccessAction<T extends StoredActionLike>(
+  action: T,
+  projected: T
+): T {
+  const guide = action.guide;
+  return {
+    ...projected,
+    ...(action.evidence === LEGACY_CRAWL_EVIDENCE
+      ? { evidence: CURRENT_CRAWL_EVIDENCE }
+      : {}),
+    ...(guide && typeof guide === "object"
+      ? {
+          guide: {
+            ...(guide as Record<string, unknown>),
+            ...((guide as Record<string, unknown>).effectLag ===
+            LEGACY_CRAWL_EFFECT_LAG
+              ? { effectLag: CURRENT_CRAWL_EFFECT_LAG }
+              : {}),
+            ...((guide as Record<string, unknown>).failCondition ===
+            LEGACY_CRAWL_FAIL_CONDITION
+              ? { failCondition: CURRENT_CRAWL_FAIL_CONDITION }
+              : {}),
+          },
+        }
+      : {}),
+  } as T;
+}
+
+function projectNaverBlogAction<T extends StoredActionLike>(
+  action: T,
+  projected: T
+): T {
+  const guide = action.guide;
+  const legacyNotGuaranteed =
+    typeof guide === "object" && guide
+      ? (guide as Record<string, unknown>).notGuaranteed
+      : null;
+  const shouldProjectNaverGuide =
+    guide &&
+    typeof guide === "object" &&
+    Array.isArray((guide as Record<string, unknown>).engines) &&
+    ((guide as Record<string, unknown>).engines as unknown[]).some((engine) =>
+      ["naver-briefing", "hyperclova"].includes(String(engine))
+    );
+  return {
+    ...projected,
+    ...(typeof action.how === "string" &&
+    LEGACY_NAVER_NOT_GUARANTEED_RE.test(action.how)
+      ? {
+          how: action.how.replace(
+            LEGACY_NAVER_NOT_GUARANTEED_RE,
+            CURRENT_NAVER_NOT_GUARANTEED
+          ),
+        }
+      : {}),
+    ...(typeof action.verification === "string" &&
+    action.verification.includes(LEGACY_NAVER_VERIFICATION)
+      ? {
+          verification: action.verification.replace(
+            LEGACY_NAVER_VERIFICATION,
+            CURRENT_NAVER_VERIFICATION
+          ),
+        }
+      : {}),
+    ...(guide && typeof guide === "object"
+      ? {
+          guide: {
+            ...(guide as Record<string, unknown>),
+            ...(shouldProjectNaverGuide ? { engines: ["naver"] } : {}),
+            ...(typeof (guide as Record<string, unknown>).remeasureMetric ===
+              "string" &&
+            LEGACY_NAVER_REMEASURE_RE.test(
+              (guide as Record<string, unknown>).remeasureMetric as string
+            )
+              ? { remeasureMetric: CURRENT_NAVER_REMEASURE }
+              : {}),
+            ...(typeof (guide as Record<string, unknown>).failCondition ===
+              "string" &&
+            (
+              (guide as Record<string, unknown>).failCondition as string
+            ).includes("네이버 계열 답변에서 알아본 답변이 0건이면")
+              ? { failCondition: CURRENT_NAVER_FAIL_CONDITION }
+              : {}),
+            ...(typeof legacyNotGuaranteed === "string" &&
+            LEGACY_NAVER_NOT_GUARANTEED_RE.test(
+              (guide as Record<string, unknown>).notGuaranteed as string
+            )
+              ? { notGuaranteed: CURRENT_NAVER_NOT_GUARANTEED }
+              : {}),
+          },
+        }
+      : {}),
+  } as T;
+}
+
 function projectStoredAction<T extends StoredActionLike>(action: T): T {
   let projected = action;
   if (action.kind === "crawl_access") {
-    const guide = action.guide;
-    projected = {
-      ...projected,
-      ...(action.evidence === LEGACY_CRAWL_EVIDENCE
-        ? { evidence: CURRENT_CRAWL_EVIDENCE }
-        : {}),
-      ...(guide && typeof guide === "object"
-        ? {
-            guide: {
-              ...(guide as Record<string, unknown>),
-              ...((guide as Record<string, unknown>).effectLag ===
-              LEGACY_CRAWL_EFFECT_LAG
-                ? { effectLag: CURRENT_CRAWL_EFFECT_LAG }
-                : {}),
-              ...((guide as Record<string, unknown>).failCondition ===
-              LEGACY_CRAWL_FAIL_CONDITION
-                ? { failCondition: CURRENT_CRAWL_FAIL_CONDITION }
-                : {}),
-            },
-          }
-        : {}),
-    } as T;
+    projected = projectCrawlAccessAction(action, projected);
   }
   if (action.kind === "naver_blog") {
-    const guide = action.guide;
-    const legacyNotGuaranteed =
-      typeof guide === "object" && guide
-        ? (guide as Record<string, unknown>).notGuaranteed
-        : null;
-    const shouldProjectNaverGuide =
-      guide &&
-      typeof guide === "object" &&
-      Array.isArray((guide as Record<string, unknown>).engines) &&
-      ((guide as Record<string, unknown>).engines as unknown[]).some((engine) =>
-        ["naver-briefing", "hyperclova"].includes(String(engine))
-      );
-    projected = {
-      ...projected,
-      ...(typeof action.how === "string" &&
-      LEGACY_NAVER_NOT_GUARANTEED_RE.test(action.how)
-        ? {
-            how: action.how.replace(
-              LEGACY_NAVER_NOT_GUARANTEED_RE,
-              CURRENT_NAVER_NOT_GUARANTEED
-            ),
-          }
-        : {}),
-      ...(typeof action.verification === "string" &&
-      action.verification.includes(LEGACY_NAVER_VERIFICATION)
-        ? {
-            verification: action.verification.replace(
-              LEGACY_NAVER_VERIFICATION,
-              CURRENT_NAVER_VERIFICATION
-            ),
-          }
-        : {}),
-      ...(guide && typeof guide === "object"
-        ? {
-            guide: {
-              ...(guide as Record<string, unknown>),
-              ...(shouldProjectNaverGuide ? { engines: ["naver"] } : {}),
-              ...(typeof (guide as Record<string, unknown>).remeasureMetric ===
-                "string" &&
-              LEGACY_NAVER_REMEASURE_RE.test(
-                (guide as Record<string, unknown>).remeasureMetric as string
-              )
-                ? { remeasureMetric: CURRENT_NAVER_REMEASURE }
-                : {}),
-              ...(typeof (guide as Record<string, unknown>).failCondition ===
-                "string" &&
-              (
-                (guide as Record<string, unknown>).failCondition as string
-              ).includes("네이버 계열 답변에서 알아본 답변이 0건이면")
-                ? { failCondition: CURRENT_NAVER_FAIL_CONDITION }
-                : {}),
-              ...(typeof legacyNotGuaranteed === "string" &&
-              LEGACY_NAVER_NOT_GUARANTEED_RE.test(
-                (guide as Record<string, unknown>).notGuaranteed as string
-              )
-                ? { notGuaranteed: CURRENT_NAVER_NOT_GUARANTEED }
-                : {}),
-            },
-          }
-        : {}),
-    } as T;
+    projected = projectNaverBlogAction(action, projected);
   }
   if (!projected.guide || typeof projected.guide !== "object") {
     return projected;

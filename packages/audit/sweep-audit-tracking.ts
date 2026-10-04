@@ -32,29 +32,20 @@ async function withTimeout<T>(
   }
 }
 
-export async function sweepAuditTrackingReconciliation(
-  now = new Date()
-): Promise<{
-  completed: number;
-  skipped: number;
-  failed: number;
-  bounded: boolean;
-}> {
-  const startedAt = Date.now();
-  const agedBefore = new Date(
-    now.getTime() - AUDIT_TRACKING_RECONCILE_MIN_AGE_MS
-  );
-  let candidates: Array<{
-    id: string;
-    corePending: boolean;
-    briefingPending: boolean;
-  }>;
-  try {
-    candidates = await withTimeout(
-      database.$queryRawUnsafe<
-        Array<{ id: string; corePending: boolean; briefingPending: boolean }>
-      >(
-        `WITH eligible AS (
+interface ReconcileCandidate {
+  briefingPending: boolean;
+  corePending: boolean;
+  id: string;
+}
+
+function queryReconcileCandidates(
+  agedBefore: Date,
+  now: Date
+): Promise<ReconcileCandidate[]> {
+  return database.$queryRawUnsafe<
+    Array<{ id: string; corePending: boolean; briefingPending: boolean }>
+  >(
+    `WITH eligible AS (
            SELECT "id", "completedAt",
              "postprocessing"->>'tracking' AS "coreStage",
              "postprocessing"->>'briefingTracking' AS "briefingStage",
@@ -87,10 +78,42 @@ export async function sweepAuditTrackingReconciliation(
          SELECT "id", "corePending", "briefingPending" FROM ranked
          ORDER BY "queueRank" ASC, "queueClass" ASC, "completedAt" ASC, "id" ASC
          LIMIT $2`,
-        agedBefore,
-        AUDIT_TRACKING_RECONCILE_MAX_ROWS,
-        now
-      ),
+    agedBefore,
+    AUDIT_TRACKING_RECONCILE_MAX_ROWS,
+    now
+  );
+}
+
+function reconcileCandidate(
+  candidate: ReconcileCandidate,
+  now: Date
+): Promise<Array<"completed" | "failed" | "skipped">> {
+  return Promise.all([
+    ...(candidate.corePending
+      ? [reconcileAuditTracking(candidate.id, now)]
+      : []),
+    ...(candidate.briefingPending
+      ? [reconcileBriefingTracking(candidate.id, now)]
+      : []),
+  ]);
+}
+
+export async function sweepAuditTrackingReconciliation(
+  now = new Date()
+): Promise<{
+  completed: number;
+  skipped: number;
+  failed: number;
+  bounded: boolean;
+}> {
+  const startedAt = Date.now();
+  const agedBefore = new Date(
+    now.getTime() - AUDIT_TRACKING_RECONCILE_MIN_AGE_MS
+  );
+  let candidates: ReconcileCandidate[];
+  try {
+    candidates = await withTimeout(
+      queryReconcileCandidates(agedBefore, now),
       RECONCILE_OPERATION_TIMEOUT_MS
     );
   } catch (error) {
@@ -117,14 +140,7 @@ export async function sweepAuditTrackingReconciliation(
         break;
       }
       const results = await withTimeout(
-        Promise.all([
-          ...(candidate.corePending
-            ? [reconcileAuditTracking(candidate.id, now)]
-            : []),
-          ...(candidate.briefingPending
-            ? [reconcileBriefingTracking(candidate.id, now)]
-            : []),
-        ]),
+        reconcileCandidate(candidate, now),
         Math.min(RECONCILE_OPERATION_TIMEOUT_MS, remaining)
       );
       for (const result of results) {

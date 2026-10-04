@@ -50,7 +50,7 @@ export async function finalizeAuditTracking(
   claimToken: string,
   status: "completed" | "unknown" | "not_applicable" | "unreplayable"
 ): Promise<number> {
-  return db.$executeRawUnsafe(
+  return await db.$executeRawUnsafe(
     `UPDATE "AuditJob"
        SET "postprocessing" = jsonb_set(jsonb_set(
          jsonb_set(
@@ -73,6 +73,108 @@ export async function finalizeAuditTracking(
     status,
     TRACKING_RECONCILE_MAX_ATTEMPTS
   );
+}
+
+function readAuditTrackingStage(postprocessing: unknown): unknown {
+  return postprocessing &&
+    typeof postprocessing === "object" &&
+    !Array.isArray(postprocessing)
+    ? (postprocessing as { tracking?: unknown }).tracking
+    : undefined;
+}
+
+function readReplayableAuditResponses(result: {
+  engineResponses?: Record<string, unknown>[];
+}): TaggedEngineResponse[] {
+  return (Array.isArray(result.engineResponses) ? result.engineResponses : [])
+    .filter(
+      (row) =>
+        row !== null &&
+        typeof row === "object" &&
+        !Array.isArray(row) &&
+        row.promptKind !== "discovery" &&
+        row.trackingInputCaptured === true &&
+        typeof row.promptIndex === "number" &&
+        typeof row.promptText === "string" &&
+        typeof row.promptLang === "string"
+    )
+    .map((row) => ({
+      ...(row as unknown as TaggedEngineResponse),
+      rawResponse: String(row.rawResponse ?? ""),
+      citedSources: Array.isArray(row.citedSources) ? row.citedSources : [],
+      shareOfVoice:
+        typeof row.shareOfVoice === "number" ? row.shareOfVoice : null,
+      usage:
+        row.usage && typeof row.usage === "object"
+          ? (row.usage as TaggedEngineResponse["usage"])
+          : undefined,
+      promptLang: row.promptLang === "en" ? "en" : "ko",
+      promptText: String(row.promptText),
+      promptIndex: row.promptIndex as number,
+    }));
+}
+
+async function replayAuditTrackingSnapshot({
+  jobId,
+  claimToken,
+  organizationId,
+  brandId,
+  completedAt,
+  tagged,
+}: {
+  jobId: string;
+  claimToken: string;
+  organizationId: string;
+  brandId: string;
+  completedAt: Date;
+  tagged: TaggedEngineResponse[];
+}): Promise<"completed" | "failed" | "skipped"> {
+  try {
+    const replayability = await classifyTrackingReplay(organizationId, tagged);
+    if (replayability !== "ready") {
+      await finalizeAuditTracking(
+        database,
+        jobId,
+        claimToken,
+        replayability === "retry" ? "unknown" : replayability
+      );
+      return replayability === "retry" ? "failed" : "skipped";
+    }
+
+    const status = await persistAuditTracking({
+      auditJobId: jobId,
+      trackingClaimToken: claimToken,
+      organizationId,
+      brandId,
+      completedAt,
+      trackingAxis: "core",
+      tagged,
+    });
+
+    const updated = await finalizeAuditTracking(
+      database,
+      jobId,
+      claimToken,
+      status === "completed" ? "completed" : "unknown"
+    );
+    if (updated !== 1) {
+      log.warn("audit.tracking.reconcile_lost_claim", { jobId, updated });
+    }
+    return status;
+  } catch (error) {
+    log.warn("audit.tracking.reconcile_retry", { jobId, error: String(error) });
+    try {
+      await finalizeAuditTracking(database, jobId, claimToken, "unknown");
+    } catch (finalizeError) {
+      // DB failure or forced termination still leaves the fenced stale lease
+      // for a later bounded reclaim/retirement.
+      log.warn("audit.tracking.reconcile_finalize_failed", {
+        jobId,
+        error: String(finalizeError),
+      });
+    }
+    return "failed";
+  }
 }
 
 /**
@@ -98,12 +200,7 @@ export async function reconcileAuditTracking(
   if (!job || job.status !== "completed") {
     return "skipped";
   }
-  const trackingStage =
-    job.postprocessing &&
-    typeof job.postprocessing === "object" &&
-    !Array.isArray(job.postprocessing)
-      ? (job.postprocessing as { tracking?: unknown }).tracking
-      : undefined;
+  const trackingStage = readAuditTrackingStage(job.postprocessing);
   if (
     trackingStage !== "pending" &&
     trackingStage !== "unknown" &&
@@ -150,36 +247,9 @@ export async function reconcileAuditTracking(
     return "skipped";
   }
   const result = job.result as {
-    engineResponses?: Array<Record<string, unknown>>;
+    engineResponses?: Record<string, unknown>[];
   };
-  const tagged: TaggedEngineResponse[] = (
-    Array.isArray(result.engineResponses) ? result.engineResponses : []
-  )
-    .filter(
-      (row) =>
-        row !== null &&
-        typeof row === "object" &&
-        !Array.isArray(row) &&
-        row.promptKind !== "discovery" &&
-        row.trackingInputCaptured === true &&
-        typeof row.promptIndex === "number" &&
-        typeof row.promptText === "string" &&
-        typeof row.promptLang === "string"
-    )
-    .map((row) => ({
-      ...(row as unknown as TaggedEngineResponse),
-      rawResponse: String(row.rawResponse ?? ""),
-      citedSources: Array.isArray(row.citedSources) ? row.citedSources : [],
-      shareOfVoice:
-        typeof row.shareOfVoice === "number" ? row.shareOfVoice : null,
-      usage:
-        row.usage && typeof row.usage === "object"
-          ? (row.usage as TaggedEngineResponse["usage"])
-          : undefined,
-      promptLang: row.promptLang === "en" ? "en" : "ko",
-      promptText: String(row.promptText),
-      promptIndex: row.promptIndex as number,
-    }));
+  const tagged = readReplayableAuditResponses(result);
 
   if (tagged.length === 0) {
     log.warn("audit.tracking.reconcile_unkeyed_snapshot", { jobId });
@@ -187,53 +257,12 @@ export async function reconcileAuditTracking(
     return "skipped";
   }
 
-  try {
-    const replayability = await classifyTrackingReplay(
-      job.organizationId,
-      tagged
-    );
-    if (replayability !== "ready") {
-      await finalizeAuditTracking(
-        database,
-        jobId,
-        claimToken,
-        replayability === "retry" ? "unknown" : replayability
-      );
-      return replayability === "retry" ? "failed" : "skipped";
-    }
-
-    const status = await persistAuditTracking({
-      auditJobId: jobId,
-      trackingClaimToken: claimToken,
-      organizationId: job.organizationId,
-      brandId: job.brandId,
-      completedAt: job.completedAt,
-      trackingAxis: "core",
-      tagged,
-    });
-
-    const updated = await finalizeAuditTracking(
-      database,
-      jobId,
-      claimToken,
-      status === "completed" ? "completed" : "unknown"
-    );
-    if (updated !== 1) {
-      log.warn("audit.tracking.reconcile_lost_claim", { jobId, updated });
-    }
-    return status;
-  } catch (error) {
-    log.warn("audit.tracking.reconcile_retry", { jobId, error: String(error) });
-    try {
-      await finalizeAuditTracking(database, jobId, claimToken, "unknown");
-    } catch (finalizeError) {
-      // DB failure or forced termination still leaves the fenced stale lease
-      // for a later bounded reclaim/retirement.
-      log.warn("audit.tracking.reconcile_finalize_failed", {
-        jobId,
-        error: String(finalizeError),
-      });
-    }
-    return "failed";
-  }
+  return await replayAuditTrackingSnapshot({
+    jobId,
+    claimToken,
+    organizationId: job.organizationId,
+    brandId: job.brandId,
+    completedAt: job.completedAt,
+    tagged,
+  });
 }

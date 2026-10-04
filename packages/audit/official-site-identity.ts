@@ -141,7 +141,7 @@ export async function readIdentityHtml(
   let bytes = 0;
   let text = "";
   const cancel = () => {
-    void reader.cancel().catch(() => undefined);
+    reader.cancel().catch(() => undefined);
   };
   signal?.addEventListener("abort", cancel, { once: true });
   while (true) {

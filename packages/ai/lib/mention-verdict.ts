@@ -98,15 +98,13 @@ const CLARIFICATION_RE =
 const UNKNOWN_RE =
   /(들어본 적|알지 못|찾을 수 없|정보가 없|확인되지 않|잘 모르|알려진 바가 없)|(don't|do not) have (any )?(information|knowledge)|(i'm|i am) not (familiar|aware)|no information (about|on)|couldn't find/i;
 
-/**
- * 브랜드명이 일반 단어인지(=B 유형 위험). 사전이 아니라 형태로 판정한다:
- * 영문 단문 소문자 단어("forget")는 일반명사일 가능성이 높다.
- * ⚠️ 이건 "모호 후보"를 고르는 신호일 뿐, 그 자체로 미인지 판정을 하지 않는다.
- */
-const COMMON_WORD_RE = /^[a-z]{3,12}$/;
-
-/** 한글 2~3글자 브랜드는 다른 단어에 섞여들 위험이 크다("기아"⊂"푸에기아", "현대"⊂"현대적"). */
-const SHORT_HANGUL_RE = /^[가-힣]{2,3}$/;
+const URL_SCHEME_PREFIX_RE = /^https?:\/\//;
+const WWW_PREFIX_RE = /^www\./;
+const URL_PATH_SPLIT_RE = /[/?#]/;
+const IDENTITY_TOKEN_SPLIT_RE = /[^a-z0-9가-힣]+/;
+const ASCII_LETTER_RE = /[a-z]/;
+const DIGITS_ONLY_RE = /^\d+$/;
+const LONG_HANGUL_NAME_RE = /^[가-힣]{4,}$/;
 
 /**
  * 이름이 같기 쉬운 **대상 유형** 신호.
@@ -134,9 +132,9 @@ function mentionsOfficialDomain(text: string, brandDomain?: string): boolean {
   const domain = brandDomain
     .trim()
     .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .split(/[/?#]/)[0];
+    .replace(URL_SCHEME_PREFIX_RE, "")
+    .replace(WWW_PREFIX_RE, "")
+    .split(URL_PATH_SPLIT_RE)[0];
   return (
     domain.length > 0 &&
     [
@@ -149,9 +147,9 @@ function normalizedHost(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .split(/[/?#]/)[0];
+    .replace(URL_SCHEME_PREFIX_RE, "")
+    .replace(WWW_PREFIX_RE, "")
+    .split(URL_PATH_SPLIT_RE)[0];
 }
 
 function compactIdentity(value: string): string {
@@ -204,7 +202,7 @@ function identityTokens(
 ): string[] {
   return value
     .toLowerCase()
-    .split(/[^a-z0-9가-힣]+/)
+    .split(IDENTITY_TOKEN_SPLIT_RE)
     .map((token) => token.replace(KOREAN_PARTICLE_SUFFIX_RE, ""))
     .filter(
       (token) =>
@@ -215,9 +213,10 @@ function identityTokens(
         // "Melt Halo"의 `Halo` 한 단어만으로 통과할 수 있다. 영문 보조 근거는
         // 최소 5글자로 제한하고, 짧은 제품명은 아래의 한국 제품 메타데이터 경로에서
         // 서로 다른 두 개가 맞을 때만 별도로 허용한다.
-        token.length >= (/[a-z]/.test(token) ? asciiMinLength : minLength) &&
+        token.length >=
+          (ASCII_LETTER_RE.test(token) ? asciiMinLength : minLength) &&
         !IDENTITY_TOKEN_STOPWORDS.has(token) &&
-        !/^\d+$/.test(token)
+        !DIGITS_ONLY_RE.test(token)
     );
 }
 
@@ -244,7 +243,7 @@ function isRegisteredNameFragment(token: string, input: VerifyInput): boolean {
  * 영어·짧은 한글명에는 절대 적용하지 않는다.
  */
 function hasKoreanProductMetadataEvidence(input: VerifyInput): boolean {
-  if (!/^[가-힣]{4,}$/.test(input.brandName.trim())) {
+  if (!LONG_HANGUL_NAME_RE.test(input.brandName.trim())) {
     return false;
   }
   const description = input.officialSite?.description ?? "";
@@ -379,10 +378,6 @@ function hasConflictingBrandDomain(input: {
       !isOfficialDomain(domain, input.brandDomain) &&
       identityTokens.some((token) => compactIdentity(domain).includes(token))
   );
-}
-
-function isShortHangul(name: string): boolean {
-  return SHORT_HANGUL_RE.test(name.trim());
 }
 
 /**

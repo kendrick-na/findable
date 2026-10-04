@@ -85,6 +85,71 @@ export interface PersistAuditTrackingInput {
   trackingClaimToken?: string;
 }
 
+interface TrackingPayloadFields {
+  brandId: string;
+  costBasis: string | null;
+  costKrw: number | null;
+  engineId: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  promptId: string;
+  rawResponse: string | null;
+  shareOfVoice: number | null;
+  trackedAt: Date;
+}
+
+/** First write wins: any immutable payload difference is a replay conflict. */
+function hasTrackingPayloadConflict(
+  first: TrackingPayloadFields,
+  row: TrackingPayloadFields
+): boolean {
+  return (
+    first.rawResponse !== row.rawResponse ||
+    first.engineId !== row.engineId ||
+    first.promptId !== row.promptId ||
+    first.shareOfVoice !== row.shareOfVoice ||
+    first.inputTokens !== row.inputTokens ||
+    first.outputTokens !== row.outputTokens ||
+    first.costKrw !== row.costKrw ||
+    first.costBasis !== row.costBasis ||
+    first.brandId !== row.brandId ||
+    first.trackedAt.getTime() !== row.trackedAt.getTime()
+  );
+}
+
+function hasDistinctRowKeys(
+  rows: readonly unknown[],
+  keyedRows: readonly { trackingRowKey: string }[]
+): boolean {
+  return !(
+    keyedRows.length !== rows.length ||
+    new Set(keyedRows.map((row) => row.trackingRowKey)).size !== rows.length
+  );
+}
+
+/**
+ * A duplicate key is an idempotent replay only if its immutable payload agrees
+ * with the first writer. Never overwrite first-write evidence; throw instead.
+ */
+function assertFirstWriteEvidence(
+  existing: (TrackingPayloadFields & { trackingRowKey: string | null })[],
+  keyedRows: (TrackingPayloadFields & { trackingRowKey: string })[]
+): void {
+  const expected = new Map(keyedRows.map((row) => [row.trackingRowKey, row]));
+  for (const row of existing) {
+    const first = expected.get(row.trackingRowKey as string);
+    if (first && hasTrackingPayloadConflict(first, row)) {
+      log.warn("audit.tracking.idempotency_conflict", {
+        trackingRowKey: row.trackingRowKey,
+        engineId: row.engineId,
+      });
+      throw new Error(
+        `Tracking idempotency payload conflict for ${row.trackingRowKey}`
+      );
+    }
+  }
+}
+
 /**
  * audit 엔진 응답을 Tracking으로 적재. best-effort: 실패해도 throw하지 않는다
  *   (audit status는 이미 completed라 무영향). 단 내부는 $transaction으로 원자적.
@@ -229,12 +294,7 @@ export async function persistAuditTracking(
         (row): row is typeof row & { trackingRowKey: string } =>
           typeof row.trackingRowKey === "string"
       );
-      if (
-        auditJobId &&
-        (keyedRows.length !== rows.length ||
-          new Set(keyedRows.map((row) => row.trackingRowKey)).size !==
-            rows.length)
-      ) {
+      if (auditJobId && !hasDistinctRowKeys(rows, keyedRows)) {
         throw new Error("Tracking manifest requires distinct row keys");
       }
       if (keyedRows.length > 0) {
@@ -259,33 +319,7 @@ export async function persistAuditTracking(
         if (existing.length !== keyedRows.length) {
           throw new Error("Tracking row-key set is incomplete after write");
         }
-        const expected = new Map(
-          keyedRows.map((row) => [row.trackingRowKey, row])
-        );
-        for (const row of existing) {
-          const first = expected.get(row.trackingRowKey as string);
-          if (
-            first &&
-            (first.rawResponse !== row.rawResponse ||
-              first.engineId !== row.engineId ||
-              first.promptId !== row.promptId ||
-              first.shareOfVoice !== row.shareOfVoice ||
-              first.inputTokens !== row.inputTokens ||
-              first.outputTokens !== row.outputTokens ||
-              first.costKrw !== row.costKrw ||
-              first.costBasis !== row.costBasis ||
-              first.brandId !== row.brandId ||
-              first.trackedAt.getTime() !== row.trackedAt.getTime())
-          ) {
-            log.warn("audit.tracking.idempotency_conflict", {
-              trackingRowKey: row.trackingRowKey,
-              engineId: row.engineId,
-            });
-            throw new Error(
-              `Tracking idempotency payload conflict for ${row.trackingRowKey}`
-            );
-          }
-        }
+        assertFirstWriteEvidence(existing, keyedRows);
       }
       if (auditJobId) {
         const stageKey =
