@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
-import { classifyTrackingReplay, TRACKING_RECONCILE_MAX_ATTEMPTS } from "./tracking-replay-policy";
+import { classifyTrackingReplay, retireExhaustedTrackingClaim, TRACKING_RECONCILE_MAX_ATTEMPTS } from "./tracking-replay-policy";
 
 type ReconcileDatabase = Pick<typeof database, "$executeRawUnsafe">;
 
@@ -22,6 +22,7 @@ export async function claimAuditTracking(
        '{trackingReconcileToken}', to_jsonb($3::text), true),
        '{trackingReconcileAttempts}', to_jsonb(COALESCE(("postprocessing"->>'trackingReconcileAttempts')::int, 0) + 1), true)
      WHERE "id" = $1 AND "status" = 'completed'
+       AND COALESCE(("postprocessing"->>'trackingReconcileAttempts')::int, 0) < $5
        AND (
          ("postprocessing"->>'tracking' IN ('pending', 'unknown', 'failed')
            AND ("postprocessing"->>'tracking' = 'pending'
@@ -33,7 +34,8 @@ export async function claimAuditTracking(
     jobId,
     claimStartedAt.toISOString(),
     claimToken,
-    staleBefore.toISOString()
+    staleBefore.toISOString(),
+    TRACKING_RECONCILE_MAX_ATTEMPTS
   );
   return claimed === 1 ? claimToken : null;
 }
@@ -75,7 +77,8 @@ export async function finalizeAuditTracking(
  * Legacy snapshots without promptIndex are intentionally not guessed.
  */
 export async function reconcileAuditTracking(
-  jobId: string
+  jobId: string,
+  now = new Date()
 ): Promise<"completed" | "failed" | "skipped"> {
   const job = await database.auditJob.findUnique({
     where: { id: jobId },
@@ -106,7 +109,21 @@ export async function reconcileAuditTracking(
     // must never be guessed into new rows.
     return "skipped";
   }
-  const claimToken = await claimAuditTracking(database, jobId);
+  const marker = job.postprocessing as Record<string, unknown>;
+  const attempts = marker.trackingReconcileAttempts;
+  if (typeof attempts === "number" && attempts >= TRACKING_RECONCILE_MAX_ATTEMPTS) {
+    const retired = await retireExhaustedTrackingClaim(
+      database,
+      jobId,
+      "tracking",
+      trackingStage,
+      typeof marker.trackingReconcileToken === "string" ? marker.trackingReconcileToken : null,
+      now
+    );
+    if (retired === 1) log.warn("audit.tracking.reconcile_retry_exhausted", { jobId, attempts });
+    return "skipped";
+  }
+  const claimToken = await claimAuditTracking(database, jobId, now);
   if (!claimToken) return "skipped";
 
   if (!job.organizationId || !job.brandId) {
@@ -179,7 +196,13 @@ export async function reconcileAuditTracking(
     return status;
   } catch (error) {
     log.warn("audit.tracking.reconcile_retry", { jobId, error: String(error) });
-    await finalizeAuditTracking(database, jobId, claimToken, "unknown");
+    try {
+      await finalizeAuditTracking(database, jobId, claimToken, "unknown");
+    } catch (finalizeError) {
+      // DB failure or forced termination still leaves the fenced stale lease
+      // for a later bounded reclaim/retirement.
+      log.warn("audit.tracking.reconcile_finalize_failed", { jobId, error: String(finalizeError) });
+    }
     return "failed";
   }
 }

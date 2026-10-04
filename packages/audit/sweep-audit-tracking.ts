@@ -98,8 +98,8 @@ export async function sweepAuditTrackingReconciliation(
       }
       const results = await withTimeout(
         Promise.all([
-          ...(candidate.corePending ? [reconcileAuditTracking(candidate.id)] : []),
-          ...(candidate.briefingPending ? [reconcileBriefingTracking(candidate.id)] : []),
+          ...(candidate.corePending ? [reconcileAuditTracking(candidate.id, now)] : []),
+          ...(candidate.briefingPending ? [reconcileBriefingTracking(candidate.id, now)] : []),
         ]),
         Math.min(RECONCILE_OPERATION_TIMEOUT_MS, remaining)
       );

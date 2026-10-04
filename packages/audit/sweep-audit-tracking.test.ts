@@ -25,7 +25,7 @@ describe("sweepAuditTrackingReconciliation", () => {
       10,
       new Date("2026-10-04T00:00:00.000Z")
     );
-    expect(reconcile).toHaveBeenNthCalledWith(2, "job-raced");
+    expect(reconcile).toHaveBeenNthCalledWith(2, "job-raced", new Date("2026-10-04T00:00:00.000Z"));
     expect(reconcileBriefing).not.toHaveBeenCalled();
   });
 
@@ -33,7 +33,7 @@ describe("sweepAuditTrackingReconciliation", () => {
     queryRaw.mockResolvedValue([{ id: "job-briefing", corePending: false, briefingPending: true }]);
     reconcileBriefing.mockResolvedValue("completed");
     await expect(sweepAuditTrackingReconciliation()).resolves.toMatchObject({ completed: 1, failed: 0 });
-    expect(reconcileBriefing).toHaveBeenCalledWith("job-briefing");
+    expect(reconcileBriefing).toHaveBeenCalledWith("job-briefing", expect.any(Date));
     expect(reconcile).not.toHaveBeenCalled();
     expect(queryRaw.mock.calls[0][0]).toContain("briefingTracking");
   });

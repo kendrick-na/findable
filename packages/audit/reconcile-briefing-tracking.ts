@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { persistAuditTracking, type TaggedEngineResponse } from "./tracking";
-import { classifyTrackingReplay, TRACKING_RECONCILE_MAX_ATTEMPTS } from "./tracking-replay-policy";
+import { classifyTrackingReplay, retireExhaustedTrackingClaim, TRACKING_RECONCILE_MAX_ATTEMPTS } from "./tracking-replay-policy";
 
 type ReconcileDatabase = Pick<typeof database, "$executeRawUnsafe">;
 
@@ -23,6 +23,7 @@ export async function claimBriefingTracking(
        '{briefingTrackingReconcileToken}', to_jsonb($3::text), true),
        '{briefingTrackingReconcileAttempts}', to_jsonb(COALESCE(("postprocessing"->>'briefingTrackingReconcileAttempts')::int, 0) + 1), true)
      WHERE "id" = $1 AND "status" = 'completed'
+       AND COALESCE(("postprocessing"->>'briefingTrackingReconcileAttempts')::int, 0) < $5
        AND (
          ("postprocessing"->>'briefingTracking' IN ('pending', 'unknown', 'failed')
            AND ("postprocessing"->>'briefingTracking' = 'pending'
@@ -34,7 +35,8 @@ export async function claimBriefingTracking(
     jobId,
     startedAt.toISOString(),
     token,
-    staleBefore.toISOString()
+    staleBefore.toISOString(),
+    TRACKING_RECONCILE_MAX_ATTEMPTS
   );
   return claimed === 1 ? token : null;
 }
@@ -72,7 +74,8 @@ export async function finalizeBriefingTracking(
 
 /** Replay only a captured on-demand briefing snapshot; never re-run the provider. */
 export async function reconcileBriefingTracking(
-  jobId: string
+  jobId: string,
+  now = new Date()
 ): Promise<"completed" | "failed" | "skipped"> {
   const job = await database.auditJob.findUnique({
     where: { id: jobId },
@@ -93,7 +96,21 @@ export async function reconcileBriefingTracking(
       : undefined;
   if (marker !== "pending" && marker !== "unknown" && marker !== "failed" && marker !== "reconciling") return "skipped";
 
-  const token = await claimBriefingTracking(database, jobId);
+  const stage = job.postprocessing as Record<string, unknown>;
+  const attempts = stage.briefingTrackingReconcileAttempts;
+  if (typeof attempts === "number" && attempts >= TRACKING_RECONCILE_MAX_ATTEMPTS) {
+    const retired = await retireExhaustedTrackingClaim(
+      database,
+      jobId,
+      "briefingTracking",
+      marker,
+      typeof stage.briefingTrackingReconcileToken === "string" ? stage.briefingTrackingReconcileToken : null,
+      now
+    );
+    if (retired === 1) log.warn("audit.briefing.tracking_retry_exhausted", { jobId, attempts });
+    return "skipped";
+  }
+  const token = await claimBriefingTracking(database, jobId, now);
   if (!token) return "skipped";
   if (!job.organizationId || !job.brandId) {
     await finalizeBriefingTracking(database, jobId, token, "not_applicable");
@@ -156,7 +173,11 @@ export async function reconcileBriefingTracking(
     return status;
   } catch (error) {
     log.warn("audit.briefing.tracking_retry", { jobId, error: String(error) });
-    await finalizeBriefingTracking(database, jobId, token, "unknown");
+    try {
+      await finalizeBriefingTracking(database, jobId, token, "unknown");
+    } catch (finalizeError) {
+      log.warn("audit.briefing.tracking_finalize_failed", { jobId, error: String(finalizeError) });
+    }
     return "failed";
   }
 }

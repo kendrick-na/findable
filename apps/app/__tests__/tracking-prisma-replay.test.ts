@@ -18,6 +18,7 @@ import {
   finalizeBriefingTracking,
   reconcileBriefingTracking,
 } from "@repo/audit/reconcile-briefing-tracking";
+import { retireExhaustedTrackingClaim } from "@repo/audit/tracking-replay-policy";
 import { sweepAuditTrackingReconciliation } from "@repo/audit/sweep-audit-tracking";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
@@ -433,6 +434,88 @@ describe("product Tracking replay through PrismaPg", () => {
         `SELECT "postprocessing"->>'tracking' AS state FROM "AuditJob" WHERE "id" = 'job-new-pending'`
       );
       expect(fairState).toEqual([{ state: "completed" }]);
+
+      // Simulate three workers killed after claim: no finalize call runs.
+      // The following sweep must retire both axes without a fourth claim.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ('job-killed-core', 'completed', 'org-replay', 'brand-replay', $1, $2::jsonb,
+                 '{"tracking":"pending"}'::jsonb),
+                ('job-killed-briefing', 'completed', 'org-replay', 'brand-replay', $1, $3::jsonb,
+                 '{"tracking":"completed","briefingTracking":"pending"}'::jsonb)`,
+        completedAt,
+        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, trackingInputCaptured: true })) }),
+        JSON.stringify({ briefingStatus: "completed", briefingPrompt: "브랜드 효과", engineResponses: [{
+          ...responses[0], trackingInputCaptured: true, promptIndex: 0, promptText: "브랜드 효과", promptLang: "ko",
+        }] })
+      );
+      const killedAt = new Date("2026-10-04T02:00:00.000Z");
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const claimedAt = new Date(killedAt.getTime() + (attempt - 1) * 11 * 60_000);
+        await expect(claimAuditTracking(database, "job-killed-core", claimedAt, `killed-core-${attempt}`))
+          .resolves.toBe(`killed-core-${attempt}`);
+        await expect(claimBriefingTracking(database, "job-killed-briefing", claimedAt, `killed-briefing-${attempt}`))
+          .resolves.toBe(`killed-briefing-${attempt}`);
+      }
+      // The third worker dies too. Make its lease unambiguously stale while
+      // preserving the third token and attempt count.
+      await database.$executeRawUnsafe(
+        `UPDATE "AuditJob" SET "postprocessing" = jsonb_set("postprocessing",
+           '{trackingReconcileStartedAt}', to_jsonb('2000-01-01T00:00:00Z'::text), true)
+         WHERE "id" = 'job-killed-core'`
+      );
+      await database.$executeRawUnsafe(
+        `UPDATE "AuditJob" SET "postprocessing" = jsonb_set("postprocessing",
+           '{briefingTrackingReconcileStartedAt}', to_jsonb('2000-01-01T00:00:00Z'::text), true)
+         WHERE "id" = 'job-killed-briefing'`
+      );
+      const terminalSweepAt = new Date();
+      await expect(claimAuditTracking(database, "job-killed-core", terminalSweepAt, "forbidden-fourth-core")).resolves.toBeNull();
+      await expect(claimBriefingTracking(database, "job-killed-briefing", terminalSweepAt, "forbidden-fourth-briefing")).resolves.toBeNull();
+      await sweepAuditTrackingReconciliation(terminalSweepAt);
+      const killedStates = await database.$queryRawUnsafe<Array<{ id: string; postprocessing: Record<string, unknown> }>>(
+        `SELECT "id", "postprocessing" FROM "AuditJob" WHERE "id" LIKE 'job-killed-%' ORDER BY "id"`
+      );
+      expect(killedStates[0].postprocessing).toMatchObject({
+        briefingTracking: "retry_exhausted",
+        briefingTrackingReconcileAttempts: 3,
+        briefingTrackingReconcileToken: null,
+      });
+      expect(killedStates[1].postprocessing).toMatchObject({
+        tracking: "retry_exhausted",
+        trackingReconcileAttempts: 3,
+        trackingReconcileToken: null,
+      });
+      await expect(finalizeAuditTracking(database, "job-killed-core", "killed-core-3", "completed")).resolves.toBe(0);
+      await expect(finalizeBriefingTracking(database, "job-killed-briefing", "killed-briefing-3", "completed")).resolves.toBe(0);
+      await sweepAuditTrackingReconciliation(new Date(killedAt.getTime() + 44 * 60_000));
+      const afterSweep = await database.$queryRawUnsafe<Array<{ id: string; postprocessing: Record<string, unknown> }>>(
+        `SELECT "id", "postprocessing" FROM "AuditJob" WHERE "id" LIKE 'job-killed-%' ORDER BY "id"`
+      );
+      expect(afterSweep).toEqual(killedStates);
+      await expect(claimAuditTracking(database, "job-killed-core", new Date(killedAt.getTime() + 55 * 60_000), "fourth-core")).resolves.toBeNull();
+      await expect(claimBriefingTracking(database, "job-killed-briefing", new Date(killedAt.getTime() + 55 * 60_000), "fourth-briefing")).resolves.toBeNull();
+
+      // If the current writer commits first, the retirement CAS must lose.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "completedAt", "postprocessing")
+         VALUES ('job-late-wins-core', 'completed', $1,
+                 '{"tracking":"reconciling","trackingReconcileAttempts":3,
+                   "trackingReconcileToken":"live-core","trackingReconcileStartedAt":"2000-01-01T00:00:00Z"}'::jsonb),
+                ('job-late-wins-briefing', 'completed', $1,
+                 '{"briefingTracking":"reconciling","briefingTrackingReconcileAttempts":3,
+                   "briefingTrackingReconcileToken":"live-briefing","briefingTrackingReconcileStartedAt":"2000-01-01T00:00:00Z"}'::jsonb)`,
+        completedAt
+      );
+      await expect(finalizeAuditTracking(database, "job-late-wins-core", "live-core", "completed")).resolves.toBe(1);
+      await expect(finalizeBriefingTracking(database, "job-late-wins-briefing", "live-briefing", "completed")).resolves.toBe(1);
+      await expect(retireExhaustedTrackingClaim(database, "job-late-wins-core", "tracking", "reconciling", "live-core", terminalSweepAt)).resolves.toBe(0);
+      await expect(retireExhaustedTrackingClaim(database, "job-late-wins-briefing", "briefingTracking", "reconciling", "live-briefing", terminalSweepAt)).resolves.toBe(0);
+      const lateWins = await database.$queryRawUnsafe<Array<{ id: string; postprocessing: Record<string, unknown> }>>(
+        `SELECT "id", "postprocessing" FROM "AuditJob" WHERE "id" LIKE 'job-late-wins-%' ORDER BY "id"`
+      );
+      expect(lateWins[0].postprocessing).toMatchObject({ briefingTracking: "completed" });
+      expect(lateWins[1].postprocessing).toMatchObject({ tracking: "completed" });
     } finally {
       await database.$disconnect();
     }
