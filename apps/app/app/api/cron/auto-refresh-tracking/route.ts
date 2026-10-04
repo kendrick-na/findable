@@ -5,8 +5,9 @@
 //   free=null(자동 없음)·starter=168h(주간)·growth/scale=24h(데일리).
 //
 // 동작(멱등):
-//   1) Organization.plan 이 자동 갱신을 허용(autoRefreshHours != null)하는 org 조회.
-//      ⚠️ cron 은 유저 세션이 없다 → plan 진실은 **DB Organization.plan**(Clerk metadata 아님).
+//   1) 실효 플랜이 자동 갱신을 허용(autoRefreshHours != null)하는 org 조회.
+//      ⚠️ 결제 권한은 Clerk 에만 있고 Organization.plan 에는 없다(2026-10-05 실측).
+//      → 화면 게이트와 같은 resolveEffectivePlan 으로 판정한다(lib/billing/auto-refresh-eligibility).
 //   2) 각 org 의 브랜드마다 마지막 org 측정(email=`org:{orgId}`) 시각을 보고,
 //      주기가 지났으면 새 AuditJob 생성 + 러너 직접 실행(start-tracking 서버액션의 cron 판).
 //   3) 이미 저장된 마법사 프롬프트가 있으면 러너가 그걸 우선 사용(resolveRunPrompts).
@@ -42,7 +43,7 @@ import { buildAuditHistory } from "@repo/audit/history";
 import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
-import { type Plan, planCapabilities } from "@repo/auth/plan";
+import { planCapabilities } from "@repo/auth/plan";
 import { database } from "@repo/database";
 import { resend } from "@repo/email";
 import { TrackingDigestEmail } from "@repo/email/templates/tracking-digest";
@@ -50,6 +51,10 @@ import { log } from "@repo/observability/log";
 import { denyIfNotCron } from "@repo/security/cron";
 import type { NextRequest } from "next/server";
 import { env } from "@/env";
+import {
+  type AutoRefreshOrganization,
+  loadAutoRefreshOrganizations,
+} from "@/lib/billing/auto-refresh-eligibility";
 import { expireLapsedRenewalGrants } from "@/lib/billing/renewal-grace";
 
 export const maxDuration = 300;
@@ -176,18 +181,6 @@ async function sendDigest(
   return true;
 }
 
-/** 자동 갱신 대상 org 조회 결과(브랜드 포함). */
-interface OrgWithBrands {
-  brands: Array<{
-    domain: string;
-    entityVariants: unknown;
-    id: string;
-    name: string;
-  }>;
-  id: string;
-  plan: Plan;
-}
-
 /** JSON 별칭 필드에서 실제 문자열만 골라 러너에 넘긴다. */
 const stringList = (value: unknown): string[] =>
   Array.isArray(value)
@@ -205,7 +198,7 @@ const stringList = (value: unknown): string[] =>
  *   다른 브랜드의 측정 기회를 빼앗는다. 측정 이력이 없으면 즉시 대상이 된다.
  */
 async function collectDueBrands(
-  orgs: readonly OrgWithBrands[],
+  orgs: readonly AutoRefreshOrganization[],
   now: number
 ): Promise<DueBrand[]> {
   const due: DueBrand[] = [];
@@ -317,20 +310,9 @@ export const GET = async (request: NextRequest) => {
     log.error("billing.renewal_grace.scan_failed", { error: String(error) });
   }
 
-  // 1) 자동 갱신 허용 플랜의 org (DB plan 진실). free 는 autoRefreshHours=null 이라 제외.
-  const autoPlans = (
-    ["starter", "growth", "scale", "enterprise"] as Plan[]
-  ).filter((p) => planCapabilities(p).autoRefreshHours !== null);
-  const orgs = await database.organization.findMany({
-    where: { plan: { in: autoPlans } },
-    select: {
-      id: true,
-      plan: true,
-      brands: {
-        select: { domain: true, entityVariants: true, id: true, name: true },
-      },
-    },
-  });
+  // 1) 자동 갱신 허용 플랜의 org — 화면과 같은 실효 플랜(결제·유예·초대·관리자·파트너).
+  //   0-b 뒤에 둬야 방금 유예가 끝난 조직이 이번 실행에서 측정되지 않는다.
+  const orgs = await loadAutoRefreshOrganizations(new Date(now));
 
   // 2) 브랜드별 마지막 측정 시각 → 주기 경과분만 수집.
   const due = await collectDueBrands(orgs, now);
