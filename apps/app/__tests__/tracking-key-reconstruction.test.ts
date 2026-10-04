@@ -13,14 +13,25 @@ type StoredResponse = {
 };
 
 function coreKey(row: StoredResponse): string | null {
-  if (row.promptIndex === undefined) return null;
+  if (row.promptIndex === undefined) {
+    return null;
+  }
   return `core|${row.promptIndex}|${row.engineId}`;
 }
 
-function briefingKeys(jobId: string, result: { briefingPrompt?: string; engineResponses: StoredResponse[] }): string[] {
-  const rows = result.engineResponses.filter((candidate) => candidate.engineId === "naver-briefing");
-  if (rows.length === 0 || !result.briefingPrompt) return [];
-  return rows.map((row, ordinal) => `${jobId}|briefing|${ordinal}|${row.engineId}`);
+function briefingKeys(
+  jobId: string,
+  result: { briefingPrompt?: string; engineResponses: StoredResponse[] }
+): string[] {
+  const rows = result.engineResponses.filter(
+    (candidate) => candidate.engineId === "naver-briefing"
+  );
+  if (rows.length === 0 || !result.briefingPrompt) {
+    return [];
+  }
+  return rows.map(
+    (row, ordinal) => `${jobId}|briefing|${ordinal}|${row.engineId}`
+  );
 }
 
 describe("reconstructing a Tracking row key from persisted AuditJob.result", () => {

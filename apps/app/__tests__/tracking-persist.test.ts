@@ -149,7 +149,9 @@ describe("persistAuditTracking — 적재 규칙 (원가 0원)", () => {
   });
 
   test("성공 응답의 Engine seed가 없으면 부분집합을 완료하지 않는다", async () => {
-    await expect(run([row(), row({ engineId: "gemini" })])).resolves.toBe("failed");
+    await expect(run([row(), row({ engineId: "gemini" })])).resolves.toBe(
+      "failed"
+    );
     expect(state.transactionRan).toBe(false);
     expect(state.trackingRows).toHaveLength(0);
   });

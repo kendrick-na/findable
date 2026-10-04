@@ -147,7 +147,9 @@ describe("고객 리포트 공개 고지", () => {
   it("기존 동결 fixture를 현재 측정값으로 과장하지 않고 과거 엔진을 표시한다", () => {
     const data = parseClientReportData(read("knowverse.report.json"));
     expect(data).not.toBeNull();
-    if (!data) return;
+    if (!data) {
+      return;
+    }
 
     expect(clientReportDisclosure(data)).toEqual({
       isFrozenSnapshot: true,
@@ -168,7 +170,9 @@ describe("고객 리포트 공개 고지", () => {
   it("현재 엔진·현재 템플릿이어도 별도 신뢰 검수 없이는 서술을 열지 않는다", () => {
     const data = parseClientReportData(read("knowverse.report.json"));
     expect(data).not.toBeNull();
-    if (!data) return;
+    if (!data) {
+      return;
+    }
 
     const currentOnly = {
       ...data,
@@ -187,7 +191,9 @@ describe("고객 리포트 공개 고지", () => {
     const currentNaver = currentOnly.computed.engines.find(
       (engine) => engine.id === "naver"
     );
-    if (currentNaver) currentNaver.name = "네이버 검색 노출";
+    if (currentNaver) {
+      currentNaver.name = "네이버 검색 노출";
+    }
 
     expect(clientReportDisclosure(currentOnly)).toEqual({
       isFrozenSnapshot: true,
@@ -213,9 +219,9 @@ describe("고객 리포트 공개 고지", () => {
         ),
       },
     };
-    expect(clientReportDisclosure(postCutoverStoredOldLabel).legacySyntheticEngineIds).toEqual(
-      []
-    );
+    expect(
+      clientReportDisclosure(postCutoverStoredOldLabel).legacySyntheticEngineIds
+    ).toEqual([]);
   });
 
   it("Naver 측정일 형식을 해석하지 못하면 과거 합성을 현재 검색 노출로 간주하지 않는다", () => {
@@ -327,17 +333,19 @@ describe("고객 리포트 공개 고지", () => {
   it("Naver는 현재 생성본에서 AI 답변으로 과장하지 않는다", () => {
     expect(ENGINE_NAMES.naver).toBe("네이버 검색 노출");
     expect(
-      currentEngineDisplayText("네이버 AI 브리핑 · 네이버 AI · 다음 검색", ["naver"])
+      currentEngineDisplayText("네이버 AI 브리핑 · 네이버 AI · 다음 검색", [
+        "naver",
+      ])
     ).toBe("네이버 AI 브리핑 · 네이버 Cue 재현 (Findable 합성) · 다음 검색");
-    expect(
-      currentEngineDisplayText("네이버 AI 브리핑 · 네이버 AI", [])
-    ).toBe("네이버 AI 브리핑 · 네이버 AI");
-    expect(
-      currentEngineDisplayName("naver", "네이버 AI", ["naver"])
-    ).toBe("네이버 Cue 재현 (Findable 합성)");
-    expect(
-      currentEngineDisplayName("naver", "네이버 AI", [])
-    ).toBe("네이버 검색 노출");
+    expect(currentEngineDisplayText("네이버 AI 브리핑 · 네이버 AI", [])).toBe(
+      "네이버 AI 브리핑 · 네이버 AI"
+    );
+    expect(currentEngineDisplayName("naver", "네이버 AI", ["naver"])).toBe(
+      "네이버 Cue 재현 (Findable 합성)"
+    );
+    expect(currentEngineDisplayName("naver", "네이버 AI", [])).toBe(
+      "네이버 검색 노출"
+    );
   });
 
   it("동일한 고지가 screen과 print 렌더 모두에 포함된다", () => {
@@ -368,11 +376,15 @@ describe("고객 리포트 공개 고지", () => {
       })
     );
 
-    expect(screen).toContain("현재 측정값이나 현재 엔진 상태를 보증하지 않습니다");
+    expect(screen).toContain(
+      "현재 측정값이나 현재 엔진 상태를 보증하지 않습니다"
+    );
     expect(screen).toContain("과거 네이버 합성 측정");
     expect(screen).toContain("직접 AI 답변 16건");
     expect(screen).toContain('data-report-disclosure="screen"');
-    expect(print).toContain("현재 측정값이나 현재 엔진 상태를 보증하지 않습니다");
+    expect(print).toContain(
+      "현재 측정값이나 현재 엔진 상태를 보증하지 않습니다"
+    );
     expect(print).toContain("과거 네이버 합성 측정");
     expect(print).toContain("직접 AI 답변 16건");
     expect(print).toContain('data-report-disclosure="print"');
@@ -381,7 +393,9 @@ describe("고객 리포트 공개 고지", () => {
   it("공유된 Report 본문도 legacy Naver를 재현 방식으로 표시한다", () => {
     const data = parseClientReportData(read("knowverse.report.json"));
     expect(data).not.toBeNull();
-    if (!data) return;
+    if (!data) {
+      return;
+    }
 
     const html = renderToStaticMarkup(
       createElement(ClientReport, {
@@ -398,7 +412,9 @@ describe("고객 리포트 공개 고지", () => {
   it("저장된 H.p4의 구형 AI 답변 headline도 화면에서 과장하지 않는다", () => {
     const data = parseClientReportData(read("knowverse.report.json"));
     expect(data).not.toBeNull();
-    if (!data) return;
+    if (!data) {
+      return;
+    }
 
     const withOldHeadline = {
       ...data,
@@ -421,7 +437,9 @@ describe("고객 리포트 공개 고지", () => {
   it("저장된 표지 subtitle의 AI 엔진/답변 과장도 화면에서 혼합 채널로 교정한다", () => {
     const data = parseClientReportData(read("knowverse.report.json"));
     expect(data).not.toBeNull();
-    if (!data) return;
+    if (!data) {
+      return;
+    }
 
     const withOldSubtitle = {
       ...data,

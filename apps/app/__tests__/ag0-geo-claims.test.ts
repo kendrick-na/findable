@@ -155,7 +155,9 @@ describe("③ 신규 생성 템플릿·프롬프트의 과장 문구", () => {
     const runner = code("packages/audit/runner.ts");
     const commit = code("packages/audit/commit-audit-result.ts");
     expect(runner).toContain("commitAuditResult(");
-    expect(commit).toMatch(/status:\s*"completed"[\s\S]*result,[\s\S]*pdfUrl:\s*null/);
+    expect(commit).toMatch(
+      /status:\s*"completed"[\s\S]*result,[\s\S]*pdfUrl:\s*null/
+    );
   });
 
   it("crew: +40%·Reddit 40% 를 LLM 에 필수 사실로 지시하지 않는다", () => {

@@ -244,7 +244,9 @@ const MiniMock = ({ kind, isKo = true }: { kind: string; isKo?: boolean }) => {
     return (
       <div className="text-[12px] leading-[1.7]" style={fontMono}>
         <div className="mb-2 text-[var(--findable-ink-tertiary)]">
-          {isKo ? "화면 예시 · 실제 측정값 아님" : "UI example · not measured data"}
+          {isKo
+            ? "화면 예시 · 실제 측정값 아님"
+            : "UI example · not measured data"}
         </div>
         <div className="text-[var(--findable-ink-subtle)]">
           $ findable audit your-brand.co.kr

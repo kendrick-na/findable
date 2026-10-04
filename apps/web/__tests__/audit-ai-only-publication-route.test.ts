@@ -86,7 +86,9 @@ it("withholds an old PDF when only its stored recommendations are now filtered",
   expect(body.result.engineResponses[0].excerpt).toBe("visible answer");
   expect(body.result.engineResponses[0]).not.toHaveProperty("usage");
   expect(body.result.engineResponses[0]).not.toHaveProperty("shareOfVoice");
-  expect(body.result.engineResponses[0]).not.toHaveProperty("trackingInputCaptured");
+  expect(body.result.engineResponses[0]).not.toHaveProperty(
+    "trackingInputCaptured"
+  );
 });
 
 it("withholds PDF and crew output on the real poll route while retaining search evidence", async () => {

@@ -1,8 +1,8 @@
+import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
+import type { GeoAction } from "@repo/audit/actions";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
-import type { GeoAction } from "@repo/audit/actions";
 import {
   ActionDetails,
   ActionLead,
@@ -77,26 +77,25 @@ const storedAction = {
   },
 };
 
-const storedProjectedAction = filterStoredGeoActions([storedAction])[0] as GeoAction;
+const storedProjectedAction = filterStoredGeoActions([
+  storedAction,
+])[0] as GeoAction;
 
-vi.mock(
-  "../app/[locale]/audit/[jobId]/components/audit-result",
-  () => ({
-    AuditResultView: ({ locale }: { locale: string }) => {
-      const isKo = locale.startsWith("ko");
-      return createElement(
-        "section",
-        null,
-        createElement(ActionLead, { action: newAction, isKo }),
-        createElement(ActionDetails, {
-          action: storedProjectedAction,
-          index: 1,
-          isKo,
-        })
-      );
-    },
-  })
-);
+vi.mock("../app/[locale]/audit/[jobId]/components/audit-result", () => ({
+  AuditResultView: ({ locale }: { locale: string }) => {
+    const isKo = locale.startsWith("ko");
+    return createElement(
+      "section",
+      null,
+      createElement(ActionLead, { action: newAction, isKo }),
+      createElement(ActionDetails, {
+        action: storedProjectedAction,
+        index: 1,
+        isKo,
+      })
+    );
+  },
+}));
 
 import AuditResultPage from "../app/[locale]/audit/[jobId]/page";
 
@@ -115,39 +114,40 @@ describe("무료 진단 route-level 액션 가이드 렌더 계약", () => {
 
   it.each([
     ["ko", "적용 채널", "네이버 검색 노출", "수정 위치", "검증 방법"],
-    ["en", "Measurement channels", "Naver search exposure", "Where to change", "How to verify"],
-  ])(
-    "%s route가 신규·저장 카드의 채널·위치·검증·비보장 고지를 렌더한다",
-    async (locale, channelLabel, naverLabel, whereLabel, verifyLabel) => {
-      const html = renderToStaticMarkup(
-        await AuditResultPage({
-          params: Promise.resolve({
-            locale,
-            jobId: "11111111-1111-4111-8111-111111111111",
-          }),
-        })
-      );
-      expect(html).toContain(channelLabel);
-      expect(html).toContain(naverLabel);
-      expect(html).toContain(whereLabel);
-      expect(html).toContain(verifyLabel);
-      expect(html).toContain(locale === "ko" ? "근거" : "Evidence:");
-      expect(html).toContain(
-        "네이버 검색에 잡힐 글을 올리세요"
-      );
-      expect(html).toContain(
-        locale === "ko"
-          ? "네이버 블로그에 꾸준히 글을 올리세요"
-          : "네이버 블로그에 꾸준히 글을 올리세요"
-      );
-      expect(html).toContain(
-        locale === "ko"
-          ? "효과를 입증하지 않습니다"
-          : "they do not prove an effect"
-      );
-      expect(html).not.toContain("적용되는 AI");
-      expect(html).not.toContain("Naver AI Briefing");
-      expect(html).not.toContain("HyperCLOVA X");
-    }
-  );
+    [
+      "en",
+      "Measurement channels",
+      "Naver search exposure",
+      "Where to change",
+      "How to verify",
+    ],
+  ])("%s route가 신규·저장 카드의 채널·위치·검증·비보장 고지를 렌더한다", async (locale, channelLabel, naverLabel, whereLabel, verifyLabel) => {
+    const html = renderToStaticMarkup(
+      await AuditResultPage({
+        params: Promise.resolve({
+          locale,
+          jobId: "11111111-1111-4111-8111-111111111111",
+        }),
+      })
+    );
+    expect(html).toContain(channelLabel);
+    expect(html).toContain(naverLabel);
+    expect(html).toContain(whereLabel);
+    expect(html).toContain(verifyLabel);
+    expect(html).toContain(locale === "ko" ? "근거" : "Evidence:");
+    expect(html).toContain("네이버 검색에 잡힐 글을 올리세요");
+    expect(html).toContain(
+      locale === "ko"
+        ? "네이버 블로그에 꾸준히 글을 올리세요"
+        : "네이버 블로그에 꾸준히 글을 올리세요"
+    );
+    expect(html).toContain(
+      locale === "ko"
+        ? "효과를 입증하지 않습니다"
+        : "they do not prove an effect"
+    );
+    expect(html).not.toContain("적용되는 AI");
+    expect(html).not.toContain("Naver AI Briefing");
+    expect(html).not.toContain("HyperCLOVA X");
+  });
 });

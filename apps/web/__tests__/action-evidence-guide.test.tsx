@@ -1,9 +1,9 @@
-import { createElement } from "react";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { ActionGuide } from "@repo/audit/action-rules";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { ActionGuide } from "@repo/audit/action-rules";
 import { ActionEvidenceGuide } from "../app/[locale]/audit/[jobId]/components/action-evidence-guide";
 import {
   ActionDetails,
@@ -58,9 +58,7 @@ describe("웹 ActionEvidenceGuide", () => {
     expect(resultSource).toContain(
       "<TeaserActionLead action={lead} isKo={isKo} />"
     );
-    expect(resultSource).toContain(
-      "<TeaserActionDetails"
-    );
+    expect(resultSource).toContain("<TeaserActionDetails");
   });
 
   it("영어 locale에서 가이드의 UI chrome을 영어로 렌더한다", () => {

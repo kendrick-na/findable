@@ -1,8 +1,8 @@
-import { isUsableRun } from "@repo/audit/run-quality";
 import {
   auditPublicationStatus,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { isUsableRun } from "@repo/audit/run-quality";
 import type { AuditJob } from "@repo/database";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { cn } from "@repo/design-system/lib/utils";
@@ -84,7 +84,7 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
         )?.engineResponses;
         const hasCollectedAnswer =
           responses?.some(
-            (response) => !response.errorMessage && !response.isStub
+            (response) => !(response.errorMessage || response.isStub)
           ) ?? false;
         const publicationStatus = auditPublicationStatus(result);
         const isPartial =

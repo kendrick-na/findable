@@ -9,8 +9,8 @@
  *   (`sign-in.test.tsx` 가 지금까지 무사한 건 window 를 안 건드려서다.)
  */
 
-import type { AuditJob } from "@repo/database";
 import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
+import type { AuditJob } from "@repo/database";
 import { cleanup, render, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 

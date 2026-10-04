@@ -76,6 +76,10 @@ import {
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActionDetails as TeaserActionDetails,
+  ActionLead as TeaserActionLead,
+} from "./action-teaser-cards";
+import {
   AnswerBucketBoard,
   AnswerBucketPill,
   BrandNameMismatchNotice,
@@ -85,10 +89,6 @@ import { CompetitorBenchmark } from "./competitor-benchmark";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
 import { ProvisionalEvidenceView } from "./provisional-evidence-view";
 import { TruthMirror } from "./truth-mirror";
-import {
-  ActionDetails as TeaserActionDetails,
-  ActionLead as TeaserActionLead,
-} from "./action-teaser-cards";
 
 interface Props {
   jobId: string;
@@ -1335,8 +1335,7 @@ function VerificationPartialView({
   );
   const brandAiResponses = coreResponses.filter(
     (response) =>
-      answerGroup(response.engineId) === "ai" &&
-      !isDiscoveryAnswer(response)
+      answerGroup(response.engineId) === "ai" && !isDiscoveryAnswer(response)
   );
   const searchResponses = coreResponses.filter(
     (response) => answerGroup(response.engineId) === "search"
@@ -1438,7 +1437,9 @@ function VerificationPartialView({
 
       <section aria-label={isKo ? "수집된 답변" : "Collected answers"}>
         <h2 className="font-semibold text-xl text-zinc-100">
-          {isKo ? "AI 답변·검색 결과 원문" : "Saved AI answers and search results"}
+          {isKo
+            ? "AI 답변·검색 결과 원문"
+            : "Saved AI answers and search results"}
         </h2>
         <p className="mt-2 text-sm text-zinc-400">
           {isKo
@@ -1687,18 +1688,13 @@ function CompletedView({
         {!job.isWorkspaceAudit && (
           <UpsellCard isKo={isKo} job={job} locale={locale} result={result} />
         )}
-
       </div>
     </div>
   );
 }
 
 /** 잠정 회차에서 확정 판별이 필요한 파생 수치 자리를 가린다(섹션 자체는 유지). */
-function ProvisionalMaskNotice({
-  isKo,
-}: {
-  isKo: boolean;
-}) {
+function ProvisionalMaskNotice({ isKo }: { isKo: boolean }) {
   const copy = isKo
     ? "개선 처방 — 이번 회차는 잠정 결과라 처방을 확정하지 않습니다. 아래 엔진별 답변 원문은 그대로 확인할 수 있습니다."
     : "Recommendations — withheld because this run is provisional. Engine answers below remain available.";
@@ -4479,7 +4475,8 @@ function ActionTeaser({
       <p className="mt-3 text-xs text-zinc-400">
         {isKo ? (
           <>
-            처방은 이번 측정 결과와 각 카드에 표시한 근거를 함께 사용해 만들어요.{" "}
+            처방은 이번 측정 결과와 각 카드에 표시한 근거를 함께 사용해
+            만들어요.{" "}
             <a
               className="underline decoration-white/20 hover:text-zinc-300"
               href={`/${locale}/contact`}

@@ -8,7 +8,9 @@ import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
 import { buildGeoActions } from "@repo/audit/actions";
 import { describe, expect, it } from "vitest";
 
-const action = (overrides: Record<string, unknown>): Record<string, unknown> => ({
+const action = (
+  overrides: Record<string, unknown>
+): Record<string, unknown> => ({
   evidence: "측정 근거",
   how: "실행 방법",
   priority: 2,
@@ -80,7 +82,8 @@ describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
   it("인용형 부정문은 구형 Naver 긍정 서명으로 오인하지 않는다", () => {
     const honest = action({
       kind: "naver_blog",
-      source: "[사례 분석] 네이버 AI 브리핑 인용 272건 · 49.3%가 검색 상위 10위 밖",
+      source:
+        "[사례 분석] 네이버 AI 브리핑 인용 272건 · 49.3%가 검색 상위 10위 밖",
       how: "매주 올리면 AI 브리핑이 절반 가까이 인용합니다라는 주장은 근거가 없습니다.",
     });
 
@@ -111,9 +114,9 @@ describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
     expect((legacy.guide as { effectLag: string }).effectLag).toBe(
       "몇 주~몇 달. 글이 쌓여야 보입니다."
     );
-    expect(
-      (projected[0]?.guide as { effectLag: string }).effectLag
-    ).toBe("게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요.");
+    expect((projected[0]?.guide as { effectLag: string }).effectLag).toBe(
+      "게시 후 몇 주~몇 달. 실제 반영 시점과 변화는 같은 질문으로 확인하세요."
+    );
   });
 
   it("3618c25 생성기 형태의 구형 content_fix는 guide가 완비돼도 제거한다", () => {
@@ -212,8 +215,7 @@ describe("저장된 구형 액션의 과장 문구 표시 차단", () => {
               JSON.parse(
                 JSON.stringify({
                   ...generated,
-                  how:
-                    "우리 업종의 한 주제를 정해, 고객이 실제로 묻는 질문을 제목으로 삼아 매주 올리세요. 첫 문단에 답을 먼저 쓰고, 회사 이름을 정확히 적습니다. 분석에 따르면 네이버 AI 브리핑은 검색 상위 10위 밖 문서도 절반 가까이 인용합니다 — 순위보다 질문에 맞게 정리된 글이 뽑힐 여지가 있습니다.",
+                  how: "우리 업종의 한 주제를 정해, 고객이 실제로 묻는 질문을 제목으로 삼아 매주 올리세요. 첫 문단에 답을 먼저 쓰고, 회사 이름을 정확히 적습니다. 분석에 따르면 네이버 AI 브리핑은 검색 상위 10위 밖 문서도 절반 가까이 인용합니다 — 순위보다 질문에 맞게 정리된 글이 뽑힐 여지가 있습니다.",
                 })
               ),
             ]

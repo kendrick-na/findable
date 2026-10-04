@@ -82,7 +82,12 @@ export const GET = async (request: NextRequest) => {
 
   const swept = { crew: crew.count, fast: fast.count };
   const tracking = await sweepAuditTrackingReconciliation(now);
-  if (swept.fast > 0 || swept.crew > 0 || tracking.completed > 0 || tracking.failed > 0) {
+  if (
+    swept.fast > 0 ||
+    swept.crew > 0 ||
+    tracking.completed > 0 ||
+    tracking.failed > 0
+  ) {
     log.warn("cron.sweep-stuck-jobs.swept", swept);
 
     // 🔴 BL-Day17-02(2026-08-12 세션N-24) — 예전엔 위 `log.warn` 하나로 끝났고

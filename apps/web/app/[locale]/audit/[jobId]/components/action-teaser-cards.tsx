@@ -1,6 +1,6 @@
 import type { ActionGuide } from "@repo/audit/action-rules";
-import { ChevronDown } from "lucide-react";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
+import { ChevronDown } from "lucide-react";
 import { ActionEvidenceGuide } from "./action-evidence-guide";
 
 export interface ActionTeaserAction {
