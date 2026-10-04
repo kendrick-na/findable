@@ -1,13 +1,10 @@
 /** @vitest-environment node */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaPg } from "@repo/database/node_modules/@prisma/adapter-pg/dist/index.mjs";
-import { PrismaClient } from "@repo/database/generated/client";
 import { toBriefingTaggedResponses } from "@repo/audit/briefing-tracking";
-import { tagCoreResponses } from "@repo/audit/tracking";
 import {
   claimAuditTracking,
   finalizeAuditTracking,
@@ -18,8 +15,11 @@ import {
   finalizeBriefingTracking,
   reconcileBriefingTracking,
 } from "@repo/audit/reconcile-briefing-tracking";
-import { retireExhaustedTrackingClaim } from "@repo/audit/tracking-replay-policy";
 import { sweepAuditTrackingReconciliation } from "@repo/audit/sweep-audit-tracking";
+import { tagCoreResponses } from "@repo/audit/tracking";
+import { retireExhaustedTrackingClaim } from "@repo/audit/tracking-replay-policy";
+import { PrismaClient } from "@repo/database/generated/client";
+import { PrismaPg } from "@repo/database/node_modules/@prisma/adapter-pg/dist/index.mjs";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ database: null as unknown }));
@@ -39,31 +39,61 @@ const { persistAuditTracking } = await import("@repo/audit/tracking");
 const { commitBriefingResult } = await import("@repo/audit/briefing-runner");
 const tempDir = mkdtempSync("/tmp/findable-tracking-prisma-");
 const socketDir = join(tempDir, "socket");
-const port = 15732 + Math.floor(Math.random() * 100);
+const port = 15_732 + Math.floor(Math.random() * 100);
 const role = execFileSync("id", ["-un"], { encoding: "utf8" }).trim();
 const connectionString = `postgresql://${role}@127.0.0.1:${port}/postgres?application_name=findable_tracking_prisma`;
 let serverStarted = false;
+// initdb/postmaster abort on macOS without a valid locale
+// ("postmaster became multithreaded during startup"), so pin C locale here.
+const pgEnv = { ...process.env, LC_ALL: "C", LANG: "C" };
 
 function run(command: string, args: string[]) {
-  const result = spawnSync(command, args, { encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`${command} failed: ${result.stderr || result.stdout}`);
+  const result = spawnSync(command, args, { encoding: "utf8", env: pgEnv });
+  if (result.status !== 0) {
+    throw new Error(`${command} failed: ${result.stderr || result.stdout}`);
+  }
 }
 
 function startDatabase() {
   run("initdb", ["-D", tempDir, "-A", "trust", "--no-locale"]);
   mkdirSync(socketDir);
-  run("pg_ctl", ["-D", tempDir, "-o", `-p ${port} -k ${socketDir}`, "-l", join(tempDir, "postgres.log"), "start"]);
+  run("pg_ctl", [
+    "-D",
+    tempDir,
+    "-o",
+    `-p ${port} -k ${socketDir}`,
+    "-l",
+    join(tempDir, "postgres.log"),
+    "start",
+  ]);
   serverStarted = true;
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
-    if (spawnSync("pg_isready", ["-h", "127.0.0.1", "-p", String(port)]).status === 0) return;
+    if (
+      spawnSync("pg_isready", ["-h", "127.0.0.1", "-p", String(port)])
+        .status === 0
+    ) {
+      return;
+    }
   }
   throw new Error("PostgreSQL readiness timed out");
 }
 
 afterAll(() => {
   if (serverStarted) {
-    spawnSync("pg_ctl", ["-D", tempDir, "-o", `-p ${port} -k ${socketDir}`, "stop", "-m", "immediate"], { stdio: "ignore" });
+    spawnSync(
+      "pg_ctl",
+      [
+        "-D",
+        tempDir,
+        "-o",
+        `-p ${port} -k ${socketDir}`,
+        "stop",
+        "-m",
+        "immediate",
+      ],
+      { stdio: "ignore" }
+    );
   }
   rmSync(tempDir, { recursive: true, force: true });
 });
@@ -71,7 +101,9 @@ afterAll(() => {
 describe("product Tracking replay through PrismaPg", () => {
   it("GREEN characterization: replay and contention converge to one row per run key", async () => {
     startDatabase();
-    const database = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }) });
+    const database = new PrismaClient({
+      adapter: new PrismaPg({ connectionString, max: 1 }),
+    });
     state.database = database;
     try {
       await database.$executeRawUnsafe(`
@@ -98,15 +130,27 @@ describe("product Tracking replay through PrismaPg", () => {
         )
       );
       await database.$executeRawUnsafe(readFileSync(migrationPath, "utf8"));
-      const workerB = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }) });
+      const workerB = new PrismaClient({
+        adapter: new PrismaPg({ connectionString, max: 1 }),
+      });
       try {
         const concurrentStartedAt = new Date("2026-10-04T01:00:00.000Z");
         await database.$executeRawUnsafe(
           `INSERT INTO "AuditJob" ("id", "status", "postprocessing") VALUES ('job-concurrent-claim', 'completed', '{"tracking":"unknown"}'::jsonb), ('job-stale-claim', 'completed', '{"tracking":"unknown"}'::jsonb)`
         );
         const [claimA, claimB] = await Promise.all([
-          claimAuditTracking(database, "job-concurrent-claim", concurrentStartedAt, "token-concurrent-a"),
-          claimAuditTracking(workerB, "job-concurrent-claim", concurrentStartedAt, "token-concurrent-b"),
+          claimAuditTracking(
+            database,
+            "job-concurrent-claim",
+            concurrentStartedAt,
+            "token-concurrent-a"
+          ),
+          claimAuditTracking(
+            workerB,
+            "job-concurrent-claim",
+            concurrentStartedAt,
+            "token-concurrent-b"
+          ),
         ]);
         expect([claimA, claimB].filter(Boolean)).toHaveLength(1);
         const winner = claimA ? database : workerB;
@@ -114,9 +158,9 @@ describe("product Tracking replay through PrismaPg", () => {
           `INSERT INTO "ReconcileWriterEntry" ("worker") VALUES ($1)`,
           claimA ? "worker-a" : "worker-b"
         );
-        const writerRows = await database.$queryRawUnsafe<Array<{ count: bigint }>>(
-          `SELECT count(*)::bigint AS count FROM "ReconcileWriterEntry"`
-        );
+        const writerRows = await database.$queryRawUnsafe<
+          Array<{ count: bigint }>
+        >(`SELECT count(*)::bigint AS count FROM "ReconcileWriterEntry"`);
         expect(Number(writerRows[0].count)).toBe(1);
 
         const tokenA = await claimAuditTracking(
@@ -142,21 +186,56 @@ describe("product Tracking replay through PrismaPg", () => {
         );
         expect(tokenB).toBe("token-stale-b");
         await expect(
-          finalizeAuditTracking(database, "job-stale-claim", tokenA as string, "completed")
+          finalizeAuditTracking(
+            database,
+            "job-stale-claim",
+            tokenA as string,
+            "completed"
+          )
         ).resolves.toBe(0);
         await expect(
-          finalizeAuditTracking(workerB, "job-stale-claim", tokenB as string, "completed")
+          finalizeAuditTracking(
+            workerB,
+            "job-stale-claim",
+            tokenB as string,
+            "completed"
+          )
         ).resolves.toBe(1);
-        const markerRows = await database.$queryRawUnsafe<Array<{ postprocessing: Record<string, unknown> }>>(
+        const markerRows = await database.$queryRawUnsafe<
+          Array<{ postprocessing: Record<string, unknown> }>
+        >(
           `SELECT "postprocessing" FROM "AuditJob" WHERE "id" = 'job-stale-claim'`
         );
-        expect(markerRows[0].postprocessing).toMatchObject({ tracking: "completed" });
-        expect(markerRows[0].postprocessing).toMatchObject({ trackingReconcileToken: null });
+        expect(markerRows[0].postprocessing).toMatchObject({
+          tracking: "completed",
+        });
+        expect(markerRows[0].postprocessing).toMatchObject({
+          trackingReconcileToken: null,
+        });
       } finally {
         await workerB.$disconnect();
       }
       const completedAt = new Date("2026-10-04T00:00:00.000Z");
-      const responses = [{ engineId: "naver-briefing" as const, rawResponse: "provider result", brandMentioned: false, mentionPosition: 1, mentionListSize: 3, sentiment: "neutral" as const, shareOfVoice: 1, errorMessage: null, isStub: false, citedSources: [], durationMs: 1, usage: { inputTokens: 11, outputTokens: 7, costModel: "token" as const } }];
+      const responses = [
+        {
+          engineId: "naver-briefing" as const,
+          rawResponse: "provider result",
+          brandMentioned: false,
+          mentionPosition: 1,
+          mentionListSize: 3,
+          sentiment: "neutral" as const,
+          shareOfVoice: 1,
+          errorMessage: null,
+          isStub: false,
+          citedSources: [],
+          durationMs: 1,
+          usage: {
+            inputTokens: 11,
+            outputTokens: 7,
+            costModel: "token" as const,
+          },
+        },
+      ];
       await database.$executeRawUnsafe(
         `INSERT INTO "AuditJob" ("id", "status", "completedAt", "postprocessing")
          VALUES ('job-replay', 'completed', $1, '{"briefingTracking":"pending"}'::jsonb),
@@ -175,12 +254,19 @@ describe("product Tracking replay through PrismaPg", () => {
       };
       expect(await persistAuditTracking(input)).toBe("completed");
       expect(await persistAuditTracking(input)).toBe("completed");
-      await Promise.all([persistAuditTracking(input), persistAuditTracking(input)]);
+      await Promise.all([
+        persistAuditTracking(input),
+        persistAuditTracking(input),
+      ]);
       const conflictResponse = { ...responses[0], shareOfVoice: 0.5 };
       expect(
         await persistAuditTracking({
           ...input,
-          tagged: toBriefingTaggedResponses([conflictResponse], "브랜드 효과", "ko"),
+          tagged: toBriefingTaggedResponses(
+            [conflictResponse],
+            "브랜드 효과",
+            "ko"
+          ),
         })
       ).toBe("failed");
       await persistAuditTracking({
@@ -197,12 +283,32 @@ describe("product Tracking replay through PrismaPg", () => {
         trackingAxis: "core",
         tagged: coreTagged,
       });
-      await persistAuditTracking({ ...input, auditJobId: "job-core", trackingAxis: "core", tagged: coreTagged });
+      await persistAuditTracking({
+        ...input,
+        auditJobId: "job-core",
+        trackingAxis: "core",
+        tagged: coreTagged,
+      });
       await Promise.all([
-        persistAuditTracking({ ...input, auditJobId: "job-core", trackingAxis: "core", tagged: coreTagged }),
-        persistAuditTracking({ ...input, auditJobId: "job-core", trackingAxis: "core", tagged: coreTagged }),
+        persistAuditTracking({
+          ...input,
+          auditJobId: "job-core",
+          trackingAxis: "core",
+          tagged: coreTagged,
+        }),
+        persistAuditTracking({
+          ...input,
+          auditJobId: "job-core",
+          trackingAxis: "core",
+          tagged: coreTagged,
+        }),
       ]);
-      await persistAuditTracking({ ...input, auditJobId: "job-core-2", trackingAxis: "core", tagged: coreTagged });
+      await persistAuditTracking({
+        ...input,
+        auditJobId: "job-core-2",
+        trackingAxis: "core",
+        tagged: coreTagged,
+      });
       await database.$executeRawUnsafe(
         `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing") VALUES ($1, 'completed', 'org-replay', 'brand-replay', $2, $3::jsonb, '{"tracking":"unknown"}'::jsonb)`,
         "job-reconcile",
@@ -217,20 +323,42 @@ describe("product Tracking replay through PrismaPg", () => {
           })),
         })
       );
-      await expect(reconcileAuditTracking("job-reconcile")).resolves.toBe("completed");
-      await expect(reconcileAuditTracking("job-reconcile")).resolves.toBe("skipped");
-      const rows = await database.$queryRawUnsafe<{ count: bigint }[]>(`SELECT count(*)::bigint AS count FROM "Tracking" WHERE "brandId"=$1 AND "trackedAt"=$2`, "brand-replay", completedAt);
-      console.log(`Tracking row count: ${rows[0].count.toString()} (briefing/core same-run=1 each, second runs/reconcile=5)`);
+      await expect(reconcileAuditTracking("job-reconcile")).resolves.toBe(
+        "completed"
+      );
+      await expect(reconcileAuditTracking("job-reconcile")).resolves.toBe(
+        "skipped"
+      );
+      const rows = await database.$queryRawUnsafe<{ count: bigint }[]>(
+        `SELECT count(*)::bigint AS count FROM "Tracking" WHERE "brandId"=$1 AND "trackedAt"=$2`,
+        "brand-replay",
+        completedAt
+      );
+      console.log(
+        `Tracking row count: ${rows[0].count.toString()} (briefing/core same-run=1 each, second runs/reconcile=5)`
+      );
       expect(Number(rows[0].count)).toBe(5);
-      const comparable = await database.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      const comparable = await database.$queryRawUnsafe<
+        Array<Record<string, unknown>>
+      >(
         `SELECT "trackingRowKey", "rawResponse", "shareOfVoice", "inputTokens", "outputTokens", "costBasis"
          FROM "Tracking" WHERE "trackingRowKey" IN ($1, $2) ORDER BY "trackingRowKey"`,
         "job-core|core|0|naver-briefing",
         "job-reconcile|core|0|naver-briefing"
       );
       expect(comparable).toHaveLength(2);
-      expect(comparable[0]).toMatchObject({ rawResponse: "provider result", shareOfVoice: 1, inputTokens: 11, outputTokens: 7 });
-      expect(comparable[1]).toMatchObject({ rawResponse: "provider result", shareOfVoice: 1, inputTokens: 11, outputTokens: 7 });
+      expect(comparable[0]).toMatchObject({
+        rawResponse: "provider result",
+        shareOfVoice: 1,
+        inputTokens: 11,
+        outputTokens: 7,
+      });
+      expect(comparable[1]).toMatchObject({
+        rawResponse: "provider result",
+        shareOfVoice: 1,
+        inputTokens: 11,
+        outputTokens: 7,
+      });
 
       // Product commit succeeds, but its immediate Tracking writer never runs.
       // The durable leaf marker and captured provider payload must recover it.
@@ -246,55 +374,121 @@ describe("product Tracking replay through PrismaPg", () => {
           engineResponses: [],
         })
       );
-      await commitBriefingResult("job-briefing-crash", "attempt-crash", [{
-        engineId: "naver-briefing",
-        brandMentioned: true,
-        mentionPosition: 1,
-        sentiment: "neutral",
-        sov: 0,
-        durationMs: 1,
-        isStub: false,
-        errorMessage: null,
-        excerpt: "provider result",
-        rawResponse: "provider result",
-        shareOfVoice: 1,
-        usage: { inputTokens: 11, outputTokens: 7, costModel: "token" },
-        trackingInputCaptured: true,
-        promptIndex: 0,
-        promptText: "브랜드 효과",
-        promptLang: "ko",
-      }], "브랜드 효과", "pending");
-      const beforeReplay = await database.$queryRawUnsafe<Array<{ count: bigint }>>(
+      await commitBriefingResult(
+        "job-briefing-crash",
+        "attempt-crash",
+        [
+          {
+            engineId: "naver-briefing",
+            brandMentioned: true,
+            mentionPosition: 1,
+            sentiment: "neutral",
+            sov: 0,
+            durationMs: 1,
+            isStub: false,
+            errorMessage: null,
+            excerpt: "provider result",
+            rawResponse: "provider result",
+            shareOfVoice: 1,
+            usage: { inputTokens: 11, outputTokens: 7, costModel: "token" },
+            trackingInputCaptured: true,
+            promptIndex: 0,
+            promptText: "브랜드 효과",
+            promptLang: "ko",
+          },
+        ],
+        "브랜드 효과",
+        "pending"
+      );
+      const beforeReplay = await database.$queryRawUnsafe<
+        Array<{ count: bigint }>
+      >(
         `SELECT count(*)::bigint AS count FROM "Tracking" WHERE "trackingRowKey" = 'job-briefing-crash|briefing|0|naver-briefing'`
       );
       expect(Number(beforeReplay[0].count)).toBe(0);
-      await expect(sweepAuditTrackingReconciliation(new Date("2026-10-04T00:20:00.000Z")))
-        .resolves.toMatchObject({ completed: 1, failed: 0 });
-      await expect(reconcileBriefingTracking("job-briefing-crash")).resolves.toBe("skipped");
-      const recovered = await database.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      await expect(
+        sweepAuditTrackingReconciliation(new Date("2026-10-04T00:20:00.000Z"))
+      ).resolves.toMatchObject({ completed: 1, failed: 0 });
+      await expect(
+        reconcileBriefingTracking("job-briefing-crash")
+      ).resolves.toBe("skipped");
+      const recovered = await database.$queryRawUnsafe<
+        Array<Record<string, unknown>>
+      >(
         `SELECT "rawResponse", "shareOfVoice", "inputTokens", "outputTokens" FROM "Tracking"
          WHERE "trackingRowKey" = 'job-briefing-crash|briefing|0|naver-briefing'`
       );
-      expect(recovered).toEqual([{ rawResponse: "provider result", shareOfVoice: 1, inputTokens: 11, outputTokens: 7 }]);
-      const recoveredJob = await database.$queryRawUnsafe<Array<{ result: Record<string, unknown>; postprocessing: Record<string, unknown> }>>(
+      expect(recovered).toEqual([
+        {
+          rawResponse: "provider result",
+          shareOfVoice: 1,
+          inputTokens: 11,
+          outputTokens: 7,
+        },
+      ]);
+      const recoveredJob = await database.$queryRawUnsafe<
+        Array<{
+          result: Record<string, unknown>;
+          postprocessing: Record<string, unknown>;
+        }>
+      >(
         `SELECT "result", "postprocessing" FROM "AuditJob" WHERE "id" = 'job-briefing-crash'`
       );
       expect(recoveredJob[0].result.metrics).toEqual({ total: 7 });
-      expect(recoveredJob[0].postprocessing).toMatchObject({ tracking: "completed", briefing: "not_required", briefingTracking: "completed" });
+      expect(recoveredJob[0].postprocessing).toMatchObject({
+        tracking: "completed",
+        briefing: "not_required",
+        briefingTracking: "completed",
+      });
 
       await database.$executeRawUnsafe(
         `INSERT INTO "AuditJob" ("id", "status", "result", "postprocessing") VALUES
          ('job-briefing-race', 'completed', '{"briefingStatus":"completed"}'::jsonb, '{"briefingTracking":"pending"}'::jsonb)`
       );
       const raceAt = new Date("2026-10-04T01:00:00.000Z");
-      const lateWriter = await claimBriefingTracking(database, "job-briefing-race", raceAt, "late-writer");
+      const lateWriter = await claimBriefingTracking(
+        database,
+        "job-briefing-race",
+        raceAt,
+        "late-writer"
+      );
       expect(lateWriter).toBe("late-writer");
-      const secondWorker = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }) });
+      const secondWorker = new PrismaClient({
+        adapter: new PrismaPg({ connectionString, max: 1 }),
+      });
       try {
-        await expect(claimBriefingTracking(secondWorker, "job-briefing-race", new Date(raceAt.getTime() + 9 * 60_000), "too-early")).resolves.toBeNull();
-        await expect(claimBriefingTracking(secondWorker, "job-briefing-race", new Date(raceAt.getTime() + 11 * 60_000), "reconciler")).resolves.toBe("reconciler");
-        await expect(finalizeBriefingTracking(database, "job-briefing-race", "late-writer", "completed")).resolves.toBe(0);
-        await expect(finalizeBriefingTracking(secondWorker, "job-briefing-race", "reconciler", "completed")).resolves.toBe(1);
+        await expect(
+          claimBriefingTracking(
+            secondWorker,
+            "job-briefing-race",
+            new Date(raceAt.getTime() + 9 * 60_000),
+            "too-early"
+          )
+        ).resolves.toBeNull();
+        await expect(
+          claimBriefingTracking(
+            secondWorker,
+            "job-briefing-race",
+            new Date(raceAt.getTime() + 11 * 60_000),
+            "reconciler"
+          )
+        ).resolves.toBe("reconciler");
+        await expect(
+          finalizeBriefingTracking(
+            database,
+            "job-briefing-race",
+            "late-writer",
+            "completed"
+          )
+        ).resolves.toBe(0);
+        await expect(
+          finalizeBriefingTracking(
+            secondWorker,
+            "job-briefing-race",
+            "reconciler",
+            "completed"
+          )
+        ).resolves.toBe(1);
       } finally {
         await secondWorker.$disconnect();
       }
@@ -314,17 +508,26 @@ describe("product Tracking replay through PrismaPg", () => {
         `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
          VALUES ('job-after-terminals', 'completed', 'org-replay', 'brand-replay', $1, $2::jsonb, '{"tracking":"pending"}'::jsonb)`,
         completedAt,
-        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, trackingInputCaptured: true })) })
+        JSON.stringify({
+          engineResponses: coreTagged.map((row) => ({
+            ...row,
+            trackingInputCaptured: true,
+          })),
+        })
       );
       const sweepAt = new Date("2026-10-04T01:00:00.000Z");
       await sweepAuditTrackingReconciliation(sweepAt);
       await sweepAuditTrackingReconciliation(sweepAt);
-      const terminalStates = await database.$queryRawUnsafe<Array<{ state: string; count: bigint }>>(
+      const terminalStates = await database.$queryRawUnsafe<
+        Array<{ state: string; count: bigint }>
+      >(
         `SELECT "postprocessing"->>'tracking' AS state, count(*)::bigint AS count
          FROM "AuditJob" WHERE "id" LIKE 'job-terminal-%' GROUP BY 1`
       );
       expect(terminalStates).toEqual([{ state: "unreplayable", count: 10n }]);
-      const newerState = await database.$queryRawUnsafe<Array<{ state: string }>>(
+      const newerState = await database.$queryRawUnsafe<
+        Array<{ state: string }>
+      >(
         `SELECT "postprocessing"->>'tracking' AS state FROM "AuditJob" WHERE "id" = 'job-after-terminals'`
       );
       expect(newerState).toEqual([{ state: "completed" }]);
@@ -336,12 +539,29 @@ describe("product Tracking replay through PrismaPg", () => {
          VALUES ('job-removed-org', 'completed', 'org-removed', 'brand-replay', $1, $2::jsonb, '{"tracking":"pending"}'::jsonb),
                 ('job-all-stub', 'completed', 'org-replay', 'brand-replay', $1, $3::jsonb, '{"tracking":"pending"}'::jsonb)`,
         completedAt,
-        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, trackingInputCaptured: true })) }),
-        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, isStub: true, trackingInputCaptured: true })) })
+        JSON.stringify({
+          engineResponses: coreTagged.map((row) => ({
+            ...row,
+            trackingInputCaptured: true,
+          })),
+        }),
+        JSON.stringify({
+          engineResponses: coreTagged.map((row) => ({
+            ...row,
+            isStub: true,
+            trackingInputCaptured: true,
+          })),
+        })
       );
-      await expect(reconcileAuditTracking("job-removed-org")).resolves.toBe("skipped");
-      await expect(reconcileAuditTracking("job-all-stub")).resolves.toBe("skipped");
-      const notApplicable = await database.$queryRawUnsafe<Array<{ id: string; state: string }>>(
+      await expect(reconcileAuditTracking("job-removed-org")).resolves.toBe(
+        "skipped"
+      );
+      await expect(reconcileAuditTracking("job-all-stub")).resolves.toBe(
+        "skipped"
+      );
+      const notApplicable = await database.$queryRawUnsafe<
+        Array<{ id: string; state: string }>
+      >(
         `SELECT "id", "postprocessing"->>'tracking' AS state FROM "AuditJob"
          WHERE "id" IN ('job-removed-org', 'job-all-stub') ORDER BY "id"`
       );
@@ -356,11 +576,23 @@ describe("product Tracking replay through PrismaPg", () => {
         `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
          VALUES ('job-seed-later', 'completed', 'org-replay', 'brand-replay', $1, $2::jsonb, '{"tracking":"pending"}'::jsonb)`,
         completedAt,
-        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, engineId: "engine-not-seeded", trackingInputCaptured: true })) })
+        JSON.stringify({
+          engineResponses: coreTagged.map((row) => ({
+            ...row,
+            engineId: "engine-not-seeded",
+            trackingInputCaptured: true,
+          })),
+        })
       );
-      await expect(reconcileAuditTracking("job-seed-later")).resolves.toBe("failed");
-      await expect(reconcileAuditTracking("job-seed-later")).resolves.toBe("skipped");
-      const retryState = await database.$queryRawUnsafe<Array<{ attempts: number; state: string; nextAt: string }>>(
+      await expect(reconcileAuditTracking("job-seed-later")).resolves.toBe(
+        "failed"
+      );
+      await expect(reconcileAuditTracking("job-seed-later")).resolves.toBe(
+        "skipped"
+      );
+      const retryState = await database.$queryRawUnsafe<
+        Array<{ attempts: number; state: string; nextAt: string }>
+      >(
         `SELECT ("postprocessing"->>'trackingReconcileAttempts')::int AS attempts,
                 "postprocessing"->>'tracking' AS state,
                 "postprocessing"->>'trackingNextAttemptAt' AS "nextAt"
@@ -369,7 +601,9 @@ describe("product Tracking replay through PrismaPg", () => {
       expect(retryState[0]).toMatchObject({ attempts: 1, state: "unknown" });
       expect(Date.parse(retryState[0].nextAt)).toBeGreaterThan(Date.now());
       await sweepAuditTrackingReconciliation(new Date());
-      const deferredRetry = await database.$queryRawUnsafe<Array<{ attempts: number }>>(
+      const deferredRetry = await database.$queryRawUnsafe<
+        Array<{ attempts: number }>
+      >(
         `SELECT ("postprocessing"->>'trackingReconcileAttempts')::int AS attempts
          FROM "AuditJob" WHERE "id" = 'job-seed-later'`
       );
@@ -379,9 +613,13 @@ describe("product Tracking replay through PrismaPg", () => {
           `UPDATE "AuditJob" SET "postprocessing" = jsonb_set("postprocessing", '{trackingNextAttemptAt}', to_jsonb('2000-01-01T00:00:00Z'::text), true)
            WHERE "id" = 'job-seed-later'`
         );
-        await expect(reconcileAuditTracking("job-seed-later")).resolves.toBe("failed");
+        await expect(reconcileAuditTracking("job-seed-later")).resolves.toBe(
+          "failed"
+        );
       }
-      const exhausted = await database.$queryRawUnsafe<Array<{ attempts: number; state: string }>>(
+      const exhausted = await database.$queryRawUnsafe<
+        Array<{ attempts: number; state: string }>
+      >(
         `SELECT ("postprocessing"->>'trackingReconcileAttempts')::int AS attempts,
                 "postprocessing"->>'tracking' AS state FROM "AuditJob" WHERE "id" = 'job-seed-later'`
       );
@@ -393,15 +631,32 @@ describe("product Tracking replay through PrismaPg", () => {
          VALUES ('job-briefing-removed-org', 'completed', 'org-removed', 'brand-replay', $1, $2::jsonb,
                  '{"tracking":"completed","briefingTracking":"pending"}'::jsonb)`,
         completedAt,
-        JSON.stringify({ briefingStatus: "completed", briefingPrompt: "브랜드 효과", engineResponses: [{
-          ...responses[0], trackingInputCaptured: true, promptIndex: 0, promptText: "브랜드 효과", promptLang: "ko",
-        }] })
+        JSON.stringify({
+          briefingStatus: "completed",
+          briefingPrompt: "브랜드 효과",
+          engineResponses: [
+            {
+              ...responses[0],
+              trackingInputCaptured: true,
+              promptIndex: 0,
+              promptText: "브랜드 효과",
+              promptLang: "ko",
+            },
+          ],
+        })
       );
-      await expect(reconcileBriefingTracking("job-briefing-removed-org")).resolves.toBe("skipped");
-      const briefingTerminal = await database.$queryRawUnsafe<Array<{ postprocessing: Record<string, unknown> }>>(
+      await expect(
+        reconcileBriefingTracking("job-briefing-removed-org")
+      ).resolves.toBe("skipped");
+      const briefingTerminal = await database.$queryRawUnsafe<
+        Array<{ postprocessing: Record<string, unknown> }>
+      >(
         `SELECT "postprocessing" FROM "AuditJob" WHERE "id" = 'job-briefing-removed-org'`
       );
-      expect(briefingTerminal[0].postprocessing).toMatchObject({ tracking: "completed", briefingTracking: "not_applicable" });
+      expect(briefingTerminal[0].postprocessing).toMatchObject({
+        tracking: "completed",
+        briefingTracking: "not_applicable",
+      });
 
       await database.$executeRawUnsafe(
         `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
@@ -412,13 +667,23 @@ describe("product Tracking replay through PrismaPg", () => {
                  '{"briefingTracking":"pending"}'::jsonb)`,
         completedAt
       );
-      await expect(reconcileAuditTracking("job-malformed-core")).resolves.toBe("skipped");
-      await expect(reconcileBriefingTracking("job-malformed-briefing")).resolves.toBe("skipped");
-      const malformed = await database.$queryRawUnsafe<Array<{ id: string; postprocessing: Record<string, unknown> }>>(
+      await expect(reconcileAuditTracking("job-malformed-core")).resolves.toBe(
+        "skipped"
+      );
+      await expect(
+        reconcileBriefingTracking("job-malformed-briefing")
+      ).resolves.toBe("skipped");
+      const malformed = await database.$queryRawUnsafe<
+        Array<{ id: string; postprocessing: Record<string, unknown> }>
+      >(
         `SELECT "id", "postprocessing" FROM "AuditJob" WHERE "id" LIKE 'job-malformed-%' ORDER BY "id"`
       );
-      expect(malformed[0].postprocessing).toMatchObject({ briefingTracking: "unreplayable" });
-      expect(malformed[1].postprocessing).toMatchObject({ tracking: "unreplayable" });
+      expect(malformed[0].postprocessing).toMatchObject({
+        briefingTracking: "unreplayable",
+      });
+      expect(malformed[1].postprocessing).toMatchObject({
+        tracking: "unreplayable",
+      });
 
       // Even due legacy unknowns must not take every slot ahead of a new
       // pending run. Pending has priority, while retries remain age-bounded.
@@ -435,10 +700,17 @@ describe("product Tracking replay through PrismaPg", () => {
         `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
          VALUES ('job-new-pending', 'completed', 'org-replay', 'brand-replay', $1, $2::jsonb, '{"tracking":"pending"}'::jsonb)`,
         completedAt,
-        JSON.stringify({ engineResponses: coreTagged.map((row) => ({ ...row, trackingInputCaptured: true })) })
+        JSON.stringify({
+          engineResponses: coreTagged.map((row) => ({
+            ...row,
+            trackingInputCaptured: true,
+          })),
+        })
       );
       await sweepAuditTrackingReconciliation(sweepAt);
-      const fairState = await database.$queryRawUnsafe<Array<{ state: string }>>(
+      const fairState = await database.$queryRawUnsafe<
+        Array<{ state: string }>
+      >(
         `SELECT "postprocessing"->>'tracking' AS state FROM "AuditJob" WHERE "id" = 'job-new-pending'`
       );
       expect(fairState).toEqual([{ state: "completed" }]);
@@ -647,10 +919,16 @@ describe("product Tracking replay through PrismaPg", () => {
          VALUES ('chatgpt', 'ChatGPT', 'naver', 'ko')`
       );
       const planned = tagCoreResponses(
-        [[
-          { ...responses[0], engineId: "chatgpt" },
-          { ...responses[0], engineId: "gemini", rawResponse: "gemini result" },
-        ]],
+        [
+          [
+            { ...responses[0], engineId: "chatgpt" },
+            {
+              ...responses[0],
+              engineId: "gemini",
+              rawResponse: "gemini result",
+            },
+          ],
+        ],
         [{ text: "브랜드 추천", lang: "ko", kind: "brand" }]
       );
       const snapshot = JSON.stringify({
@@ -666,8 +944,12 @@ describe("product Tracking replay through PrismaPg", () => {
         completedAt,
         snapshot
       );
-      expect.soft(await reconcileAuditTracking("job-two-engines-one-seed")).toBe("failed");
-      const subset = await database.$queryRawUnsafe<Array<{ count: bigint; state: string }>>(
+      expect
+        .soft(await reconcileAuditTracking("job-two-engines-one-seed"))
+        .toBe("failed");
+      const subset = await database.$queryRawUnsafe<
+        Array<{ count: bigint; state: string }>
+      >(
         `SELECT count(t."id")::bigint AS count, j."postprocessing"->>'tracking' AS state
          FROM "AuditJob" j LEFT JOIN "Tracking" t
            ON t."trackingRowKey" IN ('job-two-engines-one-seed|core|0|chatgpt',
@@ -699,12 +981,16 @@ describe("product Tracking replay through PrismaPg", () => {
         tagged: planned,
       };
       expect(await persistAuditTracking(completeInput)).toBe("completed");
-      expect(await persistAuditTracking({
-        ...completeInput,
-        auditJobId: "job-manifest-partial",
-        tagged: planned,
-      })).toBe("completed");
-      const completeCoreRows = await database.$queryRawUnsafe<Array<{ count: bigint }>>(
+      expect(
+        await persistAuditTracking({
+          ...completeInput,
+          auditJobId: "job-manifest-partial",
+          tagged: planned,
+        })
+      ).toBe("completed");
+      const completeCoreRows = await database.$queryRawUnsafe<
+        Array<{ count: bigint }>
+      >(
         `SELECT count(*)::bigint AS count FROM "Tracking"
          WHERE "trackingRowKey" LIKE 'job-manifest-complete|core|%'`
       );
@@ -718,7 +1004,9 @@ describe("product Tracking replay through PrismaPg", () => {
           "job-manifest-complete|core|0|gemini",
         ],
       };
-      const completeBeforeCrash = await database.$queryRawUnsafe<Array<{ postprocessing: Record<string, unknown> }>>(
+      const completeBeforeCrash = await database.$queryRawUnsafe<
+        Array<{ postprocessing: Record<string, unknown> }>
+      >(
         `SELECT "postprocessing" FROM "AuditJob" WHERE "id" = 'job-manifest-complete'`
       );
       expect.soft(completeBeforeCrash[0].postprocessing).toMatchObject({
@@ -750,7 +1038,9 @@ describe("product Tracking replay through PrismaPg", () => {
       );
       await reconcileAuditTracking("job-manifest-complete");
       await reconcileAuditTracking("job-manifest-partial");
-      const manifestStates = await database.$queryRawUnsafe<Array<{ id: string; state: string }>>(
+      const manifestStates = await database.$queryRawUnsafe<
+        Array<{ id: string; state: string }>
+      >(
         `SELECT "id", "postprocessing"->>'tracking' AS state
          FROM "AuditJob" WHERE "id" LIKE 'job-manifest-%' ORDER BY "id"`
       );
@@ -768,16 +1058,23 @@ describe("product Tracking replay through PrismaPg", () => {
         JSON.stringify({
           briefingStatus: "completed",
           briefingPrompt: "브랜드 효과",
-          engineResponses: [{
-            ...responses[0], trackingInputCaptured: true, promptIndex: 0,
-            promptText: "브랜드 효과", promptLang: "ko",
-          }],
+          engineResponses: [
+            {
+              ...responses[0],
+              trackingInputCaptured: true,
+              promptIndex: 0,
+              promptText: "브랜드 효과",
+              promptLang: "ko",
+            },
+          ],
         })
       );
-      expect(await persistAuditTracking({
-        ...input,
-        auditJobId: "job-manifest-briefing",
-      })).toBe("completed");
+      expect(
+        await persistAuditTracking({
+          ...input,
+          auditJobId: "job-manifest-briefing",
+        })
+      ).toBe("completed");
       await database.$executeRawUnsafe(
         `UPDATE "AuditJob" SET "postprocessing" = "postprocessing" ||
            '{"briefingTracking":"reconciling","briefingTrackingReconcileAttempts":3,
@@ -786,7 +1083,9 @@ describe("product Tracking replay through PrismaPg", () => {
          WHERE "id" = 'job-manifest-briefing'`
       );
       await reconcileBriefingTracking("job-manifest-briefing");
-      const briefingManifest = await database.$queryRawUnsafe<Array<{ postprocessing: Record<string, unknown> }>>(
+      const briefingManifest = await database.$queryRawUnsafe<
+        Array<{ postprocessing: Record<string, unknown> }>
+      >(
         `SELECT "postprocessing" FROM "AuditJob" WHERE "id" = 'job-manifest-briefing'`
       );
       expect.soft(briefingManifest[0].postprocessing).toMatchObject({
@@ -809,17 +1108,26 @@ describe("product Tracking replay through PrismaPg", () => {
         JSON.stringify({
           briefingStatus: "completed",
           briefingPrompt: "브랜드 효과",
-          engineResponses: [{
-            ...responses[0], trackingInputCaptured: true, promptIndex: 0,
-            promptText: "브랜드 효과", promptLang: "ko",
-          }],
+          engineResponses: [
+            {
+              ...responses[0],
+              trackingInputCaptured: true,
+              promptIndex: 0,
+              promptText: "브랜드 효과",
+              promptLang: "ko",
+            },
+          ],
         })
       );
-      expect(await persistAuditTracking({
-        ...input,
-        auditJobId: "job-manifest-briefing-missing",
-      })).toBe("completed");
-      const beforeMissingBriefing = await database.$queryRawUnsafe<Array<{ count: bigint }>>(
+      expect(
+        await persistAuditTracking({
+          ...input,
+          auditJobId: "job-manifest-briefing-missing",
+        })
+      ).toBe("completed");
+      const beforeMissingBriefing = await database.$queryRawUnsafe<
+        Array<{ count: bigint }>
+      >(
         `SELECT count(*)::bigint AS count FROM "Tracking"
          WHERE "trackingRowKey" = 'job-manifest-briefing-missing|briefing|0|naver-briefing'`
       );
@@ -836,26 +1144,30 @@ describe("product Tracking replay through PrismaPg", () => {
          WHERE "id" = 'job-manifest-briefing-missing'`
       );
       await reconcileBriefingTracking("job-manifest-briefing-missing");
-      const missingBriefing = await database.$queryRawUnsafe<Array<{ count: bigint; postprocessing: Record<string, unknown> }>>(
+      const missingBriefing = await database.$queryRawUnsafe<
+        Array<{ count: bigint; postprocessing: Record<string, unknown> }>
+      >(
         `SELECT count(t."id")::bigint AS count, j."postprocessing"
          FROM "AuditJob" j LEFT JOIN "Tracking" t
            ON t."trackingRowKey" = 'job-manifest-briefing-missing|briefing|0|naver-briefing'
          WHERE j."id" = 'job-manifest-briefing-missing'
          GROUP BY j."postprocessing"`
       );
-      expect.soft(missingBriefing).toEqual([{
-        count: 0n,
-        postprocessing: expect.objectContaining({
-          tracking: "completed",
-          briefingTracking: "retry_exhausted",
-          briefingTrackingManifest: {
-            v: 1,
-            brandId: "brand-replay",
-            trackedAt: completedAt.toISOString(),
-            keys: ["job-manifest-briefing-missing|briefing|0|naver-briefing"],
-          },
-        }),
-      }]);
+      expect.soft(missingBriefing).toEqual([
+        {
+          count: 0n,
+          postprocessing: expect.objectContaining({
+            tracking: "completed",
+            briefingTracking: "retry_exhausted",
+            briefingTrackingManifest: {
+              v: 1,
+              brandId: "brand-replay",
+              trackedAt: completedAt.toISOString(),
+              keys: ["job-manifest-briefing-missing|briefing|0|naver-briefing"],
+            },
+          }),
+        },
+      ]);
 
       // A stale writer with the wrong claim token must roll its rows back.
       await database.$executeRawUnsafe(
@@ -866,22 +1178,31 @@ describe("product Tracking replay through PrismaPg", () => {
         completedAt,
         snapshot
       );
-      expect(await persistAuditTracking({
-        ...completeInput,
-        auditJobId: "job-manifest-lost-token",
-        trackingClaimToken: "loser",
-      })).toBe("failed");
-      const lostToken = await database.$queryRawUnsafe<Array<{ count: bigint; postprocessing: Record<string, unknown> }>>(
+      expect(
+        await persistAuditTracking({
+          ...completeInput,
+          auditJobId: "job-manifest-lost-token",
+          trackingClaimToken: "loser",
+        })
+      ).toBe("failed");
+      const lostToken = await database.$queryRawUnsafe<
+        Array<{ count: bigint; postprocessing: Record<string, unknown> }>
+      >(
         `SELECT count(t."id")::bigint AS count, j."postprocessing"
          FROM "AuditJob" j LEFT JOIN "Tracking" t
            ON t."trackingRowKey" LIKE 'job-manifest-lost-token|core|%'
          WHERE j."id" = 'job-manifest-lost-token'
          GROUP BY j."postprocessing"`
       );
-      expect.soft(lostToken).toEqual([{
-        count: 0n,
-        postprocessing: { tracking: "reconciling", trackingReconcileToken: "winner" },
-      }]);
+      expect.soft(lostToken).toEqual([
+        {
+          count: 0n,
+          postprocessing: {
+            tracking: "reconciling",
+            trackingReconcileToken: "winner",
+          },
+        },
+      ]);
     } finally {
       await database.$disconnect();
     }
