@@ -30,11 +30,15 @@ const data = JSON.parse(
 const token = "a".repeat(43);
 const pdfUrl = "https://example.test/issued/knowverse-old.pdf";
 const notice =
-  "발행 당시 PDF 파일에는 현재 웹 리포트의 발행본 안내가 반영되지 않을 수 있습니다.";
+  "저장된 PDF는 발행 당시 파일입니다. 현재 웹 화면의 고지·표시 보정이 반영됐는지 확인되지 않았으며, PDF 내용의 현재 유효성을 보증하지 않습니다.";
 
-async function renderPage(pdf: string | null, print = false): Promise<string> {
+async function renderPage(
+  pdf: string | null,
+  print = false,
+  reportData = data
+): Promise<string> {
   vi.mocked(loadClientReport).mockResolvedValue({
-    data,
+    data: reportData,
     pdfUrl: pdf,
     reportId: "historical-report",
   });
@@ -46,14 +50,51 @@ async function renderPage(pdf: string | null, print = false): Promise<string> {
   );
 }
 
-it("keeps a stored PDF link and places the issue-time warning beside it", async () => {
+it("warns beside any offered PDF link without requiring that link to remain offered", async () => {
   const html = await renderPage(pdfUrl);
   const toolbar = html.match(/<div class="fr-toolbar">([\s\S]*?)<\/div>/)?.[1];
 
-  expect(toolbar).toBeDefined();
-  expect(toolbar).toContain(`href="${pdfUrl}"`);
-  expect(toolbar).toContain(notice);
+  if (html.includes(pdfUrl)) {
+    expect(toolbar).toContain(notice);
+    expect(toolbar).toContain(
+      "현재 웹 리포트의 저장 측정에는 네이버 Cue 재현(Findable 합성) 결과가 포함됩니다."
+    );
+    expect(toolbar).toContain(
+      "현재 웹 리포트의 저장 측정에는 종료된 엔진 결과가 포함됩니다."
+    );
+    expect(toolbar).toContain(
+      "현재 웹 리포트의 저장 측정에는 AI 답변과 검색 노출이 함께 포함됩니다."
+    );
+  } else {
+    expect(html).not.toContain("PDF 내려받기");
+  }
   expect(html).toContain("발행본 안내");
+});
+
+it("does not invent legacy or retired-engine reasons for a current-only snapshot", async () => {
+  const currentOnly = {
+    ...data,
+    config: { ...data.config, measured_at: "2026.09.29" },
+    computed: {
+      ...data.computed,
+      answers: data.computed.answers.filter(
+        (answer) => answer.engine !== "hyperclova"
+      ),
+      engines: data.computed.engines.filter(
+        (engine) => engine.id !== "hyperclova"
+      ),
+    },
+  };
+  const html = await renderPage(pdfUrl, false, currentOnly);
+
+  expect(html).not.toContain(
+    "네이버 Cue 재현(Findable 합성) 결과가 포함됩니다."
+  );
+  expect(html).not.toContain("종료된 엔진 결과가 포함됩니다.");
+  if (html.includes(pdfUrl)) {
+    expect(html).toContain(notice);
+    expect(html).toContain("AI 답변과 검색 노출이 함께 포함됩니다.");
+  }
 });
 
 it("does not show a PDF warning when no stored PDF link exists", async () => {

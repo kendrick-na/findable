@@ -89,9 +89,28 @@ export default async function ClientReportPage({
             PDF 내려받기 (발행 당시 파일)
           </a>
           <p className="fr-pdf-notice">
-            발행 당시 PDF 파일에는 현재 웹 리포트의 발행본 안내가 반영되지 않을
-            수 있습니다.
+            저장된 PDF는 발행 당시 파일입니다. 현재 웹 화면의 고지·표시 보정이
+            반영됐는지 확인되지 않았으며, PDF 내용의 현재 유효성을 보증하지
+            않습니다.
           </p>
+          {disclosure.legacySyntheticEngineIds.includes("naver") ? (
+            <p className="fr-pdf-notice">
+              현재 웹 리포트의 저장 측정에는 네이버 Cue 재현(Findable 합성)
+              결과가 포함됩니다.
+            </p>
+          ) : null}
+          {disclosure.retiredEngineIds.length > 0 ? (
+            <p className="fr-pdf-notice">
+              현재 웹 리포트의 저장 측정에는 종료된 엔진 결과가 포함됩니다.
+            </p>
+          ) : null}
+          {disclosure.measurementMix.directAiAnswers > 0 &&
+          disclosure.measurementMix.searchExposureAnswers > 0 ? (
+            <p className="fr-pdf-notice">
+              현재 웹 리포트의 저장 측정에는 AI 답변과 검색 노출이 함께
+              포함됩니다.
+            </p>
+          ) : null}
         </div>
       ) : null}
       {!print && disclosure.isFrozenSnapshot ? (
