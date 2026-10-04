@@ -13,6 +13,7 @@ import { requireAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import { resolveAdminOrgPlan } from "@/lib/admin/effective-plan";
 import type { SiteReadinessReport } from "@/lib/site-readiness/types";
 
 const NOTE_MAX_LENGTH = 2000;
@@ -98,7 +99,16 @@ export interface ConsultingNote {
 export interface ConsultingWorkspace {
   brands: ConsultingBrand[];
   notes: ConsultingNote[];
-  organization: { id: string; name: string; plan: string };
+  organization: {
+    /** 원본 `Organization.plan`(초대·관리자 부여분). 결제 권한은 Clerk 에 있다. */
+    dbPlan: string;
+    id: string;
+    name: string;
+    /** 실효 플랜 — `resolveOrganizationPlan`(cron 과 같은 판정). */
+    plan: string;
+    /** false = Clerk 조회 실패 → DB 부여분만으로 계산(미확인). */
+    planVerified: boolean;
+  };
 }
 
 function recordOf(value: unknown): Record<string, unknown> | null {
@@ -233,6 +243,9 @@ export async function getConsultingWorkspace(
       id: true,
       name: true,
       plan: true,
+      planExpiresAt: true,
+      ownerId: true,
+      users: { select: { id: true } },
       brands: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -307,12 +320,24 @@ export async function getConsultingWorkspace(
   if (!organization) {
     return null;
   }
+  // 결제 권한은 Clerk 에 있다 — DB plan 만 보면 결제 고객이 free 로 보인다. 실패해도 throw 안 함.
+  const planView = await resolveAdminOrgPlan({
+    id: organization.id,
+    plan: organization.plan,
+    planExpiresAt: organization.planExpiresAt ?? null,
+    memberIds: [
+      organization.ownerId,
+      ...(organization.users ?? []).map((u) => u.id),
+    ].filter((id): id is string => typeof id === "string"),
+  });
 
   return {
     organization: {
       id: organization.id,
       name: organization.name,
-      plan: organization.plan,
+      plan: planView.effectivePlan,
+      dbPlan: organization.plan,
+      planVerified: planView.verified,
     },
     brands: organization.brands.map((brand) => {
       const audits = brand.auditJobs.map(toAuditSnapshot);

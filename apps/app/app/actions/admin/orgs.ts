@@ -7,6 +7,7 @@ import { grantPlan } from "@repo/auth/plan-grant";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import { resolveAdminOrgPlans } from "@/lib/admin/effective-plan";
 import { readinessUrlMatchesBrand } from "@/lib/site-readiness/brand-domain";
 import {
   createSiteReadinessRun,
@@ -29,10 +30,12 @@ import {
  */
 
 export interface OrgRow {
-  /** 자동 재측정 주기(시간). null = 수동만(free). */
+  /** 자동 재측정 주기(시간). null = 수동만(free). 실효 플랜 기준(cron 과 같은 판정). */
   autoRefreshHours: number | null;
   brandCount: number;
   createdAt: Date;
+  /** 원본 `Organization.plan` — 초대·관리자 부여분만 담긴다(결제는 Clerk). 보조 표시용. */
+  dbPlan: Plan;
   id: string;
   /** 최신 GEO 점수의 대상 브랜드. */
   latestGeoBrandName: string | null;
@@ -40,9 +43,12 @@ export interface OrgRow {
   latestGeoScore: number | null;
   memberCount: number;
   name: string;
+  /** 실효 플랜 — DB 부여 + Clerk 결제·파트너 권한(`resolveOrganizationPlan`). */
   plan: Plan;
   /** 만료일. 초대 코드로 받은 기간이 여기 보인다. null = 만료 없음(정상 유료·free). */
   planExpiresAt: Date | null;
+  /** false = Clerk 조회 실패 → 실효 플랜이 DB 부여분만으로 계산됨(미확인). */
+  planVerified: boolean;
   /** 브랜드는 있으나 사이트 준비도 실행 이력이 없는 수. */
   readinessMissingCount: number;
   /** 이 조직이 실제로 측정을 돌렸는지 — "가입만 하고 안 쓰는" 곳을 가른다. */
@@ -60,10 +66,21 @@ export async function listOrgs(): Promise<OrgRow[]> {
       plan: true,
       planExpiresAt: true,
       createdAt: true,
+      ownerId: true,
+      users: { select: { id: true } },
       _count: { select: { brands: true, users: true } },
     },
     take: 200,
   });
+  // 결제 권한은 Clerk 에 있다 — DB plan 만 보면 결제 고객이 free 로 보인다. 실패해도 throw 안 함.
+  const planViews = await resolveAdminOrgPlans(
+    orgs.map((o) => ({
+      id: o.id,
+      plan: o.plan,
+      planExpiresAt: o.planExpiresAt,
+      memberIds: [o.ownerId, ...o.users.map((u) => u.id)],
+    }))
+  );
 
   // 측정 횟수는 브랜드를 거쳐야 한다(Tracking 은 org 직결이 아니다).
   const trackingByOrg = await database.tracking.groupBy({
@@ -130,20 +147,29 @@ export async function listOrgs(): Promise<OrgRow[]> {
     }
   }
 
-  return orgs.map((o) => ({
-    id: o.id,
-    name: o.name,
-    plan: o.plan,
-    planExpiresAt: o.planExpiresAt,
-    createdAt: o.createdAt,
-    brandCount: o._count.brands,
-    memberCount: o._count.users,
-    latestGeoScore: latestGeoByOrg.get(o.id)?.score ?? null,
-    latestGeoBrandName: latestGeoByOrg.get(o.id)?.brandName ?? null,
-    trackingCount: trackingCount.get(o.id) ?? 0,
-    readinessMissingCount: readinessMissingCount.get(o.id) ?? 0,
-    autoRefreshHours: planCapabilities(o.plan).autoRefreshHours,
-  }));
+  return orgs.map((o) => {
+    const view = planViews.get(o.id) ?? {
+      dbPlan: o.plan,
+      effectivePlan: o.plan,
+      verified: false,
+    };
+    return {
+      id: o.id,
+      name: o.name,
+      plan: view.effectivePlan,
+      dbPlan: view.dbPlan,
+      planVerified: view.verified,
+      planExpiresAt: o.planExpiresAt,
+      createdAt: o.createdAt,
+      brandCount: o._count.brands,
+      memberCount: o._count.users,
+      latestGeoScore: latestGeoByOrg.get(o.id)?.score ?? null,
+      latestGeoBrandName: latestGeoByOrg.get(o.id)?.brandName ?? null,
+      trackingCount: trackingCount.get(o.id) ?? 0,
+      readinessMissingCount: readinessMissingCount.get(o.id) ?? 0,
+      autoRefreshHours: planCapabilities(view.effectivePlan).autoRefreshHours,
+    };
+  });
 }
 
 /**
