@@ -405,6 +405,49 @@ describe("audit route tenant boundary", () => {
     expect(html).toContain("private.example");
   });
 
+  test("OG AI claim excludes a Naver-only search mention and discloses legacy missing rows", async () => {
+    const payload = {
+      domain: "example.com",
+      result: {
+        brandName: "Example",
+        mentionVerdictVersion: 2,
+        metrics: {
+          ...privateJob.result.metrics,
+          enginesCovered: ["chatgpt", "naver"],
+          enginesWithMention: ["naver"],
+          verifiedCount: 10,
+          unverifiedCount: 0,
+        },
+        engineResponses: [
+          { engineId: "chatgpt", brandMentioned: false, promptKind: "brand" },
+          { engineId: "naver", brandMentioned: true, promptKind: "brand" },
+        ],
+      },
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json(payload)
+    );
+    try {
+      const image = await auditOg(request(), params);
+      const html = renderToStaticMarkup(
+        (image as unknown as { element: React.ReactElement }).element
+      );
+      expect(html).toContain("AI 엔진 1곳 중 0곳에서 확인");
+      expect(html).not.toContain("2곳 중 1곳");
+
+      fetchMock.mockResolvedValueOnce(
+        Response.json({ ...payload, result: { ...payload.result, engineResponses: undefined } })
+      );
+      const legacy = await auditOg(request(), params);
+      const legacyHtml = renderToStaticMarkup(
+        (legacy as unknown as { element: React.ReactElement }).element
+      );
+      expect(legacyHtml).toContain("AI 답변별 집계 정보 없음");
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   test("SetNull legacy org marker remains readable by its active org", async () => {
     mocks.findUnique.mockResolvedValue({ ...privateJob, organizationId: null });
     mocks.auth.mockResolvedValue({ userId: "owner", orgId: "owner-org" });

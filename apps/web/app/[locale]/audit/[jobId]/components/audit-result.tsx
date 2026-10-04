@@ -34,6 +34,7 @@ import {
   summarizeAnswerBuckets,
 } from "@repo/audit/answer-buckets";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
+import { countBrandAiRecognition } from "@repo/audit/brand-ai-recognition";
 import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 import { engineDisplayName } from "@repo/audit/engine-labels";
 import {
@@ -4591,7 +4592,7 @@ function buildUpsellCopy({
     if (isKo) {
       return {
         headline: `${brandName}의 AI 검색 성적표예요 — 우리 브랜드는 어떨까요?`,
-        bodyCopy: `이 진단은 ChatGPT·Perplexity·네이버 등 AI ${measuredCount}곳에 실제로 물어본 결과예요. 도메인만 넣으면 3분 만에 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`,
+        bodyCopy: `이 진단은 ChatGPT·Perplexity 등 AI ${measuredCount}곳에 실제로 물어본 결과예요. 도메인만 넣으면 3분 만에 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`,
       };
     }
     return {
@@ -4678,16 +4679,12 @@ function UpsellCard({
   // 실주소가 필요하므로 여기선 prefill 을 걸지 않고, 대신 "어떤 주소로" 가입해야 하는지
   // 화면에 명시한다(마스킹 노출 원칙 유지). 사용자가 직접 입력 → 오연결 위험 제거.
   const sov = Math.round(result.metrics.sov);
-  const mentionedCount = new Set(result.metrics.enginesWithMention).size;
   // 🔴 세션N-28 — 여기도 분모를 직접 셌다(`enginesCovered` 고유화 = 오류·stub 안 뺌).
   //   이번 회차엔 우연히 같은 값이 나왔지만, 전부 실패한 엔진이 섞이면 업셀 카피가
   //   "AI 8곳 중 7곳"처럼 **재보지도 못한 엔진을 분모에 넣는다**.
   //   `isFullCoverage` 판정(= 전 엔진 인지)도 이 값으로 갈리므로 문장이 뒤집힌다.
-  const measuredCount = countMeasurementCoverage(
-    result.engineResponses.filter(
-      (r) => answerGroup(r.engineId) === "ai" && !isDiscoveryAnswer(r)
-    )
-  ).measured;
+  const { measured: measuredCount, mentioned: mentionedCount } =
+    countBrandAiRecognition(result.engineResponses);
 
   const { headline, bodyCopy } = buildUpsellCopy({
     isKo,

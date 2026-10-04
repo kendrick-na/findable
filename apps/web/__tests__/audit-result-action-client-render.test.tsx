@@ -213,6 +213,32 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     expect(container.textContent).not.toContain("AI 2곳 중 1곳");
   });
 
+  it("네이버 검색만 발견되어도 AI가 브랜드를 안다고 주장하지 않는다", async () => {
+    const searchOnly = structuredClone(response);
+    for (const row of searchOnly.result.engineResponses) {
+      row.brandMentioned = row.engineId === "naver";
+    }
+    searchOnly.result.metrics.enginesWithMention = ["naver"];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify(searchOnly), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
+    expect(container.textContent).toContain("아는 AI는 1곳 중 0곳");
+    expect(container.textContent).not.toContain("AI 1곳 모두가 우리를 알아봤어요");
+  });
+
   it.each([
     ["ko", "적용 채널", "네이버 검색 노출", "수정 위치", "검증 방법", "근거 보통"],
     ["en", "Measurement channels", "Naver search exposure", "Where to change", "How to verify", "Evidence: medium"],
