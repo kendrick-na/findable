@@ -967,8 +967,8 @@ export function ClientReport({
         <div>
           <h2>AI가 먼저 찾는 브랜드로.</h2>
           <p>
-            Findable은 ChatGPT·Gemini·네이버 등 AI가 우리 브랜드를 어떻게
-            설명하는지 측정하고,
+            Findable은 AI 답변과 검색 노출을 구분해 우리 브랜드가 어떻게
+            나타나는지 살펴보고,
             <br />
             무엇을 고치면 되는지 우선순위로 알려드립니다.
           </p>
