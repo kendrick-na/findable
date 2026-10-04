@@ -11,6 +11,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/client";
 import { connectionSchema } from "./db-target-fingerprint";
 
+// Neon computes scale to zero; waking one can exceed Prisma's 2s maxWait (P2028
+// observed against a scaled-to-zero Neon branch on 2026-10-05).
+const INSPECTION_TX = { maxWait: 20_000, timeout: 60_000 } as const;
+
 export interface RepoMigration {
   checksum: string;
   name: string;
@@ -123,7 +127,7 @@ export async function readMigrationBaseline(
         `SELECT migration_name, checksum, finished_at, rolled_back_at
            FROM "_prisma_migrations"`
       );
-    });
+    }, INSPECTION_TX);
     if (rows === null) {
       return {
         ...evaluateMigrationBaseline(repo, []),

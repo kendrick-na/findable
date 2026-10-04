@@ -7,6 +7,10 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/client";
 
+// Neon computes scale to zero; waking one can exceed Prisma's 2s maxWait (P2028
+// observed against a scaled-to-zero Neon branch on 2026-10-05).
+const INSPECTION_TX = { maxWait: 20_000, timeout: 60_000 } as const;
+
 export interface EngineSeedVerdict {
   missing: string[];
   ok: boolean;
@@ -38,7 +42,7 @@ export async function readEngineSeedState(
       return tx.$queryRawUnsafe<{ id: string }[]>(
         'SELECT id FROM "public"."Engine"'
       );
-    });
+    }, INSPECTION_TX);
     return evaluateEngineSeed(rows, required);
   } finally {
     await prisma.$disconnect();
