@@ -138,3 +138,11 @@ export function isPaidEvent(type: string): boolean {
 export function isFullCancellationEvent(type: string): boolean {
   return type === "Transaction.Cancelled";
 }
+
+/**
+ * 결제(예약 결제 포함) 실패 이벤트. PortOne V2 는 `Transaction.Failed` 를 쓴다.
+ * 첫 결제 실패와 갱신 회차 실패가 같은 타입이라, 호출부가 갱신 회차인지 따로 가려야 한다.
+ */
+export function isFailedEvent(type: string): boolean {
+  return type === "Transaction.Failed";
+}
