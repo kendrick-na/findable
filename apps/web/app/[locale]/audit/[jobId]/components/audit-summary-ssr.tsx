@@ -85,8 +85,8 @@ export const AuditSummarySsr = ({ job, locale }: Props) => {
       </summary>
       <h2 className="mt-3 font-semibold text-lg text-zinc-100">
         {isKo
-          ? `${brand} — AI 답변 가시성 진단 결과`
-          : `${brand} — AI visibility audit result`}
+          ? `${brand} — AI·검색 가시성 진단 결과`
+          : `${brand} — AI and search visibility audit result`}
       </h2>
       <p className="mt-2 text-sm text-zinc-300">
         {isKo
@@ -103,7 +103,7 @@ export const AuditSummarySsr = ({ job, locale }: Props) => {
       <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-400">
         {sov !== null && (
           <li>
-            {isKo ? "등장률" : "Share of voice"}{" "}
+            {isKo ? "AI·검색 합산 등장률" : "AI and search appearance rate"}{" "}
             <span className="font-semibold text-zinc-100 tabular-nums">
               {sov}%
             </span>
@@ -111,8 +111,8 @@ export const AuditSummarySsr = ({ job, locale }: Props) => {
         )}
         <li>
           {isKo
-            ? "엔진 기준 · 우리를 말한 AI"
-            : "Per engine · AIs that mention us"}{" "}
+            ? "엔진 기준 · AI·검색 노출 확인"
+            : "Per source · AI answer or search exposure found"}{" "}
           <span className="font-semibold text-zinc-100 tabular-nums">
             {engineMentioned}/{engineTotal}
           </span>

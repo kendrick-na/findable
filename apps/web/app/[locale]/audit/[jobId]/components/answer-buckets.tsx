@@ -382,6 +382,15 @@ function MatrixRow({
   );
 }
 
+function excludedSearchCopy(isKo: boolean) {
+  return {
+    label: isKo ? "집계 제외 · 이름 없는 검색" : "Excluded · unbranded search",
+    reason: isKo
+      ? "이름 없는 검색 결과는 AI 추천이나 브랜드 질문 검색 노출로 집계하지 않습니다."
+      : "Unbranded search results are not counted as AI recommendations or branded search exposure.",
+  };
+}
+
 function CurrentMatrixRow({
   row,
   isKo,
@@ -395,22 +404,36 @@ function CurrentMatrixRow({
   const [open, setOpen] = useState(false);
   const bucket = classifyAnswer(row);
   const isSearch = answerGroup(row.engineId) === "search";
+  const excludedDiscoverySearch = isSearch && isDiscoveryAnswer(row);
+  let displayBucket: string = bucket;
+  if (retired) {
+    displayBucket = "retired";
+  } else if (excludedDiscoverySearch) {
+    displayBucket = "excluded_discovery_search";
+  }
+  const excludedCopy = excludedSearchCopy(isKo);
+  let excludedLabel = excludedCopy.label;
+  if (retired) {
+    excludedLabel = isKo
+      ? "집계 제외 · 서비스 종료"
+      : "Excluded · service ended";
+  }
   const hasText = bucket !== "engine_error" && Boolean(row.excerpt);
   const full = hasText ? stripMarkdown(row.excerpt) : "";
   const short = hasText ? preview(row.excerpt) : "";
   return (
     <li
       className="grid gap-2 border-white/5 border-t px-4 py-3 first:border-t-0 sm:grid-cols-[12rem_1fr] sm:gap-4"
-      data-bucket={retired ? "retired" : bucket}
+      data-bucket={displayBucket}
     >
       <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-start">
         <span className="font-medium text-sm text-zinc-100">
           {engineDisplayName(row.engineId, isKo)}
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
-          {retired ? (
+          {retired || excludedDiscoverySearch ? (
             <span className="inline-flex self-start whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-medium text-xs text-zinc-400">
-              {isKo ? "집계 제외 · 서비스 종료" : "Excluded · service ended"}
+              {excludedLabel}
             </span>
           ) : (
             <AnswerBucketPill bucket={bucket} isKo={isKo} />
@@ -424,7 +447,9 @@ function CurrentMatrixRow({
       </div>
       <div className="min-w-0">
         <p className="break-keep text-xs text-zinc-400">
-          {answerReason(row, isKo)}
+          {excludedDiscoverySearch
+            ? excludedCopy.reason
+            : answerReason(row, isKo)}
         </p>
         {hasText && (
           <p className="mt-1 whitespace-pre-line text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]">
@@ -492,8 +517,8 @@ export function QuestionEngineMatrix({
         </div>
         <p className="mt-1.5 break-keep text-xs text-zinc-500 leading-relaxed">
           {isKo
-            ? `이번 측정에서 던진 질문 ${groups.length}개와 엔진별 답변 전부예요. 답변마다 위 4가지 중 어디에 들어갔는지와 그 이유를 적었어요. 날짜별 변화는 대시보드의 ‘추적 질문’에서 볼 수 있어요.`
-            : `All ${groups.length} questions from this run and every engine's answer, each with its category and reason. Track changes over time in the dashboard.`}
+            ? `이번 측정에서 던진 질문 ${groups.length}개와 엔진별 답변 전부예요. 집계 대상은 판정과 이유를, 제외 대상은 제외 사유를 표시합니다. 날짜별 변화는 대시보드의 ‘추적 질문’에서 볼 수 있어요.`
+            : `All ${groups.length} questions from this run and every engine's answer. Counted answers show their category and reason; excluded rows show why. Track changes over time in the dashboard.`}
         </p>
       </div>
       <EngineLegend isKo={isKo} rows={rows} />

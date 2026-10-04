@@ -4,7 +4,9 @@ import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("@repo/analytics", () => ({
   analytics: { capture: vi.fn() },
@@ -19,34 +21,31 @@ vi.mock("@repo/design-system/components/ui/button", () => ({
     asChild: _asChild,
     children,
     ...props
-  }: { asChild?: boolean; children?: ReactNode }) =>
-    <button {...props}>{children}</button>,
+  }: {
+    asChild?: boolean;
+    children?: ReactNode;
+  }) => <button {...props}>{children}</button>,
 }));
-vi.mock(
-  "../app/[locale]/audit/[jobId]/components/answer-buckets",
-  () => ({
-    AnswerBucketBoard: () => <div />,
-    AnswerBucketPill: () => <div />,
-    BrandNameMismatchNotice: () => null,
-    QuestionEngineMatrix: () => <div />,
-  })
-);
+vi.mock("../app/[locale]/audit/[jobId]/components/answer-buckets", () => ({
+  AnswerBucketBoard: () => <div />,
+  AnswerBucketPill: () => <div />,
+  BrandNameMismatchNotice: () => null,
+  QuestionEngineMatrix: () => <div />,
+}));
 vi.mock(
   "../app/[locale]/audit/[jobId]/components/competitor-benchmark",
   () => ({ CompetitorBenchmark: () => <div /> })
 );
-vi.mock(
-  "../app/[locale]/audit/[jobId]/components/naver-vs-ai-gap",
-  () => ({ NaverVsAiGap: () => <div /> })
-);
+vi.mock("../app/[locale]/audit/[jobId]/components/naver-vs-ai-gap", () => ({
+  NaverVsAiGap: () => <div />,
+}));
 vi.mock(
   "../app/[locale]/audit/[jobId]/components/provisional-evidence-view",
   () => ({ ProvisionalEvidenceView: () => <div /> })
 );
-vi.mock(
-  "../app/[locale]/audit/[jobId]/components/truth-mirror",
-  () => ({ TruthMirror: () => <div /> })
-);
+vi.mock("../app/[locale]/audit/[jobId]/components/truth-mirror", () => ({
+  TruthMirror: () => <div />,
+}));
 
 import { AuditResultView } from "../app/[locale]/audit/[jobId]/components/audit-result";
 
@@ -190,46 +189,169 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify(response), {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        })
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(response), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          })
       )
     );
   });
 
-  it.each([
-    ["ko", "적용 채널", "네이버 검색 노출", "수정 위치", "검증 방법", "근거 보통"],
-    ["en", "Measurement channels", "Naver search exposure", "Where to change", "How to verify", "Evidence: medium"],
-  ])(
-    "%s에서 신규·저장 action data가 실제 카드로 매핑된다",
-    async (locale, channelLabel, naverLabel, whereLabel, verifyLabel, gradeLabel) => {
-      const container = document.createElement("div");
-      document.body.appendChild(container);
-      root = createRoot(container);
-      await act(async () => {
-        root?.render(<AuditResultView jobId="fixture-job" locale={locale} />);
-      });
-      await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
-      const html = container.textContent ?? "";
-      const actionSection = Array.from(container.querySelectorAll("section")).find(
-        (section) =>
-          section.textContent?.includes("그래서 뭘 하면 되나") ||
-          section.textContent?.includes("What to actually do")
+  it("shows the correction disclosure if SSR lookup missed it, without duplicating SSR", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ ...response, metricBasisChanged: true })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "검증·집계 기준을 다시 적용");
+    expect(
+      container.querySelectorAll("[data-testid='audit-metric-basis-notice']")
+    ).toHaveLength(1);
+
+    await act(() => {
+      root?.render(
+        <AuditResultView
+          correctionNoticeShown
+          jobId="fixture-job"
+          locale="ko"
+        />
       );
-      const actionHtml = actionSection?.textContent ?? "";
-      expect(html).toContain("네이버 검색에 잡힐 글을 올리세요");
-      expect(actionSection).toBeTruthy();
-      expect(actionHtml).toContain("네이버 블로그에 꾸준히 글을 올리세요");
-      expect(actionHtml).toContain(channelLabel);
-      expect(actionHtml).toContain(naverLabel);
-      expect(actionHtml).toContain(whereLabel);
-      expect(actionHtml).toContain(verifyLabel);
-      expect(actionHtml).toContain(gradeLabel);
-      expect(actionHtml).toMatch(/do not prove an effect|효과를 입증하지 않습니다/);
-      expect(actionHtml).not.toContain("Naver AI Briefing");
-      expect(actionHtml).not.toContain("HyperCLOVA X");
+    });
+    expect(
+      container.querySelectorAll("[data-testid='audit-metric-basis-notice']")
+    ).toHaveLength(0);
+  });
+
+  it("shows an advice-only correction if SSR lookup missed it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ ...response, adviceBasisChanged: true })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "저장된 일부 실행 권고");
+    expect(container.textContent).not.toContain("수치가 재계산");
+    expect(
+      container.querySelectorAll("[data-testid='audit-metric-basis-notice']")
+    ).toHaveLength(1);
+  });
+
+  it("네이버 검색 노출을 무료 업셀의 AI 엔진 수에 넣지 않는다", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
+    expect(container.textContent).toContain(
+      "측정한 AI 1곳 모두에서 이번 회차에 한 번 이상 우리 브랜드로 확인됐어요"
+    );
+    expect(container.textContent).not.toContain("AI 2곳 중 1곳");
+    // Stored GEO SoV=50 mixes search; all ten AI answers in this fixture are confirmed.
+    expect(container.textContent).toContain("AI 답변 등장률은 100%예요");
+    expect(container.textContent).not.toContain("AI 답변 등장률은 50%예요");
+    expect(container.textContent).toContain("성공한 AI·검색 응답 중");
+    expect(container.textContent).not.toContain(
+      "성공한 AI 답변 중 우리 브랜드가 등장한 비율"
+    );
+  });
+
+  it("네이버 검색만 발견되어도 AI가 브랜드를 안다고 주장하지 않는다", async () => {
+    const searchOnly = structuredClone(response);
+    for (const row of searchOnly.result.engineResponses) {
+      row.brandMentioned = row.engineId === "naver";
     }
-  );
+    searchOnly.result.metrics.enginesWithMention = ["naver"];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(searchOnly), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
+    expect(container.textContent).toContain(
+      "이번 측정에서 우리 브랜드로 확인된 AI 답변은 없어요"
+    );
+    expect(container.textContent).toContain(
+      "판정보류·동명 회사는 아래 원문에서 구분"
+    );
+    expect(container.textContent).not.toContain(
+      "AI 1곳 모두가 우리를 알아봤어요"
+    );
+  });
+
+  it.each([
+    [
+      "ko",
+      "적용 채널",
+      "네이버 검색 노출",
+      "수정 위치",
+      "검증 방법",
+      "근거 보통",
+    ],
+    [
+      "en",
+      "Measurement channels",
+      "Naver search exposure",
+      "Where to change",
+      "How to verify",
+      "Evidence: medium",
+    ],
+  ])("%s에서 신규·저장 action data가 실제 카드로 매핑된다", async (locale, channelLabel, naverLabel, whereLabel, verifyLabel, gradeLabel) => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<AuditResultView jobId="fixture-job" locale={locale} />);
+    });
+    await waitForText(container, "네이버 검색에 잡힐 글을 올리세요");
+    const html = container.textContent ?? "";
+    const actionSection = Array.from(
+      container.querySelectorAll("section")
+    ).find(
+      (section) =>
+        section.textContent?.includes("그래서 뭘 하면 되나") ||
+        section.textContent?.includes("What to actually do")
+    );
+    const actionHtml = actionSection?.textContent ?? "";
+    expect(html).toContain("네이버 검색에 잡힐 글을 올리세요");
+    expect(actionSection).toBeTruthy();
+    expect(actionHtml).toContain("네이버 블로그에 꾸준히 글을 올리세요");
+    expect(actionHtml).toContain(channelLabel);
+    expect(actionHtml).toContain(naverLabel);
+    expect(actionHtml).toContain(whereLabel);
+    expect(actionHtml).toContain(verifyLabel);
+    expect(actionHtml).toContain(gradeLabel);
+    expect(actionHtml).toMatch(
+      /do not prove an effect|효과를 입증하지 않습니다/
+    );
+    expect(actionHtml).not.toContain("Naver AI Briefing");
+    expect(actionHtml).not.toContain("HyperCLOVA X");
+  });
 });

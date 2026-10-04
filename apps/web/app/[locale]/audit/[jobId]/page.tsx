@@ -1,6 +1,8 @@
 // /audit/[jobId] — Audit 결과 페이지 (PRD §13.1)
 
 import {
+  hasFilteredStoredAuditAdvice,
+  hasRecomputedAuditMetricsChanged,
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
@@ -13,6 +15,7 @@ import { resolveIsOwner } from "../../../api/audit/_lib/owner";
 import { canExposeAuditResult } from "../../../api/audit/_lib/public-access";
 import { AuditResultView } from "./components/audit-result";
 import { AuditSummarySsr } from "./components/audit-summary-ssr";
+import { AuditMetricBasisNotice } from "./components/metric-basis-notice";
 
 interface AuditResultPageProps {
   params: Promise<{ locale: string; jobId: string }>;
@@ -73,7 +76,13 @@ async function loadSummaryJob(jobId: string) {
     ) {
       return null;
     }
-    return { ...job, result: withRecomputedAuditMetrics(job.result) };
+    const result = withRecomputedAuditMetrics(job.result);
+    return {
+      ...job,
+      result,
+      metricBasisChanged: hasRecomputedAuditMetricsChanged(job.result, result),
+      adviceBasisChanged: hasFilteredStoredAuditAdvice(job.result),
+    };
   } catch (error) {
     log.error("audit.ssr_summary.failed", { error: parseError(error) });
     return null;
@@ -98,7 +107,21 @@ const AuditResultPage = async ({ params }: AuditResultPageProps) => {
         {summaryJob && isPublishableAuditResult(summaryJob.result) && (
           <AuditSummarySsr job={summaryJob} locale={locale} />
         )}
-        <AuditResultView jobId={jobId} locale={locale} />
+        {(summaryJob?.metricBasisChanged || summaryJob?.adviceBasisChanged) && (
+          <AuditMetricBasisNotice
+            adviceBasisChanged={summaryJob.adviceBasisChanged}
+            locale={locale}
+            metricBasisChanged={summaryJob.metricBasisChanged}
+            provisional={!isPublishableAuditResult(summaryJob.result)}
+          />
+        )}
+        <AuditResultView
+          correctionNoticeShown={Boolean(
+            summaryJob?.metricBasisChanged || summaryJob?.adviceBasisChanged
+          )}
+          jobId={jobId}
+          locale={locale}
+        />
       </div>
     </div>
   );

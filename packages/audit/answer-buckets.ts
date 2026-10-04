@@ -296,6 +296,18 @@ function addDiscovery(tally: DiscoveryTally, bucket: AnswerBucket): void {
   }
 }
 
+function addAiDiscovery(
+  tally: DiscoveryTally,
+  row: BucketableAnswer,
+  group: AnswerGroup
+): number {
+  if (group !== "ai") {
+    return 0;
+  }
+  addDiscovery(tally, classifyAnswer(row));
+  return 1;
+}
+
 function isAdjudicated(bucket: AnswerBucket): boolean {
   return (
     bucket === "confirmed" ||
@@ -328,6 +340,12 @@ export function summarizeAnswerBuckets(
     if (group === "briefing" || group === "retired") {
       continue;
     }
+    // Search results from an unbranded discovery prompt are neither brand-query
+    // search exposure nor an AI recommendation. Keep both denominators clean.
+    if (isDiscoveryAnswer(row)) {
+      discoveryRows += addAiDiscovery(discovery, row, group);
+      continue;
+    }
     const bucket = isLegacyNaverSynthesis(row)
       ? legacyNaverBucket(row, options.brandDomain)
       : classifyAnswer(row);
@@ -337,11 +355,6 @@ export function summarizeAnswerBuckets(
       const perEngine = searchEngines.get(row.engineId) ?? emptyCounts();
       add(perEngine, bucket);
       searchEngines.set(row.engineId, perEngine);
-      continue;
-    }
-    if (isDiscoveryAnswer(row)) {
-      discoveryRows += 1;
-      addDiscovery(discovery, bucket);
       continue;
     }
     add(ai, bucket);
