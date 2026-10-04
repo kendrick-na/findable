@@ -3,7 +3,7 @@
 //   READ ONLY 트랜잭션. 화면에는 요약 수치만, 고객별 상세(토큰·URL·이메일 제외)는 지정한 파일에만 쓴다.
 //   상세 파일도 고객 데이터이므로 결정 기록 후 삭제한다.
 
-import { writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { createInspectionClient } from "@repo/database/prisma/read-only-client";
 import { readHistoricalReportInventory } from "./historical-inventory";
 
@@ -19,8 +19,14 @@ async function main(): Promise<void> {
     writeFileSync(out, `${JSON.stringify(inventory, null, 2)}\n`, {
       mode: 0o600,
     });
+    // `mode` applies only on creation; tighten an existing file too.
+    chmodSync(out, 0o600);
     process.stdout.write(
-      `${JSON.stringify({ summary: inventory.summary, freeAuditPdfs: inventory.freeAuditPdfs })}\n`
+      `${JSON.stringify({
+        summary: inventory.summary,
+        coverage: inventory.coverage,
+        freeAuditPdfs: { ...inventory.freeAuditPdfs, jobs: undefined },
+      })}\n`
     );
   } finally {
     await prisma.$disconnect();

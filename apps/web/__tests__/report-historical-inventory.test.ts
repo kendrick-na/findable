@@ -26,7 +26,7 @@ const snapshot = JSON.parse(
 ) as unknown;
 const blobUrl =
   "https://abc123.public.blob.vercel-storage.com/reports/knowverse-secret-name.pdf";
-const token = "tok_9f8e7d6c5b4a3210";
+const token = "Zk9mQ2xhdWRlQ29udHJvbFRvd2VyVGVzdFRva2VuMDE";
 
 const baseRow = {
   id: "r-1",
@@ -50,11 +50,13 @@ describe("classifyHistoricalReport", () => {
       snapshot: "parsed",
       templateVersion: "geo-report-template@2026-09-28",
       currentTemplate: false,
-      webLinkActive: true,
+      accessTokenSet: true,
+      webLinkResolvable: true,
+      offDbDeliveryUntracked: true,
       narrativeQuarantinedOnWeb: true,
       pdf: { present: true, host: "vercel-blob", hiddenOnWeb: true },
       directPdfUrlNeedsDecision: true,
-      viewed: { count: 3, lastViewedAt: "2026-10-01T09:00:00.000Z" },
+      recordedViews: { count: 3, lastRecordedAt: "2026-10-01T09:00:00.000Z" },
       decision: "undecided",
     });
     expect(record.pdf.urlSha256).toMatch(/^[0-9a-f]{64}$/);
@@ -79,10 +81,20 @@ describe("classifyHistoricalReport", () => {
     });
     expect(empty).toMatchObject({
       snapshot: "missing",
-      webLinkActive: false,
+      accessTokenSet: false,
+      webLinkResolvable: false,
       pdf: { present: false, host: "none", hiddenOnWeb: false },
       directPdfUrlNeedsDecision: false,
     });
+  });
+
+  it("does not call a link resolvable when the page would 404", () => {
+    expect(
+      classifyHistoricalReport({ ...baseRow, accessToken: "short" })
+    ).toMatchObject({ accessTokenSet: true, webLinkResolvable: false });
+    expect(
+      classifyHistoricalReport({ ...baseRow, data: { broken: true } })
+    ).toMatchObject({ accessTokenSet: true, webLinkResolvable: false });
   });
 
   it("does not treat a self-approving embedded publicationReview as trusted", () => {
@@ -101,7 +113,7 @@ describe("classifyHistoricalReport", () => {
 });
 
 describe("summarizeHistoricalInventory", () => {
-  it("counts exposure per organisation without listing identifiers of other customers", () => {
+  it("counts exposure per organisation and keeps org-less reports separate", () => {
     const summary = summarizeHistoricalInventory([
       classifyHistoricalReport(baseRow),
       classifyHistoricalReport({ ...baseRow, id: "r-2", pdfUrl: null }),
@@ -113,17 +125,28 @@ describe("summarizeHistoricalInventory", () => {
         viewCount: 0,
         lastViewedAt: null,
       }),
+      classifyHistoricalReport({
+        ...baseRow,
+        id: "r-4",
+        organizationId: null,
+        pdfUrl: null,
+        accessToken: null,
+        viewCount: 0,
+        lastViewedAt: null,
+      }),
     ]);
     expect(summary).toEqual({
-      reports: 3,
+      reports: 4,
       organizations: 2,
-      webLinkActive: 2,
+      reportsWithoutOrganization: 1,
+      accessTokenSet: 2,
+      webLinkResolvable: 2,
       storedPdf: 2,
       directPdfUrlNeedsDecision: 2,
-      viewedAtLeastOnce: 2,
+      withRecordedViews: 2,
       unparseable: 0,
       missingSnapshot: 0,
-      undecided: 3,
+      undecided: 4,
     });
   });
 });
@@ -200,6 +223,9 @@ describe("readHistoricalReportInventory against a disposable PostgreSQL", () => 
       await admin.$executeRawUnsafe(`CREATE TABLE "AuditJob" (
         id text PRIMARY KEY, email text NOT NULL, "pdfUrl" text,
         "organizationId" text, "createdAt" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+      await admin.$executeRawUnsafe(`CREATE TABLE "Lead" (
+        id text PRIMARY KEY, email text NOT NULL, domain text, source text NOT NULL,
+        metadata jsonb, "createdAt" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
       await admin.$executeRawUnsafe(
         `INSERT INTO "Report" (id, "organizationId", "brandId", type, "pdfUrl", data, "generatedAt", "accessToken")
          VALUES ('r-1', 'org-1', 'brand-1', 'custom', $1, $2::jsonb, '2026-09-28 15:00:00', $3),
@@ -219,6 +245,13 @@ describe("readHistoricalReportInventory against a disposable PostgreSQL", () => 
          ('a3', 'two@example.com', NULL, '2026-09-12 00:00:00')`,
         blobUrl
       );
+      // a3: PDF e-mailed to a different address, later revalidated (pdfUrl NULL).
+      await admin.$executeRawUnsafe(
+        `INSERT INTO "Lead" (id, email, source, metadata) VALUES
+         ('l1', 'friend@example.com', 'free_audit', '{"jobId":"a3"}'),
+         ('l2', 'one@example.com', 'free_audit', '{"jobId":"a1"}'),
+         ('l3', 'x@example.com', 'contact_form', '{"jobId":"a2"}')`
+      );
 
       const inventory = await readHistoricalReportInventory(admin);
       // Prisma DateTime columns are timestamp(3) without time zone holding UTC.
@@ -226,18 +259,43 @@ describe("readHistoricalReportInventory against a disposable PostgreSQL", () => 
       expect(inventory.reports[0]?.generatedAt).toBe(
         "2026-09-28T15:00:00.000Z"
       );
-      expect(inventory.reports[0]?.viewed).toEqual({
+      expect(inventory.reports[0]?.recordedViews).toEqual({
         count: 2,
-        lastViewedAt: "2026-10-01T09:00:00.000Z",
+        lastRecordedAt: "2026-10-01T09:00:00.000Z",
       });
-      expect(inventory.freeAuditPdfs).toEqual({
+      expect(inventory.freeAuditPdfs).toMatchObject({
         jobsWithStoredPdf: 2,
-        distinctRecipients: 1,
+        jobsWithLeadButNoStoredPdf: 1,
+        leadDeliveryRecords: 2,
+        distinctLeadEmails: 2,
+        distinctRequesterEmails: 2,
         byMonth: { "2026-09": 2 },
         hosts: { "vercel-blob": 2 },
       });
+      expect(
+        inventory.freeAuditPdfs.jobs.map((job) => [
+          job.jobId,
+          job.storedPdf.host,
+          job.leadDeliveryRecords,
+        ])
+      ).toEqual([
+        ["a3", "none", 1],
+        ["a2", "vercel-blob", 0],
+        ["a1", "vercel-blob", 1],
+      ]);
+      expect(inventory.coverage).toEqual({
+        storedUrlScope: "latest-db-url-only",
+        blobListingReconciled: false,
+        emailSendLogInDb: false,
+        attachmentsTracked: false,
+      });
       const serialized = JSON.stringify(inventory);
-      for (const secret of [token, blobUrl, "one@example.com"]) {
+      for (const secret of [
+        token,
+        blobUrl,
+        "one@example.com",
+        "friend@example.com",
+      ]) {
         expect(serialized).not.toContain(secret);
       }
 
@@ -245,6 +303,33 @@ describe("readHistoricalReportInventory against a disposable PostgreSQL", () => 
         `SELECT (SELECT count(*) FROM "Report") + (SELECT count(*) FROM "ReportView") + (SELECT count(*) FROM "AuditJob") AS n`
       );
       expect(Number(rows[0]?.n)).toBe(7);
+
+      // The reader's transaction must be read-only before its first query.
+      const statements: string[] = [];
+      await readHistoricalReportInventory({
+        $transaction: (fn, options) =>
+          admin.$transaction(
+            (tx) =>
+              fn({
+                $executeRawUnsafe: (query: string, ...values: unknown[]) => {
+                  statements.push(query);
+                  return tx.$executeRawUnsafe(query, ...values);
+                },
+                $queryRawUnsafe: <T>(query: string, ...values: unknown[]) => {
+                  statements.push(query);
+                  return tx.$queryRawUnsafe<T>(query, ...values);
+                },
+              }),
+            options
+          ),
+      });
+      expect(statements[0]).toBe("SET TRANSACTION READ ONLY");
+      await expect(
+        admin.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
+          await tx.$executeRawUnsafe(`UPDATE "Report" SET "pdfUrl" = NULL`);
+        })
+      ).rejects.toThrow(/read-only/i);
     } finally {
       await admin.$disconnect();
     }

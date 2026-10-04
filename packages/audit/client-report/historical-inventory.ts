@@ -29,6 +29,8 @@ export interface HistoricalReportRow {
 export type PdfHost = "vercel-blob" | "other" | "none" | "invalid";
 
 export interface HistoricalReportRecord {
+  /** Token is set. The page still 404s when the token shape or snapshot is invalid. */
+  accessTokenSet: boolean;
   brandId: string | null;
   currentTemplate: boolean;
   decision: "undecided";
@@ -37,6 +39,8 @@ export interface HistoricalReportRecord {
   generatedAt: string;
   measurementMix: Record<string, number> | null;
   narrativeQuarantinedOnWeb: boolean;
+  /** Always true: PDFs printed locally and sent as attachments leave no DB trace. */
+  offDbDeliveryUntracked: true;
   organizationId: string | null;
   pdf: {
     hiddenOnWeb: boolean;
@@ -44,13 +48,18 @@ export interface HistoricalReportRecord {
     present: boolean;
     urlSha256: string | null;
   };
+  /** ReportView rows only: bots, `?print=1`, failed best-effort writes and direct Blob downloads are not counted. */
+  recordedViews: { count: number; lastRecordedAt: string | null };
   reportId: string;
   snapshot: "parsed" | "unparseable" | "missing";
   templateVersion: string | null;
   type: string;
-  viewed: { count: number; lastViewedAt: string | null };
-  webLinkActive: boolean;
+  /** Mirrors apps/web/lib/client-report/load.ts: valid token shape and parseable snapshot. */
+  webLinkResolvable: boolean;
 }
+
+// Same shape check as apps/web/lib/client-report/load.ts TOKEN_RE.
+const ACCESS_TOKEN_RE = /^[A-Za-z0-9_-]{32,64}$/;
 
 const sha256 = (text: string) =>
   createHash("sha256").update(text).digest("hex");
@@ -72,8 +81,12 @@ export function classifyHistoricalReport(
   row: HistoricalReportRow
 ): HistoricalReportRecord {
   const parsed = row.data == null ? null : parseClientReportData(row.data);
-  const snapshot =
-    row.data == null ? "missing" : parsed ? "parsed" : "unparseable";
+  let snapshot: HistoricalReportRecord["snapshot"] = "unparseable";
+  if (row.data == null) {
+    snapshot = "missing";
+  } else if (parsed) {
+    snapshot = "parsed";
+  }
   // Inventory has no trusted append-only review store, so it evaluates the same
   // public rule the web uses without one: every frozen snapshot stays quarantined.
   const disclosure = parsed ? clientReportDisclosure(parsed, row.pdfUrl) : null;
@@ -94,7 +107,11 @@ export function classifyHistoricalReport(
     currentTemplate: parsed?.templateVersion === CLIENT_REPORT_TEMPLATE_VERSION,
     embeddedReviewPresent: embedded,
     measurementMix: disclosure ? { ...disclosure.measurementMix } : null,
-    webLinkActive: row.accessToken !== null,
+    accessTokenSet: row.accessToken !== null,
+    webLinkResolvable:
+      row.accessToken !== null &&
+      ACCESS_TOKEN_RE.test(row.accessToken) &&
+      snapshot === "parsed",
     narrativeQuarantinedOnWeb: disclosure
       ? !disclosure.narrativeAttested
       : true,
@@ -106,9 +123,10 @@ export function classifyHistoricalReport(
     },
     // The web hides the link, but a URL that was already delivered stays reachable.
     directPdfUrlNeedsDecision: pdfPresent,
-    viewed: {
+    offDbDeliveryUntracked: true,
+    recordedViews: {
       count: row.viewCount,
-      lastViewedAt: row.lastViewedAt ? row.lastViewedAt.toISOString() : null,
+      lastRecordedAt: row.lastViewedAt ? row.lastViewedAt.toISOString() : null,
     },
     decision: "undecided",
   };
@@ -119,14 +137,17 @@ export function summarizeHistoricalInventory(
 ) {
   return {
     reports: records.length,
-    organizations: new Set(records.map((r) => r.organizationId ?? "(none)"))
-      .size,
-    webLinkActive: records.filter((r) => r.webLinkActive).length,
+    organizations: new Set(
+      records.flatMap((r) => (r.organizationId ? [r.organizationId] : []))
+    ).size,
+    reportsWithoutOrganization: records.filter((r) => !r.organizationId).length,
+    accessTokenSet: records.filter((r) => r.accessTokenSet).length,
+    webLinkResolvable: records.filter((r) => r.webLinkResolvable).length,
     storedPdf: records.filter((r) => r.pdf.present).length,
     directPdfUrlNeedsDecision: records.filter(
       (r) => r.directPdfUrlNeedsDecision
     ).length,
-    viewedAtLeastOnce: records.filter((r) => r.viewed.count > 0).length,
+    withRecordedViews: records.filter((r) => r.recordedViews.count > 0).length,
     unparseable: records.filter((r) => r.snapshot === "unparseable").length,
     missingSnapshot: records.filter((r) => r.snapshot === "missing").length,
     undecided: records.filter((r) => r.decision === "undecided").length,
@@ -139,28 +160,35 @@ interface RawQueryClient {
 }
 
 export interface ReadOnlyInventoryClient {
-  $transaction<T>(fn: (tx: RawQueryClient) => Promise<T>): Promise<T>;
+  $transaction<T>(
+    fn: (tx: RawQueryClient) => Promise<T>,
+    options?: { maxWait?: number; timeout?: number }
+  ): Promise<T>;
 }
 
-export async function readHistoricalReportInventory(
+const utcIso = (column: string) =>
+  `to_char(${column}, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+
+export function readHistoricalReportInventory(
   client: ReadOnlyInventoryClient
 ) {
   // Prisma DateTime columns are timestamp(3) WITHOUT time zone holding UTC; raw
   // aggregates come back as naive values the driver would read as local time, so
   // render them as explicit UTC ISO strings in SQL.
-  return client.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
-    const reports = await tx.$queryRawUnsafe<
-      (Omit<
-        HistoricalReportRow,
-        "generatedAt" | "lastViewedAt" | "viewCount"
-      > & {
-        generatedAt: string;
-        lastViewedAt: string | null;
-        viewCount: bigint | number;
-      })[]
-    >(
-      `SELECT r.id, r."organizationId", r."brandId", r.type::text AS type,
+  return client.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
+      const reports = await tx.$queryRawUnsafe<
+        (Omit<
+          HistoricalReportRow,
+          "generatedAt" | "lastViewedAt" | "viewCount"
+        > & {
+          generatedAt: string;
+          lastViewedAt: string | null;
+          viewCount: bigint | number;
+        })[]
+      >(
+        `SELECT r.id, r."organizationId", r."brandId", r.type::text AS type,
               to_char(r."generatedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "generatedAt",
               r."accessToken", r."pdfUrl", r.data,
               count(v.id) AS "viewCount",
@@ -169,40 +197,99 @@ export async function readHistoricalReportInventory(
          LEFT JOIN "ReportView" v ON v."reportId" = r.id
         GROUP BY r.id
         ORDER BY r."generatedAt" DESC, r.id`
-    );
-    const jobs = await tx.$queryRawUnsafe<
-      { createdAt: string; email: string; pdfUrl: string }[]
-    >(
-      `SELECT to_char("createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt", email, "pdfUrl"
-         FROM "AuditJob" WHERE "pdfUrl" IS NOT NULL`
-    );
-    const byMonth: Record<string, number> = {};
-    const hosts: Record<string, number> = {};
-    for (const job of jobs) {
-      const month = job.createdAt.slice(0, 7);
-      byMonth[month] = (byMonth[month] ?? 0) + 1;
-      const host = classifyPdfHost(job.pdfUrl);
-      hosts[host] = (hosts[host] ?? 0) + 1;
-    }
-    const records = reports.map((row) =>
-      classifyHistoricalReport({
-        ...row,
-        generatedAt: new Date(row.generatedAt),
-        lastViewedAt: row.lastViewedAt ? new Date(row.lastViewedAt) : null,
-        viewCount: Number(row.viewCount),
-      })
-    );
-    return {
-      reports: records,
-      summary: summarizeHistoricalInventory(records),
-      freeAuditPdfs: {
-        jobsWithStoredPdf: jobs.length,
-        distinctRecipients: new Set(
-          jobs.map((job) => sha256(job.email.trim().toLowerCase()))
-        ).size,
-        byMonth,
-        hosts,
-      },
-    };
-  });
+      );
+      const jobs = await tx.$queryRawUnsafe<
+        {
+          createdAt: string;
+          email: string;
+          id: string;
+          organizationId: string | null;
+          pdfUrl: string | null;
+        }[]
+      >(
+        `SELECT id, "organizationId", ${utcIso('"createdAt"')} AS "createdAt",
+              email, "pdfUrl"
+         FROM "AuditJob"
+        WHERE "pdfUrl" IS NOT NULL
+           OR id IN (SELECT metadata->>'jobId' FROM "Lead"
+                      WHERE source::text = 'free_audit' AND metadata ? 'jobId')
+        ORDER BY "createdAt" DESC, id`
+      );
+      // Lead rows are the only DB trace of where a free-audit PDF e-mail was sent
+      // (apps/web/app/api/audit/[jobId]/lead/route.ts); the send itself is only logged.
+      const leads = await tx.$queryRawUnsafe<
+        { email: string; jobId: string }[]
+      >(
+        `SELECT metadata->>'jobId' AS "jobId", email FROM "Lead"
+        WHERE source::text = 'free_audit' AND metadata ? 'jobId'`
+      );
+      const leadsByJob = new Map<string, string[]>();
+      for (const lead of leads) {
+        leadsByJob.set(lead.jobId, [
+          ...(leadsByJob.get(lead.jobId) ?? []),
+          sha256(lead.email.trim().toLowerCase()),
+        ]);
+      }
+      const byMonth: Record<string, number> = {};
+      const hosts: Record<string, number> = {};
+      const freeAuditJobs = jobs.map((job) => {
+        const host = classifyPdfHost(job.pdfUrl);
+        if (job.pdfUrl) {
+          const month = job.createdAt.slice(0, 7);
+          byMonth[month] = (byMonth[month] ?? 0) + 1;
+          hosts[host] = (hosts[host] ?? 0) + 1;
+        }
+        const leadHashes = leadsByJob.get(job.id) ?? [];
+        return {
+          jobId: job.id,
+          organizationId: job.organizationId,
+          createdAt: job.createdAt,
+          storedPdf: {
+            host,
+            urlSha256: job.pdfUrl ? sha256(job.pdfUrl) : null,
+          },
+          leadDeliveryRecords: leadHashes.length,
+          decision: "undecided" as const,
+        };
+      });
+      const records = reports.map((row) =>
+        classifyHistoricalReport({
+          ...row,
+          generatedAt: new Date(row.generatedAt),
+          lastViewedAt: row.lastViewedAt ? new Date(row.lastViewedAt) : null,
+          viewCount: Number(row.viewCount),
+        })
+      );
+      return {
+        reports: records,
+        summary: summarizeHistoricalInventory(records),
+        freeAuditPdfs: {
+          jobsWithStoredPdf: jobs.filter((job) => job.pdfUrl).length,
+          // Earlier delivered URLs are lost when a rerun/revalidation nulls pdfUrl
+          // or regenerates a new file name; the Lead trace still marks the job.
+          jobsWithLeadButNoStoredPdf: freeAuditJobs.filter(
+            (job) =>
+              job.leadDeliveryRecords > 0 && job.storedPdf.host === "none"
+          ).length,
+          leadDeliveryRecords: leads.length,
+          distinctLeadEmails: new Set(
+            leads.map((lead) => sha256(lead.email.trim().toLowerCase()))
+          ).size,
+          distinctRequesterEmails: new Set(
+            jobs.map((job) => sha256(job.email.trim().toLowerCase()))
+          ).size,
+          byMonth,
+          hosts,
+          jobs: freeAuditJobs,
+        },
+        coverage: {
+          storedUrlScope: "latest-db-url-only",
+          blobListingReconciled: false,
+          emailSendLogInDb: false,
+          attachmentsTracked: false,
+        },
+      };
+    },
+    { maxWait: 10_000, timeout: 120_000 }
+  );
 }
