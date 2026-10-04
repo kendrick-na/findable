@@ -632,8 +632,8 @@ function fiveAxisScores(metrics: JobMetrics, isKo: boolean): FiveAxisView {
       score: sovAxis,
       max: 10,
       hint: isKo
-        ? "성공한 AI 답변 중 우리 브랜드가 등장한 비율"
-        : "Share of successful AI answers that mention your brand",
+        ? "성공한 AI·검색 응답 중 우리 브랜드가 등장한 비율"
+        : "Share of successful AI answers and search results that mention your brand",
     },
     {
       key: "competition",
@@ -1948,7 +1948,7 @@ function HeroSection({
         </div>
         <p className="mt-1 break-keep text-xs text-zinc-500 leading-relaxed">
           {isKo
-            ? `인지·감정·노출 품질·AI 답변 등장률·경쟁 위치를 가중 합산한 기존 진단값이에요. 지난 측정과 비교할 수 있게 계산 방식은 그대로 두었어요(네이버·다음 검색 노출 포함 · 등장률 ${Math.round(result.metrics.sov)}%).`
+            ? `인지·감정·노출 품질·AI·검색 합산 등장률·경쟁 위치를 가중 합산한 기존 진단값이에요. 지난 측정과 비교할 수 있게 계산 방식은 그대로 두었어요(네이버·다음 검색 노출 포함 · 등장률 ${Math.round(result.metrics.sov)}%).`
             : `The existing weighted composite of recognition, sentiment, presence, answer appearance and competition. Kept unchanged so runs stay comparable (includes Naver/Daum search · appearance ${Math.round(result.metrics.sov)}%).`}
         </p>
       </div>
