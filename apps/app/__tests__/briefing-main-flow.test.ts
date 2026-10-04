@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const root = join(process.cwd(), "../..");
 const source = (path: string) => readFileSync(join(root, path), "utf8");
 const runner = source("packages/audit/runner.ts");
+const briefingRunner = source("packages/audit/briefing-runner.ts");
 const route = source("apps/web/app/api/audit/[jobId]/briefing/route.ts");
 
 describe("briefing remains an explicit request", () => {
@@ -31,5 +32,10 @@ describe("briefing remains an explicit request", () => {
     ]) {
       expect(source(path)).not.toContain("runBriefingForAuditJob({");
     }
+  });
+
+  it("dates the runner's legacy self-claim so a crash can be reclaimed", () => {
+    expect(briefingRunner).toContain("'{briefingStartedAt}'");
+    expect(briefingRunner).toContain("'{briefingAttemptId}'");
   });
 });

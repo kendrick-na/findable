@@ -50,12 +50,12 @@ describe("getAuditRuntimeReadiness", () => {
     });
   });
 
-  it("requires Firecrawl when the main briefing is enabled", () => {
+  it("does not gate core audit on the obsolete automatic briefing flag", () => {
     expect(
       getAuditRuntimeReadiness({
         ...completeEnv,
         AUDIT_BRIEFING_IN_MAIN_ENABLED: "true",
       })
-    ).toEqual({ ready: false, missing: ["FIRECRAWL_API_KEY"] });
+    ).toEqual({ ready: true });
   });
 });

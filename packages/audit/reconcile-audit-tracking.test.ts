@@ -21,7 +21,7 @@ describe("reconcileAuditTracking", () => {
     vi.clearAllMocks();
   });
 
-  it.fails("known RED: briefing commit before Tracking has no replay owner", async () => {
+  it("keeps briefing outside the core replay axis", async () => {
     findUnique.mockResolvedValue({
       status: "completed",
       organizationId: "org-1",
@@ -41,11 +41,8 @@ describe("reconcileAuditTracking", () => {
       postprocessing: { tracking: "completed", briefing: "not_required" },
     });
 
-    await reconcileAuditTracking("job-briefing-crash");
-
-    expect(persistAuditTracking).toHaveBeenCalledWith(
-      expect.objectContaining({ trackingAxis: "briefing", auditJobId: "job-briefing-crash" })
-    );
+    await expect(reconcileAuditTracking("job-briefing-crash")).resolves.toBe("skipped");
+    expect(persistAuditTracking).not.toHaveBeenCalled();
   });
 
   it("replays only keyed completed snapshots and advances the marker conditionally", async () => {

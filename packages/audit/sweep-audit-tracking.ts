@@ -1,6 +1,7 @@
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { reconcileAuditTracking } from "./reconcile-audit-tracking";
+import { reconcileBriefingTracking } from "./reconcile-briefing-tracking";
 
 export const AUDIT_TRACKING_RECONCILE_MIN_AGE_MS = 10 * 60 * 1000;
 export const AUDIT_TRACKING_RECONCILE_MAX_ROWS = 10;
@@ -30,11 +31,17 @@ export async function sweepAuditTrackingReconciliation(
   const agedBefore = new Date(
     now.getTime() - AUDIT_TRACKING_RECONCILE_MIN_AGE_MS
   );
-  let candidates: Array<{ id: string }>;
+  let candidates: Array<{ id: string; corePending: boolean; briefingPending: boolean }>;
   try {
     candidates = await withTimeout(
-      database.$queryRawUnsafe<Array<{ id: string }>>(
-        `SELECT "id"
+      database.$queryRawUnsafe<Array<{ id: string; corePending: boolean; briefingPending: boolean }>>(
+        `SELECT "id",
+           ("postprocessing"->>'tracking' IN ('pending', 'unknown')
+             OR ("postprocessing"->>'tracking' = 'reconciling'
+               AND ("postprocessing"->>'trackingReconcileStartedAt')::timestamptz < $1)) AS "corePending",
+           ("postprocessing"->>'briefingTracking' IN ('pending', 'unknown')
+             OR ("postprocessing"->>'briefingTracking' = 'reconciling'
+               AND ("postprocessing"->>'briefingTrackingReconcileStartedAt')::timestamptz < $1)) AS "briefingPending"
          FROM "AuditJob"
          WHERE "status" = 'completed'
            AND "completedAt" < $1
@@ -42,6 +49,9 @@ export async function sweepAuditTrackingReconciliation(
              "postprocessing"->>'tracking' IN ('pending', 'unknown')
              OR ("postprocessing"->>'tracking' = 'reconciling'
                  AND ("postprocessing"->>'trackingReconcileStartedAt')::timestamptz < $1)
+             OR "postprocessing"->>'briefingTracking' IN ('pending', 'unknown')
+             OR ("postprocessing"->>'briefingTracking' = 'reconciling'
+                 AND ("postprocessing"->>'briefingTrackingReconcileStartedAt')::timestamptz < $1)
            )
          ORDER BY "completedAt" ASC
          LIMIT $2`,
@@ -72,11 +82,14 @@ export async function sweepAuditTrackingReconciliation(
         bounded = true;
         break;
       }
-      const result = await withTimeout(
-        reconcileAuditTracking(candidate.id),
+      const results = await withTimeout(
+        Promise.all([
+          ...(candidate.corePending ? [reconcileAuditTracking(candidate.id)] : []),
+          ...(candidate.briefingPending ? [reconcileBriefingTracking(candidate.id)] : []),
+        ]),
         Math.min(RECONCILE_OPERATION_TIMEOUT_MS, remaining)
       );
-      counts[result] += 1;
+      for (const result of results) counts[result] += 1;
     } catch (error) {
       counts.failed += 1;
       log.warn("audit.tracking.reconcile_sweep_timeout", {

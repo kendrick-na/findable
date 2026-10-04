@@ -13,6 +13,12 @@ import {
   finalizeAuditTracking,
   reconcileAuditTracking,
 } from "@repo/audit/reconcile-audit-tracking";
+import {
+  claimBriefingTracking,
+  finalizeBriefingTracking,
+  reconcileBriefingTracking,
+} from "@repo/audit/reconcile-briefing-tracking";
+import { sweepAuditTrackingReconciliation } from "@repo/audit/sweep-audit-tracking";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ database: null as unknown }));
@@ -29,6 +35,7 @@ vi.mock("@repo/ai/lib/engines", () => ({
 }));
 
 const { persistAuditTracking } = await import("@repo/audit/tracking");
+const { commitBriefingResult } = await import("@repo/audit/briefing-runner");
 const tempDir = mkdtempSync("/tmp/findable-tracking-prisma-");
 const socketDir = join(tempDir, "socket");
 const port = 15732 + Math.floor(Math.random() * 100);
@@ -215,8 +222,75 @@ describe("product Tracking replay through PrismaPg", () => {
       expect(comparable).toHaveLength(2);
       expect(comparable[0]).toMatchObject({ rawResponse: "provider result", shareOfVoice: 1, inputTokens: 11, outputTokens: 7 });
       expect(comparable[1]).toMatchObject({ rawResponse: "provider result", shareOfVoice: 1, inputTokens: 11, outputTokens: 7 });
+
+      // Product commit succeeds, but its immediate Tracking writer never runs.
+      // The durable leaf marker and captured provider payload must recover it.
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "organizationId", "brandId", "completedAt", "result", "postprocessing")
+         VALUES ($1, 'completed', 'org-replay', 'brand-replay', $2, $3::jsonb, '{"tracking":"completed","briefing":"not_required"}'::jsonb)`,
+        "job-briefing-crash",
+        completedAt,
+        JSON.stringify({
+          briefingStatus: "processing",
+          briefingAttemptId: "attempt-crash",
+          metrics: { total: 7 },
+          engineResponses: [],
+        })
+      );
+      await commitBriefingResult("job-briefing-crash", "attempt-crash", [{
+        engineId: "naver-briefing",
+        brandMentioned: true,
+        mentionPosition: 1,
+        sentiment: "neutral",
+        sov: 0,
+        durationMs: 1,
+        isStub: false,
+        errorMessage: null,
+        excerpt: "provider result",
+        rawResponse: "provider result",
+        shareOfVoice: 1,
+        usage: { inputTokens: 11, outputTokens: 7, costModel: "token" },
+        trackingInputCaptured: true,
+        promptIndex: 0,
+        promptText: "브랜드 효과",
+        promptLang: "ko",
+      }], "브랜드 효과", "pending");
+      const beforeReplay = await database.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT count(*)::bigint AS count FROM "Tracking" WHERE "trackingRowKey" = 'job-briefing-crash|briefing|0|naver-briefing'`
+      );
+      expect(Number(beforeReplay[0].count)).toBe(0);
+      await expect(sweepAuditTrackingReconciliation(new Date("2026-10-04T00:20:00.000Z")))
+        .resolves.toMatchObject({ completed: 1, failed: 0 });
+      await expect(reconcileBriefingTracking("job-briefing-crash")).resolves.toBe("skipped");
+      const recovered = await database.$queryRawUnsafe<Array<Record<string, unknown>>>(
+        `SELECT "rawResponse", "shareOfVoice", "inputTokens", "outputTokens" FROM "Tracking"
+         WHERE "trackingRowKey" = 'job-briefing-crash|briefing|0|naver-briefing'`
+      );
+      expect(recovered).toEqual([{ rawResponse: "provider result", shareOfVoice: 1, inputTokens: 11, outputTokens: 7 }]);
+      const recoveredJob = await database.$queryRawUnsafe<Array<{ result: Record<string, unknown>; postprocessing: Record<string, unknown> }>>(
+        `SELECT "result", "postprocessing" FROM "AuditJob" WHERE "id" = 'job-briefing-crash'`
+      );
+      expect(recoveredJob[0].result.metrics).toEqual({ total: 7 });
+      expect(recoveredJob[0].postprocessing).toMatchObject({ tracking: "completed", briefing: "not_required", briefingTracking: "completed" });
+
+      await database.$executeRawUnsafe(
+        `INSERT INTO "AuditJob" ("id", "status", "result", "postprocessing") VALUES
+         ('job-briefing-race', 'completed', '{"briefingStatus":"completed"}'::jsonb, '{"briefingTracking":"pending"}'::jsonb)`
+      );
+      const raceAt = new Date("2026-10-04T01:00:00.000Z");
+      const lateWriter = await claimBriefingTracking(database, "job-briefing-race", raceAt, "late-writer");
+      expect(lateWriter).toBe("late-writer");
+      const secondWorker = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }) });
+      try {
+        await expect(claimBriefingTracking(secondWorker, "job-briefing-race", new Date(raceAt.getTime() + 9 * 60_000), "too-early")).resolves.toBeNull();
+        await expect(claimBriefingTracking(secondWorker, "job-briefing-race", new Date(raceAt.getTime() + 11 * 60_000), "reconciler")).resolves.toBe("reconciler");
+        await expect(finalizeBriefingTracking(database, "job-briefing-race", "late-writer", "completed")).resolves.toBe(0);
+        await expect(finalizeBriefingTracking(secondWorker, "job-briefing-race", "reconciler", "completed")).resolves.toBe(1);
+      } finally {
+        await secondWorker.$disconnect();
+      }
     } finally {
       await database.$disconnect();
     }
-  });
+  }, 60_000);
 });
