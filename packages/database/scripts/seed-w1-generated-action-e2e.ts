@@ -69,7 +69,7 @@ const actions = buildGeoActions({
   marketScope: "korea",
   naverSearchMeasured: hasCompleteNaverSearchBaseline(
     searchRows,
-    aiRows.length
+    aiRows.map((row) => row.promptIndex)
   ),
   verdicts,
 });

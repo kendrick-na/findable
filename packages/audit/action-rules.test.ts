@@ -40,6 +40,9 @@ function inputOf(f: Fixture): ActionInput {
   const answered = f.engineResponses.filter(
     (r) => !(r.errorMessage || r.isStub)
   );
+  const naverRows = f.engineResponses.filter(
+    (response) => response.engineId === "naver"
+  );
   return {
     averageMentionPosition: null,
     brandDomain: f.domain,
@@ -52,9 +55,8 @@ function inputOf(f: Fixture): ActionInput {
     ).size,
     marketScope: f.marketScope,
     naverSearchMeasured: hasCompleteNaverSearchBaseline(
-      f.engineResponses,
-      f.engineResponses.filter((response) => response.engineId === "naver")
-        .length
+      naverRows.map((response, promptIndex) => ({ ...response, promptIndex })),
+      naverRows.map((_, promptIndex) => promptIndex)
     ),
     verdicts: summarizeVerdicts(f.engineResponses, {
       brandDomain: f.domain,
@@ -68,18 +70,36 @@ const indigo = load("audit-indigochild.json");
 
 describe("네이버 검색 전체 기준선", () => {
   it("성공 행 없음·일부 오류는 기준선 없음, 전부 성공만 전체 기준선", () => {
-    const ok = { engineId: "naver", errorMessage: null, isStub: false };
+    const ok = {
+      engineId: "naver",
+      errorMessage: null,
+      isStub: false,
+      promptIndex: 0,
+    };
     const failed = {
       engineId: "naver",
       errorMessage: "timeout",
       isStub: false,
+      promptIndex: 1,
     };
-    expect(hasCompleteNaverSearchBaseline([], 0)).toBe(false);
-    expect(hasCompleteNaverSearchBaseline([failed], 1)).toBe(false);
-    expect(hasCompleteNaverSearchBaseline([ok, failed], 2)).toBe(false);
-    expect(hasCompleteNaverSearchBaseline([ok, ok], 2)).toBe(true);
+    expect(hasCompleteNaverSearchBaseline([], [])).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([failed], [1])).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([ok, failed], [0, 1])).toBe(false);
+    expect(
+      hasCompleteNaverSearchBaseline([ok, { ...ok, promptIndex: 1 }], [0, 1])
+    ).toBe(true);
     // One successful row is not a complete baseline for two scheduled Korean questions.
-    expect(hasCompleteNaverSearchBaseline([ok], 2)).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([ok], [0, 1])).toBe(false);
+    // A missing question cannot be hidden by a duplicate row for another question.
+    expect(
+      hasCompleteNaverSearchBaseline(
+        [
+          { ...ok, promptIndex: 1 },
+          { ...ok, promptIndex: 1 },
+        ],
+        [0, 1]
+      )
+    ).toBe(false);
   });
 });
 

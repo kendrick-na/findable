@@ -659,10 +659,15 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       enginesAttempted: aiMeasurementCoverage.attempted,
       enginesMentioned: new Set(metrics.enginesWithMention).size,
       naverSearchMeasured: hasCompleteNaverSearchBaseline(
-        brandFlat,
-        prompts.filter(
-          (prompt) => prompt.lang === "ko" && prompt.kind !== "discovery"
-        ).length
+        flat
+          .map((response, index) => ({
+            ...response,
+            promptIndex: tagged[index]?.promptIndex,
+          }))
+          .filter(isBrandRow),
+        prompts.flatMap((prompt, index) =>
+          prompt.lang === "ko" && prompt.kind !== "discovery" ? [index] : []
+        )
       ),
       // 처방의 채널을 타깃 시장에 맞춘다(세션N-24). 점수의 분모를 정하는 값과 **같은 것**을 쓴다
       //   — 여기서 따로 추정하면 화면 안에서 시장 판정이 둘로 갈린다.

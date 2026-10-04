@@ -462,15 +462,21 @@ export function hasCompleteNaverSearchBaseline(
     engineId: string;
     errorMessage?: string | null;
     isStub?: boolean | null;
+    promptIndex?: number;
   }>,
-  expectedRows: number
+  expectedPromptIndices: readonly number[]
 ): boolean {
   const naverRows = responses.filter(
     (response) => response.engineId === "naver"
   );
+  const expected = new Set(expectedPromptIndices);
+  const observed = new Set(naverRows.map((response) => response.promptIndex));
   return (
-    expectedRows > 0 &&
-    naverRows.length === expectedRows &&
+    expected.size > 0 &&
+    expected.size === expectedPromptIndices.length &&
+    naverRows.length === expected.size &&
+    observed.size === expected.size &&
+    expectedPromptIndices.every((index) => observed.has(index)) &&
     naverRows.every((response) => !(response.errorMessage || response.isStub))
   );
 }
