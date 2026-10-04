@@ -147,6 +147,8 @@ export interface ActionInput {
    *   넓게 두는 쪽이 안전하다(`inferMarketScope` 의 판단과 같은 방향).
    */
   marketScope?: MarketScope;
+  /** 이번 회차의 네이버 검색 응답이 하나 이상 성공했는가. false면 비교 기준선이 없다. */
+  naverSearchMeasured?: boolean;
   /** 실제로 AI가 인용한 자사 URL. 출처 귀속이 확인된 URL만 넣는다. */
   ownedCitationUrls?: string[];
   /** 프롬프트별 언급 여부 — 갭 액션의 핵심 신호. */
@@ -418,6 +420,7 @@ function ruleSignals(input: ActionInput): RuleSignals {
     brandName: input.brandName,
     enginesMeasured: input.enginesMeasured,
     enginesMentioned: input.enginesMentioned,
+    naverSearchMeasured: input.naverSearchMeasured,
     marketScope: input.marketScope ?? "both",
     measuredLabel: measurementEvidenceLabel(input),
     // 공식 사이트 인용 수: 답변 단위 관측값 > 출처 유형 집계 > 모름(null).

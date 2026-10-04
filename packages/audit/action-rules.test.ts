@@ -10,9 +10,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  crawlAccessAction,
   DONT_LIST,
   EVIDENCE_GRADE_LABEL,
-  crawlAccessAction,
   entityClarityAction,
   RULE_THRESHOLDS,
   summarizeVerdicts,
@@ -155,6 +155,17 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
       marketScope: "global",
     });
     expect(global.some((a) => a.kind === "naver_blog")).toBe(false);
+  });
+
+  it("네이버 검색이 미측정이면 재측정 성과를 주장하지 않고 기준선부터 요청한다", () => {
+    const naver = buildGeoActions({
+      ...inputOf(indigo),
+      naverSearchMeasured: false,
+    }).find((a) => a.kind === "naver_blog");
+    expect(naver).toBeDefined();
+    expect(naver?.verification).toContain("이번 회차는 네이버 검색 미측정");
+    expect(naver?.verification).toContain("기준선");
+    expect(naver?.guide?.remeasureMetric).toContain("기준선 없음");
   });
 });
 

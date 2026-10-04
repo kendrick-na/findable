@@ -119,7 +119,9 @@ async function awaitWithTimeout<T>(
       }),
     ]);
   } finally {
-    if (timer) clearTimeout(timer);
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }
 
@@ -622,7 +624,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       const slice = flat.slice(offset, offset + width);
       offset += width;
       const usable = slice.filter(
-        (r) => !(r.errorMessage || r.isStub) && !isSearchResponse(r)
+        (r) => !(r.errorMessage || r.isStub || isSearchResponse(r))
       );
       return {
         text: p.text,
@@ -653,6 +655,12 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       enginesMeasured: aiMeasurementCoverage.measured,
       enginesAttempted: aiMeasurementCoverage.attempted,
       enginesMentioned: new Set(metrics.enginesWithMention).size,
+      naverSearchMeasured: brandFlat.some(
+        (response) =>
+          response.engineId === "naver" &&
+          !response.errorMessage &&
+          !response.isStub
+      ),
       // 처방의 채널을 타깃 시장에 맞춘다(세션N-24). 점수의 분모를 정하는 값과 **같은 것**을 쓴다
       //   — 여기서 따로 추정하면 화면 안에서 시장 판정이 둘로 갈린다.
       marketScope,
