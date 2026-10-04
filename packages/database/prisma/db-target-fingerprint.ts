@@ -19,6 +19,8 @@ const short = (text: string) =>
   createHash("sha256").update(text).digest("hex").slice(0, 12);
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const LEADING_SLASH = /^\//;
+const LINE_BREAK = /\r?\n/;
 
 /** Prisma's `?schema=` selects where tables and _prisma_migrations live (default public). */
 export function connectionSchema(value: string): string {
@@ -43,7 +45,7 @@ export function fingerprintDatabaseUrl(value: string): DatabaseFingerprint {
   const [first = "", ...rest] = url.hostname.toLowerCase().split(".");
   const pooled = first.endsWith("-pooler");
   const endpoint = pooled ? first.slice(0, -"-pooler".length) : first;
-  const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
+  const database = decodeURIComponent(url.pathname.replace(LEADING_SLASH, ""));
   return {
     pooled,
     target: short(
@@ -92,7 +94,7 @@ export function compareDatabaseTargets(
 
 export function parseEnvFile(path: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const raw of readFileSync(path, "utf8").split(/\r?\n/)) {
+  for (const raw of readFileSync(path, "utf8").split(LINE_BREAK)) {
     const line = raw.trim();
     if (!line || line.startsWith("#")) {
       continue;
