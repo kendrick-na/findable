@@ -4563,14 +4563,14 @@ function ReportToDashboardGuide({
 function buildUpsellCopy({
   isKo,
   brandName,
-  sov,
+  aiConfirmedRate,
   mentionedCount,
   measuredCount,
   isSharedView,
 }: {
   isKo: boolean;
   brandName: string;
-  sov: number;
+  aiConfirmedRate: number | null;
   mentionedCount: number;
   measuredCount: number;
   isSharedView: boolean;
@@ -4609,7 +4609,9 @@ function buildUpsellCopy({
           "지금은 기준점이 0이에요. 개선 작업을 한 뒤 다시 측정하면 올라갔는지 알 수 있어요. 무료 계정을 만들면 이 결과가 그 기준점으로 남아요.",
       };
     }
-    const headline = `${brandName}의 AI 답변 등장률은 ${sov}%예요`;
+    const headline = aiConfirmedRate === null
+      ? `${brandName}의 판정 가능한 AI 답변이 없어 등장률을 말할 수 없어요`
+      : `${brandName}의 AI 답변 등장률은 ${aiConfirmedRate}%예요 (판정 완료 답변 기준)`;
     return {
       headline,
       bodyCopy: isFullCoverage
@@ -4626,7 +4628,9 @@ function buildUpsellCopy({
     };
   }
   return {
-    headline: `${brandName} appeared in ${sov}% of successful AI answers`,
+    headline: aiConfirmedRate === null
+      ? `No adjudicated AI answers are available for ${brandName}`
+      : `${brandName} appeared in ${aiConfirmedRate}% of adjudicated AI answers`,
     bodyCopy: isFullCoverage
       ? `All ${measuredCount} measured engines recognize your brand today. The question is whether that holds — and whether competitors are gaining. Only your next run can tell. A free account keeps today as your baseline.`
       : `${mentionedCount} of ${measuredCount} engines recognize your brand today. Whether that number is growing only shows against your next run. A free account keeps this result on your dashboard.`,
@@ -4678,7 +4682,8 @@ function UpsellCard({
   // Clerk sign-up 은 email_address_field 프리필을 쿼리로 받는다. 마스킹 값이 아니라
   // 실주소가 필요하므로 여기선 prefill 을 걸지 않고, 대신 "어떤 주소로" 가입해야 하는지
   // 화면에 명시한다(마스킹 노출 원칙 유지). 사용자가 직접 입력 → 오연결 위험 제거.
-  const sov = Math.round(result.metrics.sov);
+  const aiConfirmedRate = summarizeAnswerBuckets(result.engineResponses).ai
+    .confirmedRate;
   // 🔴 세션N-28 — 여기도 분모를 직접 셌다(`enginesCovered` 고유화 = 오류·stub 안 뺌).
   //   이번 회차엔 우연히 같은 값이 나왔지만, 전부 실패한 엔진이 섞이면 업셀 카피가
   //   "AI 8곳 중 7곳"처럼 **재보지도 못한 엔진을 분모에 넣는다**.
@@ -4689,7 +4694,7 @@ function UpsellCard({
   const { headline, bodyCopy } = buildUpsellCopy({
     isKo,
     brandName: result.brandName,
-    sov,
+    aiConfirmedRate,
     mentionedCount,
     measuredCount,
     isSharedView,

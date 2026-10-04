@@ -211,6 +211,9 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
       "이번 측정에서 AI 1곳 모두가 우리를 알아봤어요"
     );
     expect(container.textContent).not.toContain("AI 2곳 중 1곳");
+    // Stored GEO SoV=50 mixes search; all ten AI answers in this fixture are confirmed.
+    expect(container.textContent).toContain("AI 답변 등장률은 100%예요");
+    expect(container.textContent).not.toContain("AI 답변 등장률은 50%예요");
   });
 
   it("네이버 검색만 발견되어도 AI가 브랜드를 안다고 주장하지 않는다", async () => {
