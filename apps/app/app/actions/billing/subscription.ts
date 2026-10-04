@@ -140,7 +140,9 @@ export const confirmSubscription = async (
   // 조직이 없는 상태를 만들면 안 된다.
   const ensuredOrgId = await ensureOrgExists();
   if (!ensuredOrgId) {
-    return { error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    return {
+      error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    };
   }
 
   try {
@@ -273,14 +275,15 @@ export const unsubscribe = async (): Promise<UnsubscribeResult> => {
         billingCustomerId: null,
         billingProvider: null,
         billingStatus: "canceled",
-        billingLastPaymentId: null,
+        // 예약은 위에서 취소됐다. 웹훅이 이 회차를 갱신으로 보지 않게 ID만 지운다.
         billingNextPaymentId: null,
-        billingNextPaymentAt: null,
+        // billingLastPaymentId·billingNextPaymentAt 은 남긴다 = 이미 결제한 기간의
+        // 출처와 끝(paid-through). auto-refresh cron 의 expireCancelledSubscriptions 가
+        // 그 시각이 지나면 Clerk 결제 권한을 회수하고 billingStatus 를 expired 로 닫는다.
       },
     });
 
-    // plan 은 즉시 내리지 않는다 — 이미 결제한 이용 기간이 남아 있기 때문.
-    // (기간 만료 처리는 갱신 스케줄러 도입 시 함께. 지금은 상태만 canceled.)
+    // plan 은 즉시 내리지 않는다 — 이미 결제한 이용 기간이 남아 있기 때문(유예 없음).
     log.info("billing.unsubscribe.done", { userId, orgId });
     return { ok: true };
   } catch (error) {

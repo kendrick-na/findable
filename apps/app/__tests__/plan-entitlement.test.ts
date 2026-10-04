@@ -1,4 +1,4 @@
-import { resolveEffectivePlan } from "@repo/auth/plan";
+import { resolveEffectivePlan, resolveOrganizationPlan } from "@repo/auth/plan";
 import { describe, expect, it } from "vitest";
 
 const now = new Date("2026-09-25T00:00:00.000Z");
@@ -87,5 +87,63 @@ describe("organization entitlement", () => {
         now,
       })
     ).toBe("growth");
+  });
+});
+
+describe("organization plan without a viewer (cron)", () => {
+  const member = {
+    clerkPlan: "free" as const,
+    hasCurrentPaymentGrant: false,
+    hasInviteRedemption: false,
+    isApprovedPartner: false,
+  };
+
+  it("falls back to the active DB grant when no member is known", () => {
+    expect(
+      resolveOrganizationPlan({
+        organizationPlan: "growth",
+        organizationPlanExpiresAt: new Date("2026-09-30T00:00:00.000Z"),
+        members: [],
+        now,
+      })
+    ).toBe("growth");
+  });
+
+  it("takes the highest member plan, matching what that member sees", () => {
+    expect(
+      resolveOrganizationPlan({
+        organizationPlan: "free",
+        organizationPlanExpiresAt: null,
+        members: [
+          member,
+          { ...member, clerkPlan: "scale", hasCurrentPaymentGrant: true },
+        ],
+        now,
+      })
+    ).toBe("scale");
+  });
+
+  it("keeps a paying member paid after an expired admin grant", () => {
+    expect(
+      resolveOrganizationPlan({
+        organizationPlan: "growth",
+        organizationPlanExpiresAt: new Date("2026-09-24T00:00:00.000Z"),
+        members: [
+          { ...member, clerkPlan: "starter", hasCurrentPaymentGrant: true },
+        ],
+        now,
+      })
+    ).toBe("starter");
+  });
+
+  it("does not trust a stale cache after an expired admin grant", () => {
+    expect(
+      resolveOrganizationPlan({
+        organizationPlan: "growth",
+        organizationPlanExpiresAt: new Date("2026-09-24T00:00:00.000Z"),
+        members: [{ ...member, clerkPlan: "growth" }],
+        now,
+      })
+    ).toBe("free");
   });
 });
