@@ -40,9 +40,6 @@ function inputOf(f: Fixture): ActionInput {
   const answered = f.engineResponses.filter(
     (r) => !(r.errorMessage || r.isStub)
   );
-  const naverRows = f.engineResponses.filter(
-    (response) => response.engineId === "naver"
-  );
   return {
     averageMentionPosition: null,
     brandDomain: f.domain,
@@ -54,10 +51,9 @@ function inputOf(f: Fixture): ActionInput {
         .map((r) => r.engineId)
     ).size,
     marketScope: f.marketScope,
-    naverSearchMeasured: hasCompleteNaverSearchBaseline(
-      naverRows.map((response, promptIndex) => ({ ...response, promptIndex })),
-      naverRows.map((_, promptIndex) => promptIndex)
-    ),
+    // Historic public fixtures do not carry promptIndex; their Naver
+    // baseline is unknown, not reconstructed from observed rows.
+    naverSearchMeasured: undefined,
     verdicts: summarizeVerdicts(f.engineResponses, {
       brandDomain: f.domain,
       brandName: f.brandName,
@@ -188,10 +184,10 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
     expect(naver?.guide?.engines).toEqual(["naver"]);
     expect(naver?.verification).not.toContain("HyperCLOVA");
     expect(naver?.verification).toContain(
-      "같은 한국어 질문에 네이버 검색 노출"
+      "네이버 검색 기준선 상태를 확인하지 못했습니다"
     );
     expect(naver?.guide?.remeasureMetric).toContain("네이버 검색 노출");
-    expect(naver?.guide?.failCondition).toContain("노출이 확인된 질문 수");
+    expect(naver?.guide?.failCondition).toContain("기준선을 확보");
   });
 
   it("해외 시장이면 네이버 카드를 내지 않는다", () => {
