@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * @vitest-environment jsdom
  *
@@ -18,6 +19,9 @@ import {
   RevenueImpactOptIn,
 } from "../../web/app/[locale]/audit/[jobId]/components/answer-buckets";
 import { DashboardAnswerBuckets } from "../app/(authenticated)/components/dashboard-answer-buckets";
+
+/** 대시보드 카드 문구는 사전에서 온다(2026-10-06) — 한국어 화면 기준으로 검사. */
+const KO_BUCKETS = koDict.app.answerBuckets;
 
 const FIXTURES = join(
   process.cwd(),
@@ -208,7 +212,7 @@ describe("BrandNameMismatchNotice", () => {
 describe("DashboardAnswerBuckets — 대시보드도 같은 숫자", () => {
   it("대시보드 카드 4칸이 공개 리포트와 같은 수를 말한다", () => {
     const { container } = render(
-      <DashboardAnswerBuckets result={replay(KNOWVERSE)} />
+      <DashboardAnswerBuckets result={replay(KNOWVERSE)} t={KO_BUCKETS} />
     );
     const count = (bucket: string) =>
       container

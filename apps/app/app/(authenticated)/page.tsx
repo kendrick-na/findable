@@ -512,6 +512,7 @@ const App = async ({ searchParams }: AppProperties) => {
                 선택에 종속되므로, 무엇을 보고 있는지 먼저 알려야 한다. */}
             {data.brandOptions.length > 1 ? (
               <BrandSwitcher
+                label={dict.dashboard.brandSwitcherLabel}
                 options={data.brandOptions}
                 selectedId={data.latestBrandId}
               />
@@ -533,7 +534,10 @@ const App = async ({ searchParams }: AppProperties) => {
             {/* 헤드라인 4분류(2026-09-29) — 공개 리포트 히어로와 같은 함수·같은 문구.
                 잠정 회차에도 보인다: 판정이 끝난 답변 수는 사실이고, 비율의 분모를 밝힌다. */}
             {correctedCurrentResult ? (
-              <DashboardAnswerBuckets result={correctedCurrentResult} />
+              <DashboardAnswerBuckets
+                result={correctedCurrentResult}
+                t={dict.answerBuckets}
+              />
             ) : null}
 
             {!currentRunPublishable && currentRunJob ? (
@@ -586,7 +590,13 @@ const App = async ({ searchParams }: AppProperties) => {
             ) : null}
 
             {data.latestBrandId && orgId ? (
-              <Suspense fallback={<DashboardSystemStatusSkeleton />}>
+              <Suspense
+                fallback={
+                  <DashboardSystemStatusSkeleton
+                    label={dict.systemStatus.loading}
+                  />
+                }
+              >
                 <DashboardSystemStatus
                   brandId={data.latestBrandId}
                   canAudit={hasPlan(plan, "growth")}
@@ -629,6 +639,7 @@ const App = async ({ searchParams }: AppProperties) => {
                       <TrendAnnotations
                         annotations={annotations}
                         brandId={data.latestBrandId}
+                        t={dict.annotations}
                       />
                     ) : null
                   }
@@ -707,7 +718,7 @@ const App = async ({ searchParams }: AppProperties) => {
                 경고할 불일치 자체가 없다 — 남겨두면 **없는 혼란을 설명하는 문장**이 된다.
                 ⚠️ 이력을 다시 이 화면에 붙이면 **그 한 줄도 같이 되살려야 한다.** */}
 
-            <PartnerCTA plan={plan} />
+            <PartnerCTA plan={plan} t={dict.partnerCta} />
             {!isPaid(plan) && (
               <UpgradeLadder plan={plan} t={dict.upgradeLadder} />
             )}

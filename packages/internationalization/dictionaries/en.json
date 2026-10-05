@@ -631,7 +631,8 @@
       "siteAudit": "Site readiness",
       "sources": "Cited sources",
       "support": "Support",
-      "todo": "What to do now"
+      "todo": "What to do now",
+      "partnerBadge": "Partner"
     },
     "exportDialog": {
       "title": "Export data",
@@ -718,7 +719,9 @@
       "issueInsufficient": "Only {count} answers to brand questions were fully checked in this run, below the minimum of {min}.",
       "issueUnverified": "{count} brand checks did not complete in this run.",
       "issueNotFinal": "Scores, mention rate, trends and recommendations for this run are not final.",
-      "checkEvidence": "Check the evidence in the report →"
+      "checkEvidence": "Check the evidence in the report →",
+      "brandSwitcherLabel": "Choose brand",
+      "headerMetricLabel": "AI & search mention rate"
     },
     "errorBoundary": {
       "title": "Something went wrong",
@@ -782,6 +785,81 @@
       "basis": "{range} · based on {n} measurements",
       "deltaCaveat": "Change since the first measurement in this range. Questions, responding engines and judging criteria can differ between runs, so this can't be read as the effect of actions such as publishing content.",
       "empty": "Measure a second time and we'll chart the change."
+    },
+    "annotations": {
+      "listTitle": "What happened in this period",
+      "emptyHint": "Note what happened in this period, and you'll see the reason next time you look at the chart.",
+      "add": "Add note",
+      "placeholder": "e.g. Press release, brand page redesign",
+      "saving": "Saving…",
+      "save": "Save",
+      "deleteLabel": "Delete note: {label}",
+      "errorSignIn": "Please sign in.",
+      "errorEmpty": "Please describe what happened.",
+      "errorTooLong": "Please keep it to {max} characters or fewer.",
+      "errorDate": "Please check the date.",
+      "errorBrand": "We couldn't find that brand.",
+      "errorGone": "This note has already been deleted.",
+      "errorForbidden": "You don't have permission to do that."
+    },
+    "partnerCta": {
+      "submitted": "Your partner application has been received. We'll let you know after review.",
+      "pendingTitle": "Partner application under review",
+      "pendingBody": "We've received your application and will let you know the result after review.",
+      "rejectedTitle": "Partner application result",
+      "title": "Are you an agency or consultancy?",
+      "rejectedBody": "This application wasn't approved. You can apply again.",
+      "body": "To measure several clients from one account, you need partner approval. Once approved, Growth features unlock.",
+      "reason": "Reason: {note}",
+      "reapply": "Apply again",
+      "apply": "Apply as a partner",
+      "dialogTitle": "Partner application",
+      "dialogBody": "A reason is optional, but it helps our review.",
+      "placeholder": "e.g. We're an agency and want to run GEO audits for several clients.",
+      "cancel": "Cancel",
+      "submitting": "Submitting…",
+      "submit": "Submit application"
+    },
+    "systemStatus": {
+      "neverRun": "No runs yet",
+      "connected": "Connected",
+      "syncing": "Syncing",
+      "needsCheck": "Needs attention",
+      "needsProperty": "Choose a property",
+      "loading": "Loading overall status",
+      "title": "Overall status",
+      "readinessLockedBody": "Check your site's technical SEO and GEO health.",
+      "readinessLabel": "Site readiness",
+      "readinessLockedMeta": "Available on the Growth plan",
+      "searchLockedBody": "Connect your real search impressions, clicks and traffic.",
+      "searchLabel": "Search data",
+      "searchLockedMeta": "Connect on the Growth plan",
+      "connectNeeded": "Not connected",
+      "score": "{n} pts",
+      "checkDone": "Check complete",
+      "checking": "Checking",
+      "notChecked": "Not checked yet",
+      "lastFailed": "The last check didn't finish · Try running it again",
+      "searchConnectHint": "You can connect Search Console, GA4 and Naver data",
+      "lede": "A summary of the key status. Open a card to see the evidence and how to fix it.",
+      "readinessRetryBody": "Run the check again to find the cause.",
+      "readinessBody": "Check the technical SEO and GEO readiness of your saved domain.",
+      "searchBody": "Connect Search Console, GA4 and Naver data to see performance.",
+      "noConnections": "No connections yet",
+      "connectedCount": "{connected}/{total} connected"
+    },
+    "answerBuckets": {
+      "nameMismatchWithSite": "The brand name you measured, “{input}”, differs from the name on your official site, “{site}”. AI was asked using the name exactly as entered — fix the brand name and measure again.",
+      "nameMismatch": "The brand name you measured, “{input}”, differs from the name on your official site. AI was asked using the name exactly as entered — fix the brand name and measure again.",
+      "title": "How AI knows you",
+      "basis": "By answer · {n} AI answers to questions using your brand name",
+      "countUnit": "answers",
+      "ofAttempts": "of {n} attempts · excluded from rates",
+      "ofJudged": "of {n} judged",
+      "pending": "{n} pending judgment —",
+      "discovery": "Recommended when asked without your name {recommended}/{adjudicated} — answers that recommended you when asked only about your industry or problem.",
+      "searchNote": "— counted separately, because this checks search results rather than AI answers.",
+      "engines": "By engine · AI engines that correctly knew you {confirmed}/{measured}"
     }
   }
 }

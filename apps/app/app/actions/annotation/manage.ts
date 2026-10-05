@@ -5,6 +5,7 @@ import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
 import { scopedBrandById } from "@/lib/db/scoped";
+import { getAppDictionary } from "@/lib/i18n";
 
 /**
  * 추세 차트 수동 주석 — 생성/삭제 (감사 D2, 2026-08-07 세션N-8).
@@ -32,28 +33,32 @@ export async function createAnnotation(
   occurredAt: string,
   label: string
 ): Promise<AnnotationResult> {
+  const t = (await getAppDictionary()).annotations;
   const { userId } = await auth();
   if (!userId) {
-    return { ok: false, error: "로그인이 필요해요." };
+    return { ok: false, error: t.errorSignIn };
   }
 
   const trimmed = label.trim();
   if (!trimmed) {
-    return { ok: false, error: "무슨 일이 있었는지 적어주세요." };
+    return { ok: false, error: t.errorEmpty };
   }
   if (trimmed.length > LABEL_MAX) {
-    return { ok: false, error: `${LABEL_MAX}자 이내로 적어주세요.` };
+    return {
+      ok: false,
+      error: t.errorTooLong.replace("{max}", String(LABEL_MAX)),
+    };
   }
 
   const when = new Date(occurredAt);
   if (Number.isNaN(when.getTime())) {
-    return { ok: false, error: "날짜를 다시 확인해주세요." };
+    return { ok: false, error: t.errorDate };
   }
 
   // 🔴 소유 검증 — 이게 없으면 남의 브랜드에 주석을 심을 수 있다.
   const brand = await scopedBrandById(brandId);
   if (!brand) {
-    return { ok: false, error: "브랜드를 찾을 수 없어요." };
+    return { ok: false, error: t.errorBrand };
   }
 
   await database.annotation.create({
@@ -66,9 +71,10 @@ export async function createAnnotation(
 }
 
 export async function deleteAnnotation(id: string): Promise<AnnotationResult> {
+  const t = (await getAppDictionary()).annotations;
   const { userId } = await auth();
   if (!userId) {
-    return { ok: false, error: "로그인이 필요해요." };
+    return { ok: false, error: t.errorSignIn };
   }
 
   // 삭제도 org 검증이 필요하다 — id 만으로 지우면 남의 주석을 지울 수 있다.
@@ -78,11 +84,11 @@ export async function deleteAnnotation(id: string): Promise<AnnotationResult> {
     select: { brandId: true },
   });
   if (!target) {
-    return { ok: false, error: "이미 지워진 메모예요." };
+    return { ok: false, error: t.errorGone };
   }
   const brand = await scopedBrandById(target.brandId);
   if (!brand) {
-    return { ok: false, error: "권한이 없어요." };
+    return { ok: false, error: t.errorForbidden };
   }
 
   await database.annotation.delete({ where: { id } });

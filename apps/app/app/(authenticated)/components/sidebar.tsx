@@ -144,6 +144,7 @@ export interface SidebarLabels {
   groupMeasure: string;
   history: string;
   lockedHint: string;
+  partnerBadge: string;
   prompts: string;
   publicInsights: string;
   siteAudit: string;
@@ -493,7 +494,7 @@ export const GlobalSidebar = ({
                 {labels.currentPlan}
               </span>
               <span className="flex items-center gap-1">
-                {isPartner && <PartnerBadge />}
+                {isPartner && <PartnerBadge label={labels.partnerBadge} />}
                 <PlanBadge plan={plan} />
               </span>
             </SidebarMenuItem>

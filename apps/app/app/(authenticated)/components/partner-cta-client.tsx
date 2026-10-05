@@ -16,6 +16,7 @@ import { Textarea } from "@repo/design-system/components/ui/textarea";
 import { Clock, Handshake } from "lucide-react";
 import { useState, useTransition } from "react";
 import { applyForPartner } from "@/app/actions/partner/apply";
+import type { AppDictionary } from "@/lib/i18n";
 
 const CARD =
   "findable-card-accent flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between";
@@ -25,9 +26,10 @@ const SUBTLE = "text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm";
 interface Props {
   note: string | null;
   status: PartnerStatus;
+  t: AppDictionary["partnerCta"];
 }
 
-export const PartnerCtaClient = ({ status, note }: Props) => {
+export const PartnerCtaClient = ({ status, note, t }: Props) => {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [pending, startTransition] = useTransition();
@@ -44,7 +46,7 @@ export const PartnerCtaClient = ({ status, note }: Props) => {
       setLocalStatus("pending");
       setOpen(false);
       setReason("");
-      toast.success("파트너 신청이 접수됐어요. 검토 후 알려드릴게요.");
+      toast.success(t.submitted);
     });
   };
 
@@ -57,10 +59,8 @@ export const PartnerCtaClient = ({ status, note }: Props) => {
             <Clock aria-hidden className="size-5" />
           </span>
           <div className="flex flex-col gap-1">
-            <p className={TITLE}>파트너 신청 심사 중</p>
-            <p className={SUBTLE}>
-              신청이 접수됐어요. 검토 후 결과를 알려드립니다.
-            </p>
+            <p className={TITLE}>{t.pendingTitle}</p>
+            <p className={SUBTLE}>{t.pendingBody}</p>
           </div>
         </div>
       </section>
@@ -84,17 +84,11 @@ export const PartnerCtaClient = ({ status, note }: Props) => {
               🔬 혜택은 **코드로 확인한 것만** 적었다(추정 금지): 승인 시 `grantPlan(userId,
               "growth")` 로 **Growth 권한이 부여**된다(`actions/partner/decide.ts:91`
               · `packages/auth/plan.ts:13`). 그래서 "Growth 기능이 열린다"고 쓸 수 있다. */}
-          <p className={TITLE}>
-            {isRejected ? "파트너 신청 결과" : "대행사·컨설팅사이신가요?"}
-          </p>
-          <p className={SUBTLE}>
-            {isRejected
-              ? "이번 신청은 승인되지 않았어요. 다시 신청할 수 있어요."
-              : "고객사 여러 곳을 한 계정에서 측정하려면 파트너 승인이 필요해요. 승인되면 Growth 기능이 열려요."}
-          </p>
+          <p className={TITLE}>{isRejected ? t.rejectedTitle : t.title}</p>
+          <p className={SUBTLE}>{isRejected ? t.rejectedBody : t.body}</p>
           {isRejected && note ? (
             <p className="mt-1 rounded-md border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] px-3 py-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              사유: {note}
+              {t.reason.replace("{note}", note)}
             </p>
           ) : null}
         </div>
@@ -103,21 +97,19 @@ export const PartnerCtaClient = ({ status, note }: Props) => {
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogTrigger asChild>
           <Button className="findable-btn-primary shrink-0">
-            {isRejected ? "다시 신청하기" : "파트너 신청"}
+            {isRejected ? t.reapply : t.apply}
           </Button>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>파트너 신청</DialogTitle>
-            <DialogDescription>
-              신청 사유는 선택이에요. 적어주시면 검토에 도움이 됩니다.
-            </DialogDescription>
+            <DialogTitle>{t.dialogTitle}</DialogTitle>
+            <DialogDescription>{t.dialogBody}</DialogDescription>
           </DialogHeader>
           <Textarea
             disabled={pending}
             maxLength={500}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="예: 대행사로 클라이언트 여러 곳의 GEO 진단에 활용하려 합니다."
+            placeholder={t.placeholder}
             rows={4}
             value={reason}
           />
@@ -127,14 +119,14 @@ export const PartnerCtaClient = ({ status, note }: Props) => {
               onClick={() => setOpen(false)}
               variant="ghost"
             >
-              취소
+              {t.cancel}
             </Button>
             <Button
               className="findable-btn-primary"
               disabled={pending}
               onClick={submit}
             >
-              {pending ? "제출 중…" : "신청 제출"}
+              {pending ? t.submitting : t.submit}
             </Button>
           </DialogFooter>
         </DialogContent>

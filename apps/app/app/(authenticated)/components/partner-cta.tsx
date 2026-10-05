@@ -1,12 +1,19 @@
 import { hasPartnerAccess, type Plan } from "@repo/auth/plan";
 import { getMyPartnerStatus } from "@/app/actions/partner/query";
+import type { AppDictionary } from "@/lib/i18n";
 import { PartnerCtaClient } from "./partner-cta-client";
 
 /**
  * 파트너 신청 CTA (서버). DB 에서 신청 상태를 읽어 상태별 UI 를 클라이언트에 위임.
  * 이미 파트너 접근권(Growth 이상) 보유면 아무것도 렌더하지 않음.
  */
-export const PartnerCTA = async ({ plan }: { plan: Plan }) => {
+export const PartnerCTA = async ({
+  plan,
+  t,
+}: {
+  plan: Plan;
+  t: AppDictionary["partnerCta"];
+}) => {
   // 이미 파트너 접근권이 있으면 신청 CTA 불필요.
   if (hasPartnerAccess(plan)) {
     return null;
@@ -19,5 +26,5 @@ export const PartnerCTA = async ({ plan }: { plan: Plan }) => {
     return null;
   }
 
-  return <PartnerCtaClient note={note} status={status} />;
+  return <PartnerCtaClient note={note} status={status} t={t} />;
 };

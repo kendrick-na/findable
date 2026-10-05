@@ -64,6 +64,7 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
           isPartner={isPartner}
           labels={{
             adminAudits: t.sidebar.adminAudits,
+            partnerBadge: t.sidebar.partnerBadge,
             adminContent: t.sidebar.adminContent,
             adminEvidence: t.sidebar.adminEvidence,
             adminMeasure: t.sidebar.adminMeasure,

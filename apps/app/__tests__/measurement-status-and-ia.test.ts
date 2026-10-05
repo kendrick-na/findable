@@ -10,7 +10,12 @@ describe("측정 상태·결과 IA 계약", () => {
       "app/(authenticated)/components/dashboard-system-status.tsx"
     );
     expect(status).toContain("connections.length === 0");
-    expect(status).toContain('"아직 연결 없음"');
+    // 🔴 2026-10-06 — 문구는 사전(`app.systemStatus.noConnections`)으로 옮겨졌다.
+    expect(status).toMatch(/connections\.length === 0\s*\?\s*t\.noConnections/);
+    const dict = JSON.parse(
+      read("../../packages/internationalization/dictionaries/ko.json")
+    ).app.systemStatus;
+    expect(dict.noConnections).toBe("아직 연결 없음");
   });
 
   it("완료된 측정 이력은 정식 공개 리포트로 연결한다", () => {

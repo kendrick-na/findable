@@ -4,6 +4,7 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useState, useTransition } from "react";
+import type { AppDictionary } from "@/lib/i18n";
 import {
   createAnnotation,
   deleteAnnotation,
@@ -23,9 +24,11 @@ import type { TrendAnnotation } from "./sov-trend-chart";
 export const TrendAnnotations = ({
   annotations,
   brandId,
+  t,
 }: {
   annotations: TrendAnnotation[];
   brandId: string;
+  t: AppDictionary["annotations"];
 }) => {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
@@ -60,9 +63,7 @@ export const TrendAnnotations = ({
     <div className="mt-4 border-[color:var(--findable-hairline,#23252a)] border-t pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-          {annotations.length > 0
-            ? "이 기간에 있었던 일"
-            : "이 기간에 무슨 일이 있었는지 적어두면, 다음에 그래프를 볼 때 이유가 같이 보여요."}
+          {annotations.length > 0 ? t.listTitle : t.emptyHint}
         </p>
         <Button
           className="h-7 gap-1.5 text-xs"
@@ -71,7 +72,7 @@ export const TrendAnnotations = ({
           variant="ghost"
         >
           <PlusIcon className="h-3.5 w-3.5" />
-          메모 추가
+          {t.add}
         </Button>
       </div>
 
@@ -87,7 +88,7 @@ export const TrendAnnotations = ({
             className="h-8 min-w-0 flex-1 text-xs"
             maxLength={60}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="예: 보도자료 배포, 브랜드 페이지 개편"
+            placeholder={t.placeholder}
             value={label}
           />
           <Button
@@ -96,7 +97,7 @@ export const TrendAnnotations = ({
             onClick={submit}
             size="sm"
           >
-            {pending ? "저장 중…" : "저장"}
+            {pending ? t.saving : t.save}
           </Button>
         </div>
       ) : null}
@@ -123,7 +124,7 @@ export const TrendAnnotations = ({
                 {a.label}
               </span>
               <button
-                aria-label={`${a.label} 메모 삭제`}
+                aria-label={t.deleteLabel.replace("{label}", a.label)}
                 className="shrink-0 rounded p-1 transition-colors hover:text-[color:var(--findable-ink,#f7f8f8)]"
                 disabled={pending}
                 onClick={() => remove(a.id)}

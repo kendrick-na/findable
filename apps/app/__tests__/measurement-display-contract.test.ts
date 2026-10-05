@@ -93,13 +93,31 @@ describe("W0-3a mixed AI/search and failed-engine display", () => {
   it("history and persistent headers identify their stored mixed-channel rate", () => {
     for (const path of [
       "app/(authenticated)/history/[jobId]/page.tsx",
-      "app/(authenticated)/components/header.tsx",
       "app/(authenticated)/components/header-metric-context.tsx",
     ]) {
       const source = readFileSync(join(process.cwd(), path), "utf8");
       expect(source).toContain("AI·검색 등장률");
       expect(source).not.toContain("AI 답변 등장률");
     }
+    // 🔴 2026-10-06 — 헤더 라벨은 사전(`app.dashboard.headerMetricLabel`)으로 옮겨졌다.
+    const header = readFileSync(
+      join(process.cwd(), "app/(authenticated)/components/header.tsx"),
+      "utf8"
+    );
+    expect(header).toContain("dict.dashboard.headerMetricLabel");
+    const label = (lang: string) =>
+      JSON.parse(
+        readFileSync(
+          join(
+            process.cwd(),
+            `../../packages/internationalization/dictionaries/${lang}.json`
+          ),
+          "utf8"
+        )
+      ).app.dashboard.headerMetricLabel as string;
+    expect(label("ko")).toBe("AI·검색 등장률");
+    expect(label("en")).toMatch(/AI & search/);
+    expect(label("en")).not.toMatch(/AI answer/i);
   });
   it("fallback coverage counts only engines with a successful row", () => {
     const coverage = extractEngineCoverage({

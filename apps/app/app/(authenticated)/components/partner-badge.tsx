@@ -11,7 +11,14 @@ import { Handshake } from "lucide-react";
  *
  * 노출 판정은 호출부에서(승인 파트너일 때만 렌더). 이 컴포넌트는 표기만.
  */
-export const PartnerBadge = ({ className }: { className?: string }) => (
+export const PartnerBadge = ({
+  className,
+  label,
+}: {
+  className?: string;
+  /** 사이드바 사전 `app.sidebar.partnerBadge`. */
+  label: string;
+}) => (
   <span
     className={cn(
       "inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 font-medium text-xs [&>svg]:size-3",
@@ -21,6 +28,6 @@ export const PartnerBadge = ({ className }: { className?: string }) => (
     data-partner="approved"
   >
     <Handshake aria-hidden />
-    파트너
+    {label}
   </span>
 );
