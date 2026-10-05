@@ -256,4 +256,43 @@ describe("refunded renewal ends paid access [P1-2/P1-3]", () => {
     expect((await expireCancelledSubscriptions(cronAt)).expired).toBe(1);
     expect(fx.clerk.publicMetadata.plan).toBe("free");
   });
+
+  it("P1-3: refunding a renewal whose Paid webhook never finished still ends the subscription", async () => {
+    // The renewal charged, but its Paid webhook never recorded it as last.
+    seedRenewedSubscriber({
+      billingLastPaymentId: FIRST_ID,
+      billingNextPaymentId: RENEWAL_ID,
+      billingNextPaymentAt: RENEWAL_AT,
+    });
+    fx.getPayment.mockImplementation(async (id: string) => ({
+      ...cancelled(id),
+      paidAt: RENEWAL_AT.toISOString(),
+    }));
+    expect((await postCancelled(RENEWAL_ID)).status).toBe(200);
+    expect(fx.cancelSchedules).toHaveBeenCalledWith("key-1");
+    expect(fx.deleteBillingKey).toHaveBeenCalledWith("key-1");
+    expect(fx.org).toMatchObject({
+      billingStatus: "canceled",
+      billingCustomerId: null,
+      billingNextPaymentId: null,
+    });
+    const { expireCancelledSubscriptions } = await import(
+      "@/lib/billing/period-end-expiry"
+    );
+    const cronAt = new Date(REFUND_AT.getTime() + 30 * 60 * 1000);
+    expect((await expireCancelledSubscriptions(cronAt)).expired).toBe(1);
+    expect(fx.clerk.publicMetadata.plan).toBe("free");
+  });
+
+  it("P1-3 control: a cancelled next payment that was never paid leaves the subscription alone", async () => {
+    seedRenewedSubscriber({
+      billingLastPaymentId: RENEWAL_ID,
+      billingNextPaymentId: NEXT_ID,
+      billingNextPaymentAt: NEXT_AT,
+    });
+    const before = structuredClone(fx.org);
+    expect((await postCancelled(NEXT_ID)).status).toBe(200);
+    expect(fx.cancelSchedules).not.toHaveBeenCalled();
+    expect(fx.org).toEqual(before);
+  });
 });

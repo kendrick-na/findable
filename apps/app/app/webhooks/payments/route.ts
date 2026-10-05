@@ -182,21 +182,38 @@ async function handleFailedPayment(paymentId: string): Promise<Response> {
  *   회수하면 결제 출처 스택이 직전 회차(같은 plan)로 "복구"되어 환불한 달을 계속 쓰게 된다.
  *   기간 끝을 지금으로 두면 다음 cron(`expireCancelledSubscriptions`)이 끝난 출처를 모두 걷는다.
  *   이미 지금보다 이른 값이면 그대로 둔다(재전송 멱등).
+ *
+ * 🔒 P1-3: 갱신 회차가 결제됐는데 Paid 웹훅이 끝나지 않으면 그 회차는 아직
+ *   `billingNextPaymentId` 에만 있다. **실제로 결제됐던**(paidAt 있음) 결제의 환불이면 그 경우도
+ *   현재 구독 회차로 본다. 결제된 적 없는 다음 예약의 취소는 구독을 건드리지 않는다.
+ *   조직 갱신은 찾은 필드(last 또는 next)가 그대로일 때만 하는 조건부 updateMany 다.
  */
 async function cleanupRefundedSubscription(
-  paymentId: string
+  paymentId: string,
+  options: { wasPaid: boolean }
 ): Promise<"not_current_subscription" | "cleaned" | "already_clean"> {
-  const org = await database.organization.findFirst({
+  const select = {
+    id: true,
+    billingCustomerId: true,
+    billingNextPaymentAt: true,
+    billingNextPaymentId: true,
+    billingProvider: true,
+    billingStatus: true,
+  } as const;
+  let guard:
+    | { billingLastPaymentId: string }
+    | { billingNextPaymentId: string } = { billingLastPaymentId: paymentId };
+  let org = await database.organization.findFirst({
     where: { billingLastPaymentId: paymentId },
-    select: {
-      id: true,
-      billingCustomerId: true,
-      billingNextPaymentAt: true,
-      billingNextPaymentId: true,
-      billingProvider: true,
-      billingStatus: true,
-    },
+    select,
   });
+  if (!org && options.wasPaid) {
+    guard = { billingNextPaymentId: paymentId };
+    org = await database.organization.findFirst({
+      where: { billingNextPaymentId: paymentId },
+      select,
+    });
+  }
   if (!org) {
     return "not_current_subscription";
   }
@@ -219,7 +236,7 @@ async function cleanupRefundedSubscription(
     await deleteBillingKey(billingKey);
   }
   await database.organization.updateMany({
-    where: { id: org.id, billingLastPaymentId: paymentId },
+    where: { id: org.id, ...guard },
     data: {
       billingStatus: "canceled",
       billingNextPaymentId: null,
@@ -346,7 +363,9 @@ async function handleCancelledPayment(
   }));
   let cleanup: Awaited<ReturnType<typeof cleanupRefundedSubscription>>;
   try {
-    cleanup = await cleanupRefundedSubscription(paymentId);
+    cleanup = await cleanupRefundedSubscription(paymentId, {
+      wasPaid: Boolean(payment.paidAt),
+    });
   } catch (error) {
     log.error("payments.webhook.refund_cleanup_failed", {
       userId,
