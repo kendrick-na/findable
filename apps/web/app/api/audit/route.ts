@@ -27,6 +27,7 @@ import { checkBotId } from "botid/server";
 import type { NextRequest } from "next/server";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+import { resolveIsOwner } from "./_lib/owner";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -491,14 +492,23 @@ export async function POST(request: NextRequest) {
     const gate = await checkUsageGate(payload.email, payload.domain, tier);
     if (gate.blocked) {
       const gateError = usageGateError(gate);
+      // 🔒 P2-3(2026-10-05): 이메일+도메인만 알면 남의 무료 결과 링크를 받던 구멍.
+      //   기존 결과 링크는 그 진단의 소유자(로그인 세션 기준)에게만 돌려준다.
+      //   비소유자는 안내 문구만 받는다(폼은 링크 없이 오류 문구를 보여 준다).
+      const existing = await database.auditJob.findUnique({
+        where: { id: gate.existingJobId },
+        select: { email: true, organizationId: true },
+      });
+      const isOwner = existing ? await resolveIsOwner(existing) : false;
       log.info("audit.request.rate_limited", {
         email: maskEmail(payload.email),
         existingJobId: gate.existingJobId,
+        linkReturned: isOwner,
       });
       return NextResponse.json(
         {
           error: gateError,
-          existingJobId: gate.existingJobId,
+          ...(isOwner ? { existingJobId: gate.existingJobId } : {}),
         },
         { status: 429 }
       );
