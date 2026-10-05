@@ -1082,3 +1082,54 @@ model PaymentRefund {
   @@index([organizationId, refundedAt])
   @@index([userId])
 }
+
+// ──────────────────────────────────────────────────
+// 환불·청약철회 요청 (migration 20261005_refund_request)
+//   요금제 화면의 "환불·청약철회 요청" 이 조직당 1행을 남기고 운영자에게 알린다.
+//   고객에게 메일을 보내지 않는다. 실제 환불(PortOne 취소)은 운영자가 처리한다.
+//   ⚠️ PaymentRefund 와 같은 이유로 Organization/User relation 을 두지 않는다
+//     (migration 적용 전 배포에서도 기존 경로가 이 테이블을 조회하지 않게).
+// ──────────────────────────────────────────────────
+
+enum RefundRequestStatus {
+  pending
+  resolved
+}
+
+model RefundRequest {
+  id             String              @id @default(uuid())
+  organizationId String
+  /// 요청한 Clerk userId.
+  userId         String
+  /// 요청 시점의 마지막 결제 ID(Organization.billingLastPaymentId). 없으면 null.
+  paymentId      String?
+  /// 고객이 적은 요청 내용(선택, 최대 500자).
+  message        String?
+  status         RefundRequestStatus @default(pending)
+  createdAt      DateTime            @default(now())
+  resolvedAt     DateTime?
+
+  @@index([organizationId, status])
+  @@index([createdAt])
+}
+
+// ──────────────────────────────────────────────────
+// 정기결제 갱신 사전 안내 발송 기록 (migration 20261005_renewal_notice)
+//   예약된 다음 결제(billingNextPaymentId) 1건당 안내 메일 1통만 보내기 위한 선점 기록.
+//   발송 전에 행을 만들고(paymentId unique), 발송이 실패하면 행을 지워 다음 실행에서 다시 시도한다.
+//   ⚠️ relation 을 두지 않는다(위와 같은 이유). 테이블이 없으면 안내 단계는 아무것도 보내지 않는다.
+// ──────────────────────────────────────────────────
+
+model RenewalNotice {
+  id             String   @id @default(uuid())
+  /// 안내 대상 예약 결제 ID(Organization.billingNextPaymentId).
+  paymentId      String   @unique
+  organizationId String
+  /// 수신자 Clerk userId(paymentId 에 심긴 결제자).
+  userId         String
+  /// 안내한 결제 예정 시각.
+  scheduledAt    DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+}
