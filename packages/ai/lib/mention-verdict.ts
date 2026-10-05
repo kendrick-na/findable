@@ -69,6 +69,11 @@ export type MentionQuality =
 export interface MentionVerdict {
   /** 점수·SoV에 실제로 반영할 최종 판정. confirmed 만 true. */
   counted: boolean;
+  /**
+   * 공식 홈페이지를 못 읽어 근거 검사 없이 판정기를 믿은 confirmed(2026-10-06, 무신사 REDIRECT_FAILED).
+   * 화면 표시는 사용자 승인 전이라 데이터 플래그로만 남긴다.
+   */
+  officialProfileUnavailable?: true;
   quality: MentionQuality;
   /** 비집계 판정의 사유(관측·재검증용). 없으면 quality 자체가 사유다. */
   reason?: MentionVerdictReason;
@@ -291,7 +296,6 @@ export function isOfficialDomain(
 /** 「함께해요」「만들어요」 같은 슬로건의 서술어 끝 — 회사를 가르는 사실이 아니다. */
 const PREDICATE_ENDING_RE = /(?:요|다|니다|세요|하자|해요)$/;
 const LEGAL_SUFFIX_RE = /\(주\)|㈜|주식회사|\(유\)|유한회사/g;
-const MIN_PROFILE_TOKENS_TO_DEMAND = 2;
 /** 슬로건에 흔한 2글자 군말 — 회사를 가르지 못한다. */
 const SLOGAN_FILLER = new Set([
   "하나",
@@ -313,9 +317,10 @@ function officialProfileTokens(input: VerifyInput): Set<string> {
   return new Set(
     [site?.title, site?.description, site?.h1]
       .filter((value): value is string => Boolean(value))
-      // 한글은 2글자 명사까지 받는다(2026-10-06): 「중고 거래부터 동네 정보까지」의 중고·거래·동네가
-      //   4글자 하한에 걸려 모두 탈락해 당근의 정답 답변이 강등됐다. 영문 하한(5)은 그대로.
-      .flatMap((value) => identityTokens(value, 2))
+      // ⚠️ 2글자 명사는 근거로 받지 않는다(2026-10-06 컨트롤타워 검증): 「금융」⊂「금융권」,
+      //   「결제」⊂「결제대행」처럼 업종 일반명사가 동명 타사 답변을 통과시켰다. 슬로건형 브랜드는
+      //   토큰 대신 상호·사업자번호·공식 별칭 앵커(hasRegisteredEntityAnchor)로 푼다.
+      .flatMap((value) => identityTokens(value))
       .filter((token) => {
         const compact = compactIdentity(token);
         // 조사 제거 과정에서 고유명사 끝 글자까지 떨어져 나올 수 있다
@@ -334,29 +339,18 @@ function officialProfileTokens(input: VerifyInput): Set<string> {
 /**
  * 근거 없음 강등을 **요구할 수 있는** 프로필인가(2026-10-06 운영 실측).
  * - 홈페이지를 못 읽어 내용이 비면(무신사 REDIRECT_FAILED) 근거를 만들 재료가 없다.
- * - 슬로건뿐인 홈페이지(당근 24건 중 17건 강등)는 2글자 명사·상호로 근거를 넓혀 풀고,
- *   그래도 근거 재료(상호 또는 고유 토큰 2개)가 없을 때만 판정기를 믿는다.
- * ⚠️ 짧은 프로필이라고 무조건 풀면 안 된다 — TechDD(「정량 기술 실사」)는 해외 동명사를
- *   걸러 내는 이 강등이 실제로 필요했다(회귀 테스트 mention-entity-regression).
+ * - 슬로건뿐인 홈페이지(당근 24건 중 17건 강등)는 강등을 끄지 않고 앵커(상호·사업자번호·
+ *   「당근마켓」 같은 공식 별칭)로 근거를 넓혀 푼다.
+ * ⚠️ 「토큰이 적으면 강등 생략」은 쓰지 않는다 — TechDD(「정량 기술 실사」, 4글자 토큰 0)의
+ *   해외 동명사를 거르는 이 강등이 실제로 필요했다(회귀 테스트 mention-entity-regression).
  */
 export function canDemandOfficialEvidence(input: VerifyInput): boolean {
   const site = input.officialSite;
-  if (!site) {
-    return false;
-  }
-  const hasContent = [
-    site.title,
-    site.description,
-    site.h1,
-    site.siteName,
-  ].some((value) => Boolean(value?.trim()));
-  const legal = compactIdentity(
-    (site.legalName ?? "").replace(LEGAL_SUFFIX_RE, "")
-  );
-  return (
-    hasContent &&
-    (legal.length >= 3 ||
-      officialProfileTokens(input).size >= MIN_PROFILE_TOKENS_TO_DEMAND)
+  return Boolean(
+    site &&
+      [site.title, site.description, site.h1, site.siteName].some((value) =>
+        Boolean(value?.trim())
+      )
   );
 }
 
@@ -768,7 +762,14 @@ export async function verifyMention(
     };
   }
 
-  return { counted: quality === "confirmed", quality, via: "llm" };
+  return {
+    counted: quality === "confirmed",
+    quality,
+    via: "llm",
+    ...(quality === "confirmed" && !canDemandOfficialEvidence(input)
+      ? { officialProfileUnavailable: true as const }
+      : {}),
+  };
 }
 
 /** 테스트·오프라인 분석용 — LLM 없이 규칙만으로 모호 여부를 본다. */
@@ -810,6 +811,7 @@ export interface VerdictV3Shadow {
 
 export interface VerifiedResponseFields {
   mentionQuality: MentionQuality;
+  officialProfileUnavailable?: true;
   verdictReason?: MentionVerdictReason;
   verdictV3?: VerdictV3Shadow;
   verdictVia: string;
@@ -852,6 +854,19 @@ function buildVerdictInput(
       brand.brandName,
       brand.brandVariants
     ).mentioned,
+  };
+}
+
+/** 판정 부가 필드(사유·홈페이지 미확인 플래그) — 있는 것만 싣는다. */
+function verdictExtras(verdict: MentionVerdict): {
+  officialProfileUnavailable?: true;
+  verdictReason?: MentionVerdictReason;
+} {
+  return {
+    ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
+    ...(verdict.officialProfileUnavailable
+      ? { officialProfileUnavailable: true as const }
+      : {}),
   };
 }
 
@@ -902,17 +917,27 @@ function logShadowDistribution(
 const SHADOW_CHUNK_DEADLINE_MS = 15_000;
 
 function withShadowDeadline<T>(
-  work: Promise<(T | null)[]>,
-  size: number
+  run: (signal: AbortSignal) => Promise<(T | null)[]>,
+  size: number,
+  parent?: AbortSignal
 ): Promise<(T | null)[]> {
+  // 시간이 지나면 실제로 판정기 호출을 취소한다 — 계속 돌면 v2 와 동시 호출 한도를 나눠
+  //   v2 가 judge_failed 로 떨어질 수 있다(컨트롤타워 검증 2026-10-06).
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort();
+  parent?.addEventListener("abort", onParentAbort, { once: true });
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<(T | null)[]>((resolve) => {
     timer = setTimeout(() => {
       log.warn("mention.verdict_v3.shadow_deadline", { size });
+      controller.abort();
       resolve(new Array(size).fill(null));
     }, SHADOW_CHUNK_DEADLINE_MS);
   });
-  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([run(controller.signal), timeout]).finally(() => {
+    clearTimeout(timer);
+    parent?.removeEventListener("abort", onParentAbort);
+  });
 }
 
 /**
@@ -967,14 +992,19 @@ export async function verifyMentions<T extends VerifiableResponse>(
     //   (2026-10-06 운영 실측: 켠 뒤 평균 131→162초, kurly 판정 단계에서 lease 만료).
     const shadowVerdicts = shadowV3
       ? withShadowDeadline(
-          Promise.all(
-            verdictInputs.map((verdictInput) =>
-              verdictInput
-                ? verifyMentionV3(verdictInput).catch(() => null)
-                : Promise.resolve(null)
-            )
-          ),
-          slice.length
+          (shadowSignal) =>
+            Promise.all(
+              verdictInputs.map((verdictInput) =>
+                verdictInput
+                  ? verifyMentionV3({
+                      ...verdictInput,
+                      signal: shadowSignal,
+                    }).catch(() => null)
+                  : Promise.resolve(null)
+              )
+            ),
+          slice.length,
+          brand.signal
         )
       : Promise.resolve(slice.map(() => null));
     const verdicts = await Promise.all(
@@ -1012,7 +1042,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
         mentionPosition: verdict.counted ? original.mentionPosition : null,
         mentionQuality: verdict.quality,
         verdictVia: verdict.via,
-        ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
+        ...verdictExtras(verdict),
         ...shadowField(shadow),
       };
     }
