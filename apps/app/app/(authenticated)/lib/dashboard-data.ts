@@ -938,23 +938,35 @@ export function buildTrackingDashboardData(
 }
 
 // 상대 시간(예: "3일 전"). 7일 초과면 YYYY.MM.DD.
-export function formatMeasuredAt(date: Date, now: Date = new Date()): string {
+// 🔴 2026-10-06 — 문구는 사전(`app.relativeTime`)에서 받는다(호출부가 넘긴다).
+export interface RelativeTimeLabels {
+  daysAgo: string;
+  hoursAgo: string;
+  justNow: string;
+  minutesAgo: string;
+}
+
+export function formatMeasuredAt(
+  date: Date,
+  t: RelativeTimeLabels,
+  now: Date = new Date()
+): string {
   const diffMs = now.getTime() - date.getTime();
   const diffMinutes = Math.round(diffMs / 60_000);
 
   if (diffMinutes < 1) {
-    return "방금 전";
+    return t.justNow;
   }
   if (diffMinutes < 60) {
-    return `${diffMinutes}분 전`;
+    return t.minutesAgo.replace("{n}", String(diffMinutes));
   }
   const diffHours = Math.round(diffMinutes / 60);
   if (diffHours < 24) {
-    return `${diffHours}시간 전`;
+    return t.hoursAgo.replace("{n}", String(diffHours));
   }
   const diffDays = Math.round(diffHours / 24);
   if (diffDays <= 7) {
-    return `${diffDays}일 전`;
+    return t.daysAgo.replace("{n}", String(diffDays));
   }
   return formatShortDate(date);
 }

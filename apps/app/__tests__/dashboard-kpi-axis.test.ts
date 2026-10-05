@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 🔬 **KPI 1번 카드 계약 가드** — N-46 라이브 실측이 잡은 두 가지를 고정한다.
  *
@@ -18,6 +19,9 @@ import { join } from "node:path";
 import { METRICS } from "@repo/audit/metric-dictionary";
 import { describe, expect, it } from "vitest";
 import { measurementCoverageHint } from "../app/(authenticated)/components/dashboard-kpis";
+
+/** 문구는 사전에서 온다(2026-10-06) — 한국어 화면 기준으로 검사. */
+const KO_KPIS = koDict.app.kpis;
 
 const SRC = readFileSync(
   join(process.cwd(), "app/(authenticated)/components/dashboard-kpis.tsx"),
@@ -63,17 +67,19 @@ describe("KPI 1번 카드 — 라벨과 값이 같은 축", () => {
 
   it("🔴 **힌트의 빈 상태가 값(latestSov)에 걸려 있다**", () => {
     const card = firstCardBlock();
-    expect(card).toContain("measurementCoverageHint(coverage, latestSov)");
-    expect(measurementCoverageHint(null, 62)).not.toContain("측정하면");
-    expect(measurementCoverageHint(null, null)).toContain("측정하면");
+    expect(card).toContain("measurementCoverageHint(coverage, latestSov, t)");
+    expect(measurementCoverageHint(null, 62, KO_KPIS)).not.toContain(
+      "측정하면"
+    );
+    expect(measurementCoverageHint(null, null, KO_KPIS)).toContain("측정하면");
   });
 
   it("⛔ **두 갈래가 같은 문구가 아니다** (분기만 있고 말이 같으면 화면은 그대로)", () => {
-    expect(measurementCoverageHint(null, 62)).not.toBe(
-      measurementCoverageHint(null, null)
+    expect(measurementCoverageHint(null, 62, KO_KPIS)).not.toBe(
+      measurementCoverageHint(null, null, KO_KPIS)
     );
-    expect(measurementCoverageHint({ mentioned: 2, total: 4 }, 62)).toContain(
-      "측정한 AI·검색 4곳 중 2곳"
-    );
+    expect(
+      measurementCoverageHint({ mentioned: 2, total: 4 }, 62, KO_KPIS)
+    ).toContain("측정한 AI·검색 4곳 중 2곳");
   });
 });

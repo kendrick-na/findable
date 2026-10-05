@@ -59,9 +59,12 @@ const TONE: Record<(typeof HEADLINE_BUCKETS)[number], string> = {
 };
 
 export function DashboardAnswerBuckets({
+  isKo = true,
   result,
   t,
 }: {
+  /** 공용 패키지 문구(`answerBucketCopy`·엔진 이름)의 언어. */
+  isKo?: boolean;
   result: unknown;
   t: AppDictionary["answerBuckets"];
 }) {
@@ -103,7 +106,7 @@ export function DashboardAnswerBuckets({
           const rate = failure
             ? bucketRate(count, ai.total)
             : bucketRate(count, ai.adjudicated);
-          const copy = answerBucketCopy(bucket, true);
+          const copy = answerBucketCopy(bucket, isKo);
           return (
             <div
               className="rounded-lg border border-[color:var(--findable-hairline,#2d3035)] p-3"
@@ -139,7 +142,7 @@ export function DashboardAnswerBuckets({
         {ai.unverified > 0 ? (
           <li>
             {t.pending.replace("{n}", String(ai.unverified))}{" "}
-            {answerBucketCopy("unverified", true).explain}
+            {answerBucketCopy("unverified", isKo).explain}
           </li>
         ) : null}
         {summary.discovery ? (
@@ -154,7 +157,7 @@ export function DashboardAnswerBuckets({
             {Object.entries(summary.searchByEngine ?? {})
               .map(
                 ([id, g]) =>
-                  `${engineDisplayName(id)} ${g.confirmed}/${g.adjudicated}`
+                  `${engineDisplayName(id, isKo)} ${g.confirmed}/${g.adjudicated}`
               )
               .join(" · ")}{" "}
             {t.searchNote}

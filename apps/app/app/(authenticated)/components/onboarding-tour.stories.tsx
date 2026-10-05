@@ -52,7 +52,13 @@ const tourLabels = (dict: typeof koDict) => ({
 const DashboardShell = ({ lang = "ko" }: { lang?: "ko" | "en" }) => (
   <div className="flex max-w-3xl flex-col gap-6 p-6">
     <div id="tour-kpis">
-      <DashboardKpis data={REAL_DATA} paid={false} />
+      <DashboardKpis
+        data={REAL_DATA}
+        isKo={lang !== "en"}
+        paid={false}
+        relativeTime={(lang === "en" ? enDict : koDict).app.relativeTime}
+        t={(lang === "en" ? enDict : koDict).app.kpis}
+      />
     </div>
     <div
       className="findable-card flex h-24 items-center justify-center text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm"

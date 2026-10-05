@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 🔴🔴 **순위 평균의 모집단을 밝힌다** (N-48 · 2026-08-20).
  *
@@ -30,6 +31,14 @@ import { join } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { DashboardKpis } from "../app/(authenticated)/components/dashboard-kpis";
+
+/** 문구는 사전에서 온다(2026-10-06) — 한국어 화면 기준으로 검사. */
+const KPI_PROPS = {
+  isKo: true,
+  relativeTime: koDict.app.relativeTime,
+  t: koDict.app.kpis,
+};
+
 import type { DashboardData } from "../app/(authenticated)/lib/dashboard-data";
 
 const base: DashboardData = {
@@ -60,7 +69,7 @@ describe("순위 카드 — 모집단을 밝힌다", () => {
   afterEach(cleanup);
 
   it("🔴🔴 「N개 응답 평균」이 화면에 있다(원래 버그: 없었다)", () => {
-    render(<DashboardKpis data={base} paid={true} />);
+    render(<DashboardKpis {...KPI_PROPS} data={base} paid={true} />);
     expect(screen.getByText(/순위는 18개 응답 평균/)).toBeTruthy();
   });
 
@@ -68,6 +77,7 @@ describe("순위 카드 — 모집단을 밝힌다", () => {
     // AuditJob 폴백은 이 수를 모른다 → null. 0 으로 깔면 "0개 응답 평균"이라는 거짓이 된다.
     render(
       <DashboardKpis
+        {...KPI_PROPS}
         data={{ ...base, positionSampleCount: null }}
         paid={true}
       />
@@ -80,6 +90,7 @@ describe("순위 카드 — 모집단을 밝힌다", () => {
   it("⚠️ 표본이 0이면 표기하지 않는다(순위가 아예 없는 측정)", () => {
     render(
       <DashboardKpis
+        {...KPI_PROPS}
         data={{
           ...base,
           averageMentionPosition: null,
@@ -94,6 +105,7 @@ describe("순위 카드 — 모집단을 밝힌다", () => {
   it("✅ 등장률의 모집단 표기와 **같은 자리·같은 문법**이다(회귀 방지)", () => {
     render(
       <DashboardKpis
+        {...KPI_PROPS}
         data={{
           ...base,
           promptScores: [
@@ -115,14 +127,26 @@ describe("대시보드 이전 회차 비교", () => {
   afterEach(cleanup);
 
   it("상승 배지도 중립색이며 조치 효과가 아니라는 고지를 함께 보인다", () => {
-    render(<DashboardKpis data={{ ...base, sovDeltaPoints: 5 }} paid={true} />);
+    render(
+      <DashboardKpis
+        {...KPI_PROPS}
+        data={{ ...base, sovDeltaPoints: 5 }}
+        paid={true}
+      />
+    );
     const badge = screen.getByText("+5%p").parentElement;
     expect(badge?.className).not.toContain("emerald");
     expect(screen.getByText(/조치의 효과로 해석할 수 없습니다/)).toBeTruthy();
   });
 
   it("측정 1회이면 이전 회차 비교 고지를 표시하지 않는다", () => {
-    render(<DashboardKpis data={{ ...base, totalCount: 1 }} paid={true} />);
+    render(
+      <DashboardKpis
+        {...KPI_PROPS}
+        data={{ ...base, totalCount: 1 }}
+        paid={true}
+      />
+    );
     expect(screen.queryByText(/조치의 효과로 해석할 수 없습니다/)).toBeNull();
   });
 });

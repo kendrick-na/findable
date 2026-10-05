@@ -20,7 +20,10 @@ import type {
   SourcesAnalysis,
 } from "../../lib/analysis-data";
 import { SOURCE_KIND_LABEL } from "../../lib/analysis-data";
-import { formatMeasuredAt } from "../../lib/dashboard-data";
+import {
+  formatMeasuredAt,
+  type RelativeTimeLabels,
+} from "../../lib/dashboard-data";
 
 // 표에 세우는 최대 도메인 수. 롱테일(1회 인용)은 접는다.
 const MAX_DOMAINS = 15;
@@ -129,7 +132,14 @@ const EngineRow = ({
   );
 };
 
-export const SourcesBoard = ({ data }: { data: SourcesAnalysis }) => {
+export const SourcesBoard = ({
+  data,
+  relativeTime,
+}: {
+  data: SourcesAnalysis;
+  /** 상대 시간 문구(사전 `app.relativeTime`). */
+  relativeTime: RelativeTimeLabels;
+}) => {
   // 🔴 **서버 컴포넌트라 여기서 플래그를 읽는다** — prop 으로 실어나르면 배선이 한 겹 늘고
   //   그 겹에서 빠뜨리면 화면이 조용히 예전 말을 한다(📕 "이미 있는 걸 안 쓰고 있을 수 있다").
   //   판정 자체는 `engineSourceState` 단독 담당 — 여기서 엔진 id 를 비교하지 않는다(N-34).
@@ -296,7 +306,8 @@ export const SourcesBoard = ({ data }: { data: SourcesAnalysis }) => {
               출처로 걸린 링크
             </h2>
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              {formatMeasuredAt(measuredAt)} 측정 기준 · 많이 걸린 순
+              {formatMeasuredAt(measuredAt, relativeTime)} 측정 기준 · 많이 걸린
+              순
             </p>
           </div>
           <div className="flex flex-col">

@@ -9,13 +9,14 @@ import {
   scopedLatestOrgAudit,
   scopedLatestRunTracking,
 } from "@/lib/db/scoped";
+import { getAppDictionary } from "@/lib/i18n";
 import { AnalysisBrandPicker } from "../components/analysis-brand-picker";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { LockedSurface } from "../components/locked-surface";
 import { SourcesBoard } from "../features/analysis/sources-board";
-import { buildSourcesAnalysis } from "../lib/analysis-data";
 import { selectAnalysisBrandId } from "../lib/analysis-brand-selection";
+import { buildSourcesAnalysis } from "../lib/analysis-data";
 
 export const metadata: Metadata = {
   title: "출처 링크 · Findable",
@@ -114,7 +115,12 @@ const SourcesPage = async ({
   const analysis = isReady ? buildSourcesAnalysis(rows) : null;
   let content = <NeedsMeasurement />;
   if (analysis) {
-    content = <SourcesBoard data={analysis} />;
+    content = (
+      <SourcesBoard
+        data={analysis}
+        relativeTime={(await getAppDictionary()).relativeTime}
+      />
+    );
   }
   if (latest && !isReady) {
     content = (

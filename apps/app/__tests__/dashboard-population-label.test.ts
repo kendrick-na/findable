@@ -73,11 +73,24 @@ const kpisCode = stripToCode(readFileSync(KPIS, "utf8"));
 
 // 정규식은 최상위에(lint: useTopLevelRegex).
 /** 질문 수 모집단 표기. 값은 `promptScores.length`(최신 1회분 실측치)여야 한다. */
-const POPULATION_PROMPTS = /질문 \$\{promptScores\.length\}개 기준/;
+// 🔴 2026-10-06 — 문구는 사전(`app.kpis`)으로 옮겨졌다. 소스는 「실측치를 끼우는 배선」,
+//   사전은 「모집단을 밝히는 문장」을 각각 잠근다.
+const POPULATION_PROMPTS =
+  /t\.summaryQuestions\.replace\("\{n\}", String\(promptScores\.length\)\)/;
+const KPI_KO = JSON.parse(
+  readFileSync(
+    join(
+      process.cwd(),
+      "../../packages/internationalization/dictionaries/ko.json"
+    ),
+    "utf8"
+  )
+).app.kpis as Record<string, string>;
 /** 0건일 때 표기를 생략하는 가드(빈 원장에 "질문 0개 기준"을 쓰지 않는다). */
 const POPULATION_ZERO_GUARD = /promptScores\.length > 0\s*\?/;
 /** 엔진 수 모집단 — 이미 있던 표기. 같이 사라지지 않게 함께 잠근다. */
-const POPULATION_ENGINES = /측정한 AI·검색 \$\{coverage\.total\}곳/;
+const POPULATION_ENGINES =
+  /t\.summaryCoverage\s*\.replace\("\{total\}", String\(coverage\.total\)\)/;
 /** 상수로 박은 질문 수(날조). 실측치 보간이 아니면 이 패턴에 걸린다. */
 const POPULATION_HARDCODED = /질문 \d+개 기준/;
 
@@ -87,6 +100,7 @@ describe("대시보드 — 숫자의 모집단을 그 자리에 밝힌다", () =
       kpisCode,
       "모집단 표기가 사라졌다 — 히어로 숫자의 분모를 알 수 없게 된다"
     ).toMatch(POPULATION_PROMPTS);
+    expect(KPI_KO.summaryQuestions).toContain("질문 {n}개 기준");
   });
 
   it("🔴 질문 0건이면 표기를 생략한다", () => {
@@ -101,6 +115,7 @@ describe("대시보드 — 숫자의 모집단을 그 자리에 밝힌다", () =
 
   it("엔진 수 모집단도 함께 유지된다", () => {
     expect(kpisCode, "엔진 모집단 표기가 사라졌다").toMatch(POPULATION_ENGINES);
+    expect(KPI_KO.summaryCoverage).toContain("측정한 AI·검색 {total}곳");
   });
 
   it("🔴 숫자를 하드코딩하지 않는다(날조 방지)", () => {

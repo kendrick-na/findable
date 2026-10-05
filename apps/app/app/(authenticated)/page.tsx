@@ -134,7 +134,7 @@ const DashboardNoResultState = ({
             className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
             href="/brand"
           >
-            브랜드에서 다시 측정
+            {t.remeasureFromBrand}
           </Link>
         </div>
       </section>
@@ -163,7 +163,7 @@ const DashboardNoResultState = ({
             className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
             href="/brand"
           >
-            브랜드에서 다시 측정
+            {t.remeasureFromBrand}
           </Link>
         </div>
       </section>
@@ -535,6 +535,7 @@ const App = async ({ searchParams }: AppProperties) => {
                 잠정 회차에도 보인다: 판정이 끝난 답변 수는 사실이고, 비율의 분모를 밝힌다. */}
             {correctedCurrentResult ? (
               <DashboardAnswerBuckets
+                isKo={locale === "ko"}
                 result={correctedCurrentResult}
                 t={dict.answerBuckets}
               />
@@ -585,7 +586,13 @@ const App = async ({ searchParams }: AppProperties) => {
                 자동으로 건너뛴다(대상 없음 → 스킵, 죽지 않음) — 순서는 자유롭게 바꿔도 된다. */}
             {currentRunPublishable ? (
               <div id="tour-kpis">
-                <DashboardKpis data={data} paid={isPaid(plan)} />
+                <DashboardKpis
+                  data={data}
+                  isKo={locale === "ko"}
+                  paid={isPaid(plan)}
+                  relativeTime={dict.relativeTime}
+                  t={dict.kpis}
+                />
               </div>
             ) : null}
 
@@ -655,7 +662,11 @@ const App = async ({ searchParams }: AppProperties) => {
                   t={dict.trendChart}
                   trend={data.trend}
                 />
-                <SearchSamplingTrendNote data={data} />
+                <SearchSamplingTrendNote
+                  data={data}
+                  isKo={locale === "ko"}
+                  t={dict.kpis}
+                />
               </div>
             ) : null}
 

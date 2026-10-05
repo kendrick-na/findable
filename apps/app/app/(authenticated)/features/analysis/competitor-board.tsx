@@ -12,14 +12,24 @@ import { cn } from "@repo/design-system/lib/utils";
 import { ChevronDownIcon } from "lucide-react";
 import type { CompetitorAnalysis } from "../../lib/analysis-data";
 import { isMyBrand } from "../../lib/analysis-data";
-import { formatMeasuredAt } from "../../lib/dashboard-data";
+import {
+  formatMeasuredAt,
+  type RelativeTimeLabels,
+} from "../../lib/dashboard-data";
 
 // 표본이 이 미만이면 순위가 흔들릴 수 있다는 주의를 띄운다(www 무료 진단과 동일 기준).
 const LOW_CONFIDENCE_SAMPLE = 10;
 // 화면에 세우는 최대 경쟁사 수. 롱테일(1회 언급)은 노이즈라 자른다.
 const MAX_ROWS = 10;
 
-export const CompetitorBoard = ({ data }: { data: CompetitorAnalysis }) => {
+export const CompetitorBoard = ({
+  data,
+  relativeTime,
+}: {
+  data: CompetitorAnalysis;
+  /** 상대 시간 문구(사전 `app.relativeTime`). */
+  relativeTime: RelativeTimeLabels;
+}) => {
   const { landscape, brandName, measuredAt, responsesParsed } = data;
   const rows = landscape.ranking.slice(0, MAX_ROWS);
   const topShare = rows[0]?.shareOfVoice ?? 0;
@@ -43,7 +53,7 @@ export const CompetitorBoard = ({ data }: { data: CompetitorAnalysis }) => {
         <SummaryCard
           hint={`AI 답변 ${responsesParsed}건에서 추출`}
           label="마지막 측정"
-          value={formatMeasuredAt(measuredAt)}
+          value={formatMeasuredAt(measuredAt, relativeTime)}
         />
       </div>
 

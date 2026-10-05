@@ -9,13 +9,14 @@ import {
   scopedLatestOrgAudit,
   scopedLatestRunTracking,
 } from "@/lib/db/scoped";
+import { getAppDictionary } from "@/lib/i18n";
 import { AnalysisBrandPicker } from "../components/analysis-brand-picker";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { LockedSurface } from "../components/locked-surface";
 import { CompetitorBoard } from "../features/analysis/competitor-board";
-import { buildCompetitorAnalysis } from "../lib/analysis-data";
 import { selectAnalysisBrandId } from "../lib/analysis-brand-selection";
+import { buildCompetitorAnalysis } from "../lib/analysis-data";
 
 export const metadata: Metadata = {
   title: "경쟁사 비교 · Findable",
@@ -131,7 +132,12 @@ const ComparePage = async ({
     <NeedsMeasurement reason={rows.length === 0 ? "no-run" : "no-ranking"} />
   );
   if (analysis) {
-    content = <CompetitorBoard data={analysis} />;
+    content = (
+      <CompetitorBoard
+        data={analysis}
+        relativeTime={(await getAppDictionary()).relativeTime}
+      />
+    );
   }
   if (latest && !isReady) {
     content = (

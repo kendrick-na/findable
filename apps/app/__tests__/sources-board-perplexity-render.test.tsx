@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 🔬 **실제 렌더해서 확인한다** — N-48 파싱 수정이 **화면에 보이는지**.
  *
@@ -47,6 +48,7 @@ describe("SourcesBoard — perplexity 인용이 화면에 보인다(N-48)", () =
         data={makeData([
           { engineId: "perplexity", citations: 7, mentioned: 3, total: 3 },
         ])}
+        relativeTime={koDict.app.relativeTime}
       />
     );
     // ⭐ 핵심: 인용 수가 실제로 화면에 있어야 한다.
@@ -61,6 +63,7 @@ describe("SourcesBoard — perplexity 인용이 화면에 보인다(N-48)", () =
         data={makeData([
           { engineId: "perplexity", citations: 0, mentioned: 2, total: 3 },
         ])}
+        relativeTime={koDict.app.relativeTime}
       />
     );
     // 이제 수집 경로가 정상이므로 0 은 "진짜로 인용이 없었다"는 뜻이다.
@@ -74,6 +77,7 @@ describe("SourcesBoard — perplexity 인용이 화면에 보인다(N-48)", () =
         data={makeData([
           { citations: 0, engineId: "claude", mentioned: 4, total: 4 },
         ])}
+        relativeTime={koDict.app.relativeTime}
       />
     );
     // 🔴 perplexity 를 빼면서 claude 까지 같이 빼버리면 **반대 방향 거짓말**이 된다
@@ -99,6 +103,7 @@ describe("SourcesBoard — perplexity 인용이 화면에 보인다(N-48)", () =
           // 등장은 4/4 인데 인용이 0 인 상황 = 폴백을 끊은 뒤의 실제 모습.
           { engineId: "chatgpt", citations: 0, mentioned: 4, total: 4 },
         ])}
+        relativeTime={koDict.app.relativeTime}
       />
     );
     // ⭐ 등장 4/4 인 엔진에 「인용 0」을 찍으면 고객은
@@ -115,6 +120,7 @@ describe("SourcesBoard — perplexity 인용이 화면에 보인다(N-48)", () =
         data={makeData([
           { engineId: "hyperclova", citations: 0, mentioned: 2, total: 2 },
         ])}
+        relativeTime={koDict.app.relativeTime}
       />
     );
     expect(screen.getByText(/출처 안 밝힘/)).toBeTruthy();

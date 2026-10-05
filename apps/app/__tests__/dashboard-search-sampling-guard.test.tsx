@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * W1 policy (2026-10-05): the dashboard's SoV / rank / sentiment mix in Naver
  * search exposure rows, so a run measured with the new Naver search sample
@@ -12,6 +13,14 @@ import {
   DashboardKpis,
   SearchSamplingTrendNote,
 } from "../app/(authenticated)/components/dashboard-kpis";
+
+/** 문구는 사전에서 온다(2026-10-06) — 한국어 화면 기준으로 검사. */
+const KPI_PROPS = {
+  isKo: true,
+  relativeTime: koDict.app.relativeTime,
+  t: koDict.app.kpis,
+};
+
 import {
   buildTrackingDashboardData,
   type TrackingRowInput,
@@ -114,8 +123,8 @@ describe("dashboard search sampling guard", () => {
     }
     render(
       <>
-        <DashboardKpis data={data} paid={true} />
-        <SearchSamplingTrendNote data={data} />
+        <DashboardKpis {...KPI_PROPS} data={data} paid={true} />
+        <SearchSamplingTrendNote data={data} isKo t={koDict.app.kpis} />
       </>
     );
     expect(screen.getByTestId("sov-comparison-blocked").textContent).toBe(
@@ -140,7 +149,7 @@ describe("dashboard search sampling guard", () => {
     if (!data) {
       throw new Error("expected dashboard data");
     }
-    render(<DashboardKpis data={data} paid={true} />);
+    render(<DashboardKpis {...KPI_PROPS} data={data} paid={true} />);
     expect(screen.queryByTestId("sov-comparison-blocked")).toBeNull();
     expect(document.body.textContent).toContain("+25%p");
   });

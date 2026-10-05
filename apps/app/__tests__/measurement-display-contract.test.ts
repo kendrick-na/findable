@@ -88,7 +88,20 @@ describe("W0-3a mixed AI/search and failed-engine display", () => {
       join(process.cwd(), "app/(authenticated)/components/dashboard-kpis.tsx"),
       "utf8"
     );
-    expect(source).toMatch(/측정한 AI·검색 \$\{coverage\.total\}곳/);
+    // 🔴 2026-10-06 — 문구는 사전(`app.kpis.coverageHint`)으로 옮겨졌다.
+    expect(source).toContain("t.coverageHint");
+    const kpis = (lang: string) =>
+      JSON.parse(
+        readFileSync(
+          join(
+            process.cwd(),
+            `../../packages/internationalization/dictionaries/${lang}.json`
+          ),
+          "utf8"
+        )
+      ).app.kpis as Record<string, string>;
+    expect(kpis("ko").coverageHint).toContain("측정한 AI·검색 {total}곳");
+    expect(kpis("en").coverageHint).toMatch(/AI engines and search/);
   });
   it("history and persistent headers identify their stored mixed-channel rate", () => {
     for (const path of [
