@@ -4,7 +4,7 @@ import { assertPublicUrl, normalizePublicUrl } from "./public-url-security";
 const FETCH_TIMEOUT_MS = 20_000;
 const MAX_REDIRECTS = 3;
 const MAX_RESPONSE_BYTES = 1_000_000;
-/** 푸터 사업자 정보를 찾느라 더 읽는 상한. 넘으면 찾은 데까지로 끝낸다(측정 시간 보호). */
+/** 푸터 사업자 정보를 찾느라 더 읽는 상한(전체 바이트). 넘으면 찾은 데까지로 끝낸다. */
 const FOOTER_SEARCH_BYTES = 600_000;
 const USER_AGENT =
   "FindableMeasurementBot/1.0 (+https://www.findable.co.kr/ko/contact)";
@@ -180,29 +180,22 @@ export async function readIdentityHtml(
     reader.cancel().catch(() => undefined);
   };
   signal?.addEventListener("abort", cancel, { once: true });
-  // A generic title with no description is insufficient for entity matching.
-  // Keep reading the bounded body to find a visible service statement.
-  const headUsable = () =>
-    HEAD_CLOSED_RE.test(text) &&
-    Boolean(
-      metaContent(text, "description") || metaContent(text, "og:description")
-    ) &&
-    Boolean(extractOfficialSiteIdentity(text, ""));
   while (true) {
     const { done, value } = await reader.read();
     if (done) {
       break;
     }
-    // 푸터의 상호·사업자번호(2026-10-05)는 문서 맨 끝에 있다. 설명을 찾은 뒤에도
-    //   상호를 찾을 때까지 더 읽되, 그때부터는 FOOTER_SEARCH_BYTES 까지만 읽는다.
-    const cap = headUsable() ? FOOTER_SEARCH_BYTES : MAX_RESPONSE_BYTES;
-    const chunk = value.subarray(0, Math.max(0, cap - bytes));
+    const remaining = MAX_RESPONSE_BYTES - bytes;
+    const chunk = value.subarray(0, remaining);
     bytes += chunk.byteLength;
     text += decoder.decode(chunk, { stream: true });
+    // A generic title with no description is insufficient for entity matching.
+    // Keep reading the bounded body to find a visible service statement.
     if (
-      headUsable() &&
-      (bytes >= FOOTER_SEARCH_BYTES ||
-        extractBusinessInfo(text.replace(NON_VISIBLE_BLOCK_RE, "")).legalName)
+      HEAD_CLOSED_RE.test(text) &&
+      (metaContent(text, "description") ||
+        metaContent(text, "og:description")) &&
+      extractOfficialSiteIdentity(text, "")
     ) {
       await reader.cancel().catch(() => undefined);
       return text + decoder.decode();
@@ -219,10 +212,103 @@ export async function readIdentityHtml(
   return text + decoder.decode();
 }
 
+/** 푸터를 더 읽을 시간 상한 — 넘기면 오류 없이 그때까지 읽은 데서 끝낸다. */
+const FOOTER_SEARCH_MS = 3000;
+
+/** 식별 구간 뒤에서 푸터 상호를 찾는다. 600KB(전체)·3초를 넘기면 오류 없이 멈춘다. */
+async function readFooter(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  decoder: TextDecoder,
+  startBytes: number
+): Promise<string> {
+  let bytes = startBytes;
+  let footer = "";
+  const deadline = Date.now() + FOOTER_SEARCH_MS;
+  while (
+    bytes < FOOTER_SEARCH_BYTES &&
+    !extractBusinessInfo(footer.replace(NON_VISIBLE_BLOCK_RE, "")).legalName
+  ) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const next = await Promise.race([
+      reader.read(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), remainingMs);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (!next || next.done) {
+      break;
+    }
+    const chunk = next.value.subarray(0, FOOTER_SEARCH_BYTES - bytes);
+    bytes += chunk.byteLength;
+    footer += decoder.decode(chunk, { stream: true });
+  }
+  return footer;
+}
+
+/**
+ * 판정용 식별 정보(title·description·H1·siteName)는 **기존과 똑같이** `readIdentityHtml`
+ * 이 멈추던 지점까지에서만 읽고(v2 판정 입력 불변 — 컨트롤타워 검증 2026-10-05 지적),
+ * 그 뒤로는 푸터의 상호·사업자번호만 찾는다. 추가 읽기는 600KB·3초 상한, 넘으면 조용히 멈춘다.
+ */
+export async function readIdentityAndFooter(
+  response: Response,
+  signal?: AbortSignal
+): Promise<{ footerHtml: string; html: string }> {
+  if (!response.body) {
+    return { html: "", footerHtml: "" };
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = "";
+  const cancel = () => {
+    reader.cancel().catch(() => undefined);
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    // 1단계 — readIdentityHtml 과 같은 규칙으로 식별 정보 구간을 정한다.
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        const html = text + decoder.decode();
+        return { html, footerHtml: "" };
+      }
+      const chunk = value.subarray(0, MAX_RESPONSE_BYTES - bytes);
+      bytes += chunk.byteLength;
+      text += decoder.decode(chunk, { stream: true });
+      if (
+        HEAD_CLOSED_RE.test(text) &&
+        (metaContent(text, "description") ||
+          metaContent(text, "og:description")) &&
+        extractOfficialSiteIdentity(text, "")
+      ) {
+        break;
+      }
+      if (bytes >= MAX_RESPONSE_BYTES) {
+        if (extractOfficialSiteIdentity(text, "")) {
+          return { html: text + decoder.decode(), footerHtml: "" };
+        }
+        throw new Error("RESPONSE_TOO_LARGE");
+      }
+    }
+    const html = text;
+    // 2단계 — 푸터만 찾는다(식별 정보에는 섞지 않는다).
+    return { html, footerHtml: await readFooter(reader, decoder, bytes) };
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    signal?.removeEventListener("abort", cancel);
+  }
+}
+
 async function fetchHomepage(
   initialUrl: URL,
   parentSignal?: AbortSignal
-): Promise<{ html: string; finalUrl: URL }> {
+): Promise<{ footerHtml: string; html: string; finalUrl: URL }> {
   let current = new URL(initialUrl);
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
     await assertPublicUrl(current);
@@ -269,10 +355,11 @@ async function fetchHomepage(
       if (!contentType.includes("text/html")) {
         throw new Error("NOT_HTML");
       }
-      return {
-        html: await readIdentityHtml(response, controller.signal),
-        finalUrl: current,
-      };
+      const { html, footerHtml } = await readIdentityAndFooter(
+        response,
+        controller.signal
+      );
+      return { html, footerHtml, finalUrl: current };
     } finally {
       clearTimeout(timeout);
       parentSignal?.removeEventListener("abort", abortFromParent);
@@ -293,13 +380,19 @@ export async function resolveOfficialSiteIdentity(
     if (signal?.aborted) {
       throw signal.reason ?? new DOMException("Aborted", "AbortError");
     }
-    const { html, finalUrl } = await fetchHomepage(
+    const { html, footerHtml, finalUrl } = await fetchHomepage(
       normalizePublicUrl(domain),
       signal
     );
     const identity = extractOfficialSiteIdentity(html, finalUrl.toString());
     if (!identity) {
       throw new Error("IDENTITY_EMPTY");
+    }
+    if (!identity.legalName && footerHtml) {
+      return {
+        ...identity,
+        ...extractBusinessInfo(footerHtml.replace(NON_VISIBLE_BLOCK_RE, "")),
+      };
     }
     return identity;
   } catch (error) {
