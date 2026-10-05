@@ -3,6 +3,7 @@ import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth } from "@repo/auth/server";
 import { database } from "@repo/database";
 import { cn } from "@repo/design-system/lib/utils";
+import { renewalGraceEndsAt } from "@repo/payments";
 import { CheckIcon, ClockIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { redeemInviteCode } from "@/app/actions/invite/redeem";
@@ -146,17 +147,25 @@ const FeatureRow = ({ feature }: { feature: PricingFeature }) => {
 };
 
 /** 정기결제 중일 때 다음 결제 한 줄. */
+const fmtLongDate = (d: Date): string =>
+  new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "long",
+    timeZone: "Asia/Seoul",
+  }).format(d);
+
 const nextPaymentLabel = (
   org: {
     billingNextPaymentAt: Date | null;
     billingStatus: string;
   } | null
 ): string => {
+  // 🔴 2026-10-05 E2E: 유예 중(past_due)의 billingNextPaymentAt 은 **이미 실패한** 회차 시각이다.
+  //   예전엔 그걸 "다음 결제 예정일"로 보여 줘서 실패한 날짜를 예정일처럼 안내했다.
+  if (org?.billingStatus === "past_due" && org.billingNextPaymentAt) {
+    return `자동결제에 실패했어요. ${fmtLongDate(renewalGraceEndsAt(org.billingNextPaymentAt))}까지는 지금처럼 이용할 수 있어요. 결제 카드를 확인해 주시고, 도움이 필요하면 문의해 주세요.`;
+  }
   if (org?.billingNextPaymentAt) {
-    return `다음 결제 예정일: ${new Intl.DateTimeFormat("ko-KR", {
-      dateStyle: "long",
-      timeZone: "Asia/Seoul",
-    }).format(org.billingNextPaymentAt)}`;
+    return `다음 결제 예정일: ${fmtLongDate(org.billingNextPaymentAt)}`;
   }
   return org?.billingStatus === "past_due"
     ? "다음 결제 예약을 확인 중이에요."
@@ -227,6 +236,18 @@ const BillingPage = async () => {
                 <CancelSubscription />
               </div>
             )}
+            {/* 🔴 2026-10-05 E2E: 해지 뒤 화면에 플랜 이름만 남아 해지됐는지·언제까지 쓰는지
+                알 수 없었다. 기간이 남은 해지(canceled + 미래 시각)일 때만 알린다 —
+                전액 환불은 웹훅이 기간 끝을 지금으로 당기므로 여기 오지 않는다. */}
+            {!hasSubscription &&
+              org?.billingStatus === "canceled" &&
+              org.billingNextPaymentAt &&
+              org.billingNextPaymentAt.getTime() > Date.now() && (
+                <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+                  정기결제를 해지했어요. {fmtLongDate(org.billingNextPaymentAt)}
+                  까지 이용할 수 있고, 그 뒤로는 결제되지 않아요.
+                </p>
+              )}
             {/* ⚖️ 환불·청약철회는 이메일 외에 앱 안에서도 요청할 수 있다(약관 제4조의3 제5항).
                 유료 이용 중이거나 정기결제가 있는 조직에만 보인다 — 무료 조직엔 환불할 결제가 없다. */}
             {(plan !== "free" || hasSubscription) && (
