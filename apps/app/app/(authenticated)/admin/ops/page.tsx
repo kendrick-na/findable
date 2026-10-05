@@ -1,6 +1,7 @@
 import { isAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "../../components/header";
 import { summarizeAuditEngineFailures } from "./audit-engine-failures";
@@ -138,9 +139,8 @@ const AdminOpsPage = async () => {
     }),
   ]);
 
-  const recentAuditEngineFailures = summarizeAuditEngineFailures(
-    recentAuditResults
-  );
+  const recentAuditEngineFailures =
+    summarizeAuditEngineFailures(recentAuditResults);
   const recentAuditFailureCount = recentAuditEngineFailures.reduce(
     (sum, row) => sum + row.failures,
     0
@@ -196,6 +196,12 @@ const AdminOpsPage = async () => {
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
             audit·리드·파트너 신청을 한눈에 보는 읽기전용 운영 대시보드입니다.
           </p>
+          <Link
+            className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm underline underline-offset-4"
+            href="/admin/billing"
+          >
+            결제 선점 점검 →
+          </Link>
         </div>
 
         {/* 🔴 원가 — 요금제 설계의 분모. 측정 1건이 얼마인지 여기서만 알 수 있다. */}
@@ -388,14 +394,8 @@ const AdminOpsPage = async () => {
           title="브랜드 · 엔진 응답"
         >
           <CardGrid>
-            <StatCard
-              label="브랜드"
-              value={fmt(brandCount)}
-            />
-            <StatCard
-              label="엔진 응답"
-              value={fmt(trackingCount)}
-            />
+            <StatCard label="브랜드" value={fmt(brandCount)} />
+            <StatCard label="엔진 응답" value={fmt(trackingCount)} />
           </CardGrid>
         </Section>
       </div>

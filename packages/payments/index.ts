@@ -38,6 +38,8 @@ export {
   deleteBillingKey,
   getPayment as getPortOnePayment,
   isPortOneConfigured,
+  isPortOnePaymentNotFound,
+  PortOneApiError,
   type PortOnePayment,
   payWithBillingKey,
   preRegisterPayment as preRegisterPortOnePayment,

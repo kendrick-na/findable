@@ -59,6 +59,30 @@ const PaymentSchema = z.object({
 export type PortOnePayment = z.infer<typeof PaymentSchema>;
 
 /**
+ * PortOne API 오류 — HTTP 상태와 오류 타입을 보존한다(메시지는 기존과 같다).
+ * 호출부가 "결제가 아예 없다(404)"와 일시 장애를 구분해야 할 때 쓴다.
+ */
+export class PortOneApiError extends Error {
+  readonly code: string | null;
+  readonly status: number;
+
+  constructor(message: string, status: number, code: string | null) {
+    super(message);
+    this.name = "PortOneApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/** PortOne 에 그 paymentId 의 결제가 존재하지 않는다는 응답인가(404 또는 PAYMENT_NOT_FOUND). */
+export function isPortOnePaymentNotFound(error: unknown): boolean {
+  return (
+    error instanceof PortOneApiError &&
+    (error.status === 404 || error.code === "PAYMENT_NOT_FOUND")
+  );
+}
+
+/**
  * 결제 단건 조회 — 결제 위젯이 redirect 한 후 서버에서 paymentId로 조회.
  * 응답의 amount.total 과 서버 기대 금액을 반드시 비교 검증할 것.
  */
@@ -80,10 +104,15 @@ export async function getPayment(paymentId: string): Promise<PortOnePayment> {
     }
   );
 
-  const data = await res.json();
+  // 404 등은 JSON 이 아닐 수도 있다 — 본문 파싱 실패가 상태 코드를 가리지 않게 한다.
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(
-      `PortOne payment lookup failed: ${data.code ?? res.status} ${data.message ?? ""}`
+    const codeField = typeof data.code === "string" ? data.code : null;
+    const code = typeof data.type === "string" ? data.type : codeField;
+    throw new PortOneApiError(
+      `PortOne payment lookup failed: ${data.code ?? res.status} ${data.message ?? ""}`,
+      res.status,
+      code
     );
   }
 
