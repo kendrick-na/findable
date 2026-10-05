@@ -521,6 +521,44 @@ function buildRegionBreakdown(
 /**
  * 메인 진입점. background에서 호출.
  */
+
+/**
+ * 고객이 브랜드 설정에 직접 넣은 상호·사업자번호(2026-10-06).
+ *
+ * 호출처(고객 측정·자동 측정 cron·관리자 1건 측정)가 각자 넘기면 한 곳이 빠지기 쉽다 →
+ * 넘겨준 값이 없으면 brandId 로 여기서 한 번 읽는다. 읽기 실패는 측정을 막지 않는다
+ * (값이 없을 때와 같은 동작 = 홈페이지 푸터 값만 사용).
+ */
+async function customerIdentityFor(
+  input: AuditRunInput
+): Promise<AuditRunInput["customerIdentity"]> {
+  if (input.customerIdentity) {
+    return input.customerIdentity;
+  }
+  if (!input.brandId) {
+    return undefined;
+  }
+  try {
+    const brand = await database.brand.findUnique({
+      where: { id: input.brandId },
+      select: { legalName: true, businessNumber: true },
+    });
+    if (!(brand?.legalName || brand?.businessNumber)) {
+      return undefined;
+    }
+    return {
+      legalName: brand.legalName ?? undefined,
+      businessNumber: brand.businessNumber ?? undefined,
+    };
+  } catch (error) {
+    log.warn("audit.customer_identity.load_failed", {
+      brandId: input.brandId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
+
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Audit orchestration combines engine, storage, PDF and briefing lifecycle guards.
 export async function runAuditJob(input: AuditRunInput): Promise<void> {
   const leaseToken = randomUUID();
@@ -621,7 +659,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       registeredBrandIdentityFallback(input);
     // 고객 입력 상호·사업자번호 > 푸터 추출값(필드별). 근거 유무(identityGrounded)는 바꾸지 않는다.
     const officialSiteIdentity = siteIdentity
-      ? mergeCustomerIdentity(siteIdentity, input.customerIdentity)
+      ? mergeCustomerIdentity(siteIdentity, await customerIdentityFor(input))
       : null;
     if (!officialSiteIdentity) {
       throw new Error(
