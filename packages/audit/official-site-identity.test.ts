@@ -159,4 +159,26 @@ describe("official site identity response", () => {
     expect(extractOfficialSiteIdentity(html, "https://x/")?.title).toBe("T");
     expect(footerHtml).toBe("");
   });
+
+  it("keeps the identity window when the footer read is aborted", async () => {
+    const head =
+      '<html><head><title>T</title><meta name="description" content="D"></head>';
+    const controller = new AbortController();
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(new TextEncoder().encode(head));
+        },
+        pull() {
+          return new Promise(() => undefined);
+        },
+      }),
+      { headers: { "content-type": "text/html" } }
+    );
+    const pending = readIdentityAndFooter(response, controller.signal);
+    setTimeout(() => controller.abort(), 20);
+    const { html, footerHtml } = await pending;
+    expect(extractOfficialSiteIdentity(html, "https://x/")?.title).toBe("T");
+    expect(footerHtml).toBe("");
+  });
 });

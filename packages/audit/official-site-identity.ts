@@ -233,13 +233,17 @@ async function readFooter(
       break;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const next = await Promise.race([
-      reader.read(),
-      new Promise<null>((resolve) => {
-        timer = setTimeout(() => resolve(null), remainingMs);
-      }),
-    ]);
-    clearTimeout(timer);
+    let next: ReadableStreamReadResult<Uint8Array> | null;
+    try {
+      next = await Promise.race([
+        reader.read(),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), remainingMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
     if (!next || next.done) {
       break;
     }
@@ -298,7 +302,9 @@ export async function readIdentityAndFooter(
     }
     const html = text;
     // 2단계 — 푸터만 찾는다(식별 정보에는 섞지 않는다).
-    return { html, footerHtml: await readFooter(reader, decoder, bytes) };
+    // 푸터 읽기 중 바깥 타임아웃·중단이 와도 이미 확보한 식별 구간은 버리지 않는다.
+    const footerHtml = await readFooter(reader, decoder, bytes).catch(() => "");
+    return { html, footerHtml };
   } finally {
     await reader.cancel().catch(() => undefined);
     signal?.removeEventListener("abort", cancel);
@@ -388,10 +394,14 @@ export async function resolveOfficialSiteIdentity(
     if (!identity) {
       throw new Error("IDENTITY_EMPTY");
     }
-    if (!identity.legalName && footerHtml) {
+    if (footerHtml && !(identity.legalName && identity.businessNumber)) {
+      const footer = extractBusinessInfo(
+        footerHtml.replace(NON_VISIBLE_BLOCK_RE, "")
+      );
       return {
         ...identity,
-        ...extractBusinessInfo(footerHtml.replace(NON_VISIBLE_BLOCK_RE, "")),
+        legalName: identity.legalName ?? footer.legalName,
+        businessNumber: identity.businessNumber ?? footer.businessNumber,
       };
     }
     return identity;
