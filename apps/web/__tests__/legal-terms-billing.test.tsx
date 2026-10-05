@@ -21,6 +21,17 @@ it("ko terms no longer promise annual billing and render the aligned billing cla
   expect(html).toContain("결제 예정일로부터 7일 동안 유료 기능 이용이 유지");
   expect(html).toContain("제4조의3 (청약철회 및 환불)");
   expect(html).toContain("이용 이력이 없는 경우 결제 금액 전액을 환불");
+  // 전자상거래법 제17조 제2항 제5호 단서·제18조 제9항: 이용일수만 공제, 위약금 없음
+  expect(html).toContain("이용일수에 해당하는 금액(결제 금액 × 이용일수 ÷");
+  expect(html).toContain("위약금은 청구하지 않습니다");
+  // 전자상거래법 제17조 제3항: 표시·광고와 다른 경우 3개월·30일
+  expect(html).toContain(
+    "3개월 이내, 그 사실을 안 날 또는 알 수 있었던 날부터 30일 이내"
+  );
+  // 전자상거래법 제18조 제2항: 3영업일 이내 환급
+  expect(html).toContain("3영업일 이내에 결제대행사 포트원(PortOne)을 통해");
+  // 근거 없는 "미사용분에 한해" 문구가 남지 않는다
+  expect(html).not.toContain("미사용분에 한해");
   expect(html).toContain("kendrick@indigochild.kr");
   expect(html).toContain("[시행일: 확인필요]");
 });
@@ -31,5 +42,7 @@ it("en terms no longer promise annual billing and render the aligned billing cla
   expect(html).toContain("one-month pass (single payment)");
   expect(html).toContain("Article 4-2 (Cancellation and failed renewals)");
   expect(html).toContain("Article 4-3 (Withdrawal and refunds)");
+  expect(html).toContain("within 3 business days");
+  expect(html).not.toContain("limited to the unused portion");
   expect(html).toContain("[effective date: to be confirmed]");
 });

@@ -8,12 +8,12 @@ import { log } from "@repo/observability/log";
 import {
   amountForPlan,
   buildPaymentId,
+  checkPaymentIdIntegrity,
   getPortOnePayment,
   isPortOneConfigured,
-  PAYMENT_ID_PREFIX,
   type PayablePlan,
+  parsePaymentId,
   planForAmount,
-  uidForPaymentId,
 } from "@repo/payments";
 
 /**
@@ -124,12 +124,9 @@ export const verifyPaymentAndGrant = async (
   }
 
   // 리플레이 가드: 이 결제가 이 세션 사용자용으로 발급된 paymentId 인지.
-  if (
-    !(
-      paymentId.startsWith(`${PAYMENT_ID_PREFIX}-`) &&
-      paymentId.includes(uidForPaymentId(userId))
-    )
-  ) {
+  // 접두사·부분 문자열이 아니라 buildPaymentId 형식 전체를 해석해 uid 를 정확히 비교한다
+  // (`user_ab` 세션이 `user_abc` 의 결제를 쓰지 못하게).
+  if (parsePaymentId(paymentId)?.userId !== userId) {
     log.warn("billing.verify.replay_blocked", { userId, paymentId });
     return { error: "이 계정의 결제가 아닙니다." };
   }
@@ -153,6 +150,25 @@ export const verifyPaymentAndGrant = async (
       });
       return {
         error: "결제 금액이 요금제와 일치하지 않습니다. 문의해 주세요.",
+      };
+    }
+
+    // 🔒 P1-1: 브라우저가 고친 paymentId(시각 조각·plan 조각)로는 부여하지 않는다.
+    //   시각 조각은 만료 판정의 근거라, 먼 미래로 고치면 권한이 영구화된다.
+    const integrity = checkPaymentIdIntegrity(paymentId, {
+      plan,
+      userId,
+      requestedAt: payment.requestedAt,
+      paidAt: payment.paidAt,
+    });
+    if (!integrity.ok) {
+      log.error("billing.verify.payment_id_mismatch", {
+        userId,
+        paymentId,
+        reason: integrity.reason,
+      });
+      return {
+        error: "결제 정보가 주문과 일치하지 않습니다. 상담으로 문의해 주세요.",
       };
     }
 

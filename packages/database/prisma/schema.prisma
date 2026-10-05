@@ -1048,3 +1048,37 @@ model InviteRedemption {
   @@unique([inviteCodeId, organizationId])
   @@index([organizationId])
 }
+
+// ──────────────────────────────────────────────────
+// 환불 기록 (migration 20261005_payment_refund_record)
+//   PortOne Cancelled/PartialCancelled 웹훅이 결제 1건당 1행을 멱등하게 남긴다.
+//   환불 펜스(늦은 Paid 차단·부여 직후 되돌리기)는 이 기록을 먼저 보고, 기록이 없을 때만
+//   기존 판정(조직 상태 + PortOne 실시간 조회)으로 돌아간다.
+//   ⚠️ 의도적으로 Organization/User 와 Prisma relation 을 두지 않는다(PromptAttempt 와 같은 이유):
+//     relationMode="prisma" 에서 relation 을 걸면 migration 적용 전 배포에서 조직 삭제 경로가
+//     이 테이블을 연쇄 조회해 깨진다. 테이블이 없으면 런타임은 기존 동작 그대로다.
+// ──────────────────────────────────────────────────
+
+enum PaymentRefundKind {
+  full
+  partial
+}
+
+model PaymentRefund {
+  id             String            @id @default(uuid())
+  /// PortOne paymentId. 결제 1건당 1행(부분 → 전액 취소는 같은 행을 승격).
+  paymentId      String            @unique
+  /// 기록 시점의 결제자 조직. 조직이 없던 사용자면 null.
+  organizationId String?
+  /// paymentId 에 심긴 uid 로 복원한 Clerk userId.
+  userId         String
+  /// PortOne 누적 취소 금액(원).
+  amount         Int
+  kind           PaymentRefundKind
+  /// PortOne 이 알려준 취소 시각(없으면 웹훅 수신 시각).
+  refundedAt     DateTime
+  recordedAt     DateTime          @default(now())
+
+  @@index([organizationId, refundedAt])
+  @@index([userId])
+}

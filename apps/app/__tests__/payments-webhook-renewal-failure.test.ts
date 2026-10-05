@@ -80,6 +80,8 @@ const statusWrites = () =>
 describe("갱신 결제 실패 웹훅", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Serves both update and updateMany; updateMany callers read `count`.
+    mocks.organizationUpdate.mockResolvedValue({ count: 1 });
     mocks.getPortOnePayment.mockResolvedValue({
       id: RENEWAL_PAYMENT_ID,
       status: "FAILED",

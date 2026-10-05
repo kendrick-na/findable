@@ -19,6 +19,15 @@ const clerkUsers = vi.hoisted(() => ({
   updateUserMetadata: vi.fn(),
 }));
 
+// plan-grant serializes per-user Clerk writes in an advisory-lock transaction.
+vi.mock("@repo/database", () => ({
+  database: {
+    $transaction: async (
+      fn: (tx: { $executeRaw: () => Promise<number> }) => unknown
+    ) => fn({ $executeRaw: async () => 1 }),
+  },
+}));
+
 // auth 패키지가 실제 import하는 Clerk 복사본을 가로챈다.
 vi.mock(
   "../../../packages/auth/node_modules/@clerk/nextjs/dist/esm/server/index.js",

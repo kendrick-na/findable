@@ -62,7 +62,7 @@ const PAGES_KO: Record<string, LegalDoc> = {
   },
   terms: {
     title: "이용약관",
-    updated: "2026년 7월 29일",
+    updated: "2026년 10월 5일",
     sections: [
       {
         h: "제1조 (목적)",
@@ -91,12 +91,40 @@ const PAGES_KO: Record<string, LegalDoc> = {
         h: "제4조의2 (해지 및 갱신 결제 실패)",
         p: "(1) 이용자는 언제든지 월 단위 자동결제를 해지할 수 있습니다. 해지하면 다음 결제는 청구되지 않으며, 이미 결제한 이용 기간의 종료일까지 유료 기능을 이용한 뒤 이용이 종료됩니다. (2) 갱신 결제가 실패한 경우 결제 예정일로부터 7일 동안 유료 기능 이용이 유지되며, 그 기간 안에 결제가 완료되지 않으면 유료 기능 이용이 종료됩니다.",
       },
-      // ⚠️ 법률 검토 필요 [확인필요] — 아래 제4조의3(환불)의 "미사용" 정의·이용 이력이 있을 때의
-      //   처리 방식(이용일수 차감 등)은 전자상거래법 제17조(청약철회 등)·콘텐츠이용자보호지침 대조 전이다.
-      //   변호사 검토 없이 시행하지 말 것.
+      // ⚖️ 제4조의3 문장별 근거 (1차 출처만, 2026-10-05 law.go.kr 원문 대조).
+      //   [전상법] 전자상거래 등에서의 소비자보호에 관한 법률 [시행 2026.7.21. 법률 제21312호]
+      //     https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=282793
+      //   [전상령] 같은 법 시행령 [시행 2026.7.21. 대통령령 제36507호]
+      //     https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=288143
+      //   [방판법] 방문판매 등에 관한 법률 [시행 2026.10.2. 법률 제22044호]
+      //     https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=290239
+      //   [보호지침] 콘텐츠이용자 보호지침 [문화체육관광부고시 제2024-16호]
+      //     https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000237546
+      //   [분쟁기준] 소비자분쟁해결기준 [공정거래위원회고시 제2025-14호] 별표 2 인터넷콘텐츠업
+      //     https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000270136
+      //   (1) 7일·기산일 = 전상법 제17조 제1항 제1호 / 미사용 시 전액 = 같은 법 제18조 제2항 제2호,
+      //       분쟁기준 인터넷콘텐츠업 3). "제공 개시"가 아닌 "유료 기능 이용"을 기준으로 삼는 것은
+      //       법보다 이용자에게 유리하므로 허용된다(전상법 제35조는 불리한 약정만 무효로 한다).
+      //   (2) 이용일수 공제 = 전상법 제17조 제2항 제5호 단서(가분적 용역·디지털콘텐츠는 제공이
+      //       개시되지 않은 부분만 철회 가능) + 분쟁기준 인터넷콘텐츠업 5) 비고 단서(7일 이내 해지 시
+      //       위약금 없이 이용일수 금액만 공제) / 위약금 없음 = 전상법 제18조 제9항 /
+      //       고지하지 않으면 전액 = 전상법 제17조 제2항 단서·제6항, 전상령 제21조의2.
+      //   (3) 표시·광고와 다른 경우 3개월·30일 = 전상법 제17조 제3항 / 전액 = 분쟁기준 인터넷콘텐츠업 2).
+      //   (4) 언제든 해지 = 방판법 제31조 / 이용일수 + 잔여 10% 공제 = 방판법 제32조 제1항·제3항,
+      //       보호지침 제16조 제3항·제25조 제1항(10% 이내), 분쟁기준 인터넷콘텐츠업 5).
+      //       🔍 [미확정] 공제율 10%는 법령·고시가 허용하는 상한이다. 0~10% 중 회사가 정할 것.
+      //   (5) 이메일 접수 = 전상법 제5조 제4항(전자문서로 철회 가능), 보호지침 제24조 제1항 제3호 /
+      //       발송일 효력 = 전상법 제17조 제4항.
+      //   (6) 3영업일 = 전상법 제18조 제2항 제2호, 보호지침 제17조 제1항 / 카드 청구 정지·취소 요청 =
+      //       전상법 제18조 제3항 / 지연배상금 = 전상법 제18조 제2항 후단, 전상령 제21조의3(연 15%),
+      //       방판법 제32조 제3항 후단.
+      //   (7) 전액 환불 시 권한 회수·다음 결제 취소 = 코드 동작(apps/app/app/webhooks/payments/route.ts).
+      //       ⚠️ 부분 환불은 웹훅이 권한·예약을 건드리지 않는다(같은 파일 handlePartialCancelledPayment)
+      //       → (2)·(4) 환불 시 운영자가 앱에서 정기결제 해지를 함께 처리해야 문장과 일치한다.
+      //   ⚠️ 변호사 검토 없이 시행하지 말 것. 남은 [확인필요]는 커밋 보고서 참조.
       {
         h: "제4조의3 (청약철회 및 환불)",
-        p: "(1) 결제일로부터 7일 이내이고 유료 기능(자동 재측정, 측정 데이터 내보내기 등 유료 플랜 전용 기능)의 이용 이력이 없는 경우 결제 금액 전액을 환불합니다. (2) 결제일로부터 7일 이내라도 유료 기능의 이용 이력이 있는 경우에는 전자상거래 등에서의 소비자보호에 관한 법률 등 관련 법령에 따른 범위에서 환불을 처리합니다(이용일수에 해당하는 금액 차감 등). (3) 환불은 이메일(kendrick@indigochild.kr)로 요청할 수 있으며, 회사가 확인한 뒤 결제대행사를 통해 처리합니다. 전액 환불이 처리되면 해당 결제로 부여된 유료 기능 이용이 종료되고 예정된 다음 결제도 취소됩니다.",
+        p: "(1) 이용자는 유료 플랜 결제일(유료 기능의 제공이 결제일보다 늦게 시작된 경우에는 그 시작일)부터 7일 이내에 청약철회를 할 수 있습니다. 이 기간에 유료 기능(자동 재측정, 측정 데이터 내보내기)의 이용 이력이 없는 경우 결제 금액 전액을 환불합니다. (2) 제1항의 기간에 유료 기능의 이용 이력이 있는 경우에는 결제 금액에서 결제일부터 청약철회일까지의 이용일수에 해당하는 금액(결제 금액 × 이용일수 ÷ 해당 이용 기간의 총일수)만 공제하고 나머지를 환불하며, 위약금은 청구하지 않습니다. 다만, 회사가 결제 전에 이 내용을 결제 화면 등 이용자가 쉽게 알 수 있는 곳에 명확하게 표시하지 않은 경우에는 결제 금액 전액을 환불합니다. (3) 유료 기능의 내용이 표시·광고의 내용과 다르거나 계약 내용과 다르게 이행된 경우에는 제1항 및 제2항과 관계없이 그 기능을 제공받은 날부터 3개월 이내, 그 사실을 안 날 또는 알 수 있었던 날부터 30일 이내에 청약철회를 할 수 있으며, 이 경우 결제 금액 전액을 환불합니다. (4) 결제일부터 7일이 지난 뒤에도 이용자는 이용 기간 중 언제든지 즉시 해지와 환불을 요청할 수 있습니다. 이 경우 회사는 결제 금액에서 해지일까지의 이용일수에 해당하는 금액과 잔여 기간 이용요금의 10%를 공제한 나머지를 환불합니다. 환불 없이 이미 결제한 이용 기간의 종료일까지 이용하려는 경우에는 제4조의2 제1항에 따라 월 단위 자동결제를 해지할 수 있습니다. (5) 청약철회, 환불, 즉시 해지는 이메일(kendrick@indigochild.kr)로 요청할 수 있으며, 이메일 등 서면으로 한 청약철회는 그 의사표시를 발송한 날에 효력이 생깁니다. (6) 회사는 청약철회 또는 즉시 해지 요청을 받은 날부터 3영업일 이내에 결제대행사 포트원(PortOne)을 통해 결제를 취소하는 방법으로 환불하며, 신용카드로 결제한 경우에는 카드사에 대금 청구의 정지 또는 취소를 요청합니다. 환불이 늦어지면 관련 법령에 따른 지연배상금을 함께 지급합니다. (7) 전액 환불이 처리되면 해당 결제로 부여된 유료 기능 이용이 종료되고 예정된 다음 결제도 취소됩니다. 제2항 또는 제4항에 따라 환불하는 경우에도 이용 계약은 해지되며 다음 결제는 청구되지 않습니다.",
       },
       {
         h: "제5조 (회사의 의무)",
@@ -159,7 +187,7 @@ const PAGES_EN: Record<string, LegalDoc> = {
   },
   terms: {
     title: "Terms of Service",
-    updated: "July 29, 2026",
+    updated: "October 5, 2026",
     sections: [
       {
         h: "Article 1 (Purpose)",
@@ -185,7 +213,8 @@ const PAGES_EN: Record<string, LegalDoc> = {
       },
       {
         h: "Article 4-3 (Withdrawal and refunds)",
-        p: "(1) If you request a refund within 7 days of payment and have not used any paid features (paid-plan features such as automatic re-measurement and measurement data export), the full amount is refunded. (2) If paid features have been used, even within 7 days of payment, refunds are handled to the extent provided by applicable law, including Korea's Act on the Consumer Protection in Electronic Commerce (for example, by deducting the amount for the days used). (3) Refunds can be requested by email (kendrick@indigochild.kr); the Company reviews the request and processes it through the payment provider. When a full refund is processed, access to paid features granted by that payment ends and any scheduled next payment is cancelled.",
+        // Sources: see the per-sentence citations above the Korean 제4조의3 (Korean text governs).
+        p: "(1) You may withdraw within 7 days of the paid-plan payment date (or, if paid features start later than the payment date, from that start date). If you have not used any paid features (automatic re-measurement, measurement data export) during this period, the full amount is refunded. (2) If you have used paid features during the period in (1), only the amount for the days used from the payment date to the withdrawal date (payment amount × days used ÷ total days in the billing period) is deducted and the rest is refunded, with no penalty. However, if the Company did not clearly show this before payment, on the checkout screen or another place you can easily see, the full amount is refunded. (3) Regardless of (1) and (2), if the paid features differ from what was displayed or advertised, or are performed differently from the agreement, you may withdraw within 3 months of receiving them or within 30 days of the date you learned or could have learned of it, and the full amount is refunded. (4) Even after 7 days from payment, you may request immediate termination and a refund at any time during the billing period. In that case the Company refunds the payment amount minus the amount for the days used up to the termination date and 10% of the fee for the remaining period. If you prefer to keep access until the end of the period you have already paid for without a refund, you may cancel the monthly subscription under Article 4-2(1). (5) Withdrawal, refunds, and immediate termination can be requested by email (kendrick@indigochild.kr); a withdrawal made in writing, including by email, takes effect on the date it is sent. (6) The Company refunds within 3 business days of receiving a withdrawal or immediate-termination request by cancelling the payment through the payment provider PortOne, and for credit card payments asks the card issuer to stop or cancel the charge. If the refund is delayed, the Company also pays delay compensation as provided by applicable law. (7) When a full refund is processed, access to paid features granted by that payment ends and any scheduled next payment is cancelled. When a refund is made under (2) or (4), the agreement is also terminated and no further payment is charged.",
       },
       {
         h: "Article 5 (Company obligations)",

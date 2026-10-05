@@ -8,10 +8,13 @@ export default defineConfig({
       "__tests__/tracking-prisma-replay.test.ts",
       "__tests__/audit-revalidation-postgres.test.ts",
       "__tests__/prompt-attempt-ledger-postgres.test.ts",
+      "__tests__/payment-refund-record-postgres.test.ts",
+      "__tests__/plan-grant-lock-postgres.test.ts",
     ],
   },
   resolve: {
     alias: {
+      "@": path.resolve(import.meta.dirname, "./"),
       "@repo": path.resolve(import.meta.dirname, "../../packages"),
       "server-only": path.resolve(
         import.meta.dirname,

@@ -9,7 +9,10 @@
  * @vitest-environment node
  */
 
-import { amountForPlan } from "@repo/payments/catalog";
+import {
+  amountForPlan,
+  paymentIssuedAtFromPaymentId,
+} from "@repo/payments/catalog";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const STARTER_AMOUNT = amountForPlan("starter") ?? 0;
@@ -28,7 +31,76 @@ const fixture = vi.hoisted(() => {
     ownerId: "user_owner-1",
     ...blank,
   };
-  const state = { failNextActiveWrite: false };
+  const state = { failNextActiveWrite: false, refundTableMissing: false };
+  interface RefundRow {
+    amount: number;
+    kind: "full" | "partial";
+    organizationId: string | null;
+    paymentId: string;
+    refundedAt: Date;
+    userId: string;
+  }
+  const refunds = new Map<string, RefundRow>();
+  const missingTable = () =>
+    Object.assign(
+      new Error("The table `public.PaymentRefund` does not exist"),
+      { code: "P2021" }
+    );
+  const refundMatches = (
+    row: RefundRow,
+    where: Record<string, unknown>
+  ): boolean =>
+    Object.entries(where).every(([key, condition]) => {
+      const value = row[key as keyof RefundRow];
+      if (condition && typeof condition === "object" && "lt" in condition) {
+        return (value as number) < (condition as { lt: number }).lt;
+      }
+      return value === condition;
+    });
+  const paymentRefund = {
+    create: vi.fn(({ data }: { data: RefundRow }) => {
+      if (state.refundTableMissing) {
+        return Promise.reject(missingTable());
+      }
+      if (refunds.has(data.paymentId)) {
+        return Promise.reject(
+          Object.assign(new Error("Unique constraint failed"), {
+            code: "P2002",
+          })
+        );
+      }
+      refunds.set(data.paymentId, { ...data });
+      return Promise.resolve({ ...data });
+    }),
+    updateMany: vi.fn(
+      ({
+        data,
+        where,
+      }: {
+        data: Partial<RefundRow>;
+        where: Record<string, unknown>;
+      }) => {
+        if (state.refundTableMissing) {
+          return Promise.reject(missingTable());
+        }
+        let count = 0;
+        for (const row of refunds.values()) {
+          if (refundMatches(row, where)) {
+            Object.assign(row, data);
+            count += 1;
+          }
+        }
+        return Promise.resolve({ count });
+      }
+    ),
+    findUnique: vi.fn(({ where }: { where: { paymentId: string } }) => {
+      if (state.refundTableMissing) {
+        return Promise.reject(missingTable());
+      }
+      const row = refunds.get(where.paymentId);
+      return Promise.resolve(row ? { ...row } : null);
+    }),
+  };
   const shouldFailActiveWrite = (data: Record<string, unknown>) => {
     if (state.failNextActiveWrite && data.billingStatus === "active") {
       state.failNextActiveWrite = false;
@@ -49,6 +121,8 @@ const fixture = vi.hoisted(() => {
   return {
     blank,
     state,
+    refunds,
+    paymentRefund,
     organization,
     log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
     pay: vi.fn(
@@ -134,6 +208,7 @@ const fixture = vi.hoisted(() => {
       return Promise.resolve({
         email: "test@example.invalid",
         name: "Test Buyer",
+        organizationId: organization.id,
         organization: structuredClone(organization),
       });
     }),
@@ -161,6 +236,7 @@ vi.mock("@repo/database", () => ({
       updateMany: fixture.updateMany,
     },
     user: { findUnique: fixture.findUser },
+    paymentRefund: fixture.paymentRefund,
   },
 }));
 vi.mock("@repo/payments", async (importOriginal) => {
@@ -185,12 +261,14 @@ vi.mock("@/lib/db/ensure-org", () => ({
 vi.mock("@repo/observability/error", () => ({ parseError: String }));
 vi.mock("@repo/observability/log", () => ({ log: fixture.log }));
 
+// PortOne always returns requestedAt; for our IDs it is the ID's issue time.
 const paidPayment = (paymentId: string, paidAt?: string) => ({
   id: paymentId,
   storeId: "store-test",
   status: "PAID",
   currency: "KRW",
   amount: { total: STARTER_AMOUNT },
+  requestedAt: paymentIssuedAtFromPaymentId(paymentId)?.toISOString(),
   paidAt,
 });
 
@@ -203,6 +281,8 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_PORTONE_CHANNEL_KEY_BILLING", "test-channel");
   Object.assign(fixture.organization, fixture.blank);
   fixture.state.failNextActiveWrite = false;
+  fixture.state.refundTableMissing = false;
+  fixture.refunds.clear();
   vi.clearAllMocks();
   fixture.cancelSchedules.mockImplementation(async () => undefined);
   fixture.deleteBillingKey.mockImplementation(async () => undefined);
@@ -578,5 +658,267 @@ describe("post-charge webhook and re-entry [C1/P1-b]", () => {
       "starter",
       olderId
     );
+  });
+});
+
+const cancelledPayment = (
+  paymentId: string,
+  overrides: Record<string, unknown> = {}
+) => ({
+  ...paidPayment(paymentId, "2026-10-04T00:00:00.000Z"),
+  status: "CANCELLED",
+  amount: { total: STARTER_AMOUNT, cancelled: STARTER_AMOUNT },
+  cancelledAt: "2026-10-04T01:00:00.000Z",
+  ...overrides,
+});
+
+describe("durable PaymentRefund record [R]", () => {
+  it("R1: a full refund webhook writes one record, and a duplicate does not add or change it", async () => {
+    expect(await confirm("starter", "rec-key")).toMatchObject({ ok: true });
+    const paymentId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    fixture.getPayment.mockImplementation(async (id: string) =>
+      cancelledPayment(id)
+    );
+    expect((await postEvent("Transaction.Cancelled", paymentId)).status).toBe(
+      200
+    );
+    expect(fixture.refunds.get(paymentId)).toEqual({
+      paymentId,
+      organizationId: "org-1",
+      userId: "user_owner-1",
+      amount: STARTER_AMOUNT,
+      kind: "full",
+      refundedAt: new Date("2026-10-04T01:00:00.000Z"),
+    });
+    const first = structuredClone(fixture.refunds.get(paymentId));
+    expect((await postEvent("Transaction.Cancelled", paymentId)).status).toBe(
+      200
+    );
+    expect(fixture.refunds.size).toBe(1);
+    expect(fixture.refunds.get(paymentId)).toEqual(first);
+  });
+
+  it("R2: a partial cancel writes a partial record and a later full refund promotes it", async () => {
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const paymentId = buildPaymentId("starter", "user_owner-1");
+    fixture.getPayment.mockImplementation(async (id: string) =>
+      cancelledPayment(id, {
+        status: "PARTIAL_CANCELLED",
+        amount: { total: STARTER_AMOUNT, cancelled: 1000 },
+        cancelledAt: "2026-10-04T00:30:00.000Z",
+      })
+    );
+    expect(
+      (await postEvent("Transaction.PartialCancelled", paymentId)).status
+    ).toBe(200);
+    expect(fixture.refunds.get(paymentId)).toMatchObject({
+      kind: "partial",
+      amount: 1000,
+    });
+    // A partial cancel never revokes.
+    expect(fixture.revoke).not.toHaveBeenCalled();
+
+    fixture.getPayment.mockImplementation(async (id: string) =>
+      cancelledPayment(id)
+    );
+    expect((await postEvent("Transaction.Cancelled", paymentId)).status).toBe(
+      200
+    );
+    expect(fixture.refunds.size).toBe(1);
+    expect(fixture.refunds.get(paymentId)).toMatchObject({
+      kind: "full",
+      amount: STARTER_AMOUNT,
+      refundedAt: new Date("2026-10-04T01:00:00.000Z"),
+    });
+
+    // A stale partial webhook replayed after the full refund does not demote it.
+    fixture.getPayment.mockImplementation(async (id: string) =>
+      cancelledPayment(id, {
+        status: "PARTIAL_CANCELLED",
+        amount: { total: STARTER_AMOUNT, cancelled: 1000 },
+      })
+    );
+    expect(
+      (await postEvent("Transaction.PartialCancelled", paymentId)).status
+    ).toBe(200);
+    expect(fixture.refunds.get(paymentId)).toMatchObject({
+      kind: "full",
+      amount: STARTER_AMOUNT,
+    });
+  });
+
+  it("R3: the late-Paid fence trusts the record and skips the live PortOne lookup", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-04T00:00:00.000Z"));
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const olderId = buildPaymentId("starter", "user_owner-1");
+    vi.setSystemTime(new Date("2026-10-04T00:05:00.000Z"));
+    expect(await confirm("starter", "fence-key")).toMatchObject({ ok: true });
+    const refundedId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    fixture.getPayment.mockImplementation(async (id: string) =>
+      id === refundedId ? cancelledPayment(id) : paidPayment(id)
+    );
+    expect((await postEvent("Transaction.Cancelled", refundedId)).status).toBe(
+      200
+    );
+    fixture.grant.mockClear();
+    fixture.getPayment.mockClear();
+
+    expect((await postPaid(olderId)).status).toBe(200);
+    expect(fixture.grant).not.toHaveBeenCalled();
+    expect(fixture.getPayment.mock.calls.map(([id]) => id)).not.toContain(
+      refundedId
+    );
+  });
+
+  it("R4: the record fences a late older Paid even while the subscription cleanup is still failing", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-04T00:00:00.000Z"));
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const olderId = buildPaymentId("starter", "user_owner-1");
+    vi.setSystemTime(new Date("2026-10-04T00:05:00.000Z"));
+    expect(await confirm("starter", "fence-key")).toMatchObject({ ok: true });
+    const refundedId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    fixture.getPayment.mockImplementation(async (id: string) =>
+      id === refundedId ? cancelledPayment(id) : paidPayment(id)
+    );
+    fixture.cancelSchedules.mockRejectedValueOnce(new Error("portone 503"));
+    expect((await postEvent("Transaction.Cancelled", refundedId)).status).toBe(
+      500
+    );
+    // Cleanup failed: the org still looks active, but the refund is a fact.
+    expect(fixture.organization.billingStatus).toBe("active");
+    expect(fixture.refunds.get(refundedId)?.kind).toBe("full");
+    fixture.grant.mockClear();
+
+    expect((await postPaid(olderId)).status).toBe(200);
+    expect(fixture.grant).not.toHaveBeenCalled();
+  });
+
+  it("R5: a Paid whose refund was recorded mid-grant is undone even if PortOne still reads PAID", async () => {
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const paymentId = buildPaymentId("starter", "user_owner-1");
+    fixture.grant.mockImplementation(() => {
+      fixture.refunds.set(paymentId, {
+        paymentId,
+        organizationId: "org-1",
+        userId: "user_owner-1",
+        amount: STARTER_AMOUNT,
+        kind: "full",
+        refundedAt: new Date("2026-10-04T01:00:00.000Z"),
+      });
+      return Promise.resolve(true);
+    });
+    expect((await postPaid(paymentId)).status).toBe(200);
+    expect(fixture.revoke).toHaveBeenCalledWith("user_owner-1", paymentId);
+    expect(fixture.schedule).not.toHaveBeenCalled();
+  });
+
+  it("R6: without the table, refunds and fences behave as before and the gap is logged once", async () => {
+    vi.resetModules();
+    fixture.state.refundTableMissing = true;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-04T00:00:00.000Z"));
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const olderId = buildPaymentId("starter", "user_owner-1");
+    vi.setSystemTime(new Date("2026-10-04T00:05:00.000Z"));
+    expect(await confirm("starter", "fence-key")).toMatchObject({ ok: true });
+    const refundedId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    fixture.getPayment.mockImplementation(async (id: string) =>
+      id === refundedId ? cancelledPayment(id) : paidPayment(id)
+    );
+    expect((await postEvent("Transaction.Cancelled", refundedId)).status).toBe(
+      200
+    );
+    expect(fixture.organization).toMatchObject({
+      billingStatus: "canceled",
+      billingCustomerId: null,
+    });
+    fixture.grant.mockClear();
+    // Fence falls back to org status + live lookup.
+    expect((await postPaid(olderId)).status).toBe(200);
+    expect(fixture.grant).not.toHaveBeenCalled();
+    expect(fixture.getPayment.mock.calls.map(([id]) => id)).toContain(
+      refundedId
+    );
+    expect((await postEvent("Transaction.Cancelled", refundedId)).status).toBe(
+      200
+    );
+    const missingWarnings = fixture.log.warn.mock.calls.filter(
+      ([event]) => event === "payments.refund_record.table_missing"
+    );
+    expect(missingWarnings).toHaveLength(1);
+    expect(fixture.log.error).not.toHaveBeenCalled();
+  });
+});
+
+describe("renewal scheduling does not overwrite a concurrent change [P2-1]", () => {
+  it("P2-1: an unsubscribe during renewal scheduling stays canceled and the new schedule is cancelled", async () => {
+    expect(await confirm("starter", "race-key")).toMatchObject({ ok: true });
+    const renewalId = fixture.organization.billingNextPaymentId as string;
+    fixture.schedule.mockImplementationOnce(() => {
+      // unsubscribe() lands while PortOne is creating the next schedule.
+      Object.assign(fixture.organization, {
+        billingStatus: "canceled",
+        billingCustomerId: null,
+        billingProvider: null,
+        billingNextPaymentId: null,
+      });
+      return Promise.resolve(undefined);
+    });
+    expect((await postPaid(renewalId)).status).toBe(200);
+    expect(fixture.organization).toMatchObject({
+      billingStatus: "canceled",
+      billingCustomerId: null,
+      billingNextPaymentId: null,
+    });
+    expect(fixture.cancelSchedules).toHaveBeenCalledWith("race-key");
+  });
+
+  it("P2-1 control: a duplicate Paid that already advanced the cycle does not cancel the schedule", async () => {
+    expect(await confirm("starter", "dup-key")).toMatchObject({ ok: true });
+    const renewalId = fixture.organization.billingNextPaymentId as string;
+    let advancedTo: string | null = null;
+    fixture.schedule.mockImplementationOnce((input: { paymentId: string }) => {
+      // A concurrent delivery of the same Paid already recorded this cycle.
+      advancedTo = input.paymentId;
+      Object.assign(fixture.organization, {
+        billingLastPaymentId: renewalId,
+        billingNextPaymentId: input.paymentId,
+      });
+      return Promise.resolve(undefined);
+    });
+    expect((await postPaid(renewalId)).status).toBe(200);
+    expect(fixture.cancelSchedules).not.toHaveBeenCalled();
+    expect(fixture.organization).toMatchObject({
+      billingStatus: "active",
+      billingCustomerId: "dup-key",
+      billingNextPaymentId: advancedTo,
+    });
+  });
+});
+
+describe("refund fence after the period-end cron [P2-2]", () => {
+  it("P2-2: without a refund record, the fence still holds after the org moves to expired", async () => {
+    fixture.state.refundTableMissing = true;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-04T00:00:00.000Z"));
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const olderId = buildPaymentId("starter", "user_owner-1");
+    vi.setSystemTime(new Date("2026-10-04T00:05:00.000Z"));
+    expect(await confirm("starter", "exp-key")).toMatchObject({ ok: true });
+    const refundedId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    fixture.getPayment.mockImplementation(async (id: string) =>
+      id === refundedId ? cancelledPayment(id) : paidPayment(id)
+    );
+    expect((await postEvent("Transaction.Cancelled", refundedId)).status).toBe(
+      200
+    );
+    // expireCancelledSubscriptions closes the refunded subscription.
+    fixture.organization.billingStatus = "expired";
+    fixture.grant.mockClear();
+
+    expect((await postPaid(olderId)).status).toBe(200);
+    expect(fixture.grant).not.toHaveBeenCalled();
   });
 });

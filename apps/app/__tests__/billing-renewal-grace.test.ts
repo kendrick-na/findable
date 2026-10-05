@@ -29,6 +29,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@repo/database", () => ({
   database: {
+    // plan-grant serializes per-user Clerk writes in an advisory-lock transaction.
+    $transaction: async (
+      fn: (tx: { $executeRaw: () => Promise<number> }) => unknown
+    ) => fn({ $executeRaw: async () => 1 }),
     organization: { findMany: mocks.findMany, updateMany: mocks.updateMany },
   },
 }));
@@ -91,7 +95,8 @@ describe("유예 기간 계산", () => {
     expect(isPaidPeriodOver(RENEWAL_ID, now)).toBe(true);
     const recent = buildPaymentId("growth", USER_ID, now.getTime() - DAY);
     expect(isPaidPeriodOver(recent, now)).toBe(false);
-    expect(isPaidPeriodOver("partner-grant", now)).toBe(false);
+    // P1-1: an unparseable payment source counts as expired (never "forever").
+    expect(isPaidPeriodOver("partner-grant", now)).toBe(true);
   });
 });
 
