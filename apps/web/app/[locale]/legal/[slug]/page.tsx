@@ -76,9 +76,27 @@ const PAGES_KO: Record<string, LegalDoc> = {
         h: "제3조 (이용계약 성립)",
         p: "이용자는 이메일로 회원가입을 신청하고, 회사가 승낙함으로써 이용계약이 성립됩니다. 만 14세 미만은 가입할 수 없습니다.",
       },
+      // 🟡 [초안 2026-10-05 — 시행 전 확인필요] 제4조~제4조의3 은 코드 실제 동작에 맞춘 개정 초안.
+      //   근거(코드): 카탈로그는 월 상품만(packages/payments/catalog.ts, 연 상품 없음) ·
+      //   다음 청구일 = 1개월 뒤(billing-cycle.ts nextBillingDate) ·
+      //   갱신 실패 유예 7일(RENEWAL_FAILURE_GRACE_DAYS) · 해지 시 결제 기간 종료일까지 유지
+      //   (apps/app/lib/billing/period-end-expiry.ts) · 앱 내 환불 버튼 없음(운영자 처리).
+      //   유료 기능 예시 = 자동 재측정(auto-refresh-tracking cron)·측정 데이터 CSV 내보내기
+      //   (apps/app/app/api/export/tracking.csv) — 코드에 있는 것만 적었다.
       {
         h: "제4조 (요금 및 결제)",
-        p: "유료 플랜은 월/연 단위로 결제됩니다. 결제는 결제대행사 포트원(PortOne)을 통해 처리되며, 실제 카드 결제·정산은 포트원과 제휴한 카드사·PG사가 담당합니다. 결제 즉시 효력이 발생하며, 환불은 결제일로부터 7일 이내 미사용분에 한해 가능합니다.",
+        p: "유료 플랜은 월 단위 자동결제 또는 1개월 이용권(1회 결제) 방식으로 결제됩니다. 월 단위 자동결제는 최초 결제일로부터 1개월마다 등록된 결제수단으로 자동 청구되며, 1개월 이용권은 결제일로부터 1개월 동안 이용할 수 있고 자동으로 갱신되지 않습니다. 결제는 결제대행사 포트원(PortOne)을 통해 처리되며, 실제 카드 결제·정산은 포트원과 제휴한 카드사·PG사가 담당합니다. 결제 즉시 효력이 발생합니다.",
+      },
+      {
+        h: "제4조의2 (해지 및 갱신 결제 실패)",
+        p: "(1) 이용자는 언제든지 월 단위 자동결제를 해지할 수 있습니다. 해지하면 다음 결제는 청구되지 않으며, 이미 결제한 이용 기간의 종료일까지 유료 기능을 이용한 뒤 이용이 종료됩니다. (2) 갱신 결제가 실패한 경우 결제 예정일로부터 7일 동안 유료 기능 이용이 유지되며, 그 기간 안에 결제가 완료되지 않으면 유료 기능 이용이 종료됩니다.",
+      },
+      // ⚠️ 법률 검토 필요 [확인필요] — 아래 제4조의3(환불)의 "미사용" 정의·이용 이력이 있을 때의
+      //   처리 방식(이용일수 차감 등)은 전자상거래법 제17조(청약철회 등)·콘텐츠이용자보호지침 대조 전이다.
+      //   변호사 검토 없이 시행하지 말 것.
+      {
+        h: "제4조의3 (청약철회 및 환불)",
+        p: "(1) 결제일로부터 7일 이내이고 유료 기능(자동 재측정, 측정 데이터 내보내기 등 유료 플랜 전용 기능)의 이용 이력이 없는 경우 결제 금액 전액을 환불합니다. (2) 결제일로부터 7일 이내라도 유료 기능의 이용 이력이 있는 경우에는 전자상거래 등에서의 소비자보호에 관한 법률 등 관련 법령에 따른 범위에서 환불을 처리합니다(이용일수에 해당하는 금액 차감 등). (3) 환불은 이메일(kendrick@indigochild.kr)로 요청할 수 있으며, 회사가 확인한 뒤 결제대행사를 통해 처리합니다. 전액 환불이 처리되면 해당 결제로 부여된 유료 기능 이용이 종료되고 예정된 다음 결제도 취소됩니다.",
       },
       {
         h: "제5조 (회사의 의무)",
@@ -94,7 +112,7 @@ const PAGES_KO: Record<string, LegalDoc> = {
       },
       {
         h: "부칙",
-        p: "본 약관은 2026년 5월 5일부터 시행됩니다.",
+        p: "본 약관은 2026년 5월 5일부터 시행됩니다. 개정된 제4조, 제4조의2, 제4조의3은 [시행일: 확인필요]부터 시행됩니다.",
       },
     ],
   },
@@ -155,9 +173,19 @@ const PAGES_EN: Record<string, LegalDoc> = {
         h: "Article 3 (Formation of the agreement)",
         p: "You apply for an account by email, and the agreement is formed when the Company accepts. Users under 14 may not register.",
       },
+      // 🟡 [Draft 2026-10-05 — confirm before taking effect] mirrors the Korean 제4조~제4조의3.
+      //   ⚠️ Legal review required [확인필요] for Article 4-3 (refunds).
       {
         h: "Article 4 (Fees and payment)",
-        p: "Paid plans are billed monthly or annually. Payments are processed through the payment provider PortOne, with actual card processing and settlement handled by PortOne's partnered card issuers and PG companies. Payments take effect immediately, and refunds are available within 7 days of payment, limited to the unused portion.",
+        p: "Paid plans are paid either as a monthly automatic subscription or as a one-month pass (single payment). A monthly subscription is charged automatically to the registered payment method every month from the first payment date; a one-month pass can be used for one month from the payment date and does not renew automatically. Payments are processed through the payment provider PortOne, with actual card processing and settlement handled by PortOne's partnered card issuers and PG companies. Payments take effect immediately.",
+      },
+      {
+        h: "Article 4-2 (Cancellation and failed renewals)",
+        p: "(1) You may cancel a monthly subscription at any time. After cancellation no further payment is charged, and you keep access to paid features until the end of the period you have already paid for, after which access ends. (2) If a renewal payment fails, access to paid features continues for 7 days from the scheduled payment date; if payment is not completed within that period, access to paid features ends.",
+      },
+      {
+        h: "Article 4-3 (Withdrawal and refunds)",
+        p: "(1) If you request a refund within 7 days of payment and have not used any paid features (paid-plan features such as automatic re-measurement and measurement data export), the full amount is refunded. (2) If paid features have been used, even within 7 days of payment, refunds are handled to the extent provided by applicable law, including Korea's Act on the Consumer Protection in Electronic Commerce (for example, by deducting the amount for the days used). (3) Refunds can be requested by email (kendrick@indigochild.kr); the Company reviews the request and processes it through the payment provider. When a full refund is processed, access to paid features granted by that payment ends and any scheduled next payment is cancelled.",
       },
       {
         h: "Article 5 (Company obligations)",
@@ -173,7 +201,7 @@ const PAGES_EN: Record<string, LegalDoc> = {
       },
       {
         h: "Addendum",
-        p: "These terms take effect on May 5, 2026.",
+        p: "These terms take effect on May 5, 2026. The amended Articles 4, 4-2, and 4-3 take effect on [effective date: to be confirmed].",
       },
     ],
   },
