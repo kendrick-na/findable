@@ -47,6 +47,7 @@ export {
   isFailedEvent,
   isFullCancellationEvent,
   isPaidEvent,
+  isPartialCancellationEvent,
   type PortOneWebhookBody,
   parseWebhookBody,
   verifyWebhookSignature,

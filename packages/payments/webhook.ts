@@ -140,6 +140,13 @@ export function isFullCancellationEvent(type: string): boolean {
 }
 
 /**
+ * 부분 취소 이벤트. 권한은 내리지 않고 환불 기록(PaymentRefund)만 남긴다.
+ */
+export function isPartialCancellationEvent(type: string): boolean {
+  return type === "Transaction.PartialCancelled";
+}
+
+/**
  * 결제(예약 결제 포함) 실패 이벤트. PortOne V2 는 `Transaction.Failed` 를 쓴다.
  * 첫 결제 실패와 갱신 회차 실패가 같은 타입이라, 호출부가 갱신 회차인지 따로 가려야 한다.
  */

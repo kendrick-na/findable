@@ -39,6 +39,7 @@ import {
   isFailedEvent,
   isFullCancellationEvent,
   isPaidEvent,
+  isPartialCancellationEvent,
   nextBillingDate,
   parseWebhookBody,
   paymentIssuedAtFromPaymentId,
@@ -51,6 +52,10 @@ import {
 } from "@repo/payments";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+import {
+  readPaymentRefundKind,
+  recordPaymentRefund,
+} from "@/lib/billing/payment-refund-record";
 
 /** 재전송해도 결과가 같은(=재시도 무의미) 종료. PortOne 이 재전송을 멈추도록 200. */
 const done = (reason: string) => NextResponse.json({ ok: true, reason });
@@ -214,8 +219,87 @@ async function cleanupRefundedSubscription(
   return "cleaned";
 }
 
+type LookedUpPayment = Awaited<ReturnType<typeof getPortOnePayment>>;
+
+function validDate(raw: string | undefined): Date | null {
+  if (!raw) {
+    return null;
+  }
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * 취소(전액·부분)를 PaymentRefund 에 멱등 기록한다. 종류·금액은 PortOne 조회 결과로 정한다.
+ * 실패·테이블 부재는 기록 모듈이 로그만 남기고 삼킨다 — 회수·정리를 막지 않는다.
+ */
+async function recordRefundFact(
+  userId: string,
+  payment: LookedUpPayment,
+  eventAt: Date | null
+): Promise<void> {
+  const kind = payment.status === "CANCELLED" ? "full" : "partial";
+  const user = await database.user
+    .findUnique({ where: { id: userId }, select: { organizationId: true } })
+    .catch(() => null);
+  await recordPaymentRefund({
+    paymentId: payment.id,
+    userId,
+    organizationId: user?.organizationId ?? null,
+    amount:
+      payment.amount.cancelled ?? (kind === "full" ? payment.amount.total : 0),
+    kind,
+    refundedAt: validDate(payment.cancelledAt) ?? eventAt ?? new Date(),
+  });
+}
+
+/** 부분 취소 — 권한·구독은 그대로 두고 환불 기록만 남긴다. */
+async function handlePartialCancelledPayment(
+  paymentId: string,
+  eventAt: Date | null
+): Promise<Response> {
+  const userId = userIdFromPaymentId(paymentId);
+  if (!userId) {
+    log.warn("payments.webhook.partial_cancel_no_uid_in_payment_id", {
+      paymentId,
+    });
+    return done("partial_cancel_no_uid_in_payment_id");
+  }
+  let payment: LookedUpPayment;
+  try {
+    payment = await getPortOnePayment(paymentId);
+  } catch (error) {
+    log.error("payments.webhook.partial_cancel_lookup_failed", {
+      paymentId,
+      error: parseError(error),
+    });
+    return retryable("partial_cancel_lookup_failed");
+  }
+  if (
+    payment.status !== "PARTIAL_CANCELLED" &&
+    payment.status !== "CANCELLED"
+  ) {
+    log.info("payments.webhook.partial_cancel_status_mismatch", {
+      paymentId,
+      status: payment.status,
+    });
+    return done(`partial_cancel_status_mismatch:${payment.status}`);
+  }
+  // 이미 전액 취소로 끝났으면 전액으로 기록한다(회수는 Cancelled 웹훅이 한다).
+  await recordRefundFact(userId, payment, eventAt);
+  log.info("payments.webhook.partial_cancel_recorded", {
+    userId,
+    paymentId,
+    status: payment.status,
+  });
+  return done("partial_cancel_recorded");
+}
+
 /** 전액 취소 — 해당 결제에서 부여한 plan 을 회수하고, 현재 구독 회차면 구독도 끝낸다. */
-async function handleCancelledPayment(paymentId: string): Promise<Response> {
+async function handleCancelledPayment(
+  paymentId: string,
+  eventAt: Date | null
+): Promise<Response> {
   const userId = userIdFromPaymentId(paymentId);
   if (!userId) {
     log.warn("payments.webhook.cancel_no_uid_in_payment_id", {
@@ -240,6 +324,9 @@ async function handleCancelledPayment(paymentId: string): Promise<Response> {
     });
     return retryable(`cancel_not_final:${payment.status}`);
   }
+
+  // 환불은 확정된 사실이다 — 회수·정리가 실패해 재전송되더라도 먼저 남긴다.
+  await recordRefundFact(userId, payment, eventAt);
 
   // 회수와 구독 정리는 서로를 막지 않는다. 한쪽이 실패해도 다른 쪽은 끝내고 5xx 로 재전송을 받는다.
   const result = await revokePlanFromPayment(userId, paymentId).catch(() => ({
@@ -276,9 +363,11 @@ async function handleCancelledPayment(paymentId: string): Promise<Response> {
 /**
  * 환불 펜스 — 조직에 기록된 환불보다 **먼저 발급된** 결제의 늦은 Paid 는 권한을 주지 않는다(X8).
  *
- * 별도 환불 테이블이 없으므로(마이그레이션 없음) "기록된 환불"은 이렇게 판정한다:
- *   조직이 canceled 이고, 마지막 결제(billingLastPaymentId)가 PortOne 에서 CANCELLED.
- * 해지(unsubscribe)만 한 조직은 마지막 결제가 PAID 라 막히지 않는다.
+ * "기록된 환불" 판정 순서:
+ *   1) PaymentRefund 에 마지막 결제(billingLastPaymentId)의 전액 환불 기록이 있으면 그것을 믿는다
+ *      (조직 정리가 아직 실패 중이어도, PortOne 조회 없이).
+ *   2) 기록이 없거나 테이블이 없으면 기존 판정: 조직이 canceled 이고 마지막 결제가 PortOne 에서
+ *      CANCELLED. 해지(unsubscribe)만 한 조직은 마지막 결제가 PAID 라 막히지 않는다.
  */
 async function isOlderThanRecordedRefund(
   userId: string,
@@ -293,16 +382,18 @@ async function isOlderThanRecordedRefund(
     },
   });
   const lastPaymentId = user?.organization?.billingLastPaymentId;
-  if (
-    !lastPaymentId ||
-    lastPaymentId === paymentId ||
-    user?.organization?.billingStatus !== "canceled"
-  ) {
+  if (!lastPaymentId || lastPaymentId === paymentId) {
     return false;
   }
   const issuedAt = paymentIssuedAtFromPaymentId(paymentId);
   const refundedIssuedAt = paymentIssuedAtFromPaymentId(lastPaymentId);
   if (!(issuedAt && refundedIssuedAt) || issuedAt > refundedIssuedAt) {
+    return false;
+  }
+  if ((await readPaymentRefundKind(lastPaymentId)) === "full") {
+    return true;
+  }
+  if (user?.organization?.billingStatus !== "canceled") {
     return false;
   }
   const last = await getPortOnePayment(lastPaymentId);
@@ -312,6 +403,7 @@ async function isOlderThanRecordedRefund(
 /**
  * 부여 직후 재조회 — 부여가 끝나기 전에 전액 환불이 끝났으면 방금 준 권한을 되돌린다(X8).
  * 환불 웹훅의 회수가 부여보다 먼저 끝나면 회수 대상이 아직 없어 권한이 남기 때문이다.
+ * PaymentRefund 의 전액 환불 기록을 먼저 보고, 없으면 PortOne 을 다시 조회한다.
  * 부분 취소는 남은 결제 대가가 있으므로 그대로 둔다.
  * 반환값이 있으면 호출부는 그 응답으로 끝낸다(다음 회차 예약도 하지 않는다).
  */
@@ -319,9 +411,12 @@ async function undoGrantIfRefunded(
   userId: string,
   paymentId: string
 ): Promise<Response | null> {
-  const latest = await getPortOnePayment(paymentId);
-  if (latest.status !== "CANCELLED") {
-    return null;
+  const recorded = (await readPaymentRefundKind(paymentId)) === "full";
+  if (!recorded) {
+    const latest = await getPortOnePayment(paymentId);
+    if (latest.status !== "CANCELLED") {
+      return null;
+    }
   }
   const undo = await revokePlanFromPayment(userId, paymentId);
   if (undo.reason === "push_failed") {
@@ -455,9 +550,13 @@ export const POST = async (request: Request): Promise<Response> => {
   }
 
   // 전액 취소는 해당 결제에서 부여한 plan만 안전하게 회수한다.
-  // 부분 취소는 남은 결제 대가가 있으므로 권한을 내리지 않는다.
+  // 부분 취소는 남은 결제 대가가 있으므로 권한을 내리지 않고 환불 기록만 남긴다.
+  const eventAt = validDate(body.timestamp);
   if (isFullCancellationEvent(body.type)) {
-    return handleCancelledPayment(body.data.paymentId);
+    return handleCancelledPayment(body.data.paymentId, eventAt);
+  }
+  if (isPartialCancellationEvent(body.type)) {
+    return handlePartialCancelledPayment(body.data.paymentId, eventAt);
   }
 
   if (isFailedEvent(body.type)) {

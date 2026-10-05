@@ -51,6 +51,8 @@ const PaymentSchema = z.object({
     })
     .optional(),
   paidAt: z.string().optional(),
+  // CancelledPayment·PartialCancelledPayment 의 취소 시각. 다른 상태에는 없다(선택 필드).
+  cancelledAt: z.string().optional(),
   receiptUrl: z.string().optional(),
 });
 
