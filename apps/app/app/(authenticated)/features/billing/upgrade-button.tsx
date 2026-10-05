@@ -37,6 +37,23 @@ const EASY_PAY_CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? "";
 // 법인카드용 PG 채널이 실제로 개통된 뒤에만 주입한다. 미설정 상태에서 카드결제
 // 버튼을 보이면 고객에게 실패하는 결제 동선을 제시하게 되므로, 이 값은 의도적으로 선택값이다.
 const CARD_CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY ?? "";
+/** PortOne 메시지 앞의 "[CODE] " 표기 — 고객 화면에는 문장만 남긴다. */
+const BRACKET_CODE_RE = /^\[[A-Z_]+\]\s*/;
+
+interface PaymentFailure {
+  code?: string;
+  message?: string;
+  pgCode?: string;
+}
+
+/** 고객이 결제창을 닫은 것인가. 토스 채널은 code 가 아니라 pgCode·message 앞머리에 싣는다(실측). */
+const isUserCancel = (r: PaymentFailure): boolean =>
+  r.code === "PAY_PROCESS_CANCELED" ||
+  r.pgCode === "PAY_PROCESS_CANCELED" ||
+  Boolean(r.message?.startsWith("[PAY_PROCESS_CANCELED]"));
+
+const customerMessage = (r: PaymentFailure): string =>
+  (r.message ?? r.code ?? "").replace(BRACKET_CODE_RE, "");
 
 export const UpgradeButton = ({
   plan,
@@ -127,7 +144,14 @@ export const UpgradeButton = ({
           amountKrw: intent.amount,
           reasonCode: response.code,
         });
-        toast.error(`결제 실패: ${response.message ?? response.code}`);
+        // 🔴 2026-10-05 E2E 실측(토스 테스트 채널): 창을 닫으면 message 가
+        //   "[PAY_PROCESS_CANCELED] 사용자가…" 로 와서 개발용 코드가 화면에 그대로 노출됐다.
+        //   고객 취소는 실패가 아니다 → 안내만 한다(정기결제 창 닫기와 같은 결).
+        if (isUserCancel(response)) {
+          toast.info("결제를 취소했어요. 결제는 진행되지 않았어요.");
+          return;
+        }
+        toast.error(`결제하지 못했어요: ${customerMessage(response)}`);
         return;
       }
 
