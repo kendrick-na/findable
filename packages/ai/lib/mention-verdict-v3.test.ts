@@ -46,10 +46,8 @@ const CHATGPT_EN_APP =
 describe("판정 v3 — 여러 동명 대상을 나열하거나 되묻는 답변", () => {
   it.each([
     ["Gemini 추천 질문", GEMINI_RECOMMEND],
-    ["Gemini 소개 질문(우리 회사가 목록 첫 줄)", GEMINI_ABOUT],
-    ["Perplexity 소개 질문", PERPLEXITY_ABOUT],
     ["ChatGPT 되물음", CHATGPT_ABOUT],
-  ])("%s 은 ambiguous 로 규칙 판정한다", async (_label, text) => {
+  ])("근거 없는 %s 은 ambiguous 로 규칙 판정한다", async (_label, text) => {
     expect(detectAmbiguity(text)).toBe(true);
     expect(
       await verifyMentionV3({ ...FRANZ, text, stringMatched: true })
@@ -60,6 +58,21 @@ describe("판정 v3 — 여러 동명 대상을 나열하거나 되묻는 답변
       via: "rule",
     });
     expect(generateObject).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Gemini 소개 질문(상호까지 설명)", GEMINI_ABOUT],
+    ["Perplexity 소개 질문(상호 언급)", PERPLEXITY_ABOUT],
+  ])("다중 나열이라도 공식 근거가 있는 %s 은 판정기에 넘긴다", async (_label, text) => {
+    vi.stubEnv("LETSUR_API_KEY", "test-key");
+    vi.mocked(generateObject).mockResolvedValueOnce({
+      object: { quality: "ambiguous", evidence: "두 가지 주요 브랜드" },
+    } as never);
+    expect(detectAmbiguity(text)).toBe(true);
+    expect(
+      await verifyMentionV3({ ...FRANZ, text, stringMatched: true })
+    ).toMatchObject({ quality: "ambiguous", via: "llm" });
+    expect(generateObject).toHaveBeenCalledTimes(1);
   });
 
   it("대상을 하나로 특정한 답변과 한쪽을 골라 설명한 답변은 규칙으로 잡지 않는다", () => {
