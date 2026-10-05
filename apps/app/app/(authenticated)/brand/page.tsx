@@ -18,6 +18,11 @@ import { BrandProfileEditorServer } from "../features/brand/brand-profile-editor
 import { PromptWizard } from "../features/brand/prompt-wizard";
 import { StartTrackingButton } from "../features/brand/start-tracking-button";
 
+// 이 화면의 「측정 시작」 서버액션(startOrgTracking)은 after() 로 측정 전체(runAuditJob)를
+//   돌린다. Next.js 문서: 서버액션 시간 상한은 **그 액션을 쓰는 page 의 maxDuration** 을 따른다.
+//   러너 예산(270초)+마무리 여유에 맞춰 명시한다 — 플랫폼 기본값에 기대지 않는다(2026-10-06).
+export const maxDuration = 300;
+
 export const metadata: Metadata = {
   title: "브랜드·측정 · Findable",
   description: "측정할 브랜드를 등록하면, AI가 우리를 말하는지 확인해요.",

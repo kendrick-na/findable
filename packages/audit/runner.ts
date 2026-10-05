@@ -859,6 +859,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             brandDomain: input.domain,
             industry: input.industry ?? undefined,
             officialSite: officialSiteIdentity,
+            // 그림자 v3(점수 미사용)는 이 마감까지 60초 이상 남았을 때만 돈다.
+            shadowDeadlineAtMs: budget.stopStartingAtMs,
           },
           ({ chunkIndex, responseCount, phase }) => {
             if (phase === "started") {

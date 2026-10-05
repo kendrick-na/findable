@@ -915,14 +915,23 @@ function logShadowDistribution(
 
 /** 그림자 판정 청크 상한 — 넘으면 그 청크는 기록하지 않는다(v2 판정은 영향 없음). */
 const SHADOW_CHUNK_DEADLINE_MS = 15_000;
+/**
+ * 그림자 판정을 **시작하지 않는** 남은 시간 하한(2026-10-06).
+ * 측정 전체 예산(runner 270초) 중 이만큼도 안 남았으면 그림자는 통째로 건너뛴다 —
+ * 점수에 쓰지 않는 기록 때문에 집계·DB 저장이 함수 시간 상한(300초)에 걸리면 안 된다.
+ */
+export const SHADOW_MIN_REMAINING_MS = 60_000;
+/** 호출자가 마감 시각을 주지 않을 때의 기본 예산(runner 의 AUDIT_RUN_TIME_BUDGET_MS 와 같다). */
+export const SHADOW_DEFAULT_BUDGET_MS = 270_000;
 
 function withShadowDeadline<T>(
   run: (signal: AbortSignal) => Promise<(T | null)[]>,
   size: number,
+  deadlineMs: number,
   parent?: AbortSignal
 ): Promise<(T | null)[]> {
-  // 시간이 지나면 실제로 판정기 호출을 취소한다 — 계속 돌면 v2 와 동시 호출 한도를 나눠
-  //   v2 가 judge_failed 로 떨어질 수 있다(컨트롤타워 검증 2026-10-06).
+  // 시간이 지나면 실제로 판정기 호출을 취소한다 — 계속 돌면 다음 단계와 호출 한도를
+  //   나눠 가진다(컨트롤타워 검증 2026-10-06).
   const controller = new AbortController();
   const onParentAbort = () => controller.abort();
   parent?.addEventListener("abort", onParentAbort, { once: true });
@@ -932,11 +941,82 @@ function withShadowDeadline<T>(
       log.warn("mention.verdict_v3.shadow_deadline", { size });
       controller.abort();
       resolve(new Array(size).fill(null));
-    }, SHADOW_CHUNK_DEADLINE_MS);
+    }, deadlineMs);
   });
   return Promise.race([run(controller.signal), timeout]).finally(() => {
     clearTimeout(timer);
     parent?.removeEventListener("abort", onParentAbort);
+  });
+}
+
+/**
+ * v2 판정이 **모두 끝난 뒤에만** 그림자 v3 를 돌려 `verdictV3` 를 덧붙인다(2026-10-06).
+ * 남은 예산이 SHADOW_MIN_REMAINING_MS 미만이면 시작하지 않고(청크마다 재확인),
+ * 청크 상한도 「남은 시간 − 하한」을 넘지 않는다 → 그림자는 마지막 60초를 절대 쓰지 않는다.
+ * v2 결과(brandMentioned·mentionQuality 등)는 건드리지 않는다.
+ */
+async function attachShadowVerdicts<R extends { verdictV3?: VerdictV3Shadow }>(
+  out: R[],
+  verdictInputs: Array<(VerifyInput & { stringMatched: boolean }) | null>,
+  options: {
+    brandName: string;
+    deadlineAtMs: number;
+    signal?: AbortSignal;
+    verifyMentionV3: (
+      input: VerifyInput & { stringMatched: boolean }
+    ) => Promise<Parameters<typeof shadowField>[0]>;
+  }
+): Promise<void> {
+  const startedAt = Date.now();
+  let attached = 0;
+  for (let start = 0; start < out.length; start += VERDICT_CONCURRENCY) {
+    const remainingMs = options.deadlineAtMs - Date.now();
+    let skipReason: "aborted" | "budget" | null = null;
+    if (options.signal?.aborted) {
+      skipReason = "aborted";
+    } else if (remainingMs < SHADOW_MIN_REMAINING_MS) {
+      skipReason = "budget";
+    }
+    if (skipReason) {
+      log.info("mention.verdict_v3.shadow_skipped", {
+        brandName: options.brandName,
+        reason: skipReason,
+        remainingMs: Math.round(remainingMs),
+        minRemainingMs: SHADOW_MIN_REMAINING_MS,
+        skippedRows: out.length - start,
+      });
+      break;
+    }
+    const inputs = verdictInputs.slice(start, start + VERDICT_CONCURRENCY);
+    const shadows = await withShadowDeadline(
+      (shadowSignal) =>
+        Promise.all(
+          inputs.map((verdictInput) =>
+            verdictInput
+              ? options
+                  .verifyMentionV3({ ...verdictInput, signal: shadowSignal })
+                  .catch(() => null)
+              : Promise.resolve(null)
+          )
+        ),
+      inputs.length,
+      Math.min(SHADOW_CHUNK_DEADLINE_MS, remainingMs - SHADOW_MIN_REMAINING_MS),
+      options.signal
+    );
+    for (const [i, shadow] of shadows.entries()) {
+      const row = out[start + i];
+      const field = shadowField(shadow);
+      if (row && field.verdictV3) {
+        row.verdictV3 = field.verdictV3;
+        attached += 1;
+      }
+    }
+  }
+  log.info("mention.verdict_v3.shadow_finished", {
+    brandName: options.brandName,
+    durationMs: Date.now() - startedAt,
+    rows: out.length,
+    attached,
   });
 }
 
@@ -961,6 +1041,11 @@ export async function verifyMentions<T extends VerifiableResponse>(
     industry?: string;
     officialSite?: VerifyInput["officialSite"];
     signal?: AbortSignal;
+    /**
+     * 측정 전체 마감 시각(epoch ms). 그림자 v3 는 이 시각까지
+     * SHADOW_MIN_REMAINING_MS 이상 남았을 때만 돈다. 없으면 호출 시점 + 270초.
+     */
+    shadowDeadlineAtMs?: number;
   },
   onChunkEvent?: (event: {
     chunkIndex: number;
@@ -974,6 +1059,11 @@ export async function verifyMentions<T extends VerifiableResponse>(
     "./mention-verdict-v3"
   );
   const shadowV3 = isVerdictV3ShadowEnabled();
+  const shadowDeadlineAtMs =
+    brand.shadowDeadlineAtMs ?? Date.now() + SHADOW_DEFAULT_BUDGET_MS;
+  const allVerdictInputs: Array<
+    (VerifyInput & { stringMatched: boolean }) | null
+  > = new Array(responses.length).fill(null);
 
   // 인덱스를 청크로 끊어 동시 실행 상한을 지킨다.
   for (let start = 0; start < responses.length; start += VERDICT_CONCURRENCY) {
@@ -988,25 +1078,9 @@ export async function verifyMentions<T extends VerifiableResponse>(
       /* logging is best-effort */
     }
     const verdictInputs = slice.map((r) => buildVerdictInput(r, brand));
-    // 그림자 판정은 점수에 쓰지 않으므로 측정 시간을 잡아먹지 않게 청크당 상한을 둔다
-    //   (2026-10-06 운영 실측: 켠 뒤 평균 131→162초, kurly 판정 단계에서 lease 만료).
-    const shadowVerdicts = shadowV3
-      ? withShadowDeadline(
-          (shadowSignal) =>
-            Promise.all(
-              verdictInputs.map((verdictInput) =>
-                verdictInput
-                  ? verifyMentionV3({
-                      ...verdictInput,
-                      signal: shadowSignal,
-                    }).catch(() => null)
-                  : Promise.resolve(null)
-              )
-            ),
-          slice.length,
-          brand.signal
-        )
-      : Promise.resolve(slice.map(() => null));
+    for (const [i, verdictInput] of verdictInputs.entries()) {
+      allVerdictInputs[start + i] = verdictInput;
+    }
     const verdicts = await Promise.all(
       slice.map((r, i): Promise<MentionVerdict> => {
         const verdictInput = verdictInputs[i];
@@ -1032,10 +1106,8 @@ export async function verifyMentions<T extends VerifiableResponse>(
       })
     );
 
-    const v3 = await shadowVerdicts;
     for (const [i, verdict] of verdicts.entries()) {
       const original = slice[i] as T;
-      const shadow = v3[i];
       out[start + i] = {
         ...original,
         brandMentioned: verdict.counted,
@@ -1043,7 +1115,6 @@ export async function verifyMentions<T extends VerifiableResponse>(
         mentionQuality: verdict.quality,
         verdictVia: verdict.via,
         ...verdictExtras(verdict),
-        ...shadowField(shadow),
       };
     }
     try {
@@ -1051,6 +1122,18 @@ export async function verifyMentions<T extends VerifiableResponse>(
     } catch {
       /* logging is best-effort */
     }
+  }
+
+  // 그림자 v3 는 v2 가 전부 끝난 뒤에만, 남은 예산이 있을 때만 돈다(2026-10-06).
+  //   이전엔 청크마다 v2 와 나란히 돌고 청크가 그림자를 기다려(최대 15초×청크 수)
+  //   측정 시간을 늘렸다 — 운영 실측: kurly 첫 측정이 판정 단계에서 시간 초과.
+  if (shadowV3) {
+    await attachShadowVerdicts(out, allVerdictInputs, {
+      brandName: brand.brandName,
+      deadlineAtMs: shadowDeadlineAtMs,
+      signal: brand.signal,
+      verifyMentionV3,
+    });
   }
 
   // 판정 분포 관측(2026-08-03 세션N) — 이 판정은 계산·과금까지 하고 **아무 곳에도
