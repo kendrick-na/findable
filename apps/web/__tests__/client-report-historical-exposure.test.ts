@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   CLIENT_REPORT_TEMPLATE_VERSION,
-  type ClientReportData,
+  type ClientReportDataV1,
   clientReportDisclosure,
 } from "@repo/audit/client-report/report-data";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -34,7 +34,7 @@ const knowverse = JSON.parse(
     join(import.meta.dirname, "fixtures/client-report/knowverse.report.json"),
     "utf8"
   )
-) as ClientReportData;
+) as ClientReportDataV1;
 const oldPdfUrl = "https://example.test/issued/knowverse-old.pdf";
 const token = "a".repeat(43);
 const currentTemplateSnapshot = {

@@ -24,6 +24,9 @@ function sha256(bytes: Uint8Array | string): string {
 
 /** Hashes the exact public snapshot, excluding archival self-review metadata. */
 export function hashClientReportSnapshot(data: ClientReportData): string {
+  if (data.schemaVersion === 2) {
+    return sha256(JSON.stringify(canonicalize(data)));
+  }
   const { publicationReview: _archivalReview, ...snapshot } = data;
   return sha256(JSON.stringify(canonicalize(snapshot)));
 }

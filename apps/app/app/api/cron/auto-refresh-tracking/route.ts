@@ -62,6 +62,7 @@ import {
   expireOneOffPaymentGrants,
 } from "@/lib/billing/period-end-expiry";
 import { expireLapsedRenewalGrants } from "@/lib/billing/renewal-grace";
+import { sendRenewalNotices } from "@/lib/billing/renewal-notice";
 
 export const maxDuration = 300;
 
@@ -345,6 +346,36 @@ async function expirePaymentAccess(now: Date) {
   return { renewalGrace, cancelledPeriodEnd, oneOffPeriodEnd };
 }
 
+const NO_RENEWAL_NOTICES = {
+  status: "failed",
+  candidates: 0,
+  sent: 0,
+  failed: 0,
+} as const;
+
+/**
+ * 정기결제 갱신 사전 안내 단계(2026-10-05) — `lib/billing/renewal-notice.ts`.
+ *
+ * 🔒 스위치 `FINDABLE_RENEWAL_NOTICE_ENABLED` 가 정확히 "true" 가 아니면 아무것도 안 한다.
+ *   Preview 에서는 `resend` 가 없으므로(createResendClient) 발송하지 않는다.
+ *   측정보다 **앞**에 둔다 — 측정이 300초 한도에 걸려도 안내가 굶지 않게. 실행당 상한이 있고
+ *   실패는 여기서 가둔다(만료·측정 단계는 계속 돈다).
+ */
+async function runRenewalNotices(now: Date) {
+  try {
+    return await sendRenewalNotices({
+      now,
+      client: resend,
+      from: env.RESEND_FROM,
+      appUrl: env.NEXT_PUBLIC_APP_URL,
+      termsUrl: new URL("/ko/legal/terms", env.NEXT_PUBLIC_WEB_URL).toString(),
+    });
+  } catch (error) {
+    log.error("billing.renewal_notice.step_failed", { error: String(error) });
+    return NO_RENEWAL_NOTICES;
+  }
+}
+
 export const GET = async (request: NextRequest) => {
   const invocationStartedAtMs = Date.now();
   // 🔒 원가가 나가기 전에 먼저 막는다(측정 1건 ~87원).
@@ -377,6 +408,11 @@ export const GET = async (request: NextRequest) => {
   // 0-b) 결제 권한 만료(갱신 실패 유예 · 해지 기간 끝 · 1회 결제 1개월).
   const paymentExpiry = await expirePaymentAccess(new Date(now));
 
+  // 0-c) 정기결제 갱신 사전 안내(스위치 기본 꺼짐 · Preview 미발송 · 예약 결제당 1통).
+  const renewalNotices = await runRenewalNotices(new Date(now));
+
+  // 측정 범위 스위치는 결제 만료(0-b)·갱신 안내(0-c) **뒤**에 둔다 — 측정을 멈춰도
+  //   만료 강하와 사전 안내는 계속 돌아야 한다.
   const scope = autoMeasurementScope();
   if (scope === "off") {
     log.info("cron.auto_measurement.disabled", {});
@@ -386,6 +422,7 @@ export const GET = async (request: NextRequest) => {
       dueCount: 0,
       triggered: 0,
       digestsSent: 0,
+      renewalNotices,
       ...paymentExpiry,
     });
   }
@@ -502,13 +539,14 @@ export const GET = async (request: NextRequest) => {
     dueCount: due.length,
     triggered,
     digestsSent,
+    renewalNotices,
     ...paymentExpiry,
   };
   const paymentExpired =
     paymentExpiry.renewalGrace.expired +
     paymentExpiry.cancelledPeriodEnd.expired +
     paymentExpiry.oneOffPeriodEnd.expired;
-  if (triggered > 0 || paymentExpired > 0) {
+  if (triggered > 0 || paymentExpired > 0 || renewalNotices.sent > 0) {
     log.info("cron.auto-refresh.triggered", result);
   }
   return Response.json({ ok: true, ...result });
