@@ -168,6 +168,7 @@ async function runCron() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED = "true";
   state.orgs = [];
   state.clerkUsers = [];
   state.inviteUserIds = [];
@@ -322,5 +323,39 @@ describe("자동 재측정 cron — 유료 판정", () => {
 
     expect(result.dueCount).toBe(2);
     expect(mocks.runAuditJob).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("자동 측정 전체 스위치", () => {
+  it("스위치가 꺼져 있으면 결제한 조직도 측정하지 않는다(기본값)", async () => {
+    // biome-ignore lint/performance/noDelete: the switch reads absence as "off".
+    delete process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED;
+    state.orgs = [org()];
+    state.clerkUsers = [payingUser("growth")];
+
+    const result = await runCron();
+
+    expect(result).toMatchObject({ dueCount: 0, triggered: 0 });
+    expect(mocks.runAuditJob).not.toHaveBeenCalled();
+    expect(mocks.auditJobCreate).not.toHaveBeenCalled();
+    // Billing safety still runs while measurement is paused.
+    const { expireLapsedRenewalGrants } = await import(
+      "@/lib/billing/renewal-grace"
+    );
+    const { expireCancelledSubscriptions, expireOneOffPaymentGrants } =
+      await import("@/lib/billing/period-end-expiry");
+    expect(expireLapsedRenewalGrants).toHaveBeenCalledTimes(1);
+    expect(expireCancelledSubscriptions).toHaveBeenCalledTimes(1);
+    expect(expireOneOffPaymentGrants).toHaveBeenCalledTimes(1);
+  });
+
+  it('"true"가 아닌 값은 꺼짐으로 본다', async () => {
+    process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED = "1";
+    state.orgs = [org()];
+    state.clerkUsers = [payingUser("growth")];
+
+    await runCron();
+
+    expect(mocks.runAuditJob).not.toHaveBeenCalled();
   });
 });
