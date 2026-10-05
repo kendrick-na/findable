@@ -280,10 +280,14 @@ export async function verifyMentionV3(
   if (!input.stringMatched) {
     return { counted: false, quality: "absent", via: "rule" };
   }
-  // 공식 도메인을 스스로 적어 대상을 특정한 답변은 되묻는 문구가 있어도 판정기에 넘긴다.
+  // 공식 근거(도메인·상호·공식 사실)가 있는 답변은 「두 가지 브랜드…」로 시작해도 규칙으로
+  //   확정하지 않고 판정기에 넘긴다 — 프란츠 Gemini 답변은 그렇게 시작한 뒤 바이오센서연구소·
+  //   제품까지 정확히 설명했다(컨트롤타워 운영 검토 2026-10-06). 판정기 지시문이 다중 나열을
+  //   ambiguous 로 가르므로, 규칙은 근거 없는 되물음만 끝낸다.
   if (
     detectAmbiguity(input.text) &&
-    !mentionsOfficialDomain(input.text, input.brandDomain)
+    !mentionsOfficialDomain(input.text, input.brandDomain) &&
+    !hasOfficialEvidenceV3(input)
   ) {
     return {
       counted: false,
