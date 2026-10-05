@@ -1,3 +1,7 @@
+"use client";
+
+import { Button } from "@repo/design-system/components/ui/button";
+import { toast } from "@repo/design-system/components/ui/sonner";
 import {
   Table,
   TableBody,
@@ -6,12 +10,24 @@ import {
   TableHeader,
   TableRow,
 } from "@repo/design-system/components/ui/table";
-import type { RefundRequestRow } from "@/app/actions/admin/refund-requests";
+import { useState, useTransition } from "react";
+import {
+  type RefundRequestRow,
+  type ResolveRefundRequestResult,
+  resolveRefundRequest,
+} from "@/app/actions/admin/refund-requests";
 
 // 🔴 영문 슬러그를 화면에 그대로 내보내지 않는다(stuck-claim-table 과 같은 규칙).
 const STATUS_LABEL: Record<RefundRequestRow["status"], string> = {
   pending: "처리 대기",
   resolved: "처리 완료",
+};
+
+const OUTCOME_MESSAGE: Record<ResolveRefundRequestResult["outcome"], string> = {
+  resolved: "처리 완료로 표시했습니다.",
+  already_resolved: "이미 처리 완료된 요청입니다.",
+  not_found: "요청을 찾을 수 없습니다.",
+  failed: "처리 완료 표시에 실패했습니다. 잠시 후 다시 시도해 주세요.",
 };
 
 const fmtDate = (d: Date) =>
@@ -28,7 +44,35 @@ export const RefundRequestTable = ({
 }: {
   requests: RefundRequestRow[];
 }) => {
-  if (requests.length === 0) {
+  const [rows, setRows] = useState<RefundRequestRow[]>(requests);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  const resolve = (row: RefundRequestRow) => {
+    setPendingId(row.id);
+    startTransition(async () => {
+      try {
+        const result = await resolveRefundRequest(row.id);
+        const message = OUTCOME_MESSAGE[result.outcome];
+        if (result.ok) {
+          toast.success(message);
+          setRows((current) =>
+            current.map((r) =>
+              r.id === row.id ? { ...r, status: "resolved" } : r
+            )
+          );
+        } else {
+          toast.error(message);
+        }
+      } catch {
+        toast.error(OUTCOME_MESSAGE.failed);
+      } finally {
+        setPendingId(null);
+      }
+    });
+  };
+
+  if (rows.length === 0) {
     return (
       <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
         접수된 환불·청약철회 요청이 없습니다.
@@ -44,10 +88,11 @@ export const RefundRequestTable = ({
           <TableHead>상태</TableHead>
           <TableHead>마지막 결제 ID</TableHead>
           <TableHead>요청 내용</TableHead>
+          <TableHead />
         </TableRow>
       </TableHeader>
       <TableBody>
-        {requests.map((r) => (
+        {rows.map((r) => (
           <TableRow key={r.id}>
             <TableCell className="whitespace-nowrap">
               {fmtDate(r.createdAt)}
@@ -64,6 +109,18 @@ export const RefundRequestTable = ({
             </TableCell>
             <TableCell className="max-w-xs whitespace-pre-wrap text-xs">
               {r.message ?? "—"}
+            </TableCell>
+            <TableCell className="text-right">
+              {r.status === "pending" && (
+                <Button
+                  disabled={pendingId === r.id}
+                  onClick={() => resolve(r)}
+                  size="sm"
+                  variant="outline"
+                >
+                  {pendingId === r.id ? "저장 중…" : "처리 완료"}
+                </Button>
+              )}
             </TableCell>
           </TableRow>
         ))}

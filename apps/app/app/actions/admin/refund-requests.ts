@@ -69,3 +69,45 @@ export async function listRefundRequests(): Promise<RefundRequestRow[]> {
     organizationName: nameById.get(r.organizationId) ?? null,
   }));
 }
+
+export type ResolveRefundRequestResult =
+  | { ok: true; outcome: "resolved" | "already_resolved" }
+  | { ok: false; outcome: "not_found" | "failed" };
+
+/**
+ * 환불 요청을 "처리 완료"로 표시한다 — PortOne 취소·해지를 마친 운영자가 누른다.
+ *
+ * 🔒 `requireAdmin()` 으로 시작한다. 이 함수는 **표시만** 바꾼다(PortOne·Clerk 호출 없음,
+ *   고객 메일 없음). 실제 환불은 PortOne 취소 → 결제 웹훅이 권한을 회수한다.
+ *   처리 대기(pending)일 때만 바꿔서, 두 번 눌러도 처리 시각이 덮어써지지 않는다.
+ */
+export async function resolveRefundRequest(
+  id: string
+): Promise<ResolveRefundRequestResult> {
+  const adminId = await requireAdmin();
+  try {
+    const updated = await database.refundRequest.updateMany({
+      where: { id, status: "pending" },
+      data: { status: "resolved", resolvedAt: new Date() },
+    });
+    if (updated.count === 1) {
+      log.info("admin.refund_requests.resolved", { adminId, requestId: id });
+      return { ok: true, outcome: "resolved" };
+    }
+    const existing = await database.refundRequest.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+    if (!existing) {
+      return { ok: false, outcome: "not_found" };
+    }
+    return { ok: true, outcome: "already_resolved" };
+  } catch (error) {
+    log.error("admin.refund_requests.resolve_failed", {
+      adminId,
+      requestId: id,
+      error: parseError(error),
+    });
+    return { ok: false, outcome: "failed" };
+  }
+}
