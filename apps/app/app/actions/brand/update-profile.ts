@@ -3,6 +3,10 @@
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import {
+  normalizeBusinessNumber,
+  normalizeLegalName,
+} from "@/lib/brand/official-identity";
 import { ensureOrgExists } from "@/lib/db/ensure-org";
 import { scopedBrandById } from "@/lib/db/scoped";
 
@@ -58,6 +62,8 @@ const toMarketScope = (value?: string): MarketScopeValue | null => {
 
 export interface UpdateBrandProfileInput {
   brandId: string;
+  /** 고객이 넣은 사업자등록번호. 빈 문자열 = 지우기, 안 보내면 무변경. */
+  businessNumber?: string;
   /** 사용자가 확정한 경쟁사명. 안 보내면 무변경. */
   competitors?: string[];
   /** 마지막 확인을 마쳤는지. 측정 성공 여부와 별도로 저장한다. */
@@ -65,6 +71,8 @@ export interface UpdateBrandProfileInput {
   /** 내 브랜드 표기 변형. 예: ["아모레", "Amorepacific"]. 안 보내면 무변경. */
   entityVariants?: string[];
   industry?: string;
+  /** 고객이 넣은 회사 정식 상호. 빈 문자열 = 지우기, 안 보내면 무변경. */
+  legalName?: string;
   /**
    * 👤 고객이 확정한 타깃 시장. 안 보내면 무변경(= 자동 추정 유지).
    *
@@ -131,6 +139,30 @@ function validatedIdentity(
   return identity;
 }
 
+/** 고객이 넣은 공식 회사 정보 — 보낸 필드만 정규화해 돌려준다(빈 값 = 지우기). */
+function validatedOfficialIdentity(
+  input: UpdateBrandProfileInput
+):
+  | { error: string }
+  | { businessNumber?: string | null; legalName?: string | null } {
+  const out: { businessNumber?: string | null; legalName?: string | null } = {};
+  if (input.legalName !== undefined) {
+    const legal = normalizeLegalName(input.legalName);
+    if (!legal.ok) {
+      return { error: "회사 정식 상호는 2~60자로 입력해 주세요." };
+    }
+    out.legalName = legal.value;
+  }
+  if (input.businessNumber !== undefined) {
+    const bizno = normalizeBusinessNumber(input.businessNumber);
+    if (!bizno.ok) {
+      return { error: "사업자등록번호 10자리를 확인해 주세요." };
+    }
+    out.businessNumber = bizno.value;
+  }
+  return out;
+}
+
 export const updateBrandProfile = async (
   input: UpdateBrandProfileInput
 ): Promise<UpdateBrandProfileResult> => {
@@ -142,6 +174,8 @@ export const updateBrandProfile = async (
 
   // 보낸 필드만 덮어쓴다 — 2단계만 하고 4단계를 건너뛴 사용자의 값을 지우지 않는다.
   const data: {
+    businessNumber?: string | null;
+    legalName?: string | null;
     competitors?: string[];
     entityVariants?: string[];
     marketScope?: MarketScopeValue;
@@ -153,6 +187,11 @@ export const updateBrandProfile = async (
     return identity;
   }
   Object.assign(data, identity);
+  const official = validatedOfficialIdentity(input);
+  if ("error" in official) {
+    return official;
+  }
+  Object.assign(data, official);
   if (input.entityVariants) {
     data.entityVariants = cleanList(input.entityVariants);
   }

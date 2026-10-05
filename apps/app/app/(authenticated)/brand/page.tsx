@@ -55,8 +55,9 @@ function jobView(job: Pick<AuditJob, "status" | "result">) {
     } | null
   )?.engineResponses;
   const hasCollectedAnswer =
-    responses?.some((response) => !response.errorMessage && !response.isStub) ??
-    false;
+    responses?.some(
+      (response) => !(response.errorMessage || response.isStub)
+    ) ?? false;
   const isPartial =
     job.status === "completed" &&
     hasCollectedAnswer &&
@@ -86,6 +87,20 @@ function jobView(job: Pick<AuditJob, "status" | "result">) {
 }
 
 // requireOrg 만 통과하면 되는 org 멤버 self 화면(admin 게이트 아님).
+/** 최근 측정이 홈페이지 푸터에서 찾은 사업자등록번호 — 편집기에 "제안"으로만 보여 준다. */
+const footerBusinessNumber = (result: unknown): string | null => {
+  const identity = (
+    result as {
+      measurementContext?: {
+        officialSiteIdentity?: { businessNumber?: unknown } | null;
+      };
+    } | null
+  )?.measurementContext?.officialSiteIdentity;
+  return typeof identity?.businessNumber === "string"
+    ? identity.businessNumber
+    : null;
+};
+
 // scopedBrands 는 내부에서 requireOrg 를 호출하므로 org 미선택 시 throw → 인증 레이아웃이 처리.
 const BrandPage = async () => {
   const orgId = await requireOrg();
@@ -240,11 +255,16 @@ const BrandPage = async () => {
                         자체를 건너뛴다. 여기가 없으면 별칭·경쟁사를 **영영 못 넣는다**. */}
                     <BrandProfileEditorServer
                       brandId={brand.id}
-                      name={brand.name}
-                      industry={brand.industry}
-                      marketScope={brand.marketScope}
+                      businessNumber={brand.businessNumber}
                       competitors={brand.competitors}
                       entityVariants={brand.entityVariants}
+                      industry={brand.industry}
+                      legalName={brand.legalName}
+                      marketScope={brand.marketScope}
+                      name={brand.name}
+                      suggestedBusinessNumber={footerBusinessNumber(
+                        latestByDomain.get(brand.domain)?.result
+                      )}
                     />
                   </li>
                 );
