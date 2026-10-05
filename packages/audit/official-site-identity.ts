@@ -58,6 +58,61 @@ export function extractBusinessInfo(contentHtml: string): {
   };
 }
 
+/** 고객이 앱에서 직접 입력한 공식 정보(Brand.legalName·businessNumber, 2026-10-06). */
+export interface CustomerIdentityInput {
+  businessNumber?: string | null;
+  legalName?: string | null;
+}
+
+const CUSTOMER_LEGAL_NAME_MIN = 2;
+const CUSTOMER_LEGAL_NAME_MAX = 60;
+const NON_DIGIT_RE = /\D/g;
+
+/** 상호: 앞뒤 공백만 걷고 ㈜·(주)·주식회사 등은 그대로 둔다. 2~60자가 아니면 없는 값. */
+export function normalizeCustomerLegalName(
+  value: string | null | undefined
+): string | null {
+  const trimmed = (value ?? "").trim();
+  return trimmed.length >= CUSTOMER_LEGAL_NAME_MIN &&
+    trimmed.length <= CUSTOMER_LEGAL_NAME_MAX
+    ? trimmed
+    : null;
+}
+
+/** 사업자등록번호: 숫자 10자리만 받아 000-00-00000 으로 맞춘다. 아니면 없는 값. */
+export function normalizeCustomerBusinessNumber(
+  value: string | null | undefined
+): string | null {
+  const digits = (value ?? "").replace(NON_DIGIT_RE, "");
+  if (digits.length !== 10) {
+    return null;
+  }
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+/**
+ * 고객 입력 > 푸터 추출값, **필드별로** 합친다. 고객 값이 없거나 형식이 틀리면 푸터 값을
+ * 그대로 쓰고, 둘 다 없으면 원래 객체를 그대로 돌려준다(키도 새로 만들지 않는다).
+ * 판정기의 상호·사업자번호 앵커(hasRegisteredEntityAnchor·판정 v3)가 이 값을 읽는다.
+ */
+export function mergeCustomerIdentity(
+  site: OfficialSiteIdentity,
+  customer: CustomerIdentityInput | null | undefined
+): OfficialSiteIdentity {
+  const legalName = normalizeCustomerLegalName(customer?.legalName);
+  const businessNumber = normalizeCustomerBusinessNumber(
+    customer?.businessNumber
+  );
+  if (!(legalName || businessNumber)) {
+    return site;
+  }
+  return {
+    ...site,
+    ...(legalName ? { legalName } : {}),
+    ...(businessNumber ? { businessNumber } : {}),
+  };
+}
+
 /**
  * Some otherwise public sites return a bot challenge or an empty HTML shell to
  * serverless fetchers. A signed-in customer has already confirmed the domain,

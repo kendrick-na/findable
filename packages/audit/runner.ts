@@ -77,7 +77,11 @@ import {
   isMeasurementFailure,
 } from "./measurement-coverage";
 import { isPublishableAuditResult } from "./normalize-stored-metrics";
-import { registeredBrandIdentityFallback } from "./official-site-identity";
+import {
+  type CustomerIdentityInput,
+  mergeCustomerIdentity,
+  registeredBrandIdentityFallback,
+} from "./official-site-identity";
 import { generateAuditPdf } from "./pdf-generator";
 import type { AuditPdfData } from "./pdf-template";
 import type { AuditPostprocessing } from "./postprocessing";
@@ -114,6 +118,11 @@ export interface AuditRunInput {
   brandId?: string;
   brandName?: string;
   brandVariants?: string[];
+  /**
+   * 고객이 앱에서 입력한 상호·사업자등록번호(Brand.legalName·businessNumber).
+   * 홈페이지 푸터에서 읽은 값보다 우선한다(필드별). 없으면 푸터 값 그대로.
+   */
+  customerIdentity?: CustomerIdentityInput;
   domain: string;
   /**
    * 업종(AuditJob.industry). 언급 품질 검증에서 동명이인 분별 단서로 쓴다
@@ -606,10 +615,14 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       : await timed("official_site", () =>
           ai.resolveOfficialSiteIdentity(input.domain)
         );
-    const officialSiteIdentity =
+    const siteIdentity =
       savedCheckpoint?.context.officialSiteIdentity ??
       resolvedOfficialSiteIdentity ??
       registeredBrandIdentityFallback(input);
+    // 고객 입력 상호·사업자번호 > 푸터 추출값(필드별). 근거 유무(identityGrounded)는 바꾸지 않는다.
+    const officialSiteIdentity = siteIdentity
+      ? mergeCustomerIdentity(siteIdentity, input.customerIdentity)
+      : null;
     if (!officialSiteIdentity) {
       throw new Error(
         "공식 사이트에서 브랜드 식별 근거(title, description, H1)를 확인하지 못했습니다. 사이트 접근 설정을 확인한 뒤 다시 측정해 주세요."
@@ -818,6 +831,11 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
               completedQuestions: updatedCheckpoint.responses.length,
               totalQuestions: prompts.length,
             });
+          },
+          // 마감(270초) 전 35초 미만이면 새 질문을 시작하지 않고 저장된 지점에서 멈춘다.
+          {
+            invocationStartedAtMs: budget.invocationStartedAtMs,
+            stopStartingAtMs: budget.stopStartingAtMs,
           }
         ),
       { promptCount: prompts.length }
@@ -859,6 +877,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             brandDomain: input.domain,
             industry: input.industry ?? undefined,
             officialSite: officialSiteIdentity,
+            // 그림자 v3(점수 미사용)는 이 마감까지 60초 이상 남았을 때만 돈다.
+            shadowDeadlineAtMs: budget.stopStartingAtMs,
           },
           ({ chunkIndex, responseCount, phase }) => {
             if (phase === "started") {

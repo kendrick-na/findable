@@ -59,6 +59,7 @@ vi.mock("@repo/ai/lib/brand-aliases", () => ({
   officialSiteAliases: vi.fn(() => []),
 }));
 vi.mock("./official-site-identity", () => ({
+  mergeCustomerIdentity: vi.fn((site: unknown) => site),
   registeredBrandIdentityFallback: vi.fn(() => ({ title: "Test Brand" })),
   resolveOfficialSiteIdentity: vi.fn(async () => ({ title: "Test Brand" })),
 }));
@@ -533,7 +534,9 @@ describe("runAuditJob offline lifecycle contracts", () => {
       await runAuditJob(input);
 
       const completed = terminalCalls()[0];
-      expect(completed.data.result.engineResponses).toHaveLength(4);
+      // Only the first question ran: the runner now hands its 270s budget to
+      // the scheduler (before 2026-10-06 it did not, so all 4 ran here).
+      expect(completed.data.result.engineResponses).toHaveLength(1);
       expect(completed.data.result.measurementContext).toMatchObject({
         identityGrounded: true,
       });
@@ -555,8 +558,9 @@ describe("runAuditJob offline lifecycle contracts", () => {
       const publicationResult = withRecomputedAuditMetrics(
         completed.data.result
       );
+      // 3 planned brand questions never started → the run says so explicitly.
       expect(auditPublicationIssue(publicationResult)).toBe(
-        "insufficient_sample"
+        "incomplete_execution"
       );
       expect(auditPublicationStatus(publicationResult)).toBe("provisional");
     } finally {
