@@ -177,7 +177,11 @@ async function handleFailedPayment(paymentId: string): Promise<Response> {
  * 순서는 해지(unsubscribe)와 같다 — ① 예약 취소 → ② 빌링키 삭제 → ③ 조직 기록 정리.
  * 두 PortOne 호출은 "이미 취소/삭제됨"을 성공으로 보므로 재전송에도 멱등이다.
  * 실패하면 예외를 던져 호출부가 5xx 로 재전송을 받게 한다(반쯤 정리된 채로 200 금지).
- * billingNextPaymentAt 은 남긴다 — 기간 종료 cron 이 남은 결제 출처를 마저 정리한다.
+ *
+ * 🔒 P1-2: 이용 기간 끝(`billingNextPaymentAt`)을 **환불 시각**으로 당긴다. 환불된 회차의 권한을
+ *   회수하면 결제 출처 스택이 직전 회차(같은 plan)로 "복구"되어 환불한 달을 계속 쓰게 된다.
+ *   기간 끝을 지금으로 두면 다음 cron(`expireCancelledSubscriptions`)이 끝난 출처를 모두 걷는다.
+ *   이미 지금보다 이른 값이면 그대로 둔다(재전송 멱등).
  */
 async function cleanupRefundedSubscription(
   paymentId: string
@@ -187,6 +191,7 @@ async function cleanupRefundedSubscription(
     select: {
       id: true,
       billingCustomerId: true,
+      billingNextPaymentAt: true,
       billingNextPaymentId: true,
       billingProvider: true,
       billingStatus: true,
@@ -196,12 +201,16 @@ async function cleanupRefundedSubscription(
     return "not_current_subscription";
   }
 
+  const now = new Date();
+  const periodEndsLater =
+    !org.billingNextPaymentAt || org.billingNextPaymentAt > now;
   const billingKey =
     org.billingProvider === "portone" ? org.billingCustomerId : null;
   if (
     !billingKey &&
     org.billingStatus === "canceled" &&
-    org.billingNextPaymentId === null
+    org.billingNextPaymentId === null &&
+    !periodEndsLater
   ) {
     return "already_clean";
   }
@@ -214,6 +223,7 @@ async function cleanupRefundedSubscription(
     data: {
       billingStatus: "canceled",
       billingNextPaymentId: null,
+      ...(periodEndsLater ? { billingNextPaymentAt: now } : {}),
       ...(billingKey ? { billingCustomerId: null, billingProvider: null } : {}),
     },
   });
