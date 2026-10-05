@@ -66,10 +66,12 @@ describe("loadClerkPlanSignals", () => {
     expect(signals?.get("user_0")).toEqual({
       clerkPlan: "starter",
       hasCurrentPaymentGrant: true,
+      currentPaymentId: "pay_1",
     });
     expect(signals?.get("user_204")).toEqual({
       clerkPlan: "free",
       hasCurrentPaymentGrant: false,
+      currentPaymentId: null,
     });
   });
 
@@ -100,7 +102,14 @@ describe("memberPlanSignal", () => {
       memberPlanSignal(
         "user_2",
         new Map([
-          ["user_2", { clerkPlan: "growth", hasCurrentPaymentGrant: true }],
+          [
+            "user_2",
+            {
+              clerkPlan: "growth",
+              hasCurrentPaymentGrant: true,
+              currentPaymentId: "pay_2",
+            },
+          ],
         ]),
         invited,
         partners

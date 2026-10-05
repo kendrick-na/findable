@@ -21,36 +21,13 @@ import { expirePaymentGrants } from "@repo/auth/plan-grant";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
-import {
-  nextBillingDate,
-  paymentIssuedAtFromPaymentId,
-  renewalGraceCutoff,
-  userIdFromPaymentId,
-} from "@repo/payments";
+import { renewalGraceCutoff, userIdFromPaymentId } from "@repo/payments";
+import { isPaidPeriodOver } from "./paid-period";
 
 /** 한 번의 cron 실행에서 처리할 최대 조직 수(Clerk 호출 한도 보호). */
 const MAX_EXPIRIES_PER_RUN = 20;
 
-/** 이보다 먼 미래 시각이 심긴 결제 출처는 위변조로 본다(정상 회차는 결제 시각 ≈ ID 시각). */
-const FUTURE_ISSUED_TOLERANCE_MS = 60 * 60 * 1000;
-
-/**
- * 이 결제가 대가를 치른 한 달 이용 기간이 `now` 까지 끝났는가.
- *
- * 🔒 P1-1(2026-10-05): 결제 출처로 저장된 ID 의 시각을 읽을 수 없거나 먼 미래면 **끝난 것**으로 본다.
- *   예전엔 "판단 불가 → 끝나지 않음"이라, 브라우저가 고친 ID 로 받은 권한이 영구히 남았다.
- *   파트너·초대·관리자 권한은 결제 출처가 null 이라 이 함수에 오지 않는다(paymentGrantAfterExpiry).
- */
-export function isPaidPeriodOver(paymentId: string, now: Date): boolean {
-  const issuedAt = paymentIssuedAtFromPaymentId(paymentId);
-  if (!issuedAt) {
-    return true;
-  }
-  if (issuedAt.getTime() - now.getTime() > FUTURE_ISSUED_TOLERANCE_MS) {
-    return true;
-  }
-  return nextBillingDate(issuedAt).getTime() <= now.getTime();
-}
+export { isPaidPeriodOver } from "./paid-period";
 
 export async function expireLapsedRenewalGrants(
   now = new Date()

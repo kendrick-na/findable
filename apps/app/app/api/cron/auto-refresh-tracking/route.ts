@@ -5,9 +5,10 @@
 //   free=null(자동 없음)·starter=168h(주간)·growth/scale=24h(데일리).
 //
 // 동작(멱등):
-//   1) 실효 플랜이 자동 갱신을 허용(autoRefreshHours != null)하는 org 조회.
+//   1) 측정 범위(FINDABLE_AUTO_MEASUREMENT_SCOPE, 기본 "paid")에 맞는 org 조회.
+//      "paid" = 실제 결제 플랜만(주기·브랜드 상한도 결제 플랜 기준), "all" = 실효 플랜 전부.
 //      ⚠️ 결제 권한은 Clerk 에만 있고 Organization.plan 에는 없다(2026-10-05 실측).
-//      → 화면 게이트와 같은 resolveEffectivePlan 으로 판정한다(lib/billing/auto-refresh-eligibility).
+//      → 화면 게이트와 같은 판정 + 출처로 고른다(lib/billing/auto-refresh-eligibility).
 //   2) 각 org 의 브랜드마다 마지막 org 측정(email=`org:{orgId}`) 시각을 보고,
 //      주기가 지났으면 새 AuditJob 생성 + 러너 직접 실행(start-tracking 서버액션의 cron 판).
 //   3) 이미 저장된 마법사 프롬프트가 있으면 러너가 그걸 우선 사용(resolveRunPrompts).
@@ -81,13 +82,34 @@ const digestEmailEnabled = (): boolean =>
   process.env.FINDABLE_ENABLE_DIGEST_EMAIL === "1";
 
 /**
- * 자동 측정 전체 스위치(2026-10-05 대표 결정). **기본은 꺼짐**.
- * 실유료 고객 0명인 지금 내부·관리자 부여 조직의 매일 측정이 월 ~22만 원을 써서 멈춘다.
- * 꺼져 있어도 결제 권한 만료(0-a/0-b)는 계속 돈다 — 결제 안전장치는 측정과 무관하다.
- * 다시 켜려면 `FINDABLE_AUTO_MEASUREMENT_ENABLED=true` 후 재배포.
+ * 자동 측정 범위 스위치(2026-10-05 대표 결정). `FINDABLE_AUTO_MEASUREMENT_SCOPE`:
+ *   - "paid"(**미설정 시 기본**): 실제 결제(Clerk 결제 출처, 이용 기간 또는 갱신 실패 7일 유예 중)로
+ *     얻은 플랜의 조직만. 주기·브랜드 상한은 결제 플랜 기준(lib/billing/auto-refresh-eligibility).
+ *   - "all": 예전 동작 — 실효 유료 플랜 전부(관리자·초대·파트너 부여 포함).
+ *   - "off": 측정 없음.
+ * 예전 스위치 호환: SCOPE 가 없고 `FINDABLE_AUTO_MEASUREMENT_ENABLED=true` 면 "all",
+ *   `=false` 로 명시돼 있으면 "off"(운영자가 명시적으로 끈 값을 존중).
+ * 모르는 SCOPE 값은 "off"(원가 쪽으로 열지 않는다).
+ * 어느 범위든 결제 권한 만료(0-a/0-b)는 계속 돈다 — 결제 안전장치는 측정과 무관하다.
  */
-export const autoMeasurementEnabled = (): boolean =>
-  process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED === "true";
+export type AutoMeasurementScope = "paid" | "all" | "off";
+
+export function autoMeasurementScope(
+  source: Record<string, string | undefined> = process.env
+): AutoMeasurementScope {
+  const raw = source.FINDABLE_AUTO_MEASUREMENT_SCOPE?.trim().toLowerCase();
+  if (raw) {
+    return raw === "paid" || raw === "all" ? raw : "off";
+  }
+  const legacy = source.FINDABLE_AUTO_MEASUREMENT_ENABLED?.trim().toLowerCase();
+  if (legacy === "true") {
+    return "all";
+  }
+  if (legacy === "false") {
+    return "off";
+  }
+  return "paid";
+}
 
 /** 히스토리 비교용 조회 상한(브랜드당). `/api/audit/[jobId]` 와 같은 값. */
 const HISTORY_TAKE = 50;
@@ -389,13 +411,14 @@ export const GET = async (request: NextRequest) => {
   // 0-c) 정기결제 갱신 사전 안내(스위치 기본 꺼짐 · Preview 미발송 · 예약 결제당 1통).
   const renewalNotices = await runRenewalNotices(new Date(now));
 
-  // 측정 일시정지 스위치는 결제 만료(0-b)·갱신 안내(0-c) **뒤**에 둔다 — 측정을 멈춰도
+  // 측정 범위 스위치는 결제 만료(0-b)·갱신 안내(0-c) **뒤**에 둔다 — 측정을 멈춰도
   //   만료 강하와 사전 안내는 계속 돌아야 한다.
-  if (!autoMeasurementEnabled()) {
+  const scope = autoMeasurementScope();
+  if (scope === "off") {
     log.info("cron.auto_measurement.disabled", {});
     return Response.json({
       ok: true,
-      autoMeasurement: "disabled",
+      autoMeasurement: scope,
       dueCount: 0,
       triggered: 0,
       digestsSent: 0,
@@ -404,9 +427,9 @@ export const GET = async (request: NextRequest) => {
     });
   }
 
-  // 1) 자동 갱신 허용 플랜의 org — 화면과 같은 실효 플랜(결제·유예·초대·관리자·파트너).
+  // 1) 자동 갱신 허용 플랜의 org — "paid" 는 결제 플랜만(브랜드 상한 적용), "all" 은 실효 플랜 전부.
   //   0-b 뒤에 둬야 방금 권한이 끝난 조직이 이번 실행에서 측정되지 않는다.
-  const orgs = await loadAutoRefreshOrganizations(new Date(now));
+  const orgs = await loadAutoRefreshOrganizations(new Date(now), scope);
 
   // 2) 브랜드별 마지막 측정 시각 → 주기 경과분만 수집.
   const due = await collectDueBrands(orgs, now);
@@ -512,6 +535,7 @@ export const GET = async (request: NextRequest) => {
   const digestsSent = await sendDigests(digestByOrg);
 
   const result = {
+    autoMeasurement: scope,
     dueCount: due.length,
     triggered,
     digestsSent,

@@ -25,7 +25,10 @@ export const CLERK_USER_PAGE = 100;
 export type ClerkPlanSignal = Pick<
   MemberPlanSignal,
   "clerkPlan" | "hasCurrentPaymentGrant"
->;
+> & {
+  /** Current payment provenance id (private), for paid-period checks. */
+  currentPaymentId: string | null;
+};
 
 /** Clerk signals per user id, or `null` when Clerk could not be read. */
 export async function loadClerkPlanSignals(
@@ -45,13 +48,17 @@ export async function loadClerkPlanSignals(
         limit: CLERK_USER_PAGE,
       });
       for (const user of page.data) {
+        const privateMetadata = user.privateMetadata as Record<
+          string,
+          unknown
+        > | null;
+        const paymentId = privateMetadata?.findablePaymentId;
         signals.set(user.id, {
           clerkPlan: planFromPublicMetadata(
             user.publicMetadata as Record<string, unknown> | null
           ),
-          hasCurrentPaymentGrant: hasCurrentPaymentGrant(
-            user.privateMetadata as Record<string, unknown> | null
-          ),
+          hasCurrentPaymentGrant: hasCurrentPaymentGrant(privateMetadata),
+          currentPaymentId: typeof paymentId === "string" ? paymentId : null,
         });
       }
     }

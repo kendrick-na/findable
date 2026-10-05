@@ -178,6 +178,109 @@ export function resolveOrganizationPlan(input: {
   );
 }
 
+/**
+ * 실효 플랜이 어디서 왔나(2026-10-05 · 자동 측정은 "실제 결제" 출처만).
+ *   - payment: Clerk 결제 출처(findablePaymentId)가 있는 구성원의 Clerk plan
+ *   - partner: 승인 파트너(DB PartnerApplication approved → growth)
+ *   - invite: 초대 코드로 쓰인 조직 DB 기간 부여(초대 이력 있는 구성원이 있을 때)
+ *   - admin: 관리자 기간 부여(조직 DB plan + 만료일) 또는 결제 출처 없는 Clerk plan
+ *   - db: 만료일 없는 조직 DB plan(수동 기록)
+ *   - none: free
+ */
+export type PlanSource =
+  | "payment"
+  | "partner"
+  | "invite"
+  | "admin"
+  | "db"
+  | "none";
+
+// 같은 플랜이 여러 출처에서 오면 앞쪽을 출처로 표기한다(결제 우선).
+const SOURCE_PRIORITY: readonly PlanSource[] = [
+  "payment",
+  "partner",
+  "invite",
+  "admin",
+  "db",
+  "none",
+];
+
+interface PlanCandidate {
+  plan: Plan;
+  source: PlanSource;
+}
+
+function organizationPlanCandidates(input: {
+  members: readonly MemberPlanSignal[];
+  now?: Date;
+  organizationPlan: Plan;
+  organizationPlanExpiresAt: Date | null;
+}): PlanCandidate[] {
+  const nowMs = (input.now ?? new Date()).getTime();
+  const expiresAt = input.organizationPlanExpiresAt;
+  const expiredOrgGrant = Boolean(expiresAt && expiresAt.getTime() <= nowMs);
+  const invited = input.members.some((m) => m.hasInviteRedemption);
+  let orgSource: PlanSource = "db";
+  if (invited) {
+    orgSource = "invite";
+  } else if (expiresAt) {
+    orgSource = "admin";
+  }
+  const candidates: PlanCandidate[] = [
+    {
+      plan: expiredOrgGrant ? "free" : input.organizationPlan,
+      source: orgSource,
+    },
+  ];
+  // resolveEffectivePlan 의 userPlan·partnerPlan 과 같은 규칙(값이 어긋나면 테스트가 잡는다).
+  for (const member of input.members) {
+    if (member.hasCurrentPaymentGrant) {
+      candidates.push({ plan: member.clerkPlan, source: "payment" });
+    } else if (member.isApprovedPartner) {
+      candidates.push({ plan: member.clerkPlan, source: "partner" });
+    } else if (!(member.hasInviteRedemption || expiredOrgGrant)) {
+      candidates.push({ plan: member.clerkPlan, source: "admin" });
+    }
+    if (member.isApprovedPartner) {
+      candidates.push({ plan: "growth", source: "partner" });
+    }
+  }
+  return candidates.filter((c) => c.plan !== "free");
+}
+
+/**
+ * `resolveOrganizationPlan` 과 같은 실효 플랜 + 그 출처 + 결제로만 얻은 플랜.
+ * `paymentPlan` 은 결제 출처가 있는 구성원 플랜 중 가장 높은 값(없으면 free) —
+ * 관리자·초대·파트너 부여가 위에 얹혀도 결제 몫만 따로 본다.
+ */
+export function resolveOrganizationPlanWithSource(input: {
+  members: readonly MemberPlanSignal[];
+  now?: Date;
+  organizationPlan: Plan;
+  organizationPlanExpiresAt: Date | null;
+}): { paymentPlan: Plan; plan: Plan; source: PlanSource } {
+  const candidates = organizationPlanCandidates(input);
+  let best: PlanCandidate = { plan: "free", source: "none" };
+  let paymentPlan: Plan = "free";
+  for (const candidate of candidates) {
+    const higher =
+      PLAN_RANK[candidate.plan] > PLAN_RANK[best.plan] ||
+      (candidate.plan === best.plan &&
+        SOURCE_PRIORITY.indexOf(candidate.source) <
+          SOURCE_PRIORITY.indexOf(best.source));
+    if (higher) {
+      best = candidate;
+    }
+    if (
+      candidate.source === "payment" &&
+      PLAN_RANK[candidate.plan] > PLAN_RANK[paymentPlan]
+    ) {
+      paymentPlan = candidate.plan;
+    }
+  }
+  return { plan: best.plan, source: best.source, paymentPlan };
+}
+
 // ──────────────────────────────────────────────────
 // 플랜 능력치(게이팅 단일 진실) — 2026-07-30 백로그 2·7.
 //

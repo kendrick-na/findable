@@ -168,7 +168,11 @@ async function runCron() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED = "true";
+  // These cases cover the "all" scope (every effective paid plan). The paid-only
+  // default is covered in auto-refresh-measurement-scope.test.ts.
+  process.env.FINDABLE_AUTO_MEASUREMENT_SCOPE = "all";
+  // biome-ignore lint/performance/noDelete: absence means "not set".
+  delete process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED;
   state.orgs = [];
   state.clerkUsers = [];
   state.inviteUserIds = [];
@@ -326,10 +330,9 @@ describe("자동 재측정 cron — 유료 판정", () => {
   });
 });
 
-describe("자동 측정 전체 스위치", () => {
-  it("스위치가 꺼져 있으면 결제한 조직도 측정하지 않는다(기본값)", async () => {
-    // biome-ignore lint/performance/noDelete: the switch reads absence as "off".
-    delete process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED;
+describe("자동 측정 범위 스위치", () => {
+  it('"off" 면 결제한 조직도 측정하지 않고 결제 만료 단계는 계속 돈다', async () => {
+    process.env.FINDABLE_AUTO_MEASUREMENT_SCOPE = "off";
     state.orgs = [org()];
     state.clerkUsers = [payingUser("growth")];
 
@@ -349,8 +352,10 @@ describe("자동 측정 전체 스위치", () => {
     expect(expireOneOffPaymentGrants).toHaveBeenCalledTimes(1);
   });
 
-  it('"true"가 아닌 값은 꺼짐으로 본다', async () => {
-    process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED = "1";
+  it('예전 스위치를 "false" 로 명시하면 꺼짐으로 본다', async () => {
+    // biome-ignore lint/performance/noDelete: legacy-only configuration.
+    delete process.env.FINDABLE_AUTO_MEASUREMENT_SCOPE;
+    process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED = "false";
     state.orgs = [org()];
     state.clerkUsers = [payingUser("growth")];
 
