@@ -359,12 +359,74 @@ export function canDemandOfficialEvidence(input: VerifyInput): boolean {
  * ① 푸터 상호(「바이오센서연구소」) ② 사업자등록번호 ③ 등록명을 품은 더 긴 공식 별칭
  *   (「당근」 → 「당근마켓」). ③은 등록명 자체·짧은 별칭(「Franz」)은 받지 않는다.
  */
+/**
+ * 상호 앵커로 쓰면 안 되는 일반 단어(2026-10-06 컨트롤타워 검토).
+ * 고객이 직접 넣는 상호가 「코리아」「솔루션」뿐이면 그 단어가 들어간 다른 회사 답변까지
+ * 우리 회사로 확정된다(점수 부풀리기 경로). 회사명 전체가 이 단어들뿐일 때만 막는다.
+ */
+const GENERIC_LEGAL_NAME_TOKENS = new Set([
+  "코리아",
+  "솔루션",
+  "솔루션즈",
+  "테크",
+  "테크놀로지",
+  "컴퍼니",
+  "그룹",
+  "홀딩스",
+  "글로벌",
+  "인터내셔널",
+  "파트너스",
+  "코퍼레이션",
+  "서비스",
+  "플랫폼",
+  "시스템",
+  "시스템즈",
+  "네트웍스",
+  "커머스",
+  "랩스",
+  "스튜디오",
+  "미디어",
+  "korea",
+  "solution",
+  "solutions",
+  "tech",
+  "technology",
+  "company",
+  "group",
+  "holdings",
+  "global",
+  "international",
+  "partners",
+  "corporation",
+  "service",
+  "platform",
+  "systems",
+  "labs",
+  "studio",
+  "media",
+  "commerce",
+]);
+
+/**
+ * 상호가 엔티티를 **따로** 특정하는가. 등록명·별칭과 같거나 그 안에 들어가면 이름 일치와
+ * 다를 게 없어 동명 타사 차단이 무력화된다(예: 브랜드 「무신사」 + 상호 「㈜무신사」).
+ */
+function isDistinctiveLegalName(legal: string, input: VerifyInput): boolean {
+  if (legal.length < 3 || GENERIC_LEGAL_NAME_TOKENS.has(legal)) {
+    return false;
+  }
+  const names = [input.brandName, ...(input.brandVariants ?? [])]
+    .map((name) => compactIdentity(name))
+    .filter((name) => name.length > 0);
+  return !names.some((name) => name === legal || name.includes(legal));
+}
+
 function hasRegisteredEntityAnchor(input: VerifyInput): boolean {
   const text = compactIdentity(input.text);
   const legal = compactIdentity(
     (input.officialSite?.legalName ?? "").replace(LEGAL_SUFFIX_RE, "")
   );
-  if (legal.length >= 3 && text.includes(legal)) {
+  if (isDistinctiveLegalName(legal, input) && text.includes(legal)) {
     return true;
   }
   const bizNo = input.officialSite?.businessNumber;

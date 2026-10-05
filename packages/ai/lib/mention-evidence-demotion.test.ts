@@ -129,3 +129,33 @@ it.each([
     reason: "official_evidence_missing",
   });
 });
+
+// 2026-10-06 컨트롤타워 검토: 고객이 직접 넣는 상호가 흔한 단어이거나 브랜드 이름과
+// 같으면 앵커가 되면 안 된다(동명 타사가 우리 회사로 확정되는 경로).
+it("does not accept a generic legal name as an anchor", async () => {
+  judgeSays("confirmed");
+  expect(
+    await verifyMention({
+      brandName: "토스",
+      brandVariants: [],
+      brandDomain: "toss.im",
+      stringMatched: true,
+      officialSite: { ...TOSS_SITE, legalName: "코리아" },
+      text: "토스는 독일 베를린의 결제 단말기 회사로, 코리아 지사를 통해 결제와 송금을 지원합니다.",
+    })
+  ).toMatchObject({ counted: false, quality: "unknown_brand" });
+});
+
+it("does not accept a legal name that is just the brand name", async () => {
+  judgeSays("confirmed");
+  expect(
+    await verifyMention({
+      brandName: "노우버스",
+      brandVariants: [],
+      brandDomain: "knowverse.net",
+      stringMatched: true,
+      officialSite: { ...KNOWVERSE_SITE, legalName: "(주)노우버스" },
+      text: "노우버스는 미국의 온라인 교육 플랫폼으로 강의 영상과 학습 도구를 월 구독으로 제공합니다.",
+    })
+  ).toMatchObject({ counted: false, quality: "unknown_brand" });
+});
