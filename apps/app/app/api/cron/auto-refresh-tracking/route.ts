@@ -80,6 +80,15 @@ const MAX_TRIGGERS_PER_RUN = 1;
 const digestEmailEnabled = (): boolean =>
   process.env.FINDABLE_ENABLE_DIGEST_EMAIL === "1";
 
+/**
+ * 자동 측정 전체 스위치(2026-10-05 대표 결정). **기본은 꺼짐**.
+ * 실유료 고객 0명인 지금 내부·관리자 부여 조직의 매일 측정이 월 ~22만 원을 써서 멈춘다.
+ * 꺼져 있어도 결제 권한 만료(0-a/0-b)는 계속 돈다 — 결제 안전장치는 측정과 무관하다.
+ * 다시 켜려면 `FINDABLE_AUTO_MEASUREMENT_ENABLED=true` 후 재배포.
+ */
+export const autoMeasurementEnabled = (): boolean =>
+  process.env.FINDABLE_AUTO_MEASUREMENT_ENABLED === "true";
+
 /** 히스토리 비교용 조회 상한(브랜드당). `/api/audit/[jobId]` 와 같은 값. */
 const HISTORY_TAKE = 50;
 
@@ -379,6 +388,21 @@ export const GET = async (request: NextRequest) => {
 
   // 0-c) 정기결제 갱신 사전 안내(스위치 기본 꺼짐 · Preview 미발송 · 예약 결제당 1통).
   const renewalNotices = await runRenewalNotices(new Date(now));
+
+  // 측정 일시정지 스위치는 결제 만료(0-b)·갱신 안내(0-c) **뒤**에 둔다 — 측정을 멈춰도
+  //   만료 강하와 사전 안내는 계속 돌아야 한다.
+  if (!autoMeasurementEnabled()) {
+    log.info("cron.auto_measurement.disabled", {});
+    return Response.json({
+      ok: true,
+      autoMeasurement: "disabled",
+      dueCount: 0,
+      triggered: 0,
+      digestsSent: 0,
+      renewalNotices,
+      ...paymentExpiry,
+    });
+  }
 
   // 1) 자동 갱신 허용 플랜의 org — 화면과 같은 실효 플랜(결제·유예·초대·관리자·파트너).
   //   0-b 뒤에 둬야 방금 권한이 끝난 조직이 이번 실행에서 측정되지 않는다.
