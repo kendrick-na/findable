@@ -1,5 +1,6 @@
 import { ArrowRight, ListChecks } from "lucide-react";
 import Link from "next/link";
+import type { AppDictionary } from "@/lib/i18n";
 
 // ──────────────────────────────────────────────────
 // 1-4 "지금 할 일" 카드 (2026-08-06 세션N-5) — 📕기획서 §4-1 섹션순서 2번 · L-5
@@ -24,9 +25,11 @@ import Link from "next/link";
 export const NextActionsCard = ({
   brandId,
   brandName,
+  t,
 }: {
   brandId?: string | null;
   brandName: string | null;
+  t: AppDictionary["nextActions"];
 }) => (
   <Link
     className="findable-card flex min-w-0 items-center gap-4 p-5 transition-colors hover:border-[color:var(--findable-primary,#ff7a4d)]"
@@ -40,12 +43,10 @@ export const NextActionsCard = ({
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
       <span className="font-semibold text-[color:var(--findable-ink,#f7f8f8)]">
-        개선 실행 계획 보기
+        {t.title}
       </span>
       <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-        {brandName
-          ? `${brandName}의 최근 측정에서 관찰된 문제와 실행 우선순위를 정리했어요`
-          : "최근 측정에서 관찰된 문제와 실행 우선순위를 정리했어요"}
+        {brandName ? t.bodyWithBrand.replace("{brand}", brandName) : t.body}
       </span>
     </span>
     <ArrowRight

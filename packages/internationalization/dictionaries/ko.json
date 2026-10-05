@@ -690,6 +690,98 @@
       "errorLimit": "사용 한도에 도달한 코드예요.",
       "errorAlreadyUsed": "이미 사용한 코드예요.",
       "errorFailed": "코드를 적용하지 못했어요. 잠시 후 다시 시도해 주세요."
+    },
+    "dashboard": {
+      "headerTitle": "대시보드",
+      "firstRunTitle": "첫 측정을 진행하고 있어요",
+      "firstRunBody": "브랜드 설정은 완료됐어요. AI 답변을 수집한 뒤 이 대시보드와 측정 이력에 결과가 쌓입니다.",
+      "liveStatus": "실시간 상태 보기",
+      "firstRunFailedTitle": "브랜드 설정은 완료됐지만 첫 측정에 실패했어요",
+      "firstRunFailedBody": "브랜드를 다시 입력할 필요는 없어요. 실패 사유를 확인한 뒤 기존 브랜드에서 측정만 다시 시작하세요.",
+      "viewHistory": "측정 이력 보기",
+      "remeasureFromBrand": "브랜드에서 다시 측정",
+      "noAnswersTitle": "측정 요청은 끝났지만 AI 응답을 받지 못했어요",
+      "noAnswersBody": "0점이나 미노출이라는 뜻이 아니에요. 연결된 AI 응답이 없어 이번 회차의 점수와 할 일을 만들 수 없습니다.",
+      "viewRunDetail": "측정 상세 보기",
+      "newRunTitle": "새 측정을 진행하고 있어요",
+      "newRunBody": "지금 보이는 값은 이전 완료 결과예요. 새 결과가 끝나면 자동으로 이력에 쌓여요.",
+      "liveStatusArrow": "실시간 상태 보기 →",
+      "checkLatestTitle": "최신 측정 결과를 확인해 주세요",
+      "checkLatestBody": "최신 측정은 완료됐지만 대시보드 시계열 반영이 지연됐습니다. 이전 회차의 숫자를 최신 결과로 표시하지 않습니다.",
+      "viewLatestReport": "최신 측정과 리포트 보기 →",
+      "title": "가시성 대시보드",
+      "ledeWithBrand": "AI가 ‘{brand}’ 브랜드를 어떻게 말하는지 모았어요.",
+      "lede": "AI가 내 브랜드를 어떻게 말하는지 모았어요.",
+      "startMeasure": "측정 시작",
+      "issueIncomplete": "계획한 브랜드 질문의 AI 측정이 중단되거나 일부 미완료됐습니다.",
+      "issuePlanUnverified": "과거 측정의 질문 계획을 확인할 수 없어 결과를 잠정으로 표시합니다.",
+      "issueInsufficient": "이번 측정은 브랜드 질문의 AI 판별이 끝난 답변이 {count}건뿐이라 기준({min}건)에 못 미칩니다.",
+      "issueUnverified": "이번 측정은 브랜드 판별 {count}회가 완료되지 않았습니다.",
+      "issueNotFinal": "이번 회차의 점수·등장률·추세·개선 처방은 확정하지 않습니다.",
+      "checkEvidence": "리포트에서 근거 확인 →"
+    },
+    "errorBoundary": {
+      "title": "문제가 발생했어요",
+      "body": "일시적인 오류일 수 있어요. 다시 시도하거나 대시보드로 돌아가 주세요. 계속되면 문의로 알려주세요. 바로 확인할게요.",
+      "retry": "다시 시도",
+      "toDashboard": "대시보드로"
+    },
+    "runContext": {
+      "thisBrand": "이 브랜드",
+      "measuredAt": " · {date} 측정 결과",
+      "viewReport": "이 회차 리포트 보기",
+      "newTab": "새 탭",
+      "seeHistory": "이 회차의 상세 결과는 측정 이력에서 확인할 수 있어요"
+    },
+    "upgradeLadder": {
+      "competitorsTitle": "경쟁사 비교",
+      "competitorsBody": "우리와 경쟁사를 나란히 놓고 누가 더 많이 등장하는지 보여드려요.",
+      "trackingTitle": "자동 추적",
+      "trackingBody": "매주 자동으로 다시 측정해서 달라진 점을 이력에 쌓아드려요.",
+      "exportTitle": "리포트 내보내기",
+      "exportBody": "Notion·Google Docs로 내보내 팀·대표님과 공유해요.",
+      "headlineStarter": "Starter에 더해, Growth에서 이런 것들이 열립니다",
+      "headlineFree": "Growth로 업그레이드하면 이런 것들이 열립니다",
+      "lede": "지금은 측정 요약까지 확인할 수 있어요. 심화 분석은 Growth에서 열립니다.",
+      "viewPlans": "요금제 보기",
+      "comingSoon": "준비 중"
+    },
+    "nextActions": {
+      "title": "개선 실행 계획 보기",
+      "bodyWithBrand": "{brand}의 최근 측정에서 관찰된 문제와 실행 우선순위를 정리했어요",
+      "body": "최근 측정에서 관찰된 문제와 실행 우선순위를 정리했어요"
+    },
+    "promptScoreboard": {
+      "title": "질문별 성적",
+      "empty": "이번 측정에는 질문별로 나눠 볼 기록이 없어요. 질문을 등록하고 다시 측정하면 어느 질문에서 밀리는지 여기에 나와요.",
+      "lede": "같은 브랜드라도 질문에 따라 AI 답변에 나오기도 하고 빠지기도 해요. 약한 질문이 위에 있어요.",
+      "hits": "{hit}/{total}곳",
+      "position": "{n}번째"
+    },
+    "deepAnalysis": {
+      "resultTitle": "심층 분석 결과",
+      "resultFallback": "이 회차의 측정 근거를 추가 분석했습니다.",
+      "actionFallback": "개선 과제",
+      "startError": "심층 분석을 시작하지 못했습니다.",
+      "title": "측정 근거로 심층 분석하기",
+      "body": "실측 결과와 인용 근거를 바탕으로 개선 우선순위를 한 번 더 정리합니다.",
+      "busyNote": "분석 중입니다. 잠시 후 새로고침하면 결과가 표시됩니다.",
+      "busy": "분석 중",
+      "start": "심층 분석 시작"
+    },
+    "trendChart": {
+      "rangeDays": "{n}일",
+      "rangeAll": "전체",
+      "rangeAllNote": "전체 기간",
+      "rangeRecentNote": "최근 {n}일",
+      "seriesMention": "등장률",
+      "seriesPositive": "긍정 비율",
+      "title": "시간에 따른 변화",
+      "ledeWithSentiment": "측정할 때마다 AI가 우리를 얼마나 말하는지, 얼마나 좋게 말하는지",
+      "lede": "측정할 때마다 AI가 우리를 얼마나 말하는지",
+      "basis": "{range} · 측정 {n}회 기준",
+      "deltaCaveat": "구간 첫 측정 대비 변화입니다. 회차마다 질문·응답한 엔진·판정 기준이 달라질 수 있어, 콘텐츠 발행 등 조치의 효과로 해석할 수 없습니다.",
+      "empty": "두 번째 측정을 하면 변화를 그려드려요."
     }
   }
 }

@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import type { AppDictionary } from "@/lib/i18n";
 import type { PromptScore } from "../lib/dashboard-data";
 
 // 🔴 `export`(세션N-39): 스토리(`satisfies Meta<typeof …>`)가 이 타입을 이름으로
 //   참조해야 해서 공개한다 — 안 하면 **TS4023**. N-38 이 같은 자리에서 겪었다.
 export interface PromptScoreboardProps {
   scores: PromptScore[];
+  t: AppDictionary["promptScoreboard"];
 }
 
 /**
@@ -29,7 +31,7 @@ export interface PromptScoreboardProps {
  *   · 못한 질문에 **빨강을 쓰지 않는다**(§9-2 GSC 안티패닉). 막대 길이와 숫자로만 말한다.
  *   · 순위가 없는 질문은 `—`. 0으로 깔면 "1등"이라는 정반대 신호가 된다.
  */
-export const PromptScoreboard = ({ scores }: PromptScoreboardProps) => {
+export const PromptScoreboard = ({ scores, t }: PromptScoreboardProps) => {
   // The dashboard streams after navigation. Native hash scrolling can run
   // before this section exists, leaving the user at the top of the page.
   useEffect(() => {
@@ -65,11 +67,10 @@ export const PromptScoreboard = ({ scores }: PromptScoreboardProps) => {
             실제 화면은 「질문별 성적」 `text-lg` 다 → **같은 섹션이 상태에 따라
             다른 이름으로 불리게 된다**(NN/g 4 일관성 위반). */}
         <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-          질문별 성적
+          {t.title}
         </h2>
         <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm leading-relaxed">
-          이번 측정에는 질문별로 나눠 볼 기록이 없어요. 질문을 등록하고 다시
-          측정하면 어느 질문에서 밀리는지 여기에 나와요.
+          {t.empty}
         </p>
       </section>
     );
@@ -79,11 +80,10 @@ export const PromptScoreboard = ({ scores }: PromptScoreboardProps) => {
     <section className="flex flex-col gap-3" id="tracked-prompts">
       <div className="flex flex-col gap-1">
         <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-          질문별 성적
+          {t.title}
         </h2>
         <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-          같은 브랜드라도 질문에 따라 AI 답변에 나오기도 하고 빠지기도 해요.
-          약한 질문이 위에 있어요.
+          {t.lede}
         </p>
       </div>
 
@@ -117,10 +117,14 @@ export const PromptScoreboard = ({ scores }: PromptScoreboardProps) => {
                   />
                 </div>
                 <span className="w-20 shrink-0 text-right text-[color:var(--findable-ink,#f7f8f8)] text-sm tabular-nums">
-                  {score.hit}/{score.total}곳
+                  {t.hits
+                    .replace("{hit}", String(score.hit))
+                    .replace("{total}", String(score.total))}
                 </span>
                 <span className="w-16 shrink-0 text-right text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm tabular-nums">
-                  {score.position === null ? "—" : `${score.position}번째`}
+                  {score.position === null
+                    ? "—"
+                    : t.position.replace("{n}", String(score.position))}
                 </span>
               </div>
             </div>

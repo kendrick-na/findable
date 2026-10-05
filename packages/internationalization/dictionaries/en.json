@@ -690,6 +690,98 @@
       "errorLimit": "This code has reached its usage limit.",
       "errorAlreadyUsed": "You've already used this code.",
       "errorFailed": "We couldn't apply the code. Please try again in a moment."
+    },
+    "dashboard": {
+      "headerTitle": "Dashboard",
+      "firstRunTitle": "Your first measurement is running",
+      "firstRunBody": "Your brand is set up. Once AI answers are collected, results will appear on this dashboard and in your measurement history.",
+      "liveStatus": "View live status",
+      "firstRunFailedTitle": "Your brand is set up, but the first measurement failed",
+      "firstRunFailedBody": "You don't need to enter your brand again. Check why it failed, then restart the measurement from your existing brand.",
+      "viewHistory": "View measurement history",
+      "remeasureFromBrand": "Measure again from Brand",
+      "noAnswersTitle": "The measurement finished, but no AI answers came back",
+      "noAnswersBody": "This does not mean a score of 0 or that you were not mentioned. Without AI answers, we can't produce a score or actions for this run.",
+      "viewRunDetail": "View measurement details",
+      "newRunTitle": "A new measurement is running",
+      "newRunBody": "The numbers shown are from your last completed run. New results will be added to your history automatically when they finish.",
+      "liveStatusArrow": "View live status →",
+      "checkLatestTitle": "Please check your latest results",
+      "checkLatestBody": "Your latest measurement finished, but the dashboard trend hasn't caught up yet. We won't show the previous run's numbers as the latest results.",
+      "viewLatestReport": "View latest measurement and report →",
+      "title": "Visibility dashboard",
+      "ledeWithBrand": "What AI says about ‘{brand}’, all in one place.",
+      "lede": "What AI says about your brand, all in one place.",
+      "startMeasure": "Start measuring",
+      "issueIncomplete": "AI measurement of the planned brand questions stopped or did not fully complete.",
+      "issuePlanUnverified": "We can't verify the question plan of this past measurement, so results are shown as provisional.",
+      "issueInsufficient": "Only {count} answers to brand questions were fully checked in this run, below the minimum of {min}.",
+      "issueUnverified": "{count} brand checks did not complete in this run.",
+      "issueNotFinal": "Scores, mention rate, trends and recommendations for this run are not final.",
+      "checkEvidence": "Check the evidence in the report →"
+    },
+    "errorBoundary": {
+      "title": "Something went wrong",
+      "body": "This may be a temporary error. Try again or go back to the dashboard. If it keeps happening, let us know through Support and we'll look into it right away.",
+      "retry": "Try again",
+      "toDashboard": "Back to dashboard"
+    },
+    "runContext": {
+      "thisBrand": "This brand",
+      "measuredAt": " · Measured {date}",
+      "viewReport": "View this run's report",
+      "newTab": "opens in a new tab",
+      "seeHistory": "See this run's full results in your measurement history"
+    },
+    "upgradeLadder": {
+      "competitorsTitle": "Competitor comparison",
+      "competitorsBody": "See your brand side by side with competitors and who gets mentioned more.",
+      "trackingTitle": "Automatic tracking",
+      "trackingBody": "We re-measure automatically every week and add what changed to your history.",
+      "exportTitle": "Report export",
+      "exportBody": "Export to Notion or Google Docs to share with your team and leadership.",
+      "headlineStarter": "On top of Starter, Growth unlocks the following",
+      "headlineFree": "Upgrade to Growth to unlock the following",
+      "lede": "Right now you can see the measurement summary. In-depth analysis unlocks on Growth.",
+      "viewPlans": "View plans",
+      "comingSoon": "Coming soon"
+    },
+    "nextActions": {
+      "title": "View your action plan",
+      "bodyWithBrand": "The issues found in {brand}'s latest measurement, with priorities for what to do",
+      "body": "The issues found in your latest measurement, with priorities for what to do"
+    },
+    "promptScoreboard": {
+      "title": "Results by question",
+      "empty": "This measurement has no per-question records. Add questions and measure again to see where you fall behind.",
+      "lede": "The same brand can appear in AI answers for some questions and be missing for others. Your weakest questions are at the top.",
+      "hits": "{hit}/{total}",
+      "position": "#{n}"
+    },
+    "deepAnalysis": {
+      "resultTitle": "In-depth analysis",
+      "resultFallback": "We analyzed the evidence from this run in more depth.",
+      "actionFallback": "Improvement task",
+      "startError": "We couldn't start the in-depth analysis.",
+      "title": "Run an in-depth analysis on the evidence",
+      "body": "We use your measured results and cited sources to sharpen your improvement priorities.",
+      "busyNote": "Analyzing. Refresh in a moment to see the results.",
+      "busy": "Analyzing",
+      "start": "Start analysis"
+    },
+    "trendChart": {
+      "rangeDays": "{n} days",
+      "rangeAll": "All",
+      "rangeAllNote": "All time",
+      "rangeRecentNote": "Last {n} days",
+      "seriesMention": "Mention rate",
+      "seriesPositive": "Positive share",
+      "title": "Change over time",
+      "ledeWithSentiment": "How often AI mentions you each time you measure, and how favorably",
+      "lede": "How often AI mentions you each time you measure",
+      "basis": "{range} · based on {n} measurements",
+      "deltaCaveat": "Change since the first measurement in this range. Questions, responding engines and judging criteria can differ between runs, so this can't be read as the effect of actions such as publishing content.",
+      "empty": "Measure a second time and we'll chart the change."
     }
   }
 }

@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import { PromptScoreboard } from "./prompt-scoreboard";
 
@@ -25,6 +26,8 @@ import { PromptScoreboard } from "./prompt-scoreboard";
  * 숫자는 **실측 그대로**다(나이키 5질문 · 66행). 지어내지 않는다.
  */
 const meta = {
+  // 문구는 사전에서 온다(`app.promptScoreboard`). JSON 직접 import — `getAppDictionary` 는 server-only.
+  args: { t: koDict.app.promptScoreboard },
   component: PromptScoreboard,
   parameters: { layout: "padded" },
   title: "대시보드/밀리는 질문",

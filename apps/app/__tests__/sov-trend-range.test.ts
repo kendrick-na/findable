@@ -1,3 +1,5 @@
+import enDict from "@repo/internationalization/dictionaries/en.json";
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * @vitest-environment jsdom
  *
@@ -30,6 +32,10 @@ import {
   SovTrendChart,
 } from "../app/(authenticated)/components/sov-trend-chart";
 import type { SovTrendPoint } from "../app/(authenticated)/lib/dashboard-data";
+
+/** 문구는 사전에서 온다(2026-10-06). 이 테스트는 한국어 화면 기준으로 검사한다. */
+const KO = koDict.app.trendChart;
+const EN = enDict.app.trendChart;
 
 const DAY = 24 * 60 * 60 * 1000;
 /** 기준시각을 상수로 고정 — `Date.now()` 를 쓰면 테스트가 날짜에 따라 흔들린다. */
@@ -69,6 +75,7 @@ describe("추세 수치 해석", () => {
             occurredAt: new Date(NOW - 2 * DAY),
           },
         ],
+        t: KO,
         trend: NIKE,
       })
     );
@@ -79,9 +86,17 @@ describe("추세 수치 해석", () => {
 
   it("비교할 이전 측정이 없으면 변화 경고도 표시하지 않는다", () => {
     const html = renderToStaticMarkup(
-      createElement(SovTrendChart, { trend: [point(0, 94)] })
+      createElement(SovTrendChart, { t: KO, trend: [point(0, 94)] })
     );
     expect(html).not.toContain("조치의 효과로 해석할 수 없습니다");
+  });
+
+  it("🔴 영어 화면도 같은 고지를 한다(번역하면서 경고가 빠지지 않게)", () => {
+    const html = renderToStaticMarkup(
+      createElement(SovTrendChart, { t: EN, trend: NIKE })
+    );
+    expect(html).toContain("Change since the first measurement in this range");
+    expect(EN.deltaCaveat).toMatch(/can't be read as the effect of actions/);
   });
 });
 
@@ -114,13 +129,13 @@ describe("기간 선택지 — 빈 화면이 되는 버튼은 만들지 않는�
   it("🔴 고르면 점이 2개 미만인 기간은 선택지에 없다", () => {
     // 측정 2회가 20일 간격 → 7일·14일을 누르면 1점(빈 화면)이 된다.
     const sparse = [point(20, 90), point(0, 95)];
-    const labels = rangeOptions(sparse).map((option) => option.label);
+    const labels = rangeOptions(sparse, KO).map((option) => option.label);
     expect(labels, "빈 화면이 되는 7일 버튼이 살아있다").not.toContain("7일");
     expect(labels, "빈 화면이 되는 14일 버튼이 살아있다").not.toContain("14일");
   });
 
   it("🔴 데이터가 채우는 기간은 선택지에 있다", () => {
-    const labels = rangeOptions(NIKE).map((option) => option.label);
+    const labels = rangeOptions(NIKE, KO).map((option) => option.label);
     // nike 실측 형태(18일 폭): 7일 4점 · 14일 4점 · 30일 6점 = 전체와 동일.
     //   30일이 이미 전체를 덮으므로 `전체` 는 **중복이라 붙지 않는다**(아래 케이스와 같은 계약).
     expect(labels).toContain("7일");
@@ -131,13 +146,13 @@ describe("기간 선택지 — 빈 화면이 되는 버튼은 만들지 않는�
   it("선택지가 1개뿐이면 호출부가 UI 를 숨긴다(length<=1 계약)", () => {
     // 측정 1회 = 어느 기간도 2점을 못 만든다 → `전체` 하나만 남아야 한다.
     const single = [point(0, 90)];
-    expect(rangeOptions(single).length).toBeLessThanOrEqual(1);
+    expect(rangeOptions(single, KO).length).toBeLessThanOrEqual(1);
   });
 
   it("모든 후보가 전체와 같은 점 수면 `전체` 를 중복으로 붙이지 않는다", () => {
     // 3점이 하루 안에 몰려 있으면 7일·14일·30일·전체가 전부 3점 → 중복 버튼 방지.
     const dense = [point(0, 90), point(0, 92), point(0, 94)];
-    const all = rangeOptions(dense).filter((o) => o.days === null);
+    const all = rangeOptions(dense, KO).filter((o) => o.days === null);
     expect(all.length, "같은 결과를 주는 버튼이 중복으로 생겼다").toBe(0);
   });
 });
@@ -171,7 +186,7 @@ describe("배선 — 차트가 필터된 데이터를 그린다", () => {
 
 describe("머리글 숫자 — 분모를 밝힌다", () => {
   it("최신 값과 구간 첫 점 대비 증감을 준다", () => {
-    const got = headlineOf(filterByRange(NIKE, null), null);
+    const got = headlineOf(filterByRange(NIKE, null), null, KO);
     expect(got?.latest).toBe(94); // 마지막 점
     expect(got?.delta).toBe(94); // 0 → 94
     expect(got?.rangeNote).toBe("전체 기간");
@@ -179,7 +194,7 @@ describe("머리글 숫자 — 분모를 밝힌다", () => {
 
   it("🔴 기간을 좁히면 증감 기준도 함께 바뀐다", () => {
     // 7일 구간의 첫 점은 97 → 94-97 = -3
-    const got = headlineOf(filterByRange(NIKE, 7), 7);
+    const got = headlineOf(filterByRange(NIKE, 7), 7, KO);
     expect(got?.delta).toBe(-3);
     expect(
       got?.rangeNote,
@@ -188,22 +203,22 @@ describe("머리글 숫자 — 분모를 밝힌다", () => {
   });
 
   it("점이 1개면 증감을 만들지 않는다(없는 비교를 지어내지 않는다)", () => {
-    expect(headlineOf([point(0, 90)], null)?.delta).toBeNull();
+    expect(headlineOf([point(0, 90)], null, KO)?.delta).toBeNull();
   });
 
   it("빈 배열이면 머리글을 그리지 않는다", () => {
-    expect(headlineOf([], null)).toBeNull();
+    expect(headlineOf([], null, KO)).toBeNull();
   });
 
   it("소수점 증감을 1자리로 반올림한다(0.30000001 방지)", () => {
-    const got = headlineOf([point(2, 90.1), point(0, 90.4)], null);
+    const got = headlineOf([point(2, 90.1), point(0, 90.4)], null, KO);
     expect(got?.delta).toBe(0.3);
   });
 
   it("변화가 없으면 0 을 준다(null 과 구분된다)", () => {
     // 🔴 `0` 과 `null` 은 다른 뜻이다 — 0=변화없음 · null=비교불가.
     //   섞으면 "변화 없음"을 "비교 못 함"으로 감추게 된다.
-    const got = headlineOf([point(2, 95), point(0, 95)], null);
+    const got = headlineOf([point(2, 95), point(0, 95)], null, KO);
     expect(got?.delta).toBe(0);
   });
 });

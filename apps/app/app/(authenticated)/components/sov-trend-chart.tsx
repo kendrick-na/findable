@@ -18,7 +18,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { AppDictionary } from "@/lib/i18n";
 import type { SovTrendPoint } from "../lib/dashboard-data";
+
+/** 이 카드의 문구 — 서버(`page.tsx`)가 `app.trendChart` 사전에서 넘긴다. */
+export type TrendChartLabels = AppDictionary["trendChart"];
 
 export interface TrendAnnotation {
   id: string;
@@ -45,6 +49,7 @@ export interface SovTrendChartProps {
    *   ⚠️ 없으면 아무 것도 그리지 않는다 — 못 누르는 버튼을 그리지 않는다.
    */
   emptyAction?: ReactNode;
+  t: TrendChartLabels;
   trend: SovTrendPoint[];
 }
 
@@ -57,13 +62,12 @@ export interface SovTrendChartProps {
  * ⚠️ 선택지가 1개(전체)뿐이면 호출부가 필터 UI 를 그리지 않는다.
  */
 export function rangeOptions(
-  trend: SovTrendPoint[]
+  trend: SovTrendPoint[],
+  t: Pick<TrendChartLabels, "rangeAll" | "rangeDays">
 ): { days: number | null; label: string }[] {
-  const candidates: { days: number; label: string }[] = [
-    { days: 7, label: "7일" },
-    { days: 14, label: "14일" },
-    { days: 30, label: "30일" },
-  ];
+  const candidates: { days: number; label: string }[] = [7, 14, 30].map(
+    (days) => ({ days, label: t.rangeDays.replace("{n}", String(days)) })
+  );
   const usable = candidates.filter(
     (candidate) => filterByRange(trend, candidate.days).length >= 2
   );
@@ -71,7 +75,7 @@ export function rangeOptions(
   const widest = usable.at(-1);
   const showAll =
     !widest || filterByRange(trend, widest.days).length < trend.length;
-  return showAll ? [...usable, { days: null, label: "전체" }] : usable;
+  return showAll ? [...usable, { days: null, label: t.rangeAll }] : usable;
 }
 
 /** 최근 N일로 자른다. `null` 이면 전체. 기준시각은 **마지막 측정**(오늘이 아니다). */
@@ -95,7 +99,8 @@ export function filterByRange(
  */
 export function headlineOf(
   visible: SovTrendPoint[],
-  days: number | null
+  days: number | null,
+  t: Pick<TrendChartLabels, "rangeAllNote" | "rangeRecentNote">
 ): { delta: number | null; latest: number; rangeNote: string } | null {
   // ⚠️ `sov` 는 `number`(non-null)다(`dashboard-data.ts:151`) — null 분기를 두지 않는다
   //   (읽는 코드가 없는 상태를 방어하면 죽은 코드가 남고, 없는 상태를 있는 것처럼 읽힌다).
@@ -111,7 +116,10 @@ export function headlineOf(
   return {
     delta,
     latest: Math.round(last.sov),
-    rangeNote: days === null ? "전체 기간" : `최근 ${days}일`,
+    rangeNote:
+      days === null
+        ? t.rangeAllNote
+        : t.rangeRecentNote.replace("{n}", String(days)),
   };
 }
 
@@ -151,18 +159,19 @@ function snapToTrend(
 //   색 규율(§9 Stripe): "모든 데이터에 색을 칠하면 색은 의미를 잃는다" → 2계열까지만,
 //   감성은 브랜드색과 구분되되 상태색(적/녹)이 아닌 중립 계열을 쓴다.
 //   ⚠️ 적녹 조합 회피: 색맹 99%가 적녹이고, 하락을 빨강으로 칠하지 않는 것이 이 제품의 규율.
-const chartConfig = {
-  sov: {
-    label: "등장률",
-    color: "var(--findable-primary, #ff7a4d)",
-  },
-  positiveRate: {
-    // 단청(teal) = 디자인시스템에 이미 있는 비상태색 2차 색상(globals.css:43).
-    // 오렌지↔단청은 적녹이 아니라 색맹에서도 구분된다.
-    label: "긍정 비율",
-    color: "var(--findable-dancheong, oklch(0.58 0.110 195))",
-  },
-} satisfies ChartConfig;
+const chartConfigOf = (t: TrendChartLabels) =>
+  ({
+    sov: {
+      label: t.seriesMention,
+      color: "var(--findable-primary, #ff7a4d)",
+    },
+    positiveRate: {
+      // 단청(teal) = 디자인시스템에 이미 있는 비상태색 2차 색상(globals.css:43).
+      // 오렌지↔단청은 적녹이 아니라 색맹에서도 구분된다.
+      label: t.seriesPositive,
+      color: "var(--findable-dancheong, oklch(0.58 0.110 195))",
+    },
+  }) satisfies ChartConfig;
 
 // completed 측정들의 추세. 데이터는 서버(page.tsx)에서 asc 정렬되어 내려온다.
 export const SovTrendChart = ({
@@ -171,13 +180,14 @@ export const SovTrendChart = ({
   brandId = null,
   emptyAction = null,
   annotationsSlot = null,
+  t,
 }: SovTrendChartProps) => {
   // 🔴 기간 선택지는 **데이터가 실제로 채우는 것만** 만든다(장식 컨트롤 금지).
-  const options = rangeOptions(trend);
+  const options = rangeOptions(trend, t);
   // 기본값 = 전체(null). 점을 최대한 보여주는 쪽에서 시작한다.
   const [rangeDays, setRangeDays] = useState<number | null>(null);
   const visible = filterByRange(trend, rangeDays);
-  const headline = headlineOf(visible, rangeDays);
+  const headline = headlineOf(visible, rangeDays, t);
 
   // 감성 데이터가 한 점도 없으면 라인·범례를 아예 그리지 않는다(빈 계열 = 노이즈).
   const hasSentiment = visible.some((point) => point.positiveRate !== null);
@@ -189,12 +199,10 @@ export const SovTrendChart = ({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">
             <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-              시간에 따른 변화
+              {t.title}
             </h2>
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              {hasSentiment
-                ? "측정할 때마다 AI가 우리를 얼마나 말하는지, 얼마나 좋게 말하는지"
-                : "측정할 때마다 AI가 우리를 얼마나 말하는지"}
+              {hasSentiment ? t.ledeWithSentiment : t.lede}
             </p>
           </div>
           {/* 🔴 기간 필터 — 경쟁사 4/4 가 갖고 있고 우리만 없었다(`Last 7 Days`·
@@ -242,14 +250,15 @@ export const SovTrendChart = ({
               </span>
             )}
             <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-              {headline.rangeNote} · 측정 {visible.length}회 기준
+              {t.basis
+                .replace("{range}", headline.rangeNote)
+                .replace("{n}", String(visible.length))}
             </span>
           </div>
         ) : null}
         {headline?.delta !== null && headline?.delta !== undefined ? (
           <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-            구간 첫 측정 대비 변화입니다. 회차마다 질문·응답한 엔진·판정 기준이
-            달라질 수 있어, 콘텐츠 발행 등 조치의 효과로 해석할 수 없습니다.
+            {t.deltaCaveat}
           </p>
         ) : null}
       </div>
@@ -258,7 +267,7 @@ export const SovTrendChart = ({
           // 빈 상태 = 행동 지향 + 격려형(Polaris §5-5). "실패"로 읽히지 않게 한다.
           <div className="flex h-[220px] flex-col items-center justify-center gap-3 rounded-lg border border-[color:var(--findable-hairline,#23252a)] border-dashed">
             <p className="max-w-xs text-center text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              두 번째 측정을 하면 변화를 그려드려요.
+              {t.empty}
             </p>
             {/* 🔴 2026-08-17(N-37) — **말만 하고 방법을 주지 않던 자리다.**
                 화면 3곳이 *"2회차부터 보여드려요"* 라고 안내하는데 정작 재측정 버튼이
@@ -267,7 +276,10 @@ export const SovTrendChart = ({
             {emptyAction}
           </div>
         ) : (
-          <ChartContainer className="h-[220px] w-full" config={chartConfig}>
+          <ChartContainer
+            className="h-[220px] w-full"
+            config={chartConfigOf(t)}
+          >
             <AreaChart
               accessibilityLayer
               data={visible}

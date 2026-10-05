@@ -21,7 +21,12 @@ import {
   scopedLatestRunTracking,
   scopedTracking,
 } from "@/lib/db/scoped";
-import { getAppDictionary } from "@/lib/i18n";
+import {
+  type AppDictionary,
+  dateLocaleFor,
+  getAppDictionary,
+  getAppLocale,
+} from "@/lib/i18n";
 import { hasCompletedSetup } from "@/lib/onboarding";
 import { BrandSwitcher } from "./components/brand-switcher";
 import { DashboardAnswerBuckets } from "./components/dashboard-answer-buckets";
@@ -74,11 +79,13 @@ const DashboardNoResultState = ({
   failedJobId,
   unavailableJobId,
   signedInEmail,
+  t,
 }: {
   activeJobId?: string;
   failedJobId?: string;
   unavailableJobId?: string;
   signedInEmail: string | null;
+  t: AppDictionary["dashboard"];
 }) => {
   if (activeJobId) {
     return (
@@ -89,18 +96,17 @@ const DashboardNoResultState = ({
         />
         <div>
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-            첫 측정을 진행하고 있어요
+            {t.firstRunTitle}
           </h1>
           <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-            브랜드 설정은 완료됐어요. AI 답변을 수집한 뒤 이 대시보드와 측정
-            이력에 결과가 쌓입니다.
+            {t.firstRunBody}
           </p>
         </div>
         <Link
           className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
           href={`/brand/measuring?job=${activeJobId}`}
         >
-          실시간 상태 보기
+          {t.liveStatus}
         </Link>
       </section>
     );
@@ -111,11 +117,10 @@ const DashboardNoResultState = ({
       <section className="findable-card flex min-h-[360px] flex-col items-center justify-center gap-4 p-8 text-center">
         <div>
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-            브랜드 설정은 완료됐지만 첫 측정에 실패했어요
+            {t.firstRunFailedTitle}
           </h1>
           <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-            브랜드를 다시 입력할 필요는 없어요. 실패 사유를 확인한 뒤 기존
-            브랜드에서 측정만 다시 시작하세요.
+            {t.firstRunFailedBody}
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
@@ -123,7 +128,7 @@ const DashboardNoResultState = ({
             className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
             href="/history"
           >
-            측정 이력 보기
+            {t.viewHistory}
           </Link>
           <Link
             className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
@@ -141,11 +146,10 @@ const DashboardNoResultState = ({
       <section className="findable-card flex min-h-[360px] flex-col items-center justify-center gap-4 p-8 text-center">
         <div>
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-            측정 요청은 끝났지만 AI 응답을 받지 못했어요
+            {t.noAnswersTitle}
           </h1>
           <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-            0점이나 미노출이라는 뜻이 아니에요. 연결된 AI 응답이 없어 이번
-            회차의 점수와 할 일을 만들 수 없습니다.
+            {t.noAnswersBody}
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
@@ -153,7 +157,7 @@ const DashboardNoResultState = ({
             className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
             href="/history"
           >
-            측정 상세 보기
+            {t.viewRunDetail}
           </Link>
           <Link
             className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
@@ -189,7 +193,10 @@ const App = async ({ searchParams }: AppProperties) => {
   const user = await currentUser();
   const email = user ? getPrimaryEmail(user) : null;
   const { orgId } = await auth();
-  const dict = await getAppDictionary();
+  const [dict, locale] = await Promise.all([
+    getAppDictionary(),
+    getAppLocale(),
+  ]);
   if (orgId && !(await hasCompletedSetup())) {
     redirect("/welcome");
   }
@@ -429,7 +436,7 @@ const App = async ({ searchParams }: AppProperties) => {
   return (
     <>
       <Header
-        page="대시보드"
+        page={dict.dashboard.headerTitle}
         pages={["Findable"]}
         showMetric={
           currentRunPublishable &&
@@ -444,18 +451,17 @@ const App = async ({ searchParams }: AppProperties) => {
           >
             <div>
               <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-                새 측정을 진행하고 있어요
+                {dict.dashboard.newRunTitle}
               </p>
               <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                지금 보이는 값은 이전 완료 결과예요. 새 결과가 끝나면 자동으로
-                이력에 쌓여요.
+                {dict.dashboard.newRunBody}
               </p>
             </div>
             <Link
               className="text-[color:var(--findable-primary,#ff7a4d)] text-sm"
               href={`/brand/measuring?job=${activeJob.id}`}
             >
-              실시간 상태 보기 →
+              {dict.dashboard.liveStatusArrow}
             </Link>
           </section>
         ) : null}
@@ -463,17 +469,16 @@ const App = async ({ searchParams }: AppProperties) => {
         {newerJobWithoutTracking ? (
           <section className="findable-card flex flex-col gap-3 p-6">
             <h1 className="font-semibold text-xl">
-              최신 측정 결과를 확인해 주세요
+              {dict.dashboard.checkLatestTitle}
             </h1>
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              최신 측정은 완료됐지만 대시보드 시계열 반영이 지연됐습니다. 이전
-              회차의 숫자를 최신 결과로 표시하지 않습니다.
+              {dict.dashboard.checkLatestBody}
             </p>
             <Link
               className="text-[color:var(--findable-primary,#ff7a4d)] text-sm"
               href={`/history/${newerJobWithoutTracking.id}`}
             >
-              최신 측정과 리포트 보기 →
+              {dict.dashboard.viewLatestReport}
             </Link>
           </section>
         ) : null}
@@ -483,19 +488,22 @@ const App = async ({ searchParams }: AppProperties) => {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex flex-col gap-1">
                 <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-                  가시성 대시보드
+                  {dict.dashboard.title}
                 </h1>
                 <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
                   {data.latestBrandName
-                    ? `AI가 ‘${data.latestBrandName}’ 브랜드를 어떻게 말하는지 모았어요.`
-                    : "AI가 내 브랜드를 어떻게 말하는지 모았어요."}
+                    ? dict.dashboard.ledeWithBrand.replace(
+                        "{brand}",
+                        data.latestBrandName
+                      )
+                    : dict.dashboard.lede}
                 </p>
               </div>
               <Link
                 className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
                 href="/brand"
               >
-                측정 시작
+                {dict.dashboard.startMeasure}
               </Link>
             </div>
 
@@ -511,6 +519,7 @@ const App = async ({ searchParams }: AppProperties) => {
 
             <DashboardRunContext
               brandName={data.latestBrandName}
+              dateLocale={dateLocaleFor(locale)}
               jobId={currentRunJob?.id ?? null}
               measuredAt={data.latestMeasuredAt}
               reportUrl={
@@ -518,6 +527,7 @@ const App = async ({ searchParams }: AppProperties) => {
                   ? `${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`
                   : null
               }
+              t={dict.runContext}
             />
 
             {/* 헤드라인 4분류(2026-09-29) — 공개 리포트 히어로와 같은 함수·같은 문구.
@@ -529,25 +539,37 @@ const App = async ({ searchParams }: AppProperties) => {
             {!currentRunPublishable && currentRunJob ? (
               <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-amber-100 text-sm">
                 {currentRunIssue === "incomplete_execution"
-                  ? "계획한 브랜드 질문의 AI 측정이 중단되거나 일부 미완료됐습니다."
+                  ? dict.dashboard.issueIncomplete
                   : null}
                 {currentRunIssue === "question_plan_unverified"
-                  ? "과거 측정의 질문 계획을 확인할 수 없어 결과를 잠정으로 표시합니다."
+                  ? dict.dashboard.issuePlanUnverified
                   : null}
                 {currentRunIssue === "insufficient_sample"
-                  ? `이번 측정은 브랜드 질문의 AI 판별이 끝난 답변이 ${publicationVerifiedAnswerCount(correctedCurrentResult) ?? 0}건뿐이라 기준(${MIN_VERIFIED_ANSWERS}건)에 못 미칩니다.`
+                  ? dict.dashboard.issueInsufficient
+                      .replace(
+                        "{count}",
+                        String(
+                          publicationVerifiedAnswerCount(
+                            correctedCurrentResult
+                          ) ?? 0
+                        )
+                      )
+                      .replace("{min}", String(MIN_VERIFIED_ANSWERS))
                   : null}
                 {currentRunIssue !== "incomplete_execution" &&
                 currentRunIssue !== "question_plan_unverified" &&
                 currentRunIssue !== "insufficient_sample"
-                  ? `이번 측정은 브랜드 판별 ${currentRunUnverified}회가 완료되지 않았습니다.`
+                  ? dict.dashboard.issueUnverified.replace(
+                      "{count}",
+                      String(currentRunUnverified)
+                    )
                   : null}{" "}
-                이번 회차의 점수·등장률·추세·개선 처방은 확정하지 않습니다.{" "}
+                {dict.dashboard.issueNotFinal}{" "}
                 <Link
                   className="underline underline-offset-2"
                   href={`${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`}
                 >
-                  리포트에서 근거 확인 →
+                  {dict.dashboard.checkEvidence}
                 </Link>
               </section>
             ) : null}
@@ -579,6 +601,7 @@ const App = async ({ searchParams }: AppProperties) => {
                 <NextActionsCard
                   brandId={data.latestBrandId}
                   brandName={data.latestBrandName}
+                  t={dict.nextActions}
                 />
               </div>
             ) : null}
@@ -593,6 +616,7 @@ const App = async ({ searchParams }: AppProperties) => {
                 }
                 crewStatus={currentRunAnalysis?.crewStatus ?? "not_requested"}
                 jobId={currentRunJob?.id ?? null}
+                t={dict.deepAnalysis}
               />
             ) : null}
 
@@ -617,6 +641,7 @@ const App = async ({ searchParams }: AppProperties) => {
                       />
                     ) : null
                   }
+                  t={dict.trendChart}
                   trend={data.trend}
                 />
                 <SearchSamplingTrendNote data={data} />
@@ -627,7 +652,10 @@ const App = async ({ searchParams }: AppProperties) => {
                 리서치 `01:132` *"업계 1군은 이걸 메인에 둔다"* · 경쟁사 채택률 8/15.
                 위치: 추세(시간) 다음, 이력(원장) 앞 — 요약 → 추세 → **분해** → 원장 순. */}
             {currentRunPublishable ? (
-              <PromptScoreboard scores={data.promptScores} />
+              <PromptScoreboard
+                scores={data.promptScores}
+                t={dict.promptScoreboard}
+              />
             ) : null}
 
             {/* 「진실의 거울」(v4 탭7 · N-37) — 요약 → 추세 → 분해 → **원문** 순.
@@ -680,7 +708,9 @@ const App = async ({ searchParams }: AppProperties) => {
                 ⚠️ 이력을 다시 이 화면에 붙이면 **그 한 줄도 같이 되살려야 한다.** */}
 
             <PartnerCTA plan={plan} />
-            {!isPaid(plan) && <UpgradeLadder plan={plan} />}
+            {!isPaid(plan) && (
+              <UpgradeLadder plan={plan} t={dict.upgradeLadder} />
+            )}
           </>
         ) : null}
         {newerJobWithoutTracking || (hasData && hasUsableResult) ? null : (
@@ -694,6 +724,7 @@ const App = async ({ searchParams }: AppProperties) => {
             activeJobId={activeJob?.id}
             failedJobId={latestFailedJob?.id}
             signedInEmail={email}
+            t={dict.dashboard}
             unavailableJobId={
               hasData && !hasUsableResult ? latestCompletedJob?.id : undefined
             }

@@ -109,3 +109,6 @@ export async function getAppDictionary() {
   const dictionary = await getDictionary(locale);
   return dictionary.app;
 }
+
+/** `app` 네임스페이스 사전 타입. 부품에 `t: AppDictionary["dashboard"]` 처럼 넘길 때 쓴다. */
+export type AppDictionary = Awaited<ReturnType<typeof getAppDictionary>>;
