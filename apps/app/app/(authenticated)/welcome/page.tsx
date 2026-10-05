@@ -16,9 +16,9 @@ import { getPrimaryEmail } from "../lib/user";
 import { WelcomeFlowServer } from "./welcome-flow-server";
 import { WelcomeIntro } from "./welcome-intro";
 
-export const metadata: Metadata = {
-  title: "시작하기 · Findable",
-  description: "도메인 하나만 넣으면 AI가 우리를 뭐라고 말하는지 알려드려요.",
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = (await getAppDictionary()).onboarding;
+  return { title: t.metaTitle, description: t.metaDescription };
 };
 
 /**

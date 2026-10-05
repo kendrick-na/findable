@@ -56,6 +56,13 @@ export const APP_DEFAULT_LOCALE: AppLocale = "ko";
  */
 export const APP_ENGLISH_ENABLED = false;
 
+/**
+ * 날짜·숫자 표기용 BCP 47 태그. `toLocaleDateString(dateLocaleFor(locale))` 처럼 쓴다.
+ * ⚠️ 2026-10-06 실측: 앱에 `"ko-KR"` 고정이 58곳 — 화면을 옮길 때 이걸로 바꾼다.
+ */
+export const dateLocaleFor = (locale: AppLocale): string =>
+  locale === "en" ? "en-US" : "ko-KR";
+
 const isAppLocale = (v: string | undefined): v is AppLocale =>
   v !== undefined && APP_LOCALES.includes(v as AppLocale);
 

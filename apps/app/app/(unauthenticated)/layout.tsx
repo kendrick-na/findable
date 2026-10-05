@@ -1,7 +1,8 @@
 import { auth } from "@repo/auth/server";
-import { redirect } from "next/navigation";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { getAppDictionary } from "@/lib/i18n";
 
 interface AuthLayoutProps {
   readonly children: ReactNode;
@@ -31,6 +32,7 @@ const AuthLayout = async ({ children }: AuthLayoutProps) => {
   if (userId) {
     redirect("/");
   }
+  const t = (await getAppDictionary()).authPanel;
 
   return (
     <div
@@ -79,9 +81,9 @@ const AuthLayout = async ({ children }: AuthLayoutProps) => {
                 68%
               </p>
               <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs leading-relaxed">
-                구글 검색이 클릭 없이 끝나요 (2026년 상반기 기준)
+                {t.zeroClickStat}
               </p>
-              <p className="mt-1 text-[color:var(--findable-ink-tertiary,#7e8289)] text-[10px]">
+              <p className="mt-1 text-[10px] text-[color:var(--findable-ink-tertiary,#7e8289)]">
                 — SparkToro
               </p>
             </div>
@@ -90,10 +92,10 @@ const AuthLayout = async ({ children }: AuthLayoutProps) => {
                 25%
               </p>
               <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs leading-relaxed">
-                기존 검색 트래픽이 2026년까지 줄어들 거라는 예측
+                {t.trafficForecastStat}
               </p>
-              <p className="mt-1 text-[color:var(--findable-ink-tertiary,#7e8289)] text-[10px]">
-                — Gartner (2024년 발표한 예측치)
+              <p className="mt-1 text-[10px] text-[color:var(--findable-ink-tertiary,#7e8289)]">
+                {t.gartnerSource}
               </p>
             </div>
           </div>
@@ -102,12 +104,10 @@ const AuthLayout = async ({ children }: AuthLayoutProps) => {
             className="text-2xl text-[color:var(--findable-ink,#f7f8f8)] leading-snug"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            &ldquo;AI는 지금 우리 브랜드를 추천하고 있을까요?&rdquo;
+            &ldquo;{t.quote}&rdquo;
           </p>
           <p className="mt-4 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-            ChatGPT · Claude · Perplexity · Gemini 답변과 네이버 AI 브리핑,
-            네이버·다음 검색 노출까지 — 한국어와 영어로 우리 브랜드가 어디에
-            있는지 추적합니다.
+            {t.lede}
           </p>
           {/* 🔴 2026-08-17(N-37) — 소셜프루프. 경쟁사 4곳은 이 자리에 **고객 로고**를
               두는데(Profound 18개·Scrunch "500개사") 우리는 고객 0명이라
@@ -115,9 +115,9 @@ const AuthLayout = async ({ children }: AuthLayoutProps) => {
               **같은 사실 3개만** 재사용한다(문구가 갈리면 어느 쪽이 맞는지 알 수 없게 된다).
               ⛔ "고객사"·"도입"·"KAIST 인증 기술" 금지 — 전부 거짓이다. */}
           <ul className="mt-6 flex flex-col gap-1.5 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-            <li>KAIST OverEdge 2026 선정</li>
-            <li>생성형 AI 활용 경진대회 최우수상</li>
-            <li>K-GEO-Bench 공개 데이터셋 발행 (CC BY 4.0)</li>
+            <li>{t.credentialOverEdge}</li>
+            <li>{t.credentialAward}</li>
+            <li>{t.credentialDataset}</li>
           </ul>
 
           {/* AI 엔진 로고 — haloX 참조. Findable이 실제로 추적하는 엔진이라 날조가 아니다

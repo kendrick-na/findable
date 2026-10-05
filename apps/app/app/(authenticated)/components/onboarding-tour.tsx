@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@repo/design-system/components/ui/dialog";
 import { cn } from "@repo/design-system/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /**
  * 대시보드 첫 진입 가이드 투어 — 2026-08-21(11번).
@@ -34,33 +34,44 @@ import { useEffect, useState } from "react";
  *   바꾸면 다시 뜰 수 있다는 트레이드오프를 그대로 받아들인다.
  */
 
+/**
+ * 투어 문구 — 서버(`page.tsx`)가 `app.tour`·`app.onboarding` 사전에서 넘긴다.
+ * ⚠️ 이 파일은 `"use client"` 라 `getAppDictionary`(server-only)를 직접 못 부른다.
+ */
+export interface OnboardingTourLabels {
+  actionsBody: string;
+  actionsTitle: string;
+  done: string;
+  kpisBody: string;
+  kpisTitle: string;
+  next: string;
+  skip: string;
+  /** `{current}`·`{total}` 자리표시자 포함(예: "{current}단계 / {total}단계"). */
+  stepOf: string;
+  trendBody: string;
+  trendTitle: string;
+  truthMirrorBody: string;
+  truthMirrorTitle: string;
+}
+
 interface TourStep {
   description: string;
   targetId: string;
   title: string;
 }
 
-const STEPS: TourStep[] = [
-  {
-    targetId: "tour-kpis",
-    title: "AI가 우리를 얼마나 말하는지",
-    description:
-      "ChatGPT·Claude 같은 AI가 우리 브랜드를 언급한 비율, 순위, 감성을 여기서 한눈에 봐요.",
-  },
+const buildSteps = (t: OnboardingTourLabels): TourStep[] => [
+  { targetId: "tour-kpis", title: t.kpisTitle, description: t.kpisBody },
   {
     targetId: "tour-actions",
-    title: "지금 뭘 고쳐야 하는지",
-    description: "측정 결과를 바탕으로 다음에 할 일을 여기서 추천해드려요.",
+    title: t.actionsTitle,
+    description: t.actionsBody,
   },
-  {
-    targetId: "tour-trend",
-    title: "시간에 따른 변화",
-    description: "측정할 때마다 노출도가 어떻게 바뀌는지 추세로 쌓여요.",
-  },
+  { targetId: "tour-trend", title: t.trendTitle, description: t.trendBody },
   {
     targetId: "tour-truth-mirror",
-    title: "AI가 실제로 한 말",
-    description: "요약이 아니라 AI 답변 원문을 그대로 확인할 수 있어요.",
+    title: t.truthMirrorTitle,
+    description: t.truthMirrorBody,
   },
 ];
 
@@ -71,7 +82,14 @@ function findTarget(id: string): HTMLElement | null {
   return document.getElementById(id);
 }
 
-export const OnboardingTour = () => {
+export const OnboardingTour = ({
+  labels,
+}: {
+  labels: OnboardingTourLabels;
+}) => {
+  // 🔴 useMemo 필수 — 아래 effect 가 STEPS 에 의존하고 setRect 를 부른다.
+  //   매 렌더 새 배열이면 effect → setRect → 렌더 → effect … 무한 반복된다.
+  const STEPS = useMemo(() => buildSteps(labels), [labels]);
   const [open, setOpen] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -110,7 +128,7 @@ export const OnboardingTour = () => {
     }
     el.scrollIntoView({ block: "center" });
     setRect(el.getBoundingClientRect());
-  }, [open, stepIndex]);
+  }, [open, stepIndex, STEPS]);
 
   const finish = () => {
     setOpen(false);
@@ -205,7 +223,9 @@ export const OnboardingTour = () => {
           }}
         >
           <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-            {stepIndex + 1}단계 / {STEPS.length}단계
+            {labels.stepOf
+              .replace("{current}", String(stepIndex + 1))
+              .replace("{total}", String(STEPS.length))}
           </span>
           <DialogTitle className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-sm">
             {step.title}
@@ -222,7 +242,7 @@ export const OnboardingTour = () => {
               onClick={finish}
               type="button"
             >
-              건너뛰기
+              {labels.skip}
             </button>
             <Button
               onClick={() => {
@@ -234,7 +254,7 @@ export const OnboardingTour = () => {
               }}
               size="sm"
             >
-              {isLast ? "완료" : "다음"}
+              {isLast ? labels.done : labels.next}
             </Button>
           </div>
         </DialogPrimitive.Content>

@@ -23,9 +23,26 @@ interface FormState {
 
 const initialState: FormState = { status: "idle" };
 
+/** 서버(`billing/page.tsx`)가 `app.invite` 사전에서 넘긴다(client 라 직접 못 읽음). */
+export interface RedeemFormLabels {
+  codeLabel: string;
+  codePlaceholder: string;
+  lede: string;
+  submit: string;
+  submitting: string;
+  /** `{date}` 자리표시자 포함. */
+  success: string;
+  title: string;
+}
+
 export const RedeemForm = ({
+  dateLocale,
+  labels,
   onRedeem,
 }: {
+  /** 만료일 표기 로케일(예: "ko-KR"·"en-US"). */
+  dateLocale: string;
+  labels: RedeemFormLabels;
   onRedeem?: (input: { code: string }) => Promise<RedeemResult>;
 }) => {
   const router = useRouter();
@@ -42,7 +59,10 @@ export const RedeemForm = ({
       }
       // 만료일을 **날짜로** 알린다 — "30일"이라고만 하면 언제까지인지 세어야 한다.
       toast.success(
-        `적용됐어요. ${result.expiresAt.toLocaleDateString("ko-KR")}까지 쓸 수 있어요.`
+        labels.success.replace(
+          "{date}",
+          result.expiresAt.toLocaleDateString(dateLocale)
+        )
       );
       return { status: "ok" };
     },
@@ -59,24 +79,24 @@ export const RedeemForm = ({
     <form action={formAction} className="findable-card flex flex-col gap-4 p-6">
       <div className="flex flex-col gap-1">
         <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-base">
-          초대 코드
+          {labels.title}
         </h2>
         <p
           className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm"
           style={{ wordBreak: "keep-all" }}
         >
-          프로그램에서 받은 코드가 있다면 입력해 주세요. 바로 적용돼요.
+          {labels.lede}
         </p>
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="invite-code">코드</Label>
+        <Label htmlFor="invite-code">{labels.codeLabel}</Label>
         <Input
           autoComplete="off"
           // 대문자로 보이게 한다 — 서버도 대문자로 정규화하므로 화면과 저장이 일치한다.
           className="uppercase"
           id="invite-code"
           name="code"
-          placeholder="예: OVEREDGE2026"
+          placeholder={labels.codePlaceholder}
           required
         />
       </div>
@@ -94,7 +114,7 @@ export const RedeemForm = ({
           disabled={isPending || !onRedeem}
           type="submit"
         >
-          {isPending ? "적용하는 중…" : "적용하기"}
+          {isPending ? labels.submitting : labels.submit}
         </Button>
       </div>
     </form>

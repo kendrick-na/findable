@@ -8,6 +8,7 @@ import { CheckIcon, ClockIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { redeemInviteCode } from "@/app/actions/invite/redeem";
 import { env } from "@/env";
+import { dateLocaleFor, getAppDictionary, getAppLocale } from "@/lib/i18n";
 import { Header } from "../components/header";
 import { PlanBadge } from "../components/plan-badge";
 import { CancelSubscription } from "../features/billing/cancel-subscription";
@@ -178,7 +179,11 @@ export const metadata: Metadata = {
 };
 
 const BillingPage = async () => {
-  const plan = await getCurrentPlan();
+  const [plan, dict, locale] = await Promise.all([
+    getCurrentPlan(),
+    getAppDictionary(),
+    getAppLocale(),
+  ]);
   const webUrl = env.NEXT_PUBLIC_WEB_URL;
   const meta = PLAN_META[plan];
   // ⚖️ 결제 전 고지·요금제 화면이 같은 약관(환불 규정 포함)을 가리킨다.
@@ -214,7 +219,11 @@ const BillingPage = async () => {
         {/* 🔴 초대 코드 — 결제와 **다른 축**이다(프로그램 참가 기업용).
             요금제 카드보다 **위**에 둔다: 코드를 받은 사람은 결제할 이유가 없는데
             가격표를 먼저 지나가게 하면 "돈 내야 하나"로 읽힌다. */}
-        <RedeemForm onRedeem={redeemInviteCode} />
+        <RedeemForm
+          dateLocale={dateLocaleFor(locale)}
+          labels={dict.invite}
+          onRedeem={redeemInviteCode}
+        />
 
         {/* 현재 플랜 요약 */}
         <section className="findable-card flex flex-wrap items-center justify-between gap-4 p-6">

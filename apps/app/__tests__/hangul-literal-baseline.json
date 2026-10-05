@@ -9,7 +9,6 @@
   "app/(authenticated)/components/analysis-brand-picker.tsx": 3,
   "app/(authenticated)/components/audit-history-list.tsx": 15,
   "app/(authenticated)/components/brand-switcher.tsx": 1,
-  "app/(authenticated)/components/create-org-gate.tsx": 4,
   "app/(authenticated)/components/dashboard-answer-buckets.tsx": 17,
   "app/(authenticated)/components/dashboard-deep-analysis.tsx": 8,
   "app/(authenticated)/components/dashboard-kpis.tsx": 42,
@@ -21,7 +20,6 @@
   "app/(authenticated)/components/history-auto-refresh.tsx": 4,
   "app/(authenticated)/components/locked-surface.tsx": 3,
   "app/(authenticated)/components/next-actions-card.tsx": 3,
-  "app/(authenticated)/components/onboarding-tour.tsx": 11,
   "app/(authenticated)/components/partner-badge.tsx": 1,
   "app/(authenticated)/components/partner-cta-client.tsx": 13,
   "app/(authenticated)/components/prompt-scoreboard.tsx": 8,
@@ -44,7 +42,6 @@
   "app/(authenticated)/features/brand/assign-brand-form.tsx": 44,
   "app/(authenticated)/features/brand/prompt-wizard.tsx": 32,
   "app/(authenticated)/features/brand/start-tracking-button.tsx": 11,
-  "app/(authenticated)/features/invite/redeem-form.tsx": 6,
   "app/(authenticated)/features/site-readiness/execution-playbook.tsx": 22,
   "app/(authenticated)/features/site-readiness/pagespeed-panel.tsx": 2,
   "app/(authenticated)/features/site-readiness/site-readiness-form.tsx": 1,
@@ -61,7 +58,5 @@
   "app/(authenticated)/prompts/prompt-list.tsx": 26,
   "app/(authenticated)/site-audit/integrations/page.tsx": 127,
   "app/(authenticated)/site-audit/page.tsx": 3,
-  "app/(authenticated)/sources/page.tsx": 17,
-  "app/(authenticated)/welcome/page.tsx": 2,
-  "app/(unauthenticated)/layout.tsx": 10
+  "app/(authenticated)/sources/page.tsx": 17
 }

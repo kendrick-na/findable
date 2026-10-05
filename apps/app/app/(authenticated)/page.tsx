@@ -21,6 +21,7 @@ import {
   scopedLatestRunTracking,
   scopedTracking,
 } from "@/lib/db/scoped";
+import { getAppDictionary } from "@/lib/i18n";
 import { hasCompletedSetup } from "@/lib/onboarding";
 import { BrandSwitcher } from "./components/brand-switcher";
 import { DashboardAnswerBuckets } from "./components/dashboard-answer-buckets";
@@ -188,6 +189,7 @@ const App = async ({ searchParams }: AppProperties) => {
   const user = await currentUser();
   const email = user ? getPrimaryEmail(user) : null;
   const { orgId } = await auth();
+  const dict = await getAppDictionary();
   if (orgId && !(await hasCompletedSetup())) {
     redirect("/welcome");
   }
@@ -645,7 +647,16 @@ const App = async ({ searchParams }: AppProperties) => {
                 19번 줄) — 단 Findable은 **실제 측정 결과**(`hasData` 분기 안) 위에서만
                 뜬다. 빈 상태(`DashboardEmptyState`)에는 안 뜬다 — 볼 데이터가 없는
                 화면을 투어할 이유가 없다. */}
-            {currentRunPublishable ? <OnboardingTour /> : null}
+            {currentRunPublishable ? (
+              <OnboardingTour
+                labels={{
+                  ...dict.tour,
+                  next: dict.onboarding.next,
+                  skip: dict.onboarding.skip,
+                  stepOf: dict.onboarding.stepOf,
+                }}
+              />
+            ) : null}
 
             {/* 🔴 「최근 측정 이력」 섹션 제거 (세션N-34 · N-33 확정사항 7번 실행).
                 같은 `AuditHistoryList` 가 여기와 `/history` **두 곳에 렌더**되고 있었다.

@@ -267,7 +267,9 @@
       "editorEmpty": "Nothing yet.",
       "editorSave": "Save",
       "editorSaved": "Saved. It applies from the next measurement.",
-      "editorDirtyHint": "Saving applies from the next measurement."
+      "editorDirtyHint": "Saving applies from the next measurement.",
+      "metaTitle": "Get started · Findable",
+      "metaDescription": "Enter just your domain and we'll show you what AI says about you."
     },
     "content": {
       "navLabel": "My content",
@@ -645,6 +647,49 @@
       "cancel": "Cancel",
       "download": "Download",
       "downloading": "Downloading…"
+    },
+    "authPanel": {
+      "zeroClickStat": "of Google searches end without a click (H1 2026)",
+      "trafficForecastStat": "forecast drop in traditional search traffic by 2026",
+      "gartnerSource": "— Gartner (forecast published in 2024)",
+      "quote": "Is AI recommending your brand right now?",
+      "lede": "From ChatGPT · Claude · Perplexity · Gemini answers to Naver AI Briefing and Naver · Daum search results — we track where your brand shows up, in Korean and English.",
+      "credentialOverEdge": "Selected · KAIST OverEdge 2026",
+      "credentialAward": "Grand Prize · Generative AI Competition",
+      "credentialDataset": "Published K-GEO-Bench open dataset (CC BY 4.0)"
+    },
+    "orgGate": {
+      "title": "Create a workspace to get started",
+      "body": "Measurements, brands and reports are saved per workspace. Enter your company or team name here. You'll confirm the public brand name and domain in the next step."
+    },
+    "tour": {
+      "kpisTitle": "How often AI mentions you",
+      "kpisBody": "See at a glance how often AI engines like ChatGPT and Claude mention your brand, where you rank, and the sentiment.",
+      "actionsTitle": "What to fix now",
+      "actionsBody": "Based on your measurement, we recommend what to do next here.",
+      "trendTitle": "Change over time",
+      "trendBody": "Each measurement adds to a trend of how your visibility changes.",
+      "truthMirrorTitle": "What AI actually said",
+      "truthMirrorBody": "See the original AI answers word for word, not a summary.",
+      "done": "Done"
+    },
+    "invite": {
+      "title": "Invite code",
+      "lede": "If you received a code from a program, enter it here. It applies right away.",
+      "codeLabel": "Code",
+      "codePlaceholder": "e.g. OVEREDGE2026",
+      "submit": "Apply",
+      "submitting": "Applying…",
+      "success": "Applied. You can use it until {date}.",
+      "errorSignIn": "Sign in and select an organization.",
+      "errorEmpty": "Enter an invite code.",
+      "errorOrgNotReady": "We couldn't set up your organization. Please try again in a moment.",
+      "errorHasPlan": "You already have an active plan. Invite codes can only be used on the free plan.",
+      "errorNotFound": "That code doesn't exist. Please check it and try again.",
+      "errorExpired": "This code has expired.",
+      "errorLimit": "This code has reached its usage limit.",
+      "errorAlreadyUsed": "You've already used this code.",
+      "errorFailed": "We couldn't apply the code. Please try again in a moment."
     }
   }
 }
