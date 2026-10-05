@@ -3,6 +3,7 @@ import { auth } from "@repo/auth/server";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { env } from "@/env";
 import {
   findSenderAlias,
   listSenderAliases,
@@ -14,6 +15,12 @@ import {
   loadLeads,
   OUTREACH_SENDER,
 } from "@/lib/ax-mail/leads";
+import {
+  approvedReportUrlByDomain,
+  bareDomain,
+  listIssuedReports,
+  reportWebUrl,
+} from "@/lib/client-report/admin";
 import { getAppDictionary } from "@/lib/i18n";
 import { Header } from "../../components/header";
 import {
@@ -79,7 +86,8 @@ export default async function AxMailPage({
   if (!(orgId && userId && (await isAdmin()))) {
     notFound();
   }
-  const [t, params, sender, drafted] = await Promise.all([
+  const webUrl = reportWebUrl(env.NEXT_PUBLIC_WEB_URL);
+  const [t, params, sender, drafted, issued] = await Promise.all([
     getAppDictionary(),
     searchParams,
     senderState(orgId, userId),
@@ -93,9 +101,16 @@ export default async function AxMailPage({
         select: { leadId: true },
       })
       .catch(() => []),
+    // T8 — 승인·공개 중인 v12 발행본만 영업 링크로 쓴다(초안·만료·폐기·v1 제외).
+    listIssuedReports(webUrl).catch(() => []),
   ]);
+  const reportUrls = approvedReportUrlByDomain(issued);
   const draftedIds = new Set(drafted.map((row) => row.leadId));
-  const leads: WorkbenchLead[] = loadLeads().map((lead) => {
+  const leads: WorkbenchLead[] = loadLeads().map((snapshotLead) => {
+    const lead = {
+      ...snapshotLead,
+      reportUrl: reportUrls.get(bareDomain(snapshotLead.domain)) ?? null,
+    };
     const readiness = leadReadiness(lead);
     return {
       lead,
