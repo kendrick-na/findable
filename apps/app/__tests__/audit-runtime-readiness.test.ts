@@ -58,4 +58,30 @@ describe("getAuditRuntimeReadiness", () => {
       })
     ).toEqual({ ready: true });
   });
+
+  it("skips provider keys in local stub mode", () => {
+    expect(
+      getAuditRuntimeReadiness({
+        DATABASE_URL: "postgres://db",
+        FINDABLE_AUDIT_STUB_MODE: "1",
+      })
+    ).toEqual({ ready: true });
+  });
+
+  it("never skips provider keys on production, even with the stub flag", () => {
+    expect(
+      getAuditRuntimeReadiness({
+        DATABASE_URL: "postgres://db",
+        FINDABLE_AUDIT_STUB_MODE: "1",
+        VERCEL_ENV: "production",
+      }).ready
+    ).toBe(false);
+  });
+
+  it("still requires a database in stub mode", () => {
+    expect(getAuditRuntimeReadiness({ VERCEL_ENV: "preview" })).toEqual({
+      ready: false,
+      missing: ["DATABASE_URL"],
+    });
+  });
 });
