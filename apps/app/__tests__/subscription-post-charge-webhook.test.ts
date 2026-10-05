@@ -851,3 +851,49 @@ describe("durable PaymentRefund record [R]", () => {
     expect(fixture.log.error).not.toHaveBeenCalled();
   });
 });
+
+describe("renewal scheduling does not overwrite a concurrent change [P2-1]", () => {
+  it("P2-1: an unsubscribe during renewal scheduling stays canceled and the new schedule is cancelled", async () => {
+    expect(await confirm("starter", "race-key")).toMatchObject({ ok: true });
+    const renewalId = fixture.organization.billingNextPaymentId as string;
+    fixture.schedule.mockImplementationOnce(() => {
+      // unsubscribe() lands while PortOne is creating the next schedule.
+      Object.assign(fixture.organization, {
+        billingStatus: "canceled",
+        billingCustomerId: null,
+        billingProvider: null,
+        billingNextPaymentId: null,
+      });
+      return Promise.resolve(undefined);
+    });
+    expect((await postPaid(renewalId)).status).toBe(200);
+    expect(fixture.organization).toMatchObject({
+      billingStatus: "canceled",
+      billingCustomerId: null,
+      billingNextPaymentId: null,
+    });
+    expect(fixture.cancelSchedules).toHaveBeenCalledWith("race-key");
+  });
+
+  it("P2-1 control: a duplicate Paid that already advanced the cycle does not cancel the schedule", async () => {
+    expect(await confirm("starter", "dup-key")).toMatchObject({ ok: true });
+    const renewalId = fixture.organization.billingNextPaymentId as string;
+    let advancedTo: string | null = null;
+    fixture.schedule.mockImplementationOnce((input: { paymentId: string }) => {
+      // A concurrent delivery of the same Paid already recorded this cycle.
+      advancedTo = input.paymentId;
+      Object.assign(fixture.organization, {
+        billingLastPaymentId: renewalId,
+        billingNextPaymentId: input.paymentId,
+      });
+      return Promise.resolve(undefined);
+    });
+    expect((await postPaid(renewalId)).status).toBe(200);
+    expect(fixture.cancelSchedules).not.toHaveBeenCalled();
+    expect(fixture.organization).toMatchObject({
+      billingStatus: "active",
+      billingCustomerId: "dup-key",
+      billingNextPaymentId: advancedTo,
+    });
+  });
+});

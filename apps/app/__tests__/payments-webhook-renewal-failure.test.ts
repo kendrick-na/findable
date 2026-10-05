@@ -21,7 +21,8 @@ const mocks = vi.hoisted(() => ({
   getPortOnePayment: vi.fn(),
   revokePlanFromPayment: vi.fn(),
   grantPlanFromPayment: vi.fn(),
-  organizationUpdate: vi.fn(),
+  // Serves both update and updateMany; updateMany callers read `count`.
+  organizationUpdate: vi.fn(async () => ({ count: 1 })),
   organizationFindFirst: vi.fn(),
   userFindUnique: vi.fn(),
   schedulePaymentWithBillingKey: vi.fn(),

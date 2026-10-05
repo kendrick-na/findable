@@ -576,14 +576,41 @@ async function scheduleFollowingSubscription(input: {
     timeToPay: nextPaymentAt,
   });
 
-  await database.organization.update({
-    where: { id: org.id },
+  // 🔒 P2-1: 예약을 만드는 사이 해지·환불·다른 재전송이 조직 기록을 바꿨을 수 있다.
+  //   읽을 때와 같은 회차·같은 빌링키일 때만 기록한다(무조건 update 는 해지를 덮어 active 로 되살렸다).
+  const recorded = await database.organization.updateMany({
+    where: {
+      id: org.id,
+      billingNextPaymentId: input.paymentId,
+      billingCustomerId: org.billingCustomerId,
+    },
     data: {
       billingStatus: "active",
       billingLastPaymentId: input.paymentId,
       billingNextPaymentId: nextPaymentId,
       billingNextPaymentAt: nextPaymentAt,
     },
+  });
+  if (recorded.count === 1) {
+    return;
+  }
+  const latest = await database.organization.findUnique({
+    where: { id: org.id },
+    select: { billingCustomerId: true, billingNextPaymentId: true },
+  });
+  if (
+    latest?.billingNextPaymentId === nextPaymentId &&
+    latest.billingCustomerId === org.billingCustomerId
+  ) {
+    // 같은 Paid 의 동시 재전송이 이미 이 회차를 기록했다 — 방금 만든 예약이 바로 그 예약이다.
+    return;
+  }
+  // 구독이 그사이 끝났거나 바뀌었다. 방금 만든 예약이 고아로 청구되지 않게 이 빌링키의 예약을 취소한다.
+  // 실패하면 예외 → 호출부가 5xx(재전송).
+  await cancelBillingKeySchedules(org.billingCustomerId);
+  log.warn("payments.webhook.renewal_superseded", {
+    userId: input.userId,
+    paymentId: input.paymentId,
   });
 }
 
