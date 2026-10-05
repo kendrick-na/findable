@@ -21,8 +21,7 @@ const mocks = vi.hoisted(() => ({
   getPortOnePayment: vi.fn(),
   revokePlanFromPayment: vi.fn(),
   grantPlanFromPayment: vi.fn(),
-  // Serves both update and updateMany; updateMany callers read `count`.
-  organizationUpdate: vi.fn(async () => ({ count: 1 })),
+  organizationUpdate: vi.fn(),
   organizationFindFirst: vi.fn(),
   userFindUnique: vi.fn(),
   schedulePaymentWithBillingKey: vi.fn(),
@@ -81,6 +80,8 @@ const statusWrites = () =>
 describe("갱신 결제 실패 웹훅", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Serves both update and updateMany; updateMany callers read `count`.
+    mocks.organizationUpdate.mockResolvedValue({ count: 1 });
     mocks.getPortOnePayment.mockResolvedValue({
       id: RENEWAL_PAYMENT_ID,
       status: "FAILED",
