@@ -1,0 +1,1134 @@
+{
+ "schema": "findable.client-report",
+ "schemaVersion": 2,
+ "version": 1,
+ "templateVersion": "geo-report-template@2026-09-28",
+ "source": {
+  "auditId": "b7f319e1-1d96-4875-a1e1-e7f5e0e814c9",
+  "auditJobId": "b7f319e1-1d96-4875-a1e1-e7f5e0e814c9",
+  "clientSlug": "knowverse-v12-fixture",
+  "completedAt": "2026-09-28T09:15:45.936Z",
+  "importedAt": "2026-09-30T03:00:00.000Z",
+  "resultSha256": "e3538fef8b92607fa363fff1ee9d612da7164ba8570fee8629036e1eeba258ef",
+  "verdictVersion": 2
+ },
+ "review": {
+  "status": "approved",
+  "reviewer": "내부 fixture(실제 검토 아님)",
+  "reviewedAt": "2026-09-30T03:00:00.000Z",
+  "rubric": "brand-identity-v1(가칭 — 확정 필요)"
+ },
+ "denominator": {
+  "engines": [
+   "chatgpt",
+   "claude",
+   "perplexity",
+   "gemini"
+  ],
+  "promptKinds": [
+   "brand"
+  ],
+  "n": 16
+ },
+ "evidence": [
+  {
+   "answerKey": "ffbbc75c67cdeb95b15f78b7fe413830c0a07d42",
+   "quote": "**노우버스(Knowverse)**는 **에듀테크 기반의 AI 교육 서비스 브랜드**로 알려져 있습니다."
+  },
+  {
+   "answerKey": "b6af8b4be606a819cb4dd59b343b90ce10fa51cf",
+   "quote": "노우버스는 인공지능(AI) 기술을 활용한 다양한 서비스를 제공하는 브랜드입니다."
+  }
+ ],
+ "release": {
+  "issuedAt": "2026-09-30T03:00:00.000Z",
+  "expiresAt": null,
+  "sendApproval": null
+ },
+ "config": {
+  "slug": "knowverse-v12-fixture",
+  "brand": "노우버스",
+  "brand_en": "Knowverse",
+  "domain": "knowverse.net",
+  "official_domains": [
+   "knowverse.net",
+   "dd.knowverse.net"
+  ],
+  "lookalike_domains": [
+   "novusinc.co.kr",
+   "novus.kr",
+   "nfxbus.com",
+   "nol-universe.com",
+   "nobus.io"
+  ],
+  "measured_at": "2026.09.28",
+  "issued_at": "2026.09.30",
+  "audit_id": "b7f319e1-1d96-4875-a1e1-e7f5e0e814c9",
+  "questions": [
+   "노우버스는 어떤 브랜드이고 어떤 서비스를 제공해?",
+   "노우버스와 비슷한 서비스를 제공하는 브랜드 5곳 추천해줘",
+   "What does 노우버스 offer, and who is it for?",
+   "Top alternatives to 노우버스 and how they differ"
+  ],
+  "question_short": [
+   "브랜드 소개",
+   "유사 브랜드 추천",
+   "서비스 소개 (영문)",
+   "대안 비교 (영문)"
+  ],
+  "official_keywords": [
+   "AI 기술실사 (TechDD)",
+   "CTO 구독",
+   "AX/DX 컨설팅",
+   "AI 강의·교육",
+   "AI 캐릭터 영상 (Tech Chatter)"
+  ],
+  "labels": [
+   {
+    "l": "made",
+    "who": "에듀테크 AI 튜터 브랜드",
+    "q": "학습용 AI 튜터, 교육 콘텐츠 추천을 제공하는 에듀테크 브랜드로 알려져 있습니다"
+   },
+   {
+    "l": "other",
+    "who": "광학기업·웹솔루션 NOVUS",
+    "q": "‘노우버스’와 가장 유사한 브랜드로 노버스(NOVUS) 두 곳이 확인되었습니다"
+   },
+   {
+    "l": "other",
+    "who": "성남 온라인 판매업자 / 부산 NOWVERSE",
+    "q": "경기도 성남시에 등록된 온라인 판매 사업자로 확인됩니다"
+   },
+   {
+    "l": "ok",
+    "who": "AI 기술실사·CTO 구독·AX/DX·AI 영상",
+    "q": "AI 캐릭터 영상 제작, CTO 구독, AI 기술실사(TechDD), AX/DX 컨설팅을 제공합니다"
+   },
+   {
+    "l": "made",
+    "who": "전세버스 ‘NowBus’",
+    "q": "전세버스·단체이동·셔틀 서비스를 제공하는 브랜드들입니다"
+   },
+   {
+    "l": "other",
+    "who": "구독 공유 플랫폼 NFXBUS",
+    "q": "넷플릭스·유튜브 프리미엄 구독을 공유해주는 플랫폼임을 확인했습니다"
+   },
+   {
+    "l": "other",
+    "who": "여행사 노랑풍선",
+    "q": "‘노우버스’가 노랑풍선을 뜻하신 거라면…"
+   },
+   {
+    "l": "ok",
+    "who": "기술 컨설팅 기업 (경쟁사 5곳 제시)",
+    "q": "CTO-as-a-Service, AI 기술실사, AX/DX 컨설팅을 제공하는 기술 컨설팅 기업입니다"
+   },
+   {
+    "l": "made",
+    "who": "지식·학습 콘텐츠 플랫폼",
+    "q": "지식·학습 콘텐츠를 만들고 운영하는 플랫폼으로 소개됩니다"
+   },
+   {
+    "l": "unknown",
+    "who": "모른다",
+    "q": "노우버스에 대한 구체적인 정보를 찾지 못했습니다"
+   },
+   {
+    "l": "ok",
+    "who": "AI·디지털 전환 서비스 기업",
+    "q": "기술실사, 구독형 CTO, AX/DX 컨설팅, AI 영상 제작을 제공합니다"
+   },
+   {
+    "l": "ok",
+    "who": "기업용 AI 서비스 기업",
+    "q": "기업과 기관을 위한 AI 캐릭터 영상, 기술실사(TechDD) 등을 제공합니다"
+   },
+   {
+    "l": "unknown",
+    "who": "모른다",
+    "q": "어떤 제품·서비스를 뜻하는지 맥락이 필요합니다"
+   },
+   {
+    "l": "unknown",
+    "who": "모른다",
+    "q": "노우버스에 대한 신뢰할 만한 정보를 찾지 못했습니다"
+   },
+   {
+    "l": "other",
+    "who": "Nozbe·Novu로 추정",
+    "q": "이름이 비슷한 Nozbe와 Novu가 있어, 어느 쪽인지 알려주세요"
+   },
+   {
+    "l": "ok",
+    "who": "AI 기술·컨설팅 한국 기업",
+    "q": "AI 기반 기술·컨설팅 서비스를 제공하는 한국 기업입니다"
+   }
+  ],
+  "cover_title": "노우버스는<br>AI에게 <em>어떻게</em><br>보이고 있을까?",
+  "cover_sub": "ChatGPT·Claude·Perplexity·Gemini 4곳에 브랜드명을 넣은 질문 4개,<br>답변 16건으로 분석한 노우버스 AI 검색 진단 리포트",
+  "why": [
+   {
+    "h": "고객은 이제 검색창보다 AI에게 먼저 묻습니다",
+    "p": "기술실사 업체를 찾는 투자 심사역, CTO가 없는 스타트업 대표는 “기술실사 어디에 맡겨?”, “CTO 구독 서비스 추천해줘”처럼 <b>AI에게 먼저 질문</b>하고, AI가 제시한 회사 목록에서 상담처를 고릅니다. AI가 우리 회사를 모르거나 <b>다른 회사로 오해하면</b>, AI의 설명이 고객이 처음 만나는 노우버스 소개가 될 수 있습니다."
+   },
+   {
+    "h": "그래서 AI가 노우버스를 어떻게 설명하는지 직접 물어봤습니다",
+    "p": "Findable은 ChatGPT, Claude, Perplexity, Gemini <b>AI 4곳</b>에 노우버스 이름을 넣은 질문 4가지를 한국어·영어로 던지고, 돌아온 <b>16개 답변 원문을 한 건씩 판별</b>했습니다. 답변이 노우버스를 정확히 설명했는지, 다른 회사와 혼동했는지, 없는 내용을 지어냈는지를 나누고, AI가 어떤 출처를 근거로 답했는지도 함께 추적했습니다. 네이버·다음 일반 검색과 HyperCLOVA X는 분모에서 뺐습니다."
+   },
+   {
+    "h": "이 리포트는 점수표가 아니라 개선 순서표입니다",
+    "p": "무엇이 잘못 전달되고 있는지, 왜 그런지, <b>무엇부터 고치면 되는지</b>를 한 흐름으로 정리했습니다. 마지막 장의 20일 개선·재측정 계획으로 바로 이어집니다."
+   }
+  ],
+  "insights_accuracy": [
+   "노우버스를 정확히 설명한 엔진은 사실상 <b>Gemini 하나</b>입니다. Gemini는 4개 질문 모두 실제 서비스(AI 기술실사·CTO 구독·AX/DX·AI 영상)를 맞혔고, Perplexity는 영문 질문 1건에서만 맞혔습니다.",
+   "<b>ChatGPT와 Claude는 4개 질문 모두 맞히지 못했습니다.</b> ChatGPT는 ‘에듀테크 AI 튜터 브랜드’, Claude는 ‘광학기업·웹솔루션 NOVUS’처럼 실제와 다른 설명을 내놓았습니다."
+  ],
+  "insights_matrix": [
+   "‘노우버스’라는 이름 자체가 <b>NOVUS·NowBus·NOWVERSE</b> 등 발음이 비슷한 이름과 섞입니다. 이름만 들은 AI는 가장 그럴듯한 다른 회사를 골라 답합니다.",
+   "‘비슷한 브랜드 추천’ 질문에서는 AI 4곳 중 <b>Gemini만</b> 실제 경쟁군(CTO 대행·기술 컨설팅)을 제시했습니다. 나머지는 전세버스·구독 공유·여행사 등을 추천했습니다."
+  ],
+  "insights_citation": [
+   "정답을 낸 답변 5개 중 <b>5개 모두가 공식 사이트(knowverse.net)를 직접 인용</b>했습니다. 반대로 틀리거나 답하지 못한 답변 11개 중 공식 사이트를 인용한 답변은 <b>0개</b>였습니다.",
+   "틀린 답변의 출처에는 네이버 블로그, 동명 회사 사이트(novusinc.co.kr·nfxbus.com), 기업정보 사이트(bizwiki·사람인)가 있었습니다. 다만 bizwiki·사람인은 정확한 답변의 출처에도 있었습니다. <b>공식 사이트에 닿지 못한 답변이 비슷한 이름의 출처로 채워진 것으로 보입니다.</b>"
+  ],
+  "causes": [
+   {
+    "n": "01",
+    "h": "이름이 비슷한 회사가 너무 많습니다",
+    "p": "노우버스·NOVUS·NowBus·NOWVERSE·노랑풍선까지, AI는 한글 발음이 비슷한 이름을 같은 대상으로 묶습니다. 영문명 <b>Knowverse</b>와 한글명이 함께 쓰인 공식 문서가 부족하면 AI는 어느 쪽이 맞는지 판단하지 못합니다."
+   },
+   {
+    "n": "02",
+    "h": "공식 사이트 밖에서 노우버스를 설명하는 글이 확인되지 않았습니다",
+    "p": "AI가 참고한 네이버 블로그·뉴스·기업정보 사이트에서 노우버스의 서비스를 설명한 글은 확인되지 않았습니다. 정확한 답변 5건은 모두 공식 사이트를 출처로 들었습니다(Gemini 4, Perplexity 1). 외부 소개글 부족과의 관계는 재측정으로 확인할 <b>가설</b>입니다."
+   },
+   {
+    "n": "03",
+    "h": "서비스 5개가 한 이름 아래 섞여 있습니다",
+    "p": "AI 기술실사·CTO 구독·AX/DX·강의·AI 영상이 한 브랜드에 모여 있어, 정답을 낸 답변도 “AI 기술을 활용한 다양한 서비스”처럼 뭉뚱그려 설명한 경우가 있었습니다. 기관용 기술실사 문의는 TechScan 페이지(dd.knowverse.net)로 연결되는 점도 확인됐습니다."
+   }
+  ],
+  "site_checks": [
+   {
+    "item": "홈 title·description",
+    "state": "ok",
+    "note": "고유 제목·설명 있음"
+   },
+   {
+    "item": "canonical (대표 주소)",
+    "state": "ok",
+    "note": "홈에서 확인"
+   },
+   {
+    "item": "구조화 데이터 (JSON-LD)",
+    "state": "ok",
+    "note": "홈에서 확인"
+   },
+   {
+    "item": "robots.txt · sitemap.xml",
+    "state": "ok",
+    "note": "둘 다 정상 응답(200)"
+   },
+   {
+    "item": "한글명+영문명 병기",
+    "state": "warn",
+    "note": "‘노우버스(Knowverse)’ 병기 문장 부족"
+   },
+   {
+    "item": "외부 채널의 회사 소개글",
+    "state": "bad",
+    "note": "블로그·뉴스·기업정보에서 서비스 설명 미확인"
+   },
+   {
+    "item": "기술실사 문의 목적지",
+    "state": "warn",
+    "note": "기관용 소개 → TechScan 루트로 이동"
+   }
+  ],
+  "playbook": [
+   {
+    "p": "P0",
+    "h": "회사 소개 한 문장을 고정하세요",
+    "d": "“노우버스(Knowverse)는 AI 기술실사·CTO 구독·AX/DX 컨설팅을 제공하는 AI 전문회사입니다.” 같은 한 문장을 홈·회사소개·서비스 페이지 첫 줄에 <b>똑같이</b> 넣습니다.",
+    "kind": "GEO 실험"
+   },
+   {
+    "p": "P0",
+    "h": "기관용 기술실사 버튼을 TechDD Pro로 바로 연결하세요",
+    "d": "회사 사이트의 ‘VC·PEF를 위한 AI 기술실사’ 버튼이 TechScan 루트가 아닌 <b>dd.knowverse.net/b2b</b>로 가도록 바꿉니다.",
+    "kind": "UX·전환"
+   },
+   {
+    "p": "P1",
+    "h": "AI가 많이 읽는 외부 채널에 회사 소개를 남기세요",
+    "d": "네이버 블로그·브런치·보도자료·기업정보(사람인·bizwiki 등록 정보)에 한글명·영문명·대표 서비스를 담은 소개글을 3건 이상 발행합니다.",
+    "kind": "GEO 실험"
+   },
+   {
+    "p": "P1",
+    "h": "서비스마다 ‘대상·산출물·가격’ FAQ를 붙이세요",
+    "d": "“CTO 구독은 누구에게 맞나요?”, “기술실사 결과물은 무엇인가요?”처럼 고객 질문에 바로 답하는 FAQ를 서비스별 3~5개 추가합니다.",
+    "kind": "GEO 실험"
+   },
+   {
+    "p": "P2",
+    "h": "구매형 질문으로 다시 측정하세요",
+    "d": "브랜드 이름 질문뿐 아니라 “스타트업 CTO 구독 서비스 추천”, “VC 기술실사 업체” 같은 <b>이름 없이 묻는 질문</b>에서 노우버스가 추천되는지 측정합니다.",
+    "kind": "측정 설계"
+   }
+  ],
+  "poc": [
+   {
+    "d": "1~3일",
+    "h": "질문·서비스 합의",
+    "p": "우선 판매 서비스와 고객 질문 6~10개 확정"
+   },
+   {
+    "d": "4~10일",
+    "h": "P0 수정",
+    "p": "소개 문장 고정·기술실사 버튼 연결"
+   },
+   {
+    "d": "11~17일",
+    "h": "P1 발행",
+    "p": "외부 소개글·서비스 FAQ 발행"
+   },
+   {
+    "d": "18~20일",
+    "h": "재측정·해석",
+    "p": "같은 질문·엔진으로 재측정 후 30분 해석 미팅"
+   }
+  ],
+  "site_checked_at": "2026.09.28",
+  "headlines": {
+   "p7": "정확했던 5건은 모두 출처에 공식 사이트가 있었습니다",
+   "p8": "AI가 노우버스를 놓친 것으로 보이는 이유는 세 가지입니다"
+  },
+  "cover_engines": [
+   "chatgpt",
+   "claude",
+   "perplexity",
+   "gemini"
+  ],
+  "site_checked_label": "2026.09.28 확인 · 09.30 재확인(동일)",
+  "excluded_note": "네이버·다음 일반 검색과 HyperCLOVA X(국문 2문항만 실행)는 분모에서 제외했습니다.",
+  "cta9_h": "이 결과를 20분 함께 확인해 볼까요?",
+  "cta9_p": "답변 원문과 판별 근거를 함께 보고, 먼저 확인할 항목을 정합니다. 수정 문구 지원 범위는 미팅에서 정합니다.",
+  "cta9_btn": "20분 결과 리뷰 요청 →",
+  "give_h": "재측정 시 함께 볼 것 (범위는 미팅에서 확정)",
+  "give2_p": "P0·P1 항목의 수정안과 문구 초안 (필요 시 범위 협의)",
+  "category_share": {
+   "questions": 6,
+   "answers": 24,
+   "examples": [
+    "[예시] 스타트업 CTO 구독 서비스 추천해줘",
+    "[예시] VC 기술실사 업체 어디가 좋아?",
+    "[예시] AI 도입 컨설팅 회사 추천"
+   ],
+   "brands": [
+    {
+     "name": "[예시] 경쟁사 A",
+     "mentions": 11,
+     "pct": 45.8
+    },
+    {
+     "name": "[예시] 경쟁사 B",
+     "mentions": 8,
+     "pct": 33.3
+    },
+    {
+     "name": "[예시] 경쟁사 C",
+     "mentions": 6,
+     "pct": 25.0
+    },
+    {
+     "name": "노우버스",
+     "mentions": 3,
+     "pct": 12.5,
+     "self": true
+    },
+    {
+     "name": "[예시] 경쟁사 D",
+     "mentions": 2,
+     "pct": 8.3
+    }
+   ],
+   "note": "⚠️ 화면 확인용 <b>예시 데이터</b>입니다. 실제 리포트는 실제 검색어 기반 측정값으로 채워집니다."
+  },
+  "topic_winners": [
+   {
+    "topic": "[예시] 기술실사",
+    "question": "VC 기술실사 업체 추천",
+    "top": [
+     "경쟁사 A",
+     "노우버스",
+     "경쟁사 C"
+    ],
+    "self_rank": 2
+   },
+   {
+    "topic": "[예시] CTO 구독",
+    "question": "스타트업 CTO 구독 서비스",
+    "top": [
+     "경쟁사 B",
+     "경쟁사 A",
+     "경쟁사 D"
+    ],
+    "self_rank": null
+   },
+   {
+    "topic": "[예시] AI 교육",
+    "question": "기업 AI 교육 업체 어디가 좋아",
+    "top": [
+     "경쟁사 C",
+     "경쟁사 B",
+     "경쟁사 A"
+    ],
+    "self_rank": null
+   },
+   {
+    "topic": "[예시] AX 컨설팅",
+    "question": "AI 전환 컨설팅 회사 추천",
+    "top": [
+     "경쟁사 A",
+     "경쟁사 D",
+     "노우버스"
+    ],
+    "self_rank": 3
+   }
+  ],
+  "revenue_opportunity": {
+   "annual_revenue": 1000000000,
+   "revenue_source": "[예시] 실제 아님",
+   "ai_share_pct": 7,
+   "monthly": 5833333,
+   "basis": [
+    "[예시] 근거 1 — 실제 리포트에는 출처 문장과 링크가 들어갑니다.",
+    "[예시] 근거 2 — AI 관여 구매 비중 7%의 출처."
+   ],
+   "support": {
+    "label": "[예시] 검색 경로로 본 보조 시산",
+    "monthly": 3200000,
+    "note": "[예시] 매출 × 검색 유입 비중 × AI 브리핑 노출 × 클릭 상승"
+   },
+   "future": "[예시] 2030년에는 AI가 대신 구매하는 비중이 10~20%로 커질 것으로 전망됩니다."
+  }
+ },
+ "computed": {
+  "answers": [
+   {
+    "engine": "chatgpt",
+    "q": 0,
+    "label": "made",
+    "who": "에듀테크 AI 튜터 브랜드",
+    "quote": "학습용 AI 튜터, 교육 콘텐츠 추천을 제공하는 에듀테크 브랜드로 알려져 있습니다",
+    "domains": [],
+    "official": 0
+   },
+   {
+    "engine": "claude",
+    "q": 0,
+    "label": "other",
+    "who": "광학기업·웹솔루션 NOVUS",
+    "quote": "‘노우버스’와 가장 유사한 브랜드로 노버스(NOVUS) 두 곳이 확인되었습니다",
+    "domains": [
+     "novusinc.co.kr",
+     "novus.kr"
+    ],
+    "official": 0
+   },
+   {
+    "engine": "perplexity",
+    "q": 0,
+    "label": "other",
+    "who": "성남 온라인 판매업자 / 부산 NOWVERSE",
+    "quote": "경기도 성남시에 등록된 온라인 판매 사업자로 확인됩니다",
+    "domains": [
+     "bizwiki.co.kr",
+     "saramin.co.kr",
+     "v.daum.net",
+     "blog.naver.com",
+     "fnnews.com",
+     "saas.or.kr",
+     "outstanding.kr",
+     "nuvoir.kr",
+     "kr.investing.com",
+     "gangnampelican.com"
+    ],
+    "official": 0
+   },
+   {
+    "engine": "gemini",
+    "q": 0,
+    "label": "ok",
+    "who": "AI 기술실사·CTO 구독·AX/DX·AI 영상",
+    "quote": "AI 캐릭터 영상 제작, CTO 구독, AI 기술실사(TechDD), AX/DX 컨설팅을 제공합니다",
+    "domains": [
+     "knowverse.net",
+     "knowverse.net",
+     "knowverse.net",
+     "knowverse.net"
+    ],
+    "official": 4
+   },
+   {
+    "engine": "chatgpt",
+    "q": 1,
+    "label": "made",
+    "who": "전세버스 ‘NowBus’",
+    "quote": "전세버스·단체이동·셔틀 서비스를 제공하는 브랜드들입니다",
+    "domains": [],
+    "official": 0
+   },
+   {
+    "engine": "claude",
+    "q": 1,
+    "label": "other",
+    "who": "구독 공유 플랫폼 NFXBUS",
+    "quote": "넷플릭스·유튜브 프리미엄 구독을 공유해주는 플랫폼임을 확인했습니다",
+    "domains": [
+     "nfxbus.com",
+     "pickle.plus"
+    ],
+    "official": 0
+   },
+   {
+    "engine": "perplexity",
+    "q": 1,
+    "label": "other",
+    "who": "여행사 노랑풍선",
+    "quote": "‘노우버스’가 노랑풍선을 뜻하신 거라면…",
+    "domains": [
+     "nol-universe.com",
+     "turu.co.kr",
+     "byrdie.com",
+     "play.google.com",
+     "elle.com",
+     "mockingwalking.tistory.com",
+     "soomgo.com",
+     "newsis.com",
+     "inven.ai",
+     "ping.fm"
+    ],
+    "official": 0
+   },
+   {
+    "engine": "gemini",
+    "q": 1,
+    "label": "ok",
+    "who": "기술 컨설팅 기업 (경쟁사 5곳 제시)",
+    "quote": "CTO-as-a-Service, AI 기술실사, AX/DX 컨설팅을 제공하는 기술 컨설팅 기업입니다",
+    "domains": [
+     "knowverse.net",
+     "knowverse.net",
+     "novus.kr"
+    ],
+    "official": 2
+   },
+   {
+    "engine": "chatgpt",
+    "q": 2,
+    "label": "made",
+    "who": "지식·학습 콘텐츠 플랫폼",
+    "quote": "지식·학습 콘텐츠를 만들고 운영하는 플랫폼으로 소개됩니다",
+    "domains": [],
+    "official": 0
+   },
+   {
+    "engine": "claude",
+    "q": 2,
+    "label": "unknown",
+    "who": "모른다",
+    "quote": "노우버스에 대한 구체적인 정보를 찾지 못했습니다",
+    "domains": [],
+    "official": 0
+   },
+   {
+    "engine": "perplexity",
+    "q": 2,
+    "label": "ok",
+    "who": "AI·디지털 전환 서비스 기업",
+    "quote": "기술실사, 구독형 CTO, AX/DX 컨설팅, AI 영상 제작을 제공합니다",
+    "domains": [
+     "linkedin.com",
+     "juku.ameba.jp",
+     "bizwiki.co.kr",
+     "knowverse.net",
+     "nol-universe.com",
+     "support.nobus.io",
+     "novus-uae.com",
+     "nobus.io",
+     "datanyze.com",
+     "saramin.co.kr"
+    ],
+    "official": 1
+   },
+   {
+    "engine": "gemini",
+    "q": 2,
+    "label": "ok",
+    "who": "기업용 AI 서비스 기업",
+    "quote": "기업과 기관을 위한 AI 캐릭터 영상, 기술실사(TechDD) 등을 제공합니다",
+    "domains": [
+     "knowverse.net",
+     "knowverse.net",
+     "knowverse.net",
+     "novus.kr",
+     "knowverse.net"
+    ],
+    "official": 4
+   },
+   {
+    "engine": "chatgpt",
+    "q": 3,
+    "label": "unknown",
+    "who": "모른다",
+    "quote": "어떤 제품·서비스를 뜻하는지 맥락이 필요합니다",
+    "domains": [],
+    "official": 0
+   },
+   {
+    "engine": "claude",
+    "q": 3,
+    "label": "unknown",
+    "who": "모른다",
+    "quote": "노우버스에 대한 신뢰할 만한 정보를 찾지 못했습니다",
+    "domains": [],
+    "official": 0
+   },
+   {
+    "engine": "perplexity",
+    "q": 3,
+    "label": "other",
+    "who": "Nozbe·Novu로 추정",
+    "quote": "이름이 비슷한 Nozbe와 Novu가 있어, 어느 쪽인지 알려주세요",
+    "domains": [
+     "alternativeto.net",
+     "clickup.com",
+     "thebrandhopper.com",
+     "remio.ai",
+     "alternative.me",
+     "techfundingnews.com",
+     "noizz.io",
+     "topbusinesssoftware.com",
+     "findalternative.to",
+     "toolfinder.com"
+    ],
+    "official": 0
+   },
+   {
+    "engine": "gemini",
+    "q": 3,
+    "label": "ok",
+    "who": "AI 기술·컨설팅 한국 기업",
+    "quote": "AI 기반 기술·컨설팅 서비스를 제공하는 한국 기업입니다",
+    "domains": [
+     "knowverse.net",
+     "intimetec.com",
+     "bureauveritas.co.kr",
+     "ey.com",
+     "pwcconsulting.co.kr",
+     "gamgi.ai",
+     "gownet.com",
+     "netgroup.com",
+     "cloudblue.com",
+     "knowverse.net",
+     "tuvsud.com",
+     "legaltech.co.kr",
+     "youtube.com",
+     "domoai.app",
+     "youtube.com",
+     "youtube.com",
+     "youtube.com"
+    ],
+    "official": 2
+   }
+  ],
+  "engines": [
+   {
+    "id": "gemini",
+    "name": "Gemini",
+    "n": 4,
+    "ok": 4,
+    "rate": 100,
+    "other": 0,
+    "made": 0,
+    "generic": 0,
+    "unknown": 0,
+    "cites": 29,
+    "official": 12,
+    "cells": {
+     "0": {
+      "engine": "gemini",
+      "q": 0,
+      "label": "ok",
+      "who": "AI 기술실사·CTO 구독·AX/DX·AI 영상",
+      "quote": "AI 캐릭터 영상 제작, CTO 구독, AI 기술실사(TechDD), AX/DX 컨설팅을 제공합니다",
+      "domains": [
+       "knowverse.net",
+       "knowverse.net",
+       "knowverse.net",
+       "knowverse.net"
+      ],
+      "official": 4
+     },
+     "1": {
+      "engine": "gemini",
+      "q": 1,
+      "label": "ok",
+      "who": "기술 컨설팅 기업 (경쟁사 5곳 제시)",
+      "quote": "CTO-as-a-Service, AI 기술실사, AX/DX 컨설팅을 제공하는 기술 컨설팅 기업입니다",
+      "domains": [
+       "knowverse.net",
+       "knowverse.net",
+       "novus.kr"
+      ],
+      "official": 2
+     },
+     "2": {
+      "engine": "gemini",
+      "q": 2,
+      "label": "ok",
+      "who": "기업용 AI 서비스 기업",
+      "quote": "기업과 기관을 위한 AI 캐릭터 영상, 기술실사(TechDD) 등을 제공합니다",
+      "domains": [
+       "knowverse.net",
+       "knowverse.net",
+       "knowverse.net",
+       "novus.kr",
+       "knowverse.net"
+      ],
+      "official": 4
+     },
+     "3": {
+      "engine": "gemini",
+      "q": 3,
+      "label": "ok",
+      "who": "AI 기술·컨설팅 한국 기업",
+      "quote": "AI 기반 기술·컨설팅 서비스를 제공하는 한국 기업입니다",
+      "domains": [
+       "knowverse.net",
+       "intimetec.com",
+       "bureauveritas.co.kr",
+       "ey.com",
+       "pwcconsulting.co.kr",
+       "gamgi.ai",
+       "gownet.com",
+       "netgroup.com",
+       "cloudblue.com",
+       "knowverse.net",
+       "tuvsud.com",
+       "legaltech.co.kr",
+       "youtube.com",
+       "domoai.app",
+       "youtube.com",
+       "youtube.com",
+       "youtube.com"
+      ],
+      "official": 2
+     }
+    }
+   },
+   {
+    "id": "perplexity",
+    "name": "Perplexity",
+    "n": 4,
+    "ok": 1,
+    "rate": 25,
+    "other": 3,
+    "made": 0,
+    "generic": 0,
+    "unknown": 0,
+    "cites": 40,
+    "official": 1,
+    "cells": {
+     "0": {
+      "engine": "perplexity",
+      "q": 0,
+      "label": "other",
+      "who": "성남 온라인 판매업자 / 부산 NOWVERSE",
+      "quote": "경기도 성남시에 등록된 온라인 판매 사업자로 확인됩니다",
+      "domains": [
+       "bizwiki.co.kr",
+       "saramin.co.kr",
+       "v.daum.net",
+       "blog.naver.com",
+       "fnnews.com",
+       "saas.or.kr",
+       "outstanding.kr",
+       "nuvoir.kr",
+       "kr.investing.com",
+       "gangnampelican.com"
+      ],
+      "official": 0
+     },
+     "1": {
+      "engine": "perplexity",
+      "q": 1,
+      "label": "other",
+      "who": "여행사 노랑풍선",
+      "quote": "‘노우버스’가 노랑풍선을 뜻하신 거라면…",
+      "domains": [
+       "nol-universe.com",
+       "turu.co.kr",
+       "byrdie.com",
+       "play.google.com",
+       "elle.com",
+       "mockingwalking.tistory.com",
+       "soomgo.com",
+       "newsis.com",
+       "inven.ai",
+       "ping.fm"
+      ],
+      "official": 0
+     },
+     "2": {
+      "engine": "perplexity",
+      "q": 2,
+      "label": "ok",
+      "who": "AI·디지털 전환 서비스 기업",
+      "quote": "기술실사, 구독형 CTO, AX/DX 컨설팅, AI 영상 제작을 제공합니다",
+      "domains": [
+       "linkedin.com",
+       "juku.ameba.jp",
+       "bizwiki.co.kr",
+       "knowverse.net",
+       "nol-universe.com",
+       "support.nobus.io",
+       "novus-uae.com",
+       "nobus.io",
+       "datanyze.com",
+       "saramin.co.kr"
+      ],
+      "official": 1
+     },
+     "3": {
+      "engine": "perplexity",
+      "q": 3,
+      "label": "other",
+      "who": "Nozbe·Novu로 추정",
+      "quote": "이름이 비슷한 Nozbe와 Novu가 있어, 어느 쪽인지 알려주세요",
+      "domains": [
+       "alternativeto.net",
+       "clickup.com",
+       "thebrandhopper.com",
+       "remio.ai",
+       "alternative.me",
+       "techfundingnews.com",
+       "noizz.io",
+       "topbusinesssoftware.com",
+       "findalternative.to",
+       "toolfinder.com"
+      ],
+      "official": 0
+     }
+    }
+   },
+   {
+    "id": "chatgpt",
+    "name": "ChatGPT",
+    "n": 4,
+    "ok": 0,
+    "rate": 0,
+    "other": 0,
+    "made": 3,
+    "generic": 0,
+    "unknown": 1,
+    "cites": 0,
+    "official": 0,
+    "cells": {
+     "0": {
+      "engine": "chatgpt",
+      "q": 0,
+      "label": "made",
+      "who": "에듀테크 AI 튜터 브랜드",
+      "quote": "학습용 AI 튜터, 교육 콘텐츠 추천을 제공하는 에듀테크 브랜드로 알려져 있습니다",
+      "domains": [],
+      "official": 0
+     },
+     "1": {
+      "engine": "chatgpt",
+      "q": 1,
+      "label": "made",
+      "who": "전세버스 ‘NowBus’",
+      "quote": "전세버스·단체이동·셔틀 서비스를 제공하는 브랜드들입니다",
+      "domains": [],
+      "official": 0
+     },
+     "2": {
+      "engine": "chatgpt",
+      "q": 2,
+      "label": "made",
+      "who": "지식·학습 콘텐츠 플랫폼",
+      "quote": "지식·학습 콘텐츠를 만들고 운영하는 플랫폼으로 소개됩니다",
+      "domains": [],
+      "official": 0
+     },
+     "3": {
+      "engine": "chatgpt",
+      "q": 3,
+      "label": "unknown",
+      "who": "모른다",
+      "quote": "어떤 제품·서비스를 뜻하는지 맥락이 필요합니다",
+      "domains": [],
+      "official": 0
+     }
+    }
+   },
+   {
+    "id": "claude",
+    "name": "Claude",
+    "n": 4,
+    "ok": 0,
+    "rate": 0,
+    "other": 2,
+    "made": 0,
+    "generic": 0,
+    "unknown": 2,
+    "cites": 4,
+    "official": 0,
+    "cells": {
+     "0": {
+      "engine": "claude",
+      "q": 0,
+      "label": "other",
+      "who": "광학기업·웹솔루션 NOVUS",
+      "quote": "‘노우버스’와 가장 유사한 브랜드로 노버스(NOVUS) 두 곳이 확인되었습니다",
+      "domains": [
+       "novusinc.co.kr",
+       "novus.kr"
+      ],
+      "official": 0
+     },
+     "1": {
+      "engine": "claude",
+      "q": 1,
+      "label": "other",
+      "who": "구독 공유 플랫폼 NFXBUS",
+      "quote": "넷플릭스·유튜브 프리미엄 구독을 공유해주는 플랫폼임을 확인했습니다",
+      "domains": [
+       "nfxbus.com",
+       "pickle.plus"
+      ],
+      "official": 0
+     },
+     "2": {
+      "engine": "claude",
+      "q": 2,
+      "label": "unknown",
+      "who": "모른다",
+      "quote": "노우버스에 대한 구체적인 정보를 찾지 못했습니다",
+      "domains": [],
+      "official": 0
+     },
+     "3": {
+      "engine": "claude",
+      "q": 3,
+      "label": "unknown",
+      "who": "모른다",
+      "quote": "노우버스에 대한 신뢰할 만한 정보를 찾지 못했습니다",
+      "domains": [],
+      "official": 0
+     }
+    }
+   }
+  ],
+  "per_q": [
+   {
+    "i": 0,
+    "text": "노우버스는 어떤 브랜드이고 어떤 서비스를 제공해?",
+    "short": "브랜드 소개",
+    "n": 4,
+    "ok": 1,
+    "rate": 25
+   },
+   {
+    "i": 1,
+    "text": "노우버스와 비슷한 서비스를 제공하는 브랜드 5곳 추천해줘",
+    "short": "유사 브랜드 추천",
+    "n": 4,
+    "ok": 1,
+    "rate": 25
+   },
+   {
+    "i": 2,
+    "text": "What does 노우버스 offer, and who is it for?",
+    "short": "서비스 소개 (영문)",
+    "n": 4,
+    "ok": 2,
+    "rate": 50
+   },
+   {
+    "i": 3,
+    "text": "Top alternatives to 노우버스 and how they differ",
+    "short": "대안 비교 (영문)",
+    "n": 4,
+    "ok": 1,
+    "rate": 25
+   }
+  ],
+  "channels": [
+   {
+    "id": "etc",
+    "name": "기타 웹사이트",
+    "n": 33,
+    "pct": 45.2
+   },
+   {
+    "id": "official",
+    "name": "공식 사이트",
+    "n": 13,
+    "pct": 17.8
+   },
+   {
+    "id": "lookalike",
+    "name": "동명·유사명 회사",
+    "n": 9,
+    "pct": 12.3
+   },
+   {
+    "id": "bizdb",
+    "name": "기업정보·리뷰",
+    "n": 6,
+    "pct": 8.2
+   },
+   {
+    "id": "news",
+    "name": "뉴스·미디어",
+    "n": 6,
+    "pct": 8.2
+   },
+   {
+    "id": "video",
+    "name": "영상",
+    "n": 4,
+    "pct": 5.5
+   },
+   {
+    "id": "blog",
+    "name": "블로그",
+    "n": 2,
+    "pct": 2.7
+   }
+  ],
+  "top": [
+   {
+    "domain": "knowverse.net",
+    "n": 13,
+    "w": 100,
+    "type": "공식 사이트",
+    "ch": "official",
+    "engines": "Gemini, Perplexity",
+    "in_ok": true
+   },
+   {
+    "domain": "youtube.com",
+    "n": 4,
+    "w": 31,
+    "type": "영상",
+    "ch": "video",
+    "engines": "Gemini",
+    "in_ok": true
+   },
+   {
+    "domain": "novus.kr",
+    "n": 3,
+    "w": 23,
+    "type": "동명·유사명 회사",
+    "ch": "lookalike",
+    "engines": "Claude, Gemini",
+    "in_ok": true
+   },
+   {
+    "domain": "bizwiki.co.kr",
+    "n": 2,
+    "w": 15,
+    "type": "기업정보·리뷰",
+    "ch": "bizdb",
+    "engines": "Perplexity",
+    "in_ok": true
+   },
+   {
+    "domain": "saramin.co.kr",
+    "n": 2,
+    "w": 15,
+    "type": "기업정보·리뷰",
+    "ch": "bizdb",
+    "engines": "Perplexity",
+    "in_ok": true
+   },
+   {
+    "domain": "nol-universe.com",
+    "n": 2,
+    "w": 15,
+    "type": "동명·유사명 회사",
+    "ch": "lookalike",
+    "engines": "Perplexity",
+    "in_ok": true
+   },
+   {
+    "domain": "novusinc.co.kr",
+    "n": 1,
+    "w": 8,
+    "type": "동명·유사명 회사",
+    "ch": "lookalike",
+    "engines": "Claude",
+    "in_ok": false
+   },
+   {
+    "domain": "v.daum.net",
+    "n": 1,
+    "w": 8,
+    "type": "뉴스·미디어",
+    "ch": "news",
+    "engines": "Perplexity",
+    "in_ok": false
+   },
+   {
+    "domain": "blog.naver.com",
+    "n": 1,
+    "w": 8,
+    "type": "블로그",
+    "ch": "blog",
+    "engines": "Perplexity",
+    "in_ok": false
+   },
+   {
+    "domain": "fnnews.com",
+    "n": 1,
+    "w": 8,
+    "type": "뉴스·미디어",
+    "ch": "news",
+    "engines": "Perplexity",
+    "in_ok": false
+   }
+  ],
+  "s": {
+   "n": 16,
+   "ok_n": 5,
+   "ok_rate": 31,
+   "wrong_n": 8,
+   "wrong_rate": 50,
+   "other_n": 5,
+   "made_n": 3,
+   "generic_n": 0,
+   "unknown_n": 3,
+   "bad_n": 11,
+   "ok_with_official": 5,
+   "bad_with_official": 0,
+   "engines_total": 4,
+   "engines_correct": 2,
+   "correct_engine_names": "Gemini·Perplexity",
+   "cites_total": 73,
+   "official_cites": 13,
+   "official_pct": 17.8,
+   "nq": 4,
+   "faces_n": 8,
+   "bad_rate": 69,
+   "off_ans": 5,
+   "bad_parts": "다른 회사로 착각 5 · 지어낸 설명 3 · 모른다 3"
+  }
+ }
+}

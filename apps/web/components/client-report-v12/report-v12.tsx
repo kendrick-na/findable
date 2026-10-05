@@ -1,17 +1,22 @@
 // biome-ignore-all lint/performance/noImgElement: 인쇄(PDF) 문서라 next/image 의 지연 로딩·srcset 이 오히려 해롭다 — 원본 템플릿처럼 원본 PNG 를 바로 쓴다
 // biome-ignore-all lint/correctness/useImageSize: 크기는 CSS(mm 단위)가 정한다 — 원본 템플릿과 같은 방식
-// v12 고객 영업 리포트 — A4 11쪽. 원본 = `_v12_v4_minimal/fix/template.html`(Jinja) 을 한 줄씩 옮겼다.
+// v12 고객 영업 리포트 — A4. 원본 = `_v12_v4_minimal/fix/template.html`(Jinja) 11쪽.
 //
-// 🔴 원칙
-// - 문구·순서·클래스 이름은 원본 템플릿과 같다(CSS 는 port-v12-css.py 가 기계 변환).
+// 2026-10-06 개정(대표 승인 「다 개선한 걸 보고 싶다」): 처음 보는 사람도 바로 이해하도록 다시 짰다.
+// - 쪽 구성: 이유+목차 합침 · 플레이북+20일 계획 합침 · 신규 3쪽(카테고리 점유율·주제별 1~3위·매출 기회)
+//   → 신규 쪽은 **발행본에 그 데이터가 있을 때만** 나온다(없는 숫자를 채우지 않는다). 쪽 번호는 실제 쪽 수로 매긴다.
+// - 쪽마다 주인공 숫자 1개 · AI 순서 고정(ChatGPT→Claude→Perplexity→Gemini) · 내부 용어(엔진·P0·측정 ID) 숨김
+// - 마지막 행동은 「15분 통화」 하나(메일과 같은 말).
+// - 기본 CSS(report-v12.css)는 원본에서 기계 변환한 그대로 두고, 바뀐 모양은 report-v12-revise.css 에만 쓴다.
+//
+// 🔴 원칙(그대로)
 // - 숫자는 발행본(Report.data v2)의 저장값만 쓴다(재계산 없음) — PDF 도 이 화면을 인쇄한다.
-// - 원본과 다른 점은 두 가지뿐: ① 이미지 경로(/report-assets) ② status_note 는 **발송 승인 상태가 정한다**
-//   (대표 최종 발송 승인 전이면 무조건 「내부 시안 · 외부 발송 금지」 — config 값으로 덮을 수 없음).
-// - 템플릿을 바꾸면 이 파일·CSS 를 같이 바꾸고 V12_TEMPLATE_MD5 를 올린다(테스트가 대조).
+// - status_note 는 **발송 승인 상태가 정한다**(대표 최종 발송 승인 전이면 무조건 「내부 시안 · 외부 발송 금지」).
 
 import {
   ENGINE_MONO,
   ENGINE_NAMES,
+  ENGINE_ORDER,
   type EngineId,
   LABELS,
   type LabelId,
@@ -22,25 +27,90 @@ import type { ClientReportDataV2 } from "@repo/audit/client-report/report-data";
 import type { ReactNode } from "react";
 import { safeInline } from "../client-report/client-report";
 
-/** 이 컴포넌트가 옮겨 온 원본 템플릿 지문. */
+/** 이 컴포넌트의 기본 CSS 가 옮겨 온 원본 템플릿 지문. */
 export const V12_TEMPLATE_MD5 = "cac3c89ebdc7b4ba1f8d6e46dbe4f3f7";
 export const INTERNAL_STATUS_NOTE = "내부 시안 · 외부 발송 금지";
+/** 마지막 행동 — 메일 본문의 「15분 통화」와 같은 말이어야 한다. */
+export const CALL_CTA = "15분 결과 설명 통화 요청하기";
+const CONTACT_EMAIL = "contact@findable.co.kr";
 
-const TOTAL = 11;
 /**
  * 원본 템플릿은 autoescape=False 라 문구 속 `<b>`·`<em>`·`<br>` 가 서식으로 찍힌다.
  * 웹은 DB 값이므로 기존 리포트와 같은 safeInline(허용 태그만)으로 같은 결과를 낸다.
  */
 const rich = (html: string | undefined) => ({
-  dangerouslySetInnerHTML: { __html: safeInline(html ?? "") },
+  dangerouslySetInnerHTML: { __html: safeInline(plain(html ?? "")) },
 });
+
+/**
+ * 발행본 문구 속 내부 용어 → 고객이 바로 아는 말(2026-10-06 개정). 저장값은 그대로 두고 화면에서만 바꾼다.
+ * 기술 항목은 영문 원어를 괄호로 남겨 개발 담당자에게 그대로 전달할 수 있게 한다.
+ */
+const PLAIN_TERMS: [RegExp, string][] = [
+  [/\bP0\b/g, "이번 주 항목"],
+  [/\bP1\b/g, "20일 안 항목"],
+  [/\bP2\b/g, "재측정 항목"],
+  [/(?<!검색\s?)엔진/g, "AI"],
+  [/분모에서/g, "집계에서"],
+  [/홈 title·description/g, "홈페이지 제목·설명 (title·description)"],
+  [/canonical \(대표 주소\)/g, "대표 주소 지정 (canonical)"],
+  [/구조화 데이터 \(JSON-LD\)/g, "AI가 읽는 회사 정보 (JSON-LD)"],
+  [
+    /robots\.txt · sitemap\.xml/g,
+    "검색 로봇 안내·사이트 지도 (robots.txt·sitemap.xml)",
+  ],
+];
+export function plain(text: string): string {
+  return PLAIN_TERMS.reduce((t, [re, to]) => t.replace(re, to), text);
+}
 const A = "/report-assets";
 const pad2 = (n: number) => String(n).padStart(2, "0");
+const TRAILING_ZERO_RE = /\.0$/;
+
+/** 원 단위 금액 → 「4,235만 원」「72.6억 원」. */
+export function krw(won: number): string {
+  if (won >= 100_000_000) {
+    const eok = won / 100_000_000;
+    return `${eok >= 100 ? Math.round(eok).toLocaleString("ko-KR") : eok.toFixed(1).replace(TRAILING_ZERO_RE, "")}억\u00a0원`;
+  }
+  return `${Math.round(won / 10_000).toLocaleString("ko-KR")}만\u00a0원`;
+}
+
+/** 신규 쪽 ① — 브랜드 이름 없이 묻는 구매 질문에서 누가 추천되나. */
+interface CategoryShare {
+  answers: number;
+  brands: { mentions: number; name: string; pct: number; self?: boolean }[];
+  /** 예: "PDRN 앰플 추천해줘" 같은 실제 검색어 기반 질문 */
+  examples: string[];
+  note?: string;
+  questions: number;
+}
+/** 신규 쪽 ② — 주제별 추천 1~3위. */
+interface TopicWinner {
+  question: string;
+  /** 우리 브랜드 순위. 상위권 밖이면 null. */
+  self_rank: number | null;
+  top: string[];
+  topic: string;
+}
+/** 신규 쪽 ③ — 매출 기회(승인 공식: 연매출 × AI 개입 구매 비중). 저장값만 쓴다. */
+interface RevenueOpportunity {
+  ai_share_pct: number;
+  annual_revenue: number;
+  /** 근거 목록(출처 문장). */
+  basis: string[];
+  future?: string;
+  monthly: number;
+  revenue_source: string;
+  /** 보조 시산(검색 경로) — 없으면 안 보인다. */
+  support?: { label: string; monthly: number; note: string };
+}
 
 interface Cfg {
   audit_id: string;
   brand: string;
   brand_en?: string;
+  category_share?: CategoryShare;
   causes: { h: string; p: string }[];
   domain: string;
   headlines?: Record<string, string>;
@@ -55,8 +125,10 @@ interface Cfg {
   poc: { d: string; h: string; p: string }[];
   question_short: string[];
   questions: string[];
+  revenue_opportunity?: RevenueOpportunity;
   site_checked_at?: string;
   site_checks: { item: string; note: string; state: "ok" | "warn" | "bad" }[];
+  topic_winners?: TopicWinner[];
   why: { h: string; p: string }[];
   [key: string]: unknown;
 }
@@ -64,22 +136,26 @@ interface Cfg {
 const str = (c: Cfg, key: string): string | undefined =>
   typeof c[key] === "string" && c[key] ? (c[key] as string) : undefined;
 
+const engineRank = (id: string) => {
+  const i = ENGINE_ORDER.indexOf(id as EngineId);
+  return i === -1 ? ENGINE_ORDER.length : i;
+};
+/** 모든 쪽에서 AI 순서를 같게(ChatGPT→Claude→Perplexity→Gemini…). */
+const byEngine = <T extends { engine?: string; id?: string }>(a: T, b: T) =>
+  engineRank(a.engine ?? a.id ?? "") - engineRank(b.engine ?? b.id ?? "");
+
 function Mono({ e }: { e: string }) {
   return <span className="mono">{ENGINE_MONO[e as EngineId]}</span>;
 }
 
-function Head({ sec, brand }: { brand: string; sec?: string }) {
+function Head({ sec }: { sec: string }) {
   return (
     <div className="hd">
       <img alt="Findable" src={`${A}/Findable.png`} />
-      {sec ? (
-        <span className="sec-tag">
-          <i />
-          {sec}
-        </span>
-      ) : (
-        <span className="sec-tag">{brand} AI 검색 진단</span>
-      )}
+      <span className="sec-tag">
+        <i />
+        {sec}
+      </span>
     </div>
   );
 }
@@ -91,6 +167,7 @@ function Dot() {
 function Foot({
   c,
   n,
+  total,
   stale,
   statusNote,
 }: {
@@ -98,24 +175,45 @@ function Foot({
   n: number;
   stale: boolean;
   statusNote: string | undefined;
+  total: number;
 }) {
   return (
     <div className="ft">
       <span>
         Findable AI 검색 진단 · {c.brand} · 측정 {c.measured_at}
-        {stale ? " (오래된 측정)" : ""} · 측정 ID {c.audit_id.slice(0, 8)} ·{" "}
-        {statusNote ?? "고객 전용"}
+        {stale ? " (오래된 측정)" : ""} · {statusNote ?? "고객 전용"}
       </span>
       <span>
-        {pad2(n)} / {TOTAL}
+        {pad2(n)} / {pad2(total)}
       </span>
     </div>
   );
 }
 
-const ST_NAME = { ok: "양호", warn: "보완", bad: "부족" } as const;
+const ST_NAME = { ok: "양호", warn: "보완 필요", bad: "부족" } as const;
+const PLAN_GROUPS: [string, string, string][] = [
+  ["P0", "이번 주", "바로 고칠 것"],
+  ["P1", "20일 안", "외부에 알릴 것"],
+  ["P2", "다시 측정", "효과 확인"],
+];
+/** 출처 막대는 상위 4개 + 기타(색 5개 이하). */
+const MAX_CHANNELS = 4;
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 원본 Jinja 템플릿 11쪽을 한 줄씩 대응시켜 옮겼다 — 쪼개면 원본과 나란히 대조하기 어려워진다
+type PageId =
+  | "cover"
+  | "intro"
+  | "accuracy"
+  | "matrix"
+  | "share"
+  | "topics"
+  | "faces"
+  | "sources"
+  | "revenue"
+  | "causes"
+  | "plan"
+  | "back";
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 원본 Jinja 템플릿의 쪽 순서를 한 파일에서 그대로 따라가도록 둔다 — 쪽마다 쪼개면 인쇄본과 나란히 대조하기 어려워진다
 export function ClientReportV12({
   data,
   sendApproved,
@@ -125,17 +223,68 @@ export function ClientReportV12({
   sendApproved: boolean;
 }) {
   const c = data.config as unknown as Cfg;
-  const { s, answers, engines, per_q, channels, top } = data.computed;
+  const { s, answers, per_q, channels, top } = data.computed;
+  const engines = [...data.computed.engines].sort(byEngine);
   const H = c.headlines ?? {};
   const stale = c.stale === true;
   // 발송 승인 전: 무조건 내부 시안. 승인 후: 원본 템플릿 기본값(status_note 없음)과 같게.
   const statusNote = sendApproved ? undefined : INTERNAL_STATUS_NOTE;
   const officialPct = s.cites_total ? pyFloatStr(s.official_pct) : "0";
-  const noteBase = `측정 Findable ${c.measured_at} · 브랜드명을 넣은 질문 ${s.nq}종(한국어·영어) × AI ${s.engines_total}곳 · 답변 ${s.n}건 · 질문당 1회 측정(시점에 따라 답이 달라질 수 있음). 판별: 답변 원문을 사람이 한 건씩 읽고 공식 사이트 내용과 대조. ${str(c, "excluded_note") ?? ""}`;
+  const noteBase = `측정 ${c.measured_at} · 브랜드 이름을 넣은 질문 ${s.nq}개(한국어·영어) × AI ${s.engines_total}곳 = 답변 ${s.n}건 · 질문마다 1번씩 물어봤습니다(물을 때마다 답이 조금 달라질 수 있음). 답변은 사람이 한 건씩 읽고 공식 사이트 내용과 비교해 분류했습니다. ${str(c, "excluded_note") ?? ""}`;
+
+  const share = c.category_share?.brands?.length ? c.category_share : null;
+  const topics = c.topic_winners?.length ? c.topic_winners : null;
+  const revenue =
+    c.revenue_opportunity && c.revenue_opportunity.monthly > 0
+      ? c.revenue_opportunity
+      : null;
+
+  const order: PageId[] = [
+    "cover",
+    "intro",
+    "accuracy",
+    "matrix",
+    ...(share ? (["share"] as const) : []),
+    ...(topics ? (["topics"] as const) : []),
+    "faces",
+    "sources",
+    ...(revenue ? (["revenue"] as const) : []),
+    "causes",
+    "plan",
+    "back",
+  ];
+  const TOTAL = order.length;
+  const no = (id: PageId) => order.indexOf(id) + 1;
+  const foot = (id: PageId) => (
+    <Foot
+      c={c}
+      n={no(id)}
+      stale={stale}
+      statusNote={statusNote}
+      total={TOTAL}
+    />
+  );
+
+  const titles: Partial<Record<PageId, string>> = {
+    accuracy: `AI는 ${c.brand}를 정확히 알고 있을까`,
+    matrix: "질문별·AI별 답변 결과",
+    share: "이름 없이 물으면 누가 추천될까",
+    topics: "주제별로 누가 1위일까",
+    faces: `AI가 그리는 ${c.brand}의 모습`,
+    sources: "AI가 참고하는 출처",
+    revenue: "AI 추천이 움직이는 매출",
+    causes: "왜 이런 결과가 나왔을까",
+    plan: "무엇부터 고치면 될까",
+  };
+  const toc = order
+    .filter((id) => titles[id])
+    .map((id) => [titles[id] as string, no(id)] as const);
 
   const coverEngines = Array.isArray(c.cover_engines)
-    ? (c.cover_engines as string[])
-    : ["chatgpt", "claude", "naver", "gemini"];
+    ? [...(c.cover_engines as string[])].sort((a, b) =>
+        byEngine({ id: a }, { id: b })
+      )
+    : ["chatgpt", "claude", "perplexity", "gemini"];
   const picks: ReportAnswer[] = [];
   for (const e of coverEngines) {
     for (const a of answers) {
@@ -144,29 +293,41 @@ export function ClientReportV12({
       }
     }
   }
-  const toc: [string, string, number][] = [
-    ["Intro", "이 리포트를 만든 이유", 2],
-    ["Section 1", `AI는 ${c.brand}를 정확히 알고 있을까`, 4],
-    ["Section 2", "엔진·질문별 답변 결과", 5],
-    ["Section 3", `AI가 바라보는 ${c.brand}`, 6],
-    ["Section 4", "AI가 인용하는 콘텐츠", 7],
-    ["Section 5", "왜 이런 결과가 나왔을까", 8],
-    ["Playbook", "바로 실천하는 개선 플레이북", 9],
-    ["Next", "20일 개선·재측정 계획", 10],
-  ];
   const legend = (Object.keys(LABELS) as LabelId[]).filter((k) => k !== "none");
-  const pbGroups: [string, string][] = [
-    ["P0", "이번 주"],
-    ["P1", "20일 안"],
-    ["P2", "재측정 설계"],
-  ];
   const lines = (items: string[]): ReactNode =>
     items.map((t) => <div key={t} {...rich(t)} />);
+
+  const mainChannels = channels.slice(0, MAX_CHANNELS);
+  const restChannels = channels.slice(MAX_CHANNELS);
+  const rest = restChannels.reduce(
+    (acc, ch) => ({ n: acc.n + (ch.n ?? 0), pct: acc.pct + ch.pct }),
+    { n: 0, pct: 0 }
+  );
+  const shownChannels = [
+    ...mainChannels.map((ch) => ({
+      id: ch.id,
+      name: ch.name as string,
+      n: ch.n as number,
+      pct: ch.pct,
+    })),
+    ...(restChannels.length
+      ? [{ id: "etc", name: "기타", n: rest.n, pct: rest.pct }]
+      : []),
+  ];
+
+  const selfShare = share?.brands.find((b) => b.self);
+  const selfRank = share
+    ? share.brands.findIndex((b) => b.self) + 1 || null
+    : null;
+  const bestEngine = engines.reduce<(typeof engines)[number] | null>(
+    (best, e) => (best === null || e.rate > best.rate ? e : best),
+    null
+  );
 
   return (
     <>
       {/* 01 표지 */}
-      <section className="page cover">
+      <section className="page cover rv">
         <img alt="" className="fbig" src={`${A}/F_cream.png`} />
         <img alt="Findable" className="logo" src={`${A}/Findable.png`} />
         <div className="kick">
@@ -239,9 +400,9 @@ export function ClientReportV12({
         </div>
       </section>
 
-      {/* 02 이유 + 방법 */}
-      <section className="page">
-        <Head brand={c.brand} sec="Intro" />
+      {/* 02 이유 + 확인 방법 + 목차 */}
+      <section className="page rv">
+        <Head sec="들어가며" />
         <h1 className="sec">
           이 리포트를 만든 이유
           <Dot />
@@ -257,8 +418,9 @@ export function ClientReportV12({
             </div>
           ))}
         </div>
+        <h3 className="sq">이렇게 확인했습니다</h3>
         <div className="method">
-          <div className="k">측정 엔진</div>
+          <div className="k">물어본 AI</div>
           <div className="v eng-list">
             {engines.map((e) => (
               <span key={e.id}>
@@ -276,7 +438,7 @@ export function ClientReportV12({
               </div>
             ))}
           </div>
-          <div className="k">판별 기준</div>
+          <div className="k">답변 분류</div>
           <div className="v legend">
             {legend.map((k) => (
               <span className={`lb ${k}`} key={k}>
@@ -284,41 +446,28 @@ export function ClientReportV12({
               </span>
             ))}
           </div>
-          <div className="k">측정 조건</div>
+          <div className="k">조건</div>
           <div className="v">
             {c.measured_at} · 로그인하지 않은 기본 상태 · 질문당 1회 · 비교 답변{" "}
             {s.n}건 (AI {s.engines_total}곳 × 질문 {s.nq}개)
           </div>
         </div>
-        <Foot c={c} n={2} stale={stale} statusNote={statusNote} />
-      </section>
-
-      {/* 03 목차 */}
-      <section className="page">
-        <Head brand={c.brand} />
-        <div className="kicker" style={{ marginTop: "14mm" }}>
-          Contents
-        </div>
-        <div className="toc-h">
-          목차
-          <Dot />
-        </div>
-        <div className="toc">
-          {toc.map(([a, b, p]) => (
-            <div className="row" key={a}>
-              <span className="s">{a}</span>
-              <span className="n">{b}</span>
+        <h3 className="sq">목차</h3>
+        <div className="toc2">
+          {toc.map(([t, p]) => (
+            <div className="row" key={t}>
               <span className="pg">{pad2(p)}</span>
+              <span className="n">{t}</span>
             </div>
           ))}
         </div>
-        <Foot c={c} n={3} stale={stale} statusNote={statusNote} />
+        {foot("intro")}
       </section>
 
-      {/* 04 섹션1 */}
-      <section className="page">
-        <Head brand={c.brand} sec="Section 1 · 정확도" />
-        <div className="kicker">AI는 {c.brand}를 정확히 알고 있을까?</div>
+      {/* 03 정확도 */}
+      <section className="page rv">
+        <Head sec="정확도" />
+        <div className="kicker">{titles.accuracy}?</div>
         <h1 className="sec">
           <span
             {...rich(
@@ -328,69 +477,53 @@ export function ClientReportV12({
           />
           <Dot />
         </h1>
-        <div className="band">
-          <div>
-            <div className="t">정확히 설명</div>
-            <div className="v hot">
+        <div className="hero">
+          <div className="big">
+            <div className="v">
               {s.ok_n}
-              <small>/ {s.n}</small>
+              <small>/ {s.n}건</small>
             </div>
-            <div className="f">
-              {s.n}건 중 {s.ok_n}건이
-              <br />
-              실제 서비스를 맞게 설명
-            </div>
+            <div className="t">정확히 설명한 답변</div>
           </div>
-          <div>
-            <div className="t">정확히 설명하지 못함</div>
-            <div className="v">
-              {s.bad_n}
-              <small>건</small>
-            </div>
-            <div className="f">{s.bad_parts}</div>
-          </div>
-          <div>
-            <div className="t">정답을 낸 AI</div>
-            <div className="v">
-              {s.engines_correct}
-              <small>/ {s.engines_total}곳</small>
-            </div>
-            <div className="f">{s.correct_engine_names}</div>
-          </div>
-          <div>
-            <div className="t">공식 사이트가 출처에 있던 답변</div>
-            <div className="v">
-              {s.off_ans}
-              <small>/ {s.n}</small>
-            </div>
-            <div className="f">
-              그중 정확 {s.ok_with_official}건
-              <br />
-              (상관 관찰, 원인 아님)
-            </div>
-          </div>
+          <ul className="facts">
+            <li>
+              <b>{s.bad_n}건</b>은 정확히 설명하지 못했습니다
+              <span>{s.bad_parts}</span>
+            </li>
+            <li>
+              AI {s.engines_total}곳 중 <b>{s.engines_correct}곳</b>만 한 번
+              이상 정답을 냈습니다
+              <span>{s.correct_engine_names}</span>
+            </li>
+            <li>
+              공식 사이트를 출처로 든 답변은 <b>{s.off_ans}건</b>이었고, 그중{" "}
+              {s.ok_with_official}건이 정확했습니다
+              <span>함께 나타났다는 뜻이지, 원인이라는 뜻은 아닙니다</span>
+            </li>
+          </ul>
         </div>
         <h3 className="sq">
-          엔진별 결과
-          <span className="sub">
-            정확 비율 높은 순 · AI마다 같은 질문 {s.nq}개
-          </span>
+          AI별 결과
+          <span className="sub">AI마다 같은 질문 {s.nq}개</span>
         </h3>
         <table className="tbl">
           <tbody>
             <tr>
-              <th>엔진</th>
-              <th style={{ width: "40mm" }}>정확 인식률</th>
+              <th>AI</th>
+              <th style={{ width: "40mm" }}>정확히 설명한 비율</th>
               <th className="c">정확 / 질문</th>
-              <th className="c">다른 회사</th>
-              <th className="c">지어냄</th>
-              <th className="c">일반명사</th>
-              <th className="c">모름·없음</th>
+              <th className="c">다른 회사로 착각</th>
+              <th className="c">없는 내용</th>
+              <th className="c">일반 단어로 이해</th>
+              <th className="c">모름</th>
               <th className="r">공식 사이트 인용</th>
             </tr>
             {/* biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 템플릿 표의 칸 조건(0이면 흐리게)을 1:1 로 옮긴 것 */}
-            {engines.map((e, i) => (
-              <tr className={i === 0 && e.ok ? "top" : ""} key={e.id}>
+            {engines.map((e) => (
+              <tr
+                className={bestEngine?.id === e.id && e.ok ? "top" : ""}
+                key={e.id}
+              >
                 <td>
                   <span className="eng">
                     <Mono e={e.id} />
@@ -429,23 +562,18 @@ export function ClientReportV12({
         <div className="ins">{lines(c.insights_accuracy)}</div>
         <div className="notes">
           <span {...rich(noteBase)} />
-          <br />
-          공식 사이트 인용 = 답변이 근거로 표시한 출처 중{" "}
-          {c.official_domains.join("·")} 수. Gemini는 출처 주소 대신 도메인만
-          제공해 도메인 기준으로 집계. 출처와 정답이 함께 나타나도 원인이라는
-          뜻은 아닙니다.
         </div>
-        <Foot c={c} n={4} stale={stale} statusNote={statusNote} />
+        {foot("accuracy")}
       </section>
 
-      {/* 05 섹션2 */}
-      <section className="page">
-        <Head brand={c.brand} sec="Section 2 · 엔진·질문별" />
-        <div className="kicker">엔진·질문별 답변 결과</div>
+      {/* 04 질문별·AI별 */}
+      <section className="page rv">
+        <Head sec="질문별 결과" />
+        <div className="kicker">{titles.matrix}</div>
         <h1 className="sec">
           <span
             {...rich(
-              H.p5 ?? "같은 질문에도 엔진마다 전혀 다른 회사를 설명합니다"
+              H.p5 ?? "같은 질문에도 AI마다 전혀 다른 회사를 설명합니다"
             )}
           />
           <Dot />
@@ -453,7 +581,7 @@ export function ClientReportV12({
         <table className="tbl mx" style={{ marginTop: "7mm" }}>
           <tbody>
             <tr>
-              <th style={{ width: "27mm" }}>엔진</th>
+              <th style={{ width: "27mm" }}>AI</th>
               {per_q.map((q) => (
                 <th key={q.i}>
                   Q{q.i + 1} <span {...rich(q.short)} />
@@ -489,7 +617,7 @@ export function ClientReportV12({
             ))}
           </tbody>
         </table>
-        <h3 className="sq">질문 유형별 정확한 답변</h3>
+        <h3 className="sq">질문별 정확한 답변</h3>
         <div className="qrow">
           {per_q.map((q) => (
             <div key={q.i}>
@@ -507,24 +635,154 @@ export function ClientReportV12({
         </div>
         <div className="ins">{lines(c.insights_matrix)}</div>
         <div className="notes">
-          <span {...rich(noteBase)} />
-          <br />
           질문 원문 —{" "}
           <span
             {...rich(c.questions.map((q, i) => `Q${i + 1} “${q}”`).join(" · "))}
           />
         </div>
-        <Foot c={c} n={5} stale={stale} statusNote={statusNote} />
+        {foot("matrix")}
       </section>
 
-      {/* 06 섹션3 */}
-      <section className="page">
-        <Head brand={c.brand} sec="Section 3 · 브랜드 이미지" />
-        <div className="kicker">AI가 바라보는 {c.brand}</div>
+      {/* 신규 — 카테고리 점유율 */}
+      {share ? (
+        <section className="page rv">
+          <Head sec="경쟁 현황" />
+          <div className="kicker">{titles.share}?</div>
+          <h1 className="sec">
+            <span
+              {...rich(
+                H.share ??
+                  (selfShare
+                    ? `구매 질문에서 ${c.brand}가 추천된 비율은 ${pyRound(selfShare.pct)}%입니다`
+                    : `구매 질문에서 ${c.brand}는 추천되지 않았습니다`)
+              )}
+            />
+            <Dot />
+          </h1>
+          <div className="deck">
+            고객이 브랜드 이름 없이 묻는 질문 {share.questions}개를 AI에 물어,
+            답변 {share.answers}건에서 어떤 브랜드가 추천되는지 셌습니다.
+          </div>
+          <div className="hero">
+            <div className="big">
+              <div className="v">
+                {selfShare ? `${pyRound(selfShare.pct)}` : "0"}
+                <small>%</small>
+              </div>
+              <div className="t">
+                {c.brand} 추천 비율
+                {selfRank ? ` · ${selfRank}위` : " · 순위 밖"}
+              </div>
+            </div>
+            <ul className="facts">
+              <li>
+                1위는 <b>{share.brands[0]?.name}</b>(
+                {pyRound(share.brands[0]?.pct ?? 0)}%)입니다
+              </li>
+              <li>
+                실제로 물어본 질문 예
+                <span>
+                  {share.examples
+                    .slice(0, 3)
+                    .map((q) => `“${q}”`)
+                    .join(" · ")}
+                </span>
+              </li>
+            </ul>
+          </div>
+          <h3 className="sq">
+            추천된 브랜드 순위
+            <span className="sub">답변 {share.answers}건 중 추천 비율</span>
+          </h3>
+          <div className="rank">
+            {share.brands.slice(0, 8).map((b, i) => (
+              <div className={`row ${b.self ? "self" : ""}`} key={b.name}>
+                <span className="i">{i + 1}</span>
+                <span className="nm">{b.name}</span>
+                <div className="track">
+                  <i style={{ width: `${Math.min(100, b.pct)}%` }} />
+                </div>
+                <span className="p">{pyRound(b.pct)}%</span>
+              </div>
+            ))}
+          </div>
+          {share.note ? (
+            <div className="notes" {...rich(share.note)} />
+          ) : (
+            <div className="notes">
+              추천 비율 = 그 브랜드가 한 번 이상 이름이 나온 답변 수 ÷ 전체 답변
+              수. 한 답변에 여러 브랜드가 나올 수 있어 합계는 100%를 넘습니다.
+            </div>
+          )}
+          {foot("share")}
+        </section>
+      ) : null}
+
+      {/* 신규 — 주제별 1~3위 */}
+      {topics ? (
+        <section className="page rv">
+          <Head sec="주제별 승자" />
+          <div className="kicker">{titles.topics}?</div>
+          <h1 className="sec">
+            <span
+              {...rich(
+                H.topics ??
+                  `${topics.length}개 주제 중 ${c.brand}가 3위 안에 든 주제는 ${topics.filter((t) => t.self_rank !== null && t.self_rank <= 3).length}개입니다`
+              )}
+            />
+            <Dot />
+          </h1>
+          <table className="tbl topics" style={{ marginTop: "7mm" }}>
+            <tbody>
+              <tr>
+                <th style={{ width: "30mm" }}>주제</th>
+                <th>실제 질문</th>
+                <th className="c">1위</th>
+                <th className="c">2위</th>
+                <th className="c">3위</th>
+                <th className="c" style={{ width: "22mm" }}>
+                  {c.brand}
+                </th>
+              </tr>
+              {topics.map((t) => (
+                <tr key={t.topic}>
+                  <td className="name">{t.topic}</td>
+                  <td className="qcell">“{t.question}”</td>
+                  {[0, 1, 2].map((i) => (
+                    <td
+                      className={`c ${t.top[i] && t.self_rank === i + 1 ? "selfc" : ""}`}
+                      key={i}
+                    >
+                      {t.top[i] ?? "–"}
+                    </td>
+                  ))}
+                  <td className="c">
+                    {t.self_rank ? (
+                      <b>{t.self_rank}위</b>
+                    ) : (
+                      <span className="zero">순위 밖</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="notes">
+            주제마다 실제 검색어에서 고른 질문을 AI 여러 곳에 묻고, 답변에
+            추천된 순서와 횟수로 순위를 매겼습니다.
+          </div>
+          {foot("topics")}
+        </section>
+      ) : null}
+
+      {/* 브랜드 이미지 */}
+      <section className="page rv">
+        <Head sec="브랜드 이미지" />
+        <div className="kicker">{titles.faces}</div>
         <h1 className="sec">
           <span
             {...rich(
-              H.p6 ?? `AI가 만든 ${c.brand}의 얼굴은 ${s.faces_n}가지입니다`
+              H.p6 ?? `AI가 만든 ${c.brand}의 모습은 ${s.faces_n}가지입니다`
             )}
           />
           <Dot />
@@ -557,6 +815,7 @@ export function ClientReportV12({
           <div className="flist">
             {answers
               .filter((a) => a.q === 0 || a.q === 1)
+              .sort((a, b) => a.q - b.q || byEngine(a, b))
               .map((a) => (
                 <div className={`row ${a.label}`} key={`${a.engine}-${a.q}`}>
                   <div className="e">
@@ -564,13 +823,7 @@ export function ClientReportV12({
                     <span>
                       {ENGINE_NAMES[a.engine]}
                       <br />
-                      <span
-                        style={{
-                          fontWeight: 500,
-                          color: "var(--mut)",
-                          fontSize: "7.4pt",
-                        }}
-                      >
+                      <span className="qtag">
                         Q{a.q + 1} <span {...rich(c.question_short[a.q])} />
                       </span>
                     </span>
@@ -587,17 +840,16 @@ export function ClientReportV12({
           </div>
         </div>
         <div className="notes">
-          측정 {c.measured_at} · 질문당 1회 · 답변 문장은 판별자가 원문에서
-          핵심만 줄여 옮긴 요약(원문 그대로가 아님) · 판별은 사람이 원문을 공식
-          사이트와 대조. 영문 질문(Q3·Q4) 결과는 5쪽.
+          답변 문장은 원문에서 핵심만 줄여 옮긴 요약입니다. 영어 질문(Q3·Q4)
+          결과는 {pad2(no("matrix"))}쪽에 있습니다.
         </div>
-        <Foot c={c} n={6} stale={stale} statusNote={statusNote} />
+        {foot("faces")}
       </section>
 
-      {/* 07 섹션4 */}
-      <section className="page">
-        <Head brand={c.brand} sec="Section 4 · 인용 출처" />
-        <div className="kicker">AI가 인용하는 콘텐츠</div>
+      {/* 인용 출처 */}
+      <section className="page rv">
+        <Head sec="인용 출처" />
+        <div className="kicker">{titles.sources}</div>
         <h1 className="sec">
           <span
             {...rich(
@@ -608,21 +860,21 @@ export function ClientReportV12({
           <Dot />
         </h1>
         <h3 className="sq">
-          출처 채널 구성<span className="sub">인용 {s.cites_total}건</span>
+          출처 종류<span className="sub">인용 {s.cites_total}건</span>
         </h3>
         <div className="stackbar">
-          {channels.map((ch) => (
+          {shownChannels.map((ch) => (
             <div
               className={`ch-${ch.id} ${["wiki", "news", "etc", "bizdb"].includes(ch.id) ? "lt" : ""}`}
               key={ch.id}
               style={{ flex: ch.n }}
             >
-              {ch.pct >= 7 ? `${pyRound(ch.pct)}%` : null}
+              {ch.pct >= 12 ? `${pyRound(ch.pct)}%` : null}
             </div>
           ))}
         </div>
         <div className="ch-legend">
-          {channels.map((ch) => (
+          {shownChannels.map((ch) => (
             <span className={`ch-${ch.id}`} key={ch.id}>
               {ch.name}
               <b>{pyFloatStr(ch.pct)}%</b>
@@ -631,7 +883,7 @@ export function ClientReportV12({
         </div>
         <div className="vs">
           <div className="g">
-            <div className="t">정답을 낸 답변 중 공식 사이트를 인용한 답변</div>
+            <div className="t">정확한 답변 중 공식 사이트를 인용한 답변</div>
             <div className="v">
               {s.ok_with_official}
               <small>/ {s.ok_n}건</small>
@@ -647,18 +899,18 @@ export function ClientReportV12({
             </div>
           </div>
         </div>
-        <h3 className="sq">AI가 가장 많이 참고한 사이트 TOP 8</h3>
+        <h3 className="sq">AI가 가장 많이 참고한 사이트</h3>
         <table className="tbl tight">
           <tbody>
             <tr>
               <th className="c" style={{ width: "8mm" }}>
                 #
               </th>
-              <th>도메인</th>
-              <th>유형</th>
+              <th>사이트</th>
+              <th>종류</th>
               <th style={{ width: "40mm" }}>인용 수</th>
-              <th>인용한 엔진</th>
-              <th className="c">정답 근거</th>
+              <th>인용한 AI</th>
+              <th className="c">정확한 답변의 근거</th>
             </tr>
             {top.slice(0, 8).map((t, i) => (
               <tr className={t.ch === "official" ? "top" : ""} key={t.domain}>
@@ -694,18 +946,82 @@ export function ClientReportV12({
         </table>
         <div className="ins">{lines(c.insights_citation)}</div>
         <div className="notes">
-          인용 = 각 답변이 근거로 표시한 출처 도메인 {s.cites_total}건(한 답변에
-          여러 출처 가능). 채널 유형은 도메인 규칙으로 자동 분류해 일부 오분류가
-          있을 수 있습니다. 정답 근거 ‘예’ = 그 사이트를 인용한 답변 중 하나
-          이상이 ‘정확’.
+          인용 = 답변이 근거로 표시한 출처 {s.cites_total}건(한 답변에 여러 출처
+          가능). 출처 종류는 주소 규칙으로 자동 분류해 일부 틀릴 수 있습니다.
         </div>
-        <Foot c={c} n={7} stale={stale} statusNote={statusNote} />
+        {foot("sources")}
       </section>
 
-      {/* 08 섹션5 */}
-      <section className="page">
-        <Head brand={c.brand} sec="Section 5 · 원인" />
-        <div className="kicker">왜 이런 결과가 나왔을까</div>
+      {/* 신규 — 매출 기회 */}
+      {revenue ? (
+        <section className="page rv">
+          <Head sec="매출 기회" />
+          <div className="kicker">{titles.revenue}</div>
+          <h1 className="sec">
+            <span
+              {...rich(
+                H.revenue ??
+                  `${c.brand} 매출 중 매달 약 ${krw(revenue.monthly)}이 AI 추천을 거쳐 결정됩니다`
+              )}
+            />
+            <Dot />
+          </h1>
+          <div className="hero">
+            <div className="big">
+              <div className="v">
+                {krw(revenue.monthly).replace("\u00a0원", "")}
+                <small>원 / 월</small>
+              </div>
+              <div className="t">AI 추천을 거치는 매출(추정)</div>
+            </div>
+            <div className="formula">
+              <div>
+                <span>연매출</span>
+                <b>{krw(revenue.annual_revenue)}</b>
+                <em>{revenue.revenue_source}</em>
+              </div>
+              <i>×</i>
+              <div>
+                <span>AI가 관여하는 구매 비중</span>
+                <b>{revenue.ai_share_pct}%</b>
+              </div>
+              <i>÷</i>
+              <div>
+                <span>12개월</span>
+                <b>{krw(revenue.monthly)}</b>
+              </div>
+            </div>
+          </div>
+          {revenue.support ? (
+            <div className="support">
+              <div className="t">{revenue.support.label}</div>
+              <div className="v">월 {krw(revenue.support.monthly)}</div>
+              <div className="f" {...rich(revenue.support.note)} />
+            </div>
+          ) : null}
+          <h3 className="sq">이 숫자의 근거</h3>
+          <ul className="basis">
+            {revenue.basis.map((b) => (
+              <li key={b} {...rich(b)} />
+            ))}
+          </ul>
+          {revenue.future ? (
+            <div className="ins one">
+              <div {...rich(revenue.future)} />
+            </div>
+          ) : null}
+          <div className="notes">
+            추정치입니다. AI가 {c.brand}를 정확히 소개할 때 이 매출을 더 많이
+            가져올 수 있다는 뜻이지, 매출 증가를 보장하지 않습니다.
+          </div>
+          {foot("revenue")}
+        </section>
+      ) : null}
+
+      {/* 원인 + 사이트 점검 */}
+      <section className="page rv">
+        <Head sec="원인" />
+        <div className="kicker">{titles.causes}</div>
         <h1 className="sec">
           <span
             {...rich(H.p8 ?? `AI가 ${c.brand}를 놓치는 이유는 세 가지입니다`)}
@@ -724,20 +1040,17 @@ export function ClientReportV12({
           ))}
         </div>
         <h3 className="sq">
-          사이트 기본기 점검
-          <span
-            className="sub"
-            {...rich(
-              str(c, "site_checked_label") ??
-                `${c.site_checked_at || c.measured_at} 직접 확인`
-            )}
-          />
+          홈페이지 기본 점검
+          <span className="sub">
+            {c.site_checked_at || c.measured_at} 확인 · 영문 항목은 개발
+            담당자에게 그대로 전달하시면 됩니다
+          </span>
         </h3>
         <table className="tbl">
           <tbody>
             <tr>
               <th>점검 항목</th>
-              <th style={{ width: "22mm" }}>상태</th>
+              <th style={{ width: "24mm" }}>상태</th>
               <th>확인 내용</th>
             </tr>
             {c.site_checks.map((x) => (
@@ -752,80 +1065,50 @@ export function ClientReportV12({
           </tbody>
         </table>
         <div className="notes">
-          기술 기본기(제목·사이트맵 등)가 갖춰져도 AI 추천이 보장되지는
-          않습니다. Google 공식 안내도 AI 검색 전용 필수 마크업은 없으며 검색
-          기본기와 도움이 되는 콘텐츠가 핵심이라고 설명합니다.
+          홈페이지 기본기를 갖춰도 AI 추천이 보장되지는 않습니다. Google 공식
+          안내도 AI 검색 전용 필수 장치는 없고, 검색 기본기와 도움이 되는
+          콘텐츠가 핵심이라고 설명합니다.
         </div>
-        <Foot c={c} n={8} stale={stale} statusNote={statusNote} />
+        {foot("causes")}
       </section>
 
-      {/* 09 플레이북 */}
-      <section className="page">
-        <Head brand={c.brand} sec="Playbook" />
-        <div className="kicker">바로 실천하는 개선 플레이북</div>
+      {/* 개선 계획(플레이북 + 20일 일정) */}
+      <section className="page rv">
+        <Head sec="개선 계획" />
+        <div className="kicker">{titles.plan}</div>
         <h1 className="sec">
           <span
             {...rich(H.p9 ?? "AI가 어디서 읽든 같은 설명을 만나게 하세요")}
           />
           <Dot />
         </h1>
-        <div className="pb-cols">
-          {pbGroups.map(([grp, when]) => (
-            <div className={`pb-col ${grp}`} key={grp}>
+        <div className="plan-cols">
+          {PLAN_GROUPS.map(([grp, when, what]) => (
+            <div className={`plan-col ${grp}`} key={grp}>
               <div className="ph">
-                <b>{grp}</b>
-                <span>{when}</span>
+                <b>{when}</b>
+                <span>{what}</span>
               </div>
               {c.playbook
                 .filter((x) => x.p === grp)
-                .map((x) => (
-                  <div className="pb-item" key={x.h}>
-                    <h4 {...rich(x.h)} />
-                    {x.kind ? <div className="kind" {...rich(x.kind)} /> : null}
+                .map((x, i) => (
+                  <div className="plan-item" key={x.h}>
+                    <h4>
+                      <span className="i">{i + 1}</span>
+                      <span {...rich(x.h)} />
+                    </h4>
                     <p {...rich(x.d)} />
                   </div>
                 ))}
             </div>
           ))}
         </div>
-        <div className="cta">
-          <div>
-            <h4
-              {...rich(
-                str(c, "cta9_h") ?? "수정 문구까지 함께 만들어 드립니다"
-              )}
-            />
-            <p
-              {...rich(
-                str(c, "cta9_p") ??
-                  "P0·P1 항목의 구체적인 수정 문구와 외부 발행용 소개글 초안을 Findable이 준비합니다."
-              )}
-            />
-            <span
-              className="btn"
-              {...rich(str(c, "cta9_btn") ?? "20일 개선 PoC 알아보기 →")}
-            />
-          </div>
-          <img alt="" className="fmark" src={`${A}/F_mark.png`} />
-        </div>
-        <Foot c={c} n={9} stale={stale} statusNote={statusNote} />
-      </section>
-
-      {/* 10 계획 */}
-      <section className="page">
-        <Head brand={c.brand} sec="Next" />
-        <div className="kicker">20일 개선·재측정 계획</div>
-        <h1 className="big">
-          20일 뒤, AI의 대답이
-          <br />
-          달라졌는지 확인합니다
-          <Dot />
-        </h1>
-        <div className="deck">
-          이번 리포트와 <b>같은 질문·같은 엔진</b>으로 다시 측정해 전후를
-          비교합니다. 변화는 관찰 결과로만 보고하며 매출 효과로 단정하지
-          않습니다.
-        </div>
+        <h3 className="sq">
+          20일 일정
+          <span className="sub">
+            같은 질문·같은 AI로 다시 측정해 전후를 비교합니다
+          </span>
+        </h3>
         <div className="tl">
           {c.poc.map((x) => (
             <div key={x.d}>
@@ -835,66 +1118,31 @@ export function ClientReportV12({
             </div>
           ))}
         </div>
-        <h3
-          className="sq"
-          style={{ marginTop: "12mm" }}
-          {...rich(str(c, "give_h") ?? "PoC 기간 동안 Findable이 드리는 것")}
-        />
-        <div className="give">
-          <div>
-            <h4>원문·판별 근거</h4>
-            <p
-              {...rich(
-                str(c, "give1_p") ??
-                  "모든 AI 답변 원문과 판별 사유, 인용 출처를 표로 공유합니다."
-              )}
-            />
-          </div>
-          <div>
-            <h4>수정안과 문구 초안</h4>
-            <p
-              {...rich(
-                str(c, "give2_p") ??
-                  "P0·P1 항목의 수정 문구와 발행용 소개글 초안을 드립니다."
-              )}
-            />
-          </div>
-          <div>
-            <h4>재측정 리포트</h4>
-            <p
-              {...rich(
-                str(c, "give3_p") ??
-                  "같은 조건의 전후 비교 리포트와 30분 해석 미팅."
-              )}
-            />
-          </div>
+        <div className="notes">
+          변화는 관찰 결과로만 보고하며 매출 효과로 단정하지 않습니다.
         </div>
-        <div className="cta">
-          <div>
-            <h4>AI가 우리 브랜드를 어떻게 말하는지 궁금하다면?</h4>
-            <p>
-              Findable이 AI 검색 현황을 직접 진단하고, 무엇부터 고칠지
-              알려드립니다.
-            </p>
-            <span className="btn">findable.co.kr</span>
-          </div>
-          <img alt="" className="fmark" src={`${A}/F_mark.png`} />
-        </div>
-        <Foot c={c} n={10} stale={stale} statusNote={statusNote} />
+        {foot("plan")}
       </section>
 
-      {/* 11 뒷표지 */}
-      <section className="page back">
+      {/* 뒷표지 — 행동 1개 */}
+      <section className="page back rv">
         <img alt="Findable" className="fb" src={`${A}/F_mark.png`} />
         <div>
-          <h2>AI가 먼저 찾는 브랜드로.</h2>
-          <p>
-            Findable은 ChatGPT·Claude·Perplexity·Gemini 등 AI가 우리 브랜드를
-            어떻게 설명하는지 측정하고,
+          <h2>
+            결과가 궁금하시면
             <br />
-            무엇을 고치면 되는지 우선순위로 알려드립니다.
+            15분만 시간을 내 주세요.
+          </h2>
+          <p>
+            AI 답변 원문을 함께 보면서 {c.brand}에 맞는 개선 순서를
+            설명드리겠습니다.
+            <br />
+            받으신 메일에 회신하시거나 아래 주소로 연락 주세요.
           </p>
-          <span className="url">findable.co.kr</span>
+          <a className="url" href={`mailto:${CONTACT_EMAIL}`}>
+            {CALL_CTA}
+          </a>
+          <div className="mail">{CONTACT_EMAIL} · findable.co.kr</div>
         </div>
         <div className="meta">
           <span>

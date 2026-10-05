@@ -1,5 +1,6 @@
 import "@/components/client-report/client-report.css";
 import "@/components/client-report-v12/report-v12.css";
+import "@/components/client-report-v12/report-v12-revise.css";
 import "@/components/client-report-v12/report-v12-screen.css";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
