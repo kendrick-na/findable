@@ -316,3 +316,25 @@
   font-size: 9pt;
   color: var(--ink2);
 }
+
+/* 표지 결론: 틀린 비율(문장) + 매출(돈) 두 줄 */
+.fr12 .verdict.hook {
+  width: 150mm;
+}
+.fr12 .verdict.hook .s {
+  font-size: 15pt;
+  line-height: 1.42;
+}
+.fr12 .verdict.hook .s em {
+  color: var(--or-t);
+  white-space: nowrap;
+}
+.fr12 .verdict.hook .money {
+  margin-top: 2mm;
+  font-size: 11pt;
+  font-weight: 700;
+  color: var(--ink2);
+}
+.fr12 .verdict.hook .money b {
+  color: var(--ink);
+}

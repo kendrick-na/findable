@@ -389,6 +389,8 @@ export function ClientReportV12({
     </>
   ) : null;
 
+  // 표지 결론은 「10번 중 몇 번」으로 바로 읽히게(16건 중 11건 → 10번 중 7번). 반올림은 표지 문장에만 쓰고 숫자 칸은 원래 값.
+  const wrongOf10 = s.n ? Math.round((s.bad_n / s.n) * 10) : 0;
   const bestEngine = engines.reduce<(typeof engines)[number] | null>(
     (best, e) => (best === null || e.rate > best.rate ? e : best),
     null
@@ -406,26 +408,43 @@ export function ClientReportV12({
         </div>
         <h1 {...rich(str(c, "cover_title"))} />
         <div className="csub" {...rich(str(c, "cover_sub"))} />
-        <div className="verdict">
+        <div className="verdict hook">
           <div className="l">한 줄 결론</div>
           <div className="s">
-            AI 답변 {s.n}개 중 {s.ok_n}개만 {c.brand}를 정확히 설명했습니다.
+            AI에게 {c.brand}를 물으면{" "}
+            <em>
+              {wrongOf10 === 0
+                ? "대부분 맞는 답"
+                : `10번 중 ${wrongOf10}번은 틀린 답`}
+            </em>
+            이 나옵니다.
           </div>
-          <div className="nums">
-            <div>
-              <b className="hot">
-                {s.ok_n}/{s.n}
-              </b>
-              정확히 설명
+          {revenue ? (
+            <div className="money">
+              이 AI 추천을 거쳐 결정되는 {c.brand} 매출,{" "}
+              <b>매달 약 {krw(revenue.monthly)}</b>
             </div>
+          ) : null}
+          <div className="nums">
+            {revenue ? (
+              <div>
+                <b className="hot">
+                  월 {krw(revenue.monthly).replace("\u00a0원", "")}
+                </b>
+                AI 추천을 거치는 매출(추정)
+              </div>
+            ) : null}
             <div>
-              <b>{s.bad_n}건</b>정확히 설명하지 못함
+              <b className={revenue ? "" : "hot"}>
+                {s.bad_n}/{s.n}
+              </b>
+              틀리거나 모른다고 한 답변
             </div>
             <div>
               <b>
                 {s.engines_correct}/{s.engines_total}곳
               </b>
-              정답을 낸 AI
+              한 번이라도 맞힌 AI
             </div>
           </div>
         </div>
