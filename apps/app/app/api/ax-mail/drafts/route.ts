@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import { isAdmin } from "@repo/auth/admin";
 import { auth } from "@repo/auth/server";
 import { database } from "@repo/database";
+import { log } from "@repo/observability/log";
 import { z } from "zod";
+import {
+  CONTACT_BASIS_KINDS,
+  contactBasisProblem,
+  hasAdLabel,
+} from "@/lib/ax-mail/contact-basis";
 import {
   createGoogleDraft,
   findSenderAlias,
@@ -11,8 +17,9 @@ import {
   refreshMailAccessToken,
 } from "@/lib/ax-mail/google";
 import {
-  hasAdNotice,
   hasGuaranteeClaim,
+  hasReportLink,
+  hasSenderNotice,
   OUTREACH_SENDER,
 } from "@/lib/ax-mail/leads";
 
@@ -28,7 +35,44 @@ const inputSchema = z.object({
   body: z.string().min(1).max(100_000),
   idempotencyKey: z.uuid(),
   leadId: z.string().trim().min(1).max(253).optional(),
+  // 수신 근거 — 명함 수령·정보 요청·6개월 내 기존 고객. 없으면 초안을 만들지 않는다.
+  contactBasis: z.object({
+    kind: z.enum(CONTACT_BASIS_KINDS),
+    detail: z.string().trim().min(1).max(500),
+    date: z.string().trim().max(10),
+  }),
 });
+
+type DraftInput = z.infer<typeof inputSchema>;
+
+/** 초안 내용 검사 — 화면 검사와 같은 규칙으로 서버에서 다시 본다. 문제 없으면 null. */
+function draftContentError(
+  subject: string,
+  body: string,
+  contactBasis: DraftInput["contactBasis"]
+): { error: string; reason?: string } | null {
+  // 수신 근거 — 없음·미래 날짜·기존 고객 6개월 경과면 만들지 않는다.
+  const basisProblem = contactBasisProblem(contactBasis, new Date());
+  if (basisProblem) {
+    return { error: "contact_basis_invalid", reason: basisProblem };
+  }
+  // 정보통신망법 제50조 제4항 — 전송자·수신거부 안내가 빠진 초안은 만들지 않는다.
+  // 기존 고객(동의 예외)도 광고성 정보라 제목 「(광고)」 표기가 필요하다.
+  if (
+    !hasSenderNotice(body) ||
+    (contactBasis.kind === "existing_customer" && !hasAdLabel(subject))
+  ) {
+    return { error: "ad_notice_missing" };
+  }
+  // 첨부 대신 승인된 리포트 링크 — 링크 없는 초안은 만들지 않는다.
+  if (!hasReportLink(body)) {
+    return { error: "report_link_missing" };
+  }
+  if (hasGuaranteeClaim(`${subject}\n${body}`)) {
+    return { error: "guarantee_claim" };
+  }
+  return null;
+}
 
 export async function POST(request: Request) {
   const { orgId, userId } = await auth();
@@ -39,13 +83,11 @@ export async function POST(request: Request) {
   if (!input.success) {
     return Response.json({ error: "invalid_input" }, { status: 400 });
   }
-  const { recipient, subject, body, idempotencyKey, leadId } = input.data;
-  // 정보통신망법 제50조 제4항 — 광고 표기·전송자·수신거부 안내가 빠진 초안은 만들지 않는다.
-  if (!hasAdNotice(subject, body)) {
-    return Response.json({ error: "ad_notice_missing" }, { status: 422 });
-  }
-  if (hasGuaranteeClaim(`${subject}\n${body}`)) {
-    return Response.json({ error: "guarantee_claim" }, { status: 422 });
+  const { recipient, subject, body, idempotencyKey, leadId, contactBasis } =
+    input.data;
+  const contentError = draftContentError(subject, body, contactBasis);
+  if (contentError) {
+    return Response.json(contentError, { status: 422 });
   }
   const connection = await database.mailboxConnection.findUnique({
     where: {
@@ -149,6 +191,13 @@ export async function POST(request: Request) {
     await database.outreachDraft.update({
       where: { id: draft.id },
       data: { remoteDraftId, status: "created" },
+    });
+    // 수신 근거 기록(설명 원문은 개인정보가 섞일 수 있어 종류·날짜만 남긴다).
+    log.info("ax_mail.draft.contact_basis", {
+      draftId: draft.id,
+      leadId: leadId ?? null,
+      basisKind: contactBasis.kind,
+      basisDate: contactBasis.date,
     });
     return Response.json(
       { draftId: remoteDraftId, sender: sender.email, status: "created" },

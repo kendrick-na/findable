@@ -28,8 +28,10 @@ type Labels = DraftComposerLabels & {
   blockerInbound: string;
   blockerJudgesDisagree: string;
   blockerNoContact: string;
+  blockerNoContactBasis: string;
   blockerNoDate: string;
   blockerNoObservation: string;
+  blockerNoReport: string;
   blockerNotMeasured: string;
   citedDenominator: string;
   connect: string;
@@ -72,6 +74,7 @@ type Labels = DraftComposerLabels & {
   statusBlocked: string;
   statusDrafted: string;
   statusInbound: string;
+  statusNeedsBasis: string;
   statusReady: string;
   title: string;
 };
@@ -105,6 +108,8 @@ function blockerLabel(labels: Labels, blocker: Blocker): string {
     no_observation: labels.blockerNoObservation,
     judges_disagree: labels.blockerJudgesDisagree,
     no_contact: labels.blockerNoContact,
+    no_report: labels.blockerNoReport,
+    no_contact_basis: labels.blockerNoContactBasis,
   };
   return map[blocker];
 }
@@ -138,9 +143,17 @@ function StatusBadge({
       </span>
     );
   }
-  return item.readiness.ready ? (
-    <span className="rounded border border-emerald-800 bg-emerald-950/40 px-1.5 py-0.5 text-[11px] text-emerald-300">
-      {labels.statusReady}
+  if (item.readiness.ready) {
+    return (
+      <span className="rounded border border-emerald-800 bg-emerald-950/40 px-1.5 py-0.5 text-[11px] text-emerald-300">
+        {labels.statusReady}
+      </span>
+    );
+  }
+  // 문안은 준비됐고 수신 근거만 남았다 — 작성기에서 입력하면 저장할 수 있다.
+  return item.readiness.composable ? (
+    <span className="rounded border border-emerald-900 px-1.5 py-0.5 text-[11px] text-emerald-200/80">
+      {labels.statusNeedsBasis}
     </span>
   ) : (
     <span className="rounded border border-amber-900 bg-amber-950/30 px-1.5 py-0.5 text-[11px] text-amber-300">
@@ -389,6 +402,7 @@ function LeadDetail({
       {draft && (
         <DraftComposer
           canSave={canSave}
+          initialBasis={lead.contact?.contactBasis ?? null}
           initialDraft={draft}
           key={lead.id}
           labels={labels}
@@ -431,11 +445,12 @@ export function LeadWorkbench({
         .filter(
           (item) =>
             (industry === "all" || item.lead.industry === industry) &&
-            (!onlyReady || item.readiness.ready)
+            (!onlyReady || item.readiness.composable)
         )
         .sort(
           (a, b) =>
             Number(b.readiness.ready) - Number(a.readiness.ready) ||
+            Number(b.readiness.composable) - Number(a.readiness.composable) ||
             Number(Boolean(b.lead.measurement)) -
               Number(Boolean(a.lead.measurement)) ||
             a.lead.priority - b.lead.priority
