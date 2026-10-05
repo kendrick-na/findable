@@ -72,6 +72,9 @@ const RENEWABLE_BILLING_STATUSES = new Set<string>([
   "expired",
 ]);
 
+/** 환불로 끝난 구독이 가질 수 있는 상태(환불 직후 canceled → 기간 종료 cron 후 expired). */
+const REFUND_FENCE_STATUSES = new Set<string>(["canceled", "expired"]);
+
 /** 갱신 회차 실패 처리를 다시 받아야 하는(최종 상태가 아닌) 결제 상태. */
 const NON_FINAL_PAYMENT_STATUSES = new Set<string>([
   "READY",
@@ -396,7 +399,7 @@ async function handleCancelledPayment(
  * "기록된 환불" 판정 순서:
  *   1) PaymentRefund 에 마지막 결제(billingLastPaymentId)의 전액 환불 기록이 있으면 그것을 믿는다
  *      (조직 정리가 아직 실패 중이어도, PortOne 조회 없이).
- *   2) 기록이 없거나 테이블이 없으면 기존 판정: 조직이 canceled 이고 마지막 결제가 PortOne 에서
+ *   2) 기록이 없거나 테이블이 없으면 기존 판정: 조직이 canceled·expired 이고 마지막 결제가 PortOne 에서
  *      CANCELLED. 해지(unsubscribe)만 한 조직은 마지막 결제가 PAID 라 막히지 않는다.
  */
 async function isOlderThanRecordedRefund(
@@ -423,7 +426,8 @@ async function isOlderThanRecordedRefund(
   if ((await readPaymentRefundKind(lastPaymentId)) === "full") {
     return true;
   }
-  if (user?.organization?.billingStatus !== "canceled") {
+  // P2-2: 기간 종료 cron 이 환불된 구독을 expired 로 닫은 뒤에도 펜스가 유지돼야 한다.
+  if (!REFUND_FENCE_STATUSES.has(user?.organization?.billingStatus ?? "")) {
     return false;
   }
   const last = await getPortOnePayment(lastPaymentId);

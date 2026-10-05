@@ -897,3 +897,28 @@ describe("renewal scheduling does not overwrite a concurrent change [P2-1]", () 
     });
   });
 });
+
+describe("refund fence after the period-end cron [P2-2]", () => {
+  it("P2-2: without a refund record, the fence still holds after the org moves to expired", async () => {
+    fixture.state.refundTableMissing = true;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-04T00:00:00.000Z"));
+    const { buildPaymentId } = await import("@repo/payments/catalog");
+    const olderId = buildPaymentId("starter", "user_owner-1");
+    vi.setSystemTime(new Date("2026-10-04T00:05:00.000Z"));
+    expect(await confirm("starter", "exp-key")).toMatchObject({ ok: true });
+    const refundedId = fixture.pay.mock.calls[0]?.[0].paymentId as string;
+    fixture.getPayment.mockImplementation(async (id: string) =>
+      id === refundedId ? cancelledPayment(id) : paidPayment(id)
+    );
+    expect((await postEvent("Transaction.Cancelled", refundedId)).status).toBe(
+      200
+    );
+    // expireCancelledSubscriptions closes the refunded subscription.
+    fixture.organization.billingStatus = "expired";
+    fixture.grant.mockClear();
+
+    expect((await postPaid(olderId)).status).toBe(200);
+    expect(fixture.grant).not.toHaveBeenCalled();
+  });
+});
