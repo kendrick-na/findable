@@ -319,6 +319,76 @@ export function ClientReportV12({
   const selfRank = share
     ? share.brands.findIndex((b) => b.self) + 1 || null
     : null;
+  const selfMentions = selfShare?.mentions ?? 0;
+  const shareTop = share?.brands[0];
+  const shareThird = share?.brands[2];
+  // 순위표만 있으면 「그래서 뭐?」가 남는다 → 저장된 숫자로 바로 계산되는 해석 두 줄을 붙인다(추측 없음).
+  const shareInsights: string[] = share
+    ? ((c.insights_share as string[] | undefined) ?? [
+        `1위 <b>${shareTop?.name}</b>는 답변 ${share.answers}건 중 ${shareTop?.mentions}건에서 추천됐고, ${c.brand}는 ${selfMentions}건이었습니다.`,
+        selfRank !== null && selfRank <= 3
+          ? `${c.brand}는 3위 안에 들어 있습니다. 1위와의 차이는 추천 <b>${(shareTop?.mentions ?? 0) - selfMentions}건</b>입니다.`
+          : `${c.brand}가 3위 안에 들려면 추천이 <b>${(shareThird?.mentions ?? 0) - selfMentions + 1}건</b> 더 필요합니다.`,
+      ])
+    : [];
+  const topicWins = new Map<string, number>();
+  for (const t of topics ?? []) {
+    if (t.top[0]) {
+      topicWins.set(t.top[0], (topicWins.get(t.top[0]) ?? 0) + 1);
+    }
+  }
+  const topicLeader = [...topicWins.entries()].sort((a, b) => b[1] - a[1])[0];
+  const topicInsights: string[] = topics
+    ? ((c.insights_topics as string[] | undefined) ??
+      [
+        `${c.brand}가 1위인 주제는 <b>${topics.filter((t) => t.self_rank === 1).length}개</b>, 3위 안에 든 주제는 ${topics.filter((t) => t.self_rank !== null && t.self_rank <= 3).length}개입니다.`,
+        topicLeader
+          ? `가장 많은 주제에서 1위에 오른 브랜드는 <b>${topicLeader[0]}</b>(${topicLeader[1]}개 주제)입니다.`
+          : "",
+      ].filter(Boolean))
+    : [];
+
+  // 2쪽 「이 리포트를 만든 이유」 — 모든 리포트에 같은 배경(IR 덱 2026-09 실측 사실)을 쓰고, 측정 숫자만 끼운다.
+  // 리포트마다 따로 쓰려면 config.why_custom=true.
+  const engineNames = engines.map((e) => e.name).join("·");
+  const why =
+    c.why_custom === true
+      ? c.why
+      : [
+          {
+            h: "고객은 이제 검색창 대신 AI에게 묻습니다",
+            p: "예전 검색은 백화점 진열대처럼 여러 브랜드를 보여 줬습니다. AI 추천은 직원이 고객 앞에서 <b>브랜드 3개만 골라 주는 것</b>과 같습니다. 그 3개에 들지 못하면 검색 1위여도 <b>추천 목록 밖</b>에 놓입니다.",
+          },
+          {
+            h: "AI는 웹에 있는 근거로만 답합니다",
+            p: "AI가 브랜드를 빼먹거나 다른 회사로 착각하는 건 제품이 나빠서가 아니라 <b>인용할 근거가 웹에 없기 때문</b>입니다. 특히 한국어는 AI 답변의 바탕이 되는 공개 웹 데이터의 <b>0.84%</b>뿐이라(Common Crawl 기준), 한국 브랜드일수록 근거가 부족합니다.",
+          },
+          {
+            h: `그래서 AI가 ${c.brand}를 어떻게 말하는지 직접 물어봤습니다`,
+            p: `${engineNames} <b>AI ${s.engines_total}곳</b>에 질문 ${s.nq}개를 묻고, 돌아온 <b>답변 ${s.n}건을 한 건씩 읽어</b> 정확한지, 다른 회사로 착각했는지, 어떤 출처를 근거로 삼았는지 확인했습니다. AI 답변은 물을 때마다 달라지기 때문에(같은 질문을 3번 물어 추천 목록이 똑같았던 경우는 36개 중 4개), 마지막 장의 계획대로 <b>같은 조건으로 다시 측정</b>해 변화를 확인합니다.`,
+          },
+        ];
+
+  const categoryQuestions = Array.isArray(c.category_questions)
+    ? (c.category_questions as string[])
+    : [];
+  const questionList = categoryQuestions.length ? (
+    <>
+      <h3 className="sq">
+        물어본 구매 질문 전체
+        <span className="sub">
+          실제 검색어(네이버·구글 검색량)에서 고른 질문{" "}
+          {categoryQuestions.length}개
+        </span>
+      </h3>
+      <ol className="qall">
+        {categoryQuestions.map((q) => (
+          <li key={q}>“{q}”</li>
+        ))}
+      </ol>
+    </>
+  ) : null;
+
   const bestEngine = engines.reduce<(typeof engines)[number] | null>(
     (best, e) => (best === null || e.rate > best.rate ? e : best),
     null
@@ -408,7 +478,7 @@ export function ClientReportV12({
           <Dot />
         </h1>
         <div className="why-grid">
-          {c.why.map((w, i) => (
+          {why.map((w, i) => (
             <div className="why-item" key={w.h}>
               <div className="n">{i + 1}</div>
               <div>
@@ -706,6 +776,8 @@ export function ClientReportV12({
               </div>
             ))}
           </div>
+          <div className="ins">{lines(shareInsights)}</div>
+          {topics ? null : questionList}
           {share.note ? (
             <div className="notes" {...rich(share.note)} />
           ) : (
@@ -767,6 +839,8 @@ export function ClientReportV12({
               ))}
             </tbody>
           </table>
+          <div className="ins">{lines(topicInsights)}</div>
+          {questionList}
           <div className="notes">
             주제마다 실제 검색어에서 고른 질문을 AI 여러 곳에 묻고, 답변에
             추천된 순서와 횟수로 순위를 매겼습니다.

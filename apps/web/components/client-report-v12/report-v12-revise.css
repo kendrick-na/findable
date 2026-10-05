@@ -117,9 +117,9 @@
   grid-template-columns: 8mm 46mm 1fr 14mm;
   gap: 3mm;
   align-items: center;
-  padding: 2.6mm 0;
+  padding: 3.6mm 0;
   border-bottom: 1px solid var(--line);
-  font-size: 9.4pt;
+  font-size: 10pt;
 }
 .fr12 .rank .i {
   font-weight: 800;
@@ -157,7 +157,7 @@
 
 /* 신규: 주제별 1~3위 */
 .fr12 .tbl.topics td {
-  padding: 3.2mm 2mm;
+  padding: 4.6mm 2mm;
 }
 .fr12 .tbl.topics .qcell {
   font-size: 8.4pt;
@@ -305,4 +305,14 @@
   margin-top: 3.4mm;
   font-size: 9pt;
   color: #cfc6be;
+}
+
+/* 물어본 구매 질문 전체(투명성) */
+.fr12 .qall {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6mm 8mm;
+  padding-left: 5mm;
+  font-size: 9pt;
+  color: var(--ink2);
 }
