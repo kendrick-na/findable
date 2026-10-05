@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { APP_LOCALE_SWITCHER_VISIBLE } from "@/lib/i18n";
+import { APP_ENGLISH_ENABLED } from "@/lib/i18n";
 
 /**
  * 🔴 KO/EN 토글은 핵심 화면 영어화 전까지 숨긴다
@@ -15,12 +15,10 @@ const HEADER = readFileSync(
 
 describe("dashboard locale switcher visibility", () => {
   it("renders the switcher only behind the visibility flag", () => {
-    expect(HEADER).toContain(
-      "{APP_LOCALE_SWITCHER_VISIBLE && <LocaleSwitcher />}"
-    );
+    expect(HEADER).toContain("{APP_ENGLISH_ENABLED && <LocaleSwitcher />}");
   });
 
-  it("keeps the switcher hidden until core screens are translated", () => {
-    expect(APP_LOCALE_SWITCHER_VISIBLE).toBe(false);
+  it("keeps English (toggle + auto-detect) off until core screens are translated", () => {
+    expect(APP_ENGLISH_ENABLED).toBe(false);
   });
 });

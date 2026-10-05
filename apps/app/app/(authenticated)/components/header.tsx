@@ -9,7 +9,7 @@ import { Separator } from "@repo/design-system/components/ui/separator";
 import { SidebarTrigger } from "@repo/design-system/components/ui/sidebar";
 import { Fragment, type ReactNode } from "react";
 import { scopedHeaderMetric } from "@/lib/db/scoped";
-import { APP_LOCALE_SWITCHER_VISIBLE } from "@/lib/i18n";
+import { APP_ENGLISH_ENABLED } from "@/lib/i18n";
 import { LocaleSwitcher } from "./locale-switcher";
 
 interface HeaderProps {
@@ -85,7 +85,7 @@ export const Header = ({
       </Breadcrumb>
     </div>
     <div className="flex items-center gap-2">
-      {APP_LOCALE_SWITCHER_VISIBLE && <LocaleSwitcher />}
+      {APP_ENGLISH_ENABLED && <LocaleSwitcher />}
       {/* D11: 브레드크럼 반대쪽 끝. children 이 있는 화면에서도 자리가 겹치지 않는다. */}
       {showMetric && <HeaderMetric />}
       {children}
