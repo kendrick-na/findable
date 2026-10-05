@@ -38,6 +38,17 @@ export type AppLocale = (typeof APP_LOCALES)[number];
  */
 export const APP_DEFAULT_LOCALE: AppLocale = "ko";
 
+/**
+ * 헤더의 KO/EN 토글을 **보여줄지**.
+ *
+ * 🔴 **왜 꺼 두나**(2026-10-06 · `docs/_적용/영어화면_범위_20261006.md` 5장):
+ *   [실측] EN 을 누르면 사이드바만 영어가 되고 본문·로그인(Clerk koKR)·날짜(ko-KR)·
+ *   AI 리포트는 한국어로 남는다 → **반쯤 영어인 화면은 고장으로 보인다.** 외국 고객 0명.
+ *   → 핵심 화면(온보딩·대시보드·브랜드·기록·결제) 이관 + 👤 결정(약관·통화·용어집) 전까지 숨긴다.
+ * ⚠️ 숨기는 건 **버튼뿐**이다. `/locale?locale=en` 경로와 쿠키는 그대로라 내부 확인은 가능하다.
+ */
+export const APP_LOCALE_SWITCHER_VISIBLE = false;
+
 const isAppLocale = (v: string | undefined): v is AppLocale =>
   v !== undefined && APP_LOCALES.includes(v as AppLocale);
 
