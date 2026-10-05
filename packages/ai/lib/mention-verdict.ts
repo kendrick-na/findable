@@ -33,7 +33,7 @@ export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
 const LETSUR_VERDICT_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
 
-async function verdictModel() {
+export async function verdictModel() {
   const letsurKey = process.env.LETSUR_API_KEY;
   if (letsurKey) {
     const letsur = createOpenAI({
@@ -125,7 +125,10 @@ const UNSUPPORTED_KNOWLEDGE_RE =
 const UNRESOLVED_IDENTITY_RE =
   /(?:can|could|may)\s+refer\s+to[\s\S]{0,100}?(?:different|several|multiple|few)|refers?\s+to\s+(?:a\s+few|several|multiple)\s+(?:different\s+|distinct\s+)?(?:entities|products?|brands?|services?)|which\s+one\s+you\s+mean|(?:여러|몇)\s*(?:가지|개의)?\s*(?:다른|동명)?\s*(?:대상|브랜드|서비스|제품)|어느\s*(?:것|브랜드|서비스)을?\s*(?:뜻|의미)/i;
 
-function mentionsOfficialDomain(text: string, brandDomain?: string): boolean {
+export function mentionsOfficialDomain(
+  text: string,
+  brandDomain?: string
+): boolean {
   if (!brandDomain) {
     return false;
   }
@@ -143,7 +146,7 @@ function mentionsOfficialDomain(text: string, brandDomain?: string): boolean {
   );
 }
 
-function normalizedHost(value: string): string {
+export function normalizedHost(value: string): string {
   return value
     .trim()
     .toLowerCase()
@@ -152,7 +155,7 @@ function normalizedHost(value: string): string {
     .split(URL_PATH_SPLIT_RE)[0];
 }
 
-function compactIdentity(value: string): string {
+export function compactIdentity(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9가-힣]/g, "");
 }
 
@@ -267,7 +270,10 @@ function hasKoreanProductMetadataEvidence(input: VerifyInput): boolean {
 }
 
 /** 등록 도메인의 하위 서비스와 본사 도메인은 같은 공식 소유 범위로 본다. */
-function isOfficialDomain(domain: string, brandDomain?: string): boolean {
+export function isOfficialDomain(
+  domain: string,
+  brandDomain?: string
+): boolean {
   const official = brandDomain ? normalizedHost(brandDomain) : "";
   const candidate = normalizedHost(domain);
   return Boolean(
@@ -287,7 +293,7 @@ function isOfficialDomain(domain: string, brandDomain?: string): boolean {
  * 도메인 직접 언급/인용은 강한 근거이고, 그 외에는 title·description·H1의 서로 다른
  * 고유 토큰이 최소 2개 일치해야 한다. 이름만 넣은 업종 일반론·환각은 여기서 탈락한다.
  */
-function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
+export function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
   if (!input.officialSite) {
     return false;
   }
@@ -410,7 +416,7 @@ const VerdictSchema = z.object({
 /** 판정에 넣을 답변 길이 상한 — 토큰·지연 보호. 앞부분에 판단 근거가 몰려 있다. */
 const VERDICT_TEXT_LIMIT = 1200;
 
-interface VerifyInput {
+export interface VerifyInput {
   /** 브랜드 도메인 — 어떤 엔티티인지 특정하는 가장 강한 단서. */
   brandDomain?: string;
   brandName: string;
@@ -422,9 +428,13 @@ interface VerifyInput {
   industry?: string;
   /** 공식 홈페이지에서 직접 읽은 엔티티 단서. 판정의 기준 사실로만 사용한다. */
   officialSite?: {
+    /** 푸터 사업자등록번호. 판정 v3 근거 전용(v2 판정·프롬프트는 읽지 않는다). */
+    businessNumber?: string | null;
     description?: string | null;
     finalUrl?: string;
     h1?: string | null;
+    /** 푸터 상호(법인명). 판정 v3 근거 전용(v2 판정·프롬프트는 읽지 않는다). */
+    legalName?: string | null;
     siteName?: string | null;
     title?: string | null;
   } | null;
@@ -704,6 +714,104 @@ export interface VerifiableResponse {
   rawResponse: string;
 }
 
+/** 판정 v3 그림자 결과(저장 전용 — 점수·집계에 쓰지 않는다). */
+export interface VerdictV3Shadow {
+  evidence?: string;
+  quality: string;
+  reason?: string;
+  via: string;
+}
+
+export interface VerifiedResponseFields {
+  mentionQuality: MentionQuality;
+  verdictReason?: MentionVerdictReason;
+  verdictV3?: VerdictV3Shadow;
+  verdictVia: string;
+}
+
+interface VerifyBrand {
+  brandDomain?: string;
+  brandName: string;
+  brandVariants?: string[];
+  industry?: string;
+  officialSite?: VerifyInput["officialSite"];
+  signal?: AbortSignal;
+}
+
+/** 측정 실패·stub 은 판정 대상이 아니다(null). v2·v3 가 같은 입력을 쓴다. */
+function buildVerdictInput(
+  r: VerifiableResponse,
+  brand: VerifyBrand
+): (VerifyInput & { stringMatched: boolean }) | null {
+  if (r.errorMessage || r.isStub) {
+    return null;
+  }
+  return {
+    brandName: brand.brandName,
+    brandVariants: brand.brandVariants,
+    brandDomain: brand.brandDomain,
+    citedDomains: (r.citedSources ?? [])
+      .map((source) => source.domain ?? source.url ?? "")
+      .filter(Boolean),
+    industry: brand.industry,
+    officialSite: brand.officialSite,
+    signal: brand.signal,
+    text: r.rawResponse ?? "",
+    // Adapter flags are an optimization hint, not the source of truth.
+    // A live Naver AI Briefing response started with the brand name while
+    // its adapter flag was false; passing that flag through made a named
+    // answer look absent before the entity verifier could inspect it.
+    stringMatched: detectBrandMention(
+      r.rawResponse ?? "",
+      brand.brandName,
+      brand.brandVariants
+    ).mentioned,
+  };
+}
+
+function shadowField(
+  shadow: {
+    evidence?: string;
+    quality: string;
+    reason?: string;
+    via: string;
+  } | null
+): { verdictV3?: VerdictV3Shadow } {
+  if (!shadow) {
+    return {};
+  }
+  return {
+    verdictV3: {
+      quality: shadow.quality,
+      via: shadow.via,
+      ...(shadow.reason ? { reason: shadow.reason } : {}),
+      ...(shadow.evidence ? { evidence: shadow.evidence } : {}),
+    },
+  };
+}
+
+function logShadowDistribution(
+  out: Array<{ brandMentioned: boolean; verdictV3?: VerdictV3Shadow }>,
+  brandName: string
+): void {
+  const v3Dist: Record<string, number> = {};
+  let disagreements = 0;
+  for (const r of out) {
+    if (!r.verdictV3) {
+      continue;
+    }
+    v3Dist[r.verdictV3.quality] = (v3Dist[r.verdictV3.quality] ?? 0) + 1;
+    if ((r.verdictV3.quality === "confirmed") !== r.brandMentioned) {
+      disagreements += 1;
+    }
+  }
+  log.info("mention.verdict_v3.shadow_distribution", {
+    brandName,
+    disagreements,
+    ...v3Dist,
+  });
+}
+
 /**
  * LLM 판정 동시 실행 상한 — 한 측정에서 모호 응답이 다수면 레이트리밋·지연이 커진다.
  * 프롬프트 8 × 엔진 7 = 최대 56행이지만, 실제로 LLM까지 가는 건 모호한 소수다.
@@ -731,22 +839,13 @@ export async function verifyMentions<T extends VerifiableResponse>(
     responseCount: number;
     phase: "started" | "finished";
   }) => void
-): Promise<
-  Array<
-    T & {
-      mentionQuality: MentionQuality;
-      verdictReason?: MentionVerdictReason;
-      verdictVia: string;
-    }
-  >
-> {
-  const out: Array<
-    T & {
-      mentionQuality: MentionQuality;
-      verdictReason?: MentionVerdictReason;
-      verdictVia: string;
-    }
-  > = new Array(responses.length);
+): Promise<Array<T & VerifiedResponseFields>> {
+  const out: Array<T & VerifiedResponseFields> = new Array(responses.length);
+  // 판정 v3 그림자 기록(2026-10-05, 기본 off) — 점수에는 쓰지 않고 나란히 저장만 한다.
+  const { isVerdictV3ShadowEnabled, verifyMentionV3 } = await import(
+    "./mention-verdict-v3"
+  );
+  const shadowV3 = isVerdictV3ShadowEnabled();
 
   // 인덱스를 청크로 끊어 동시 실행 상한을 지킨다.
   for (let start = 0; start < responses.length; start += VERDICT_CONCURRENCY) {
@@ -760,37 +859,28 @@ export async function verifyMentions<T extends VerifiableResponse>(
     } catch {
       /* logging is best-effort */
     }
+    const verdictInputs = slice.map((r) => buildVerdictInput(r, brand));
+    const shadowVerdicts = shadowV3
+      ? Promise.all(
+          verdictInputs.map((verdictInput) =>
+            verdictInput
+              ? verifyMentionV3(verdictInput).catch(() => null)
+              : Promise.resolve(null)
+          )
+        )
+      : Promise.resolve(slice.map(() => null));
     const verdicts = await Promise.all(
-      slice.map((r): Promise<MentionVerdict> => {
+      slice.map((r, i): Promise<MentionVerdict> => {
+        const verdictInput = verdictInputs[i];
         // 측정 실패/stub 은 판정 대상 아님 — 원본 유지.
-        if (r.errorMessage || r.isStub) {
+        if (!verdictInput) {
           return Promise.resolve({
             counted: r.brandMentioned,
             quality: "absent" as MentionQuality,
             via: "skipped" as const,
           });
         }
-        return verifyMention({
-          brandName: brand.brandName,
-          brandVariants: brand.brandVariants,
-          brandDomain: brand.brandDomain,
-          citedDomains: (r.citedSources ?? [])
-            .map((source) => source.domain ?? source.url ?? "")
-            .filter(Boolean),
-          industry: brand.industry,
-          officialSite: brand.officialSite,
-          signal: brand.signal,
-          text: r.rawResponse ?? "",
-          // Adapter flags are an optimization hint, not the source of truth.
-          // A live Naver AI Briefing response started with the brand name while
-          // its adapter flag was false; passing that flag through made a named
-          // answer look absent before the entity verifier could inspect it.
-          stringMatched: detectBrandMention(
-            r.rawResponse ?? "",
-            brand.brandName,
-            brand.brandVariants
-          ).mentioned,
-        }).catch((error) => {
+        return verifyMention(verdictInput).catch((error) => {
           if (isAbortError(error) || brand.signal?.aborted) {
             return {
               counted: false,
@@ -804,8 +894,10 @@ export async function verifyMentions<T extends VerifiableResponse>(
       })
     );
 
+    const v3 = await shadowVerdicts;
     for (const [i, verdict] of verdicts.entries()) {
       const original = slice[i] as T;
+      const shadow = v3[i];
       out[start + i] = {
         ...original,
         brandMentioned: verdict.counted,
@@ -813,6 +905,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
         mentionQuality: verdict.quality,
         verdictVia: verdict.via,
         ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
+        ...shadowField(shadow),
       };
     }
     try {
@@ -840,6 +933,9 @@ export async function verifyMentions<T extends VerifiableResponse>(
   for (const r of out) {
     dist[r.mentionQuality] += 1;
     viaDist[r.verdictVia as keyof typeof viaDist] += 1;
+  }
+  if (shadowV3) {
+    logShadowDistribution(out, brand.brandName);
   }
   log.info("mention.verdict.distribution", {
     brandName: brand.brandName,

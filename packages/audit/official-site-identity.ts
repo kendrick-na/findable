@@ -4,6 +4,8 @@ import { assertPublicUrl, normalizePublicUrl } from "./public-url-security";
 const FETCH_TIMEOUT_MS = 20_000;
 const MAX_REDIRECTS = 3;
 const MAX_RESPONSE_BYTES = 1_000_000;
+/** 푸터 사업자 정보를 찾느라 더 읽는 상한. 넘으면 찾은 데까지로 끝낸다(측정 시간 보호). */
+const FOOTER_SEARCH_BYTES = 600_000;
 const USER_AGENT =
   "FindableMeasurementBot/1.0 (+https://www.findable.co.kr/ko/contact)";
 const BODY_PARAGRAPH_RE = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
@@ -16,11 +18,44 @@ const NON_VISIBLE_BLOCK_RE =
   /<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
 
 export interface OfficialSiteIdentity {
+  /** 사업자등록번호(000-00-00000). 한국 통신판매 사이트는 푸터 게시가 의무다. */
+  businessNumber?: string | null;
   description: string | null;
   finalUrl: string;
   h1: string | null;
+  /**
+   * 푸터의 상호·회사명(예: 「바이오센서연구소(주)」, 2026-10-05). 브랜드명이 흔한 단어일 때
+   * 「같은 회사」임을 가르는 가장 강한 공식 사실이다. 판정 v3 의 근거로만 쓴다.
+   */
+  legalName?: string | null;
   siteName: string | null;
   title: string | null;
+}
+
+const BUSINESS_NUMBER_RE =
+  /사업자\s*등록\s*번호\s*[:：]?\s*(\d{3}-\d{2}-\d{5})/;
+const LEGAL_NAME_RE =
+  /(?:상호(?:명)?|회사명|법인명|업체명)\s*[:：]\s*([^\n|:：]{2,60}?)(?=\s*(?:\||대표|사업자|주소|전화|tel|통신판매|개인정보|이메일|e-?mail|$))/i;
+const LEGAL_NAME_MAX_LENGTH = 40;
+
+/** 푸터 사업자 정보 — 보이는 글자에서만 읽는다(주석·스크립트 제외). */
+export function extractBusinessInfo(contentHtml: string): {
+  businessNumber: string | null;
+  legalName: string | null;
+} {
+  const text = decodeEntities(
+    contentHtml
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/<(br|\/p|\/div|\/li|\/span|\/dd|\/dt)\b[^>]*>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+  )
+    .replace(/[ \t ]+/g, " ")
+    .replace(/\n\s*/g, "\n");
+  const legal = text.match(LEGAL_NAME_RE)?.[1]?.trim() ?? "";
+  return {
+    businessNumber: text.match(BUSINESS_NUMBER_RE)?.[1] ?? null,
+    legalName: legal && legal.length <= LEGAL_NAME_MAX_LENGTH ? legal : null,
+  };
 }
 
 /**
@@ -66,6 +101,7 @@ export function extractOfficialSiteIdentity(
       bodyDescription(contentHtml),
     h1: tagText(contentHtml, "h1"),
     siteName: metaContent(contentHtml, "og:site_name"),
+    ...extractBusinessInfo(contentHtml),
   };
   return identity.title ||
     identity.description ||
@@ -144,22 +180,29 @@ export async function readIdentityHtml(
     reader.cancel().catch(() => undefined);
   };
   signal?.addEventListener("abort", cancel, { once: true });
+  // A generic title with no description is insufficient for entity matching.
+  // Keep reading the bounded body to find a visible service statement.
+  const headUsable = () =>
+    HEAD_CLOSED_RE.test(text) &&
+    Boolean(
+      metaContent(text, "description") || metaContent(text, "og:description")
+    ) &&
+    Boolean(extractOfficialSiteIdentity(text, ""));
   while (true) {
     const { done, value } = await reader.read();
     if (done) {
       break;
     }
-    const remaining = MAX_RESPONSE_BYTES - bytes;
-    const chunk = value.subarray(0, remaining);
+    // 푸터의 상호·사업자번호(2026-10-05)는 문서 맨 끝에 있다. 설명을 찾은 뒤에도
+    //   상호를 찾을 때까지 더 읽되, 그때부터는 FOOTER_SEARCH_BYTES 까지만 읽는다.
+    const cap = headUsable() ? FOOTER_SEARCH_BYTES : MAX_RESPONSE_BYTES;
+    const chunk = value.subarray(0, Math.max(0, cap - bytes));
     bytes += chunk.byteLength;
     text += decoder.decode(chunk, { stream: true });
-    // A generic title with no description is insufficient for entity matching.
-    // Keep reading the bounded body to find a visible service statement.
     if (
-      HEAD_CLOSED_RE.test(text) &&
-      (metaContent(text, "description") ||
-        metaContent(text, "og:description")) &&
-      extractOfficialSiteIdentity(text, "")
+      headUsable() &&
+      (bytes >= FOOTER_SEARCH_BYTES ||
+        extractBusinessInfo(text.replace(NON_VISIBLE_BLOCK_RE, "")).legalName)
     ) {
       await reader.cancel().catch(() => undefined);
       return text + decoder.decode();

@@ -78,7 +78,20 @@ describe("official site identity response", () => {
     });
   });
 
-  it("reads a usable head without downloading a large page body", async () => {
+  it("reads the footer business info of a Korean store homepage", () => {
+    const html =
+      '<html><head><title>프란츠 스킨케어 FRANZ SKINCARE</title><meta property="og:site_name" content="프란츠 스킨케어" /></head><body><div class="xans-company"><span>상호: 바이오센서연구소(주)</span><span>대표: 홍길동</span><span>사업자등록번호: 119-86-72928 <a>[사업자정보확인]</a></span></div><!-- 상호: 주석회사 --></body></html>';
+    expect(
+      extractOfficialSiteIdentity(html, "https://franzskincare.com/")
+    ).toMatchObject({
+      legalName: "바이오센서연구소(주)",
+      businessNumber: "119-86-72928",
+      siteName: "프란츠 스킨케어",
+    });
+  });
+
+  // 2026-10-05: 푸터 상호를 찾느라 더 읽지만, 상호가 없는 큰 문서도 600KB 에서 멈춘다.
+  it("bounds the footer search on a large page without business info", async () => {
     const head =
       '<html><head><title>이니스프리 | 공식몰</title><meta name="description" content="화장품 공식몰"></head>';
     const response = new Response(
@@ -101,6 +114,6 @@ describe("official site identity response", () => {
     );
     expect(identity?.title).toContain("이니스프리");
     expect(identity?.description).toBe("화장품 공식몰");
-    expect(html.length).toBeLessThan(1000);
+    expect(html.length).toBeLessThanOrEqual(700_000);
   });
 });

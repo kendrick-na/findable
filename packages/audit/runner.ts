@@ -1115,6 +1115,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         // 비집계 사유(2026-09-28): 「판정기 실패(judge_failed)」와 「공식 근거 없음
         //   (official_evidence_missing)」을 저장 단계에서 구분한다. 재검증이 이 값을 본다.
         ...(r.verdictReason ? { verdictReason: r.verdictReason } : {}),
+        // 판정 v3 그림자(2026-10-05, MENTION_VERDICT_V3_SHADOW=true 일 때만) — 저장만 한다.
+        //   점수·버킷은 v2 그대로. 운영 전환 전 v2 와의 차이를 사람이 검토하는 재료다.
+        ...(r.verdictV3 ? { verdictV3: r.verdictV3 } : {}),
         // 심층 분석의 인용 출처 판정도 원본 측정에 근거해야 한다. 도메인 집계만
         // 남기면 수진 분석기가 실제 출처 URL·제목을 전혀 받지 못해, "출처 분석"이라는
         // 이름과 입력 데이터가 어긋난다.
