@@ -70,6 +70,10 @@ const fx = vi.hoisted(() => {
 
 vi.mock("@repo/database", () => ({
   database: {
+    // plan-grant serializes per-user Clerk writes in an advisory-lock transaction.
+    $transaction: async (
+      fn: (tx: { $executeRaw: () => Promise<number> }) => unknown
+    ) => fn({ $executeRaw: async () => 1 }),
     organization: {
       findFirst: vi.fn(({ where }: { where: Record<string, unknown> }) =>
         Promise.resolve(fx.matches(where) ? { ...fx.org } : null)

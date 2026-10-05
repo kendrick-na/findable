@@ -9,6 +9,7 @@ export default defineConfig({
       "__tests__/audit-revalidation-postgres.test.ts",
       "__tests__/prompt-attempt-ledger-postgres.test.ts",
       "__tests__/payment-refund-record-postgres.test.ts",
+      "__tests__/plan-grant-lock-postgres.test.ts",
     ],
   },
   resolve: {

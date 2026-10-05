@@ -1,6 +1,7 @@
 import "server-only";
 
 import { clerkClient } from "@clerk/nextjs/server";
+import { database } from "@repo/database";
 import { hasPlan, normalizePlan, type Plan } from "./plan";
 
 /**
@@ -20,6 +21,27 @@ import { hasPlan, normalizePlan, type Plan } from "./plan";
  */
 
 const MAX_PUSH_RETRIES = 3;
+
+/**
+ * 🔒 P1-4(2026-10-05): Clerk 메타데이터는 읽기→계산→쓰기다. 결제 부여·환불 회수·기간 만료가
+ *   같은 사용자에게 동시에 돌면 둘 다 같은 스냅샷을 읽고, 나중에 쓴 쪽이 먼저 쓴 변경을 지운다
+ *   (방금 결제한 권한이 사라지거나 회수한 권한이 되살아난다).
+ *   → 사용자별 Postgres advisory lock(트랜잭션 범위) 안에서 읽고 쓴다. 다른 사용자는 막지 않는다.
+ *   잠금을 못 잡으면(DB 장애) 쓰지 않고 실패로 돌려준다 — 호출부가 재시도한다(fail-closed).
+ *   ⚠️ 잠금 동안 DB 연결 하나를 쥔 채 Clerk 를 호출한다(보통 수백 ms). 그래서 범위를 이
+ *   읽기→쓰기 구간으로만 좁힌다.
+ */
+const METADATA_LOCK_TX = { maxWait: 10_000, timeout: 60_000 } as const;
+
+function withUserMetadataLock<T>(
+  userId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  return database.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`findable:plan-metadata:${userId}`}, 0))`;
+    return fn();
+  }, METADATA_LOCK_TX);
+}
 
 /**
  * 결제에서 부여된 plan 의 출처를 Clerk privateMetadata에만 남긴다.
@@ -181,13 +203,33 @@ async function updatePlanMetadata(input: {
   return false;
 }
 
-export function grantPlan(userId: string, plan: Plan): Promise<boolean> {
+export async function grantPlan(userId: string, plan: Plan): Promise<boolean> {
   // 파트너·초대코드·관리자 부여는 결제 취소로 회수하면 안 된다.
-  return updatePlanMetadata({ userId, plan, privateMetadata: null });
+  try {
+    return await withUserMetadataLock(userId, () =>
+      updatePlanMetadata({ userId, plan, privateMetadata: null })
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** 결제로 plan 을 부여하고, 전액 취소 때만 회수할 출처(paymentId)를 비공개로 보관한다. */
 export async function grantPlanFromPayment(
+  userId: string,
+  plan: Plan,
+  paymentId: string
+): Promise<boolean> {
+  try {
+    return await withUserMetadataLock(userId, () =>
+      grantPlanFromPaymentLocked(userId, plan, paymentId)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function grantPlanFromPaymentLocked(
   userId: string,
   plan: Plan,
   paymentId: string
@@ -224,13 +266,28 @@ export async function grantPlanFromPayment(
  * 현재 권한을 유지하면서 환불된 출처만 제거한다.
  * 이후 파트너 승인·초대코드·관리자 부여가 덮어쓴 사용자는 절대 내리지 않는다.
  */
+interface RevokeResult {
+  reason: "not_current_payment" | "push_failed" | "revoked";
+  revoked: boolean;
+}
+
 export async function revokePlanFromPayment(
   userId: string,
   paymentId: string
-): Promise<{
-  revoked: boolean;
-  reason: "not_current_payment" | "push_failed" | "revoked";
-}> {
+): Promise<RevokeResult> {
+  try {
+    return await withUserMetadataLock(userId, () =>
+      revokePlanFromPaymentLocked(userId, paymentId)
+    );
+  } catch {
+    return { revoked: false, reason: "push_failed" };
+  }
+}
+
+async function revokePlanFromPaymentLocked(
+  userId: string,
+  paymentId: string
+): Promise<RevokeResult> {
   const clerk = await clerkClient();
   let privateMetadata: Record<string, unknown> | undefined;
   let currentPlan: Plan;
@@ -298,13 +355,28 @@ export function paymentGrantAfterExpiry(
  * 갱신 결제 실패 후 유예가 끝난 사용자의 결제 권한을 회수한다(cron 전용).
  * 결제와 무관한 권한(파트너·초대코드·관리자)은 grantPlan 이 출처를 비우므로 건드리지 않는다.
  */
+interface ExpireResult {
+  expired: boolean;
+  reason: "nothing_to_expire" | "push_failed" | "expired";
+}
+
 export async function expirePaymentGrants(
   userId: string,
   isExpired: (paymentId: string) => boolean
-): Promise<{
-  expired: boolean;
-  reason: "nothing_to_expire" | "push_failed" | "expired";
-}> {
+): Promise<ExpireResult> {
+  try {
+    return await withUserMetadataLock(userId, () =>
+      expirePaymentGrantsLocked(userId, isExpired)
+    );
+  } catch {
+    return { expired: false, reason: "push_failed" };
+  }
+}
+
+async function expirePaymentGrantsLocked(
+  userId: string,
+  isExpired: (paymentId: string) => boolean
+): Promise<ExpireResult> {
   let privateMetadata: Record<string, unknown> | undefined;
   let currentPlan: Plan;
   try {
