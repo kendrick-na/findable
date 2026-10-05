@@ -68,9 +68,9 @@ export const PRICING_TIERS: PricingTier[] = [
     name: "Free Audit",
     price: "₩0",
     period: "1회 무료",
-    desc: "도메인 입력 한 번으로 7개 AI 진단 결과를 받아보세요.",
+    desc: "도메인 입력 한 번으로 AI 답변 4곳과 네이버·다음 검색 노출을 진단해 보세요.",
     features: [
-      "7개 AI 답변 1회 진단",
+      "AI 답변 4곳 + 네이버·다음 검색 1회 진단",
       "1페이지 PDF 리포트",
       "이메일 발송",
       "카드 등록 불필요",

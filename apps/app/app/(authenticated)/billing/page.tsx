@@ -37,6 +37,15 @@ const TierCta = ({
   webUrl: string;
   termsHref: string;
 }) => {
+  // 여기 오는 Free 카드는 "현재가 아님" = 유료 이용 중이라는 뜻이다. 무료 진단 버튼은
+  //   혼란만 준다(2026-10-05 로컬 E2E) → 포함 사실만 알린다.
+  if (tier.plan === "free") {
+    return (
+      <span className="inline-flex items-center justify-center rounded-md border border-[color:var(--findable-hairline,#23252a)] px-4 py-2 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+        현재 플랜에 포함
+      </span>
+    );
+  }
   if (!(tier.plan && PAYABLE_PLANS.has(tier.plan))) {
     return (
       <a
@@ -180,6 +189,11 @@ const BillingPage = async () => {
         },
       })
     : null;
+  const hasPendingRefund = orgId
+    ? (await database.refundRequest.count({
+        where: { organizationId: orgId, status: "pending" },
+      })) > 0
+    : false;
   const hasSubscription = Boolean(
     org?.billingCustomerId && org.billingProvider === "portone"
   );
@@ -215,7 +229,9 @@ const BillingPage = async () => {
             )}
             {/* ⚖️ 환불·청약철회는 이메일 외에 앱 안에서도 요청할 수 있다(약관 제4조의3 제5항).
                 유료 이용 중이거나 정기결제가 있는 조직에만 보인다 — 무료 조직엔 환불할 결제가 없다. */}
-            {(plan !== "free" || hasSubscription) && <RefundRequestForm />}
+            {(plan !== "free" || hasSubscription) && (
+              <RefundRequestForm hasPendingRequest={hasPendingRefund} />
+            )}
             <a
               className="self-start text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs underline underline-offset-4 hover:text-[color:var(--findable-ink,#f7f8f8)]"
               href={termsHref}

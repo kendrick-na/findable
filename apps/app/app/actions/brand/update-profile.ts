@@ -3,6 +3,7 @@
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import { ensureOrgExists } from "@/lib/db/ensure-org";
 import { scopedBrandById } from "@/lib/db/scoped";
 
 /**
@@ -172,6 +173,14 @@ export const updateBrandProfile = async (
   if (Object.keys(data).length === 0 && !updateOnboarding) {
     // 보낼 게 없으면 DB 를 건드리지 않는다(건너뛰기 = 성공).
     return { ok: true };
+  }
+
+  // 온보딩 단계는 Org 행에 저장한다. 웹훅이 늦어 Org 가 아직 없으면 update 가
+  //   "레코드 없음"으로 실패해 같은 단계가 반복된다 → 먼저 Clerk 에서 보장한다.
+  if (updateOnboarding && (await ensureOrgExists()) !== owned.organizationId) {
+    return {
+      error: "조직 정보를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.",
+    };
   }
 
   try {

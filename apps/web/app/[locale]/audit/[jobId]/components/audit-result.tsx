@@ -1632,7 +1632,7 @@ function ProcessingState({
       <p className="mt-2 text-zinc-400">
         {isKo
           ? `${domain}을 여러 AI에서 측정하고 있어요. 약 30초~3분 걸려요.`
-          : `Measuring ${domain} across 7 AI engines. ~30s-3m.`}
+          : `Measuring ${domain} across several AI engines. ~30s-3m.`}
       </p>
       <p className="mt-4 font-medium text-xs text-zinc-400">
         {isKo

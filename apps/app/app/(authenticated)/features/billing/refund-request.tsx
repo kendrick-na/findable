@@ -24,10 +24,19 @@ const DONE_MESSAGE = {
     "이미 접수된 요청이 있어요. 받은 날부터 3영업일 이내에 처리해 드려요.",
 } as const;
 
-export const RefundRequestForm = () => {
+export const RefundRequestForm = ({
+  hasPendingRequest = false,
+}: {
+  /** 처리 대기 요청이 이미 있으면 새로고침 뒤에도 접수 상태를 보여 준다. */
+  hasPendingRequest?: boolean;
+}) => {
   const [isOpen, setOpen] = useState(false);
   const [message, setMessage] = useState("");
-  const [outcome, setOutcome] = useState<Outcome>({ kind: "idle" });
+  const [outcome, setOutcome] = useState<Outcome>(
+    hasPendingRequest
+      ? { kind: "done", status: "already_pending" }
+      : { kind: "idle" }
+  );
   const [isPending, startTransition] = useTransition();
   const messageId = useId();
 

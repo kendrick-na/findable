@@ -5,6 +5,7 @@ import { getCurrentPlan } from "@repo/auth/plan-server";
 import { database, Prisma } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import { ensureOrgExists } from "@/lib/db/ensure-org";
 import { requireOrg, scopedBrandById } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
 import { scheduleSiteReadinessRun } from "@/lib/site-readiness/schedule";
@@ -341,6 +342,15 @@ export const assignBrandOwner = async (
         ok: true,
         ...(await startMeasurementAfterAssign(domain, name)),
         siteReadinessRunId: siteReadinessRunId ?? undefined,
+      };
+    }
+
+    // 3-B) 신규 생성 전 Org 행 보장 — Clerk 웹훅이 늦으면 Org 없이 Brand 만 생겨
+    //   (relationMode="prisma" 라 FK 가 막지 않는다) 다음 온보딩 저장이 실패한다.
+    //   2026-10-05 로컬 E2E 에서 2단계 "다음"이 같은 화면만 반복한 원인.
+    if ((await ensureOrgExists()) !== orgId) {
+      return {
+        error: "조직 정보를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.",
       };
     }
 

@@ -121,7 +121,7 @@ const AuthLayout = async ({ children }: AuthLayoutProps) => {
           </ul>
 
           {/* AI 엔진 로고 — haloX 참조. Findable이 실제로 추적하는 엔진이라 날조가 아니다
-              (위 문단의 "7개 AI"와 같은 사실, 로고로 시각화만 다르게 한 것). */}
+              (위 문단과 같은 사실, 로고로 시각화만 다르게 한 것). */}
           <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
             <span>ChatGPT</span>
             <span>Perplexity</span>

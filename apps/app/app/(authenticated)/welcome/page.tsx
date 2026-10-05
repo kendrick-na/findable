@@ -41,8 +41,26 @@ export const metadata: Metadata = {
 /** 1단계 폼이 실어 보내는 측정 결말. 없으면 `started`(정상 경로). */
 type MeasurementOutcome = "failed" | "rate_limited" | "started";
 
-const toOutcome = (value?: string): MeasurementOutcome =>
-  value === "rate_limited" || value === "failed" ? value : "started";
+const toOutcome = (value?: string): MeasurementOutcome | undefined =>
+  value === "rate_limited" || value === "failed" || value === "started"
+    ? value
+    : undefined;
+
+/**
+ * 쿼리가 없을 때(새로고침·직접 진입) 결말을 DB 에서 읽는다.
+ * 🔴 2026-10-05 로컬 E2E: 쿼리가 사라지면 측정이 시작조차 안 됐어도
+ *   "측정은 이미 시작됐어요"라고 말했다. 진행 중·완료 Job 이 있을 때만 started.
+ */
+const outcomeFromJobs = async (
+  brandId: string
+): Promise<MeasurementOutcome> => {
+  const latest = await database.auditJob.findFirst({
+    orderBy: { createdAt: "desc" },
+    select: { status: true },
+    where: { brandId },
+  });
+  return latest && latest.status !== "failed" ? "started" : "failed";
+};
 
 const stringList = (value: unknown): string[] =>
   Array.isArray(value)
@@ -123,7 +141,7 @@ const WelcomePage = async ({
       initialScope={brand.marketScope ?? undefined}
       initialStep={organization?.onboardingStep ?? 2}
       initialVariants={stringList(brand.entityVariants)}
-      measurement={toOutcome(measurement)}
+      measurement={toOutcome(measurement) ?? (await outcomeFromJobs(brand.id))}
       readiness={
         readinessRun
           ? {

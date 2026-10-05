@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { env } from "@/env";
 import { ExportDialog, type ExportDialogLabels } from "./export-dialog";
 import { MobileTabBar, type MobileTabBarLabels } from "./mobile-tab-bar";
@@ -382,6 +382,11 @@ export const GlobalSidebar = ({
   const pathname = usePathname();
   const selectedBrandId = useSearchParams().get("brand") ?? undefined;
   const [exportOpen, setExportOpen] = useState(false);
+  // Clerk 조직 선택기·사용자 버튼은 서버 HTML 과 브라우저 첫 렌더가 달라 hydration 오류를 낸다
+  //   (2026-10-05 로컬 E2E, 로그인 후 모든 화면). 마운트 뒤에만 그리고, 그 전엔
+  //   같은 높이의 빈 칸을 둬 레이아웃이 흔들리지 않게 한다.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const isActive = (item: NavItem) =>
     !item.external &&
@@ -404,10 +409,12 @@ export const GlobalSidebar = ({
                   sidebar.open ? "" : "-mx-1"
                 )}
               >
-                <OrganizationSwitcher
-                  afterSelectOrganizationUrl="/"
-                  hidePersonal
-                />
+                {mounted ? (
+                  <OrganizationSwitcher
+                    afterSelectOrganizationUrl="/"
+                    hidePersonal
+                  />
+                ) : null}
               </div>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -491,16 +498,20 @@ export const GlobalSidebar = ({
               </span>
             </SidebarMenuItem>
             <SidebarMenuItem className="flex items-center gap-2">
-              <UserButton
-                appearance={{
-                  elements: {
-                    rootBox: "flex overflow-hidden w-full",
-                    userButtonBox: "flex-row-reverse",
-                    userButtonOuterIdentifier: "truncate pl-0",
-                  },
-                }}
-                showName
-              />
+              {mounted ? (
+                <UserButton
+                  appearance={{
+                    elements: {
+                      rootBox: "flex overflow-hidden w-full",
+                      userButtonBox: "flex-row-reverse",
+                      userButtonOuterIdentifier: "truncate pl-0",
+                    },
+                  }}
+                  showName
+                />
+              ) : (
+                <div className="w-full" />
+              )}
               <div className="flex shrink-0 items-center gap-px">
                 <ModeToggle />
                 <Button
