@@ -68,9 +68,18 @@ const REQUIRED_NOTICE = [
   "환불·청약철회 요청",
   "kendrick@indigochild.kr",
   "3영업일",
+  // 약관 제4조의3 제4항(2026-10-12 시행): 중도 해지도 이용일수만 공제, 위약금·수수료 0%
+  "7일이 지난 뒤 이용 중에 해지·환불을 요청해도 이용일수만 공제",
+  "위약금·수수료는 없어요",
 ];
-const missingNotice = (text: string) =>
-  REQUIRED_NOTICE.filter((phrase) => !text.includes(phrase));
+/** 약관과 어긋나는 옛 문구(잔여 요금 10% 공제 초안). 보이면 실패. */
+const FORBIDDEN_NOTICE = ["10%", "잔여 기간"];
+const missingNotice = (text: string) => [
+  ...REQUIRED_NOTICE.filter((phrase) => !text.includes(phrase)),
+  ...FORBIDDEN_NOTICE.filter((phrase) => text.includes(phrase)).map(
+    (phrase) => `forbidden: ${phrase}`
+  ),
+];
 
 describe("정기결제 — 결제 전 환불·해지 고지와 확인 체크", () => {
   const renderSubscribe = () =>

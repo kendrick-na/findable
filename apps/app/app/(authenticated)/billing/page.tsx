@@ -213,7 +213,7 @@ const BillingPage = async () => {
                 <CancelSubscription />
               </div>
             )}
-            {/* ⚖️ 환불·청약철회는 이메일 외에 앱 안에서도 요청할 수 있다(약관 제4조의3 초안 제5항).
+            {/* ⚖️ 환불·청약철회는 이메일 외에 앱 안에서도 요청할 수 있다(약관 제4조의3 제5항).
                 유료 이용 중이거나 정기결제가 있는 조직에만 보인다 — 무료 조직엔 환불할 결제가 없다. */}
             {(plan !== "free" || hasSubscription) && <RefundRequestForm />}
             <a

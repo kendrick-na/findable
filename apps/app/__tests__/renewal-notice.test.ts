@@ -13,7 +13,9 @@
  */
 
 import { createResendClient } from "@repo/email";
+import { RenewalNoticeEmail } from "@repo/email/templates/renewal-notice";
 import { buildPaymentId } from "@repo/payments/catalog";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const NOW = new Date("2026-10-05T00:00:00.000Z");
@@ -336,6 +338,24 @@ describe("메일 내용", () => {
     expect(html).toContain("2026년 10월 7일");
     expect(html).toContain("간편결제");
     expect(html).toContain("https://app.findable.test/billing");
+  });
+
+  it("본문은 약관과 같은 중도 해지 기준(이용일수만 공제·수수료 없음)을 적는다", () => {
+    const html = renderToStaticMarkup(
+      RenewalNoticeEmail({
+        amountKrw: 108_900,
+        billingUrl: "https://app.findable.test/billing",
+        paymentDateLabel: "2026년 10월 7일",
+        paymentMethodLabel: "간편결제",
+        planName: "Starter",
+        termsUrl: "https://findable.test/ko/legal/terms",
+      })
+    );
+    expect(html).toContain(
+      "이용한 날짜만큼만 공제하고, 위약금·수수료는 없어요"
+    );
+    expect(html).not.toContain("10%");
+    expect(html).toContain("https://findable.test/ko/legal/terms");
   });
 
   it("plan 을 읽을 수 없는 결제 ID 는 보내지 않는다", async () => {

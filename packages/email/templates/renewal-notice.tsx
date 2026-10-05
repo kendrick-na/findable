@@ -150,7 +150,9 @@ export const RenewalNoticeEmail = ({
               wordBreak: "keep-all",
             }}
           >
-            정기결제를 이용 중이라 보내 드리는 안내예요. 환불·청약철회 기준은{" "}
+            정기결제를 이용 중이라 보내 드리는 안내예요. 이용 중에 해지·환불을
+            요청하면 이용한 날짜만큼만 공제하고, 위약금·수수료는 없어요.
+            환불·청약철회 기준은{" "}
             <Link href={termsUrl} style={{ color: "#71717a" }}>
               이용약관
             </Link>

@@ -8,7 +8,7 @@ import { requestRefund } from "@/app/actions/billing/refund-request";
  * 요금제 화면 "환불·청약철회 요청" — 2026-10-05.
  *
  * 요청은 운영자에게만 전달된다(고객에게 자동 메일 없음). 접수 후에는 화면에 확인 문구와
- * 3영업일 처리 안내(약관 제4조의3 초안 제6항)를 보여 준다.
+ * 3영업일 처리 안내(약관 제4조의3 제6항)를 보여 준다.
  * 🔒 만류·겁주기 문구를 넣지 않는다(해지 버튼과 같은 다크패턴 금지 규칙).
  */
 
@@ -73,7 +73,8 @@ export const RefundRequestForm = () => {
     <div className="flex max-w-xl flex-col gap-2 rounded-md border border-[color:var(--findable-hairline,#23252a)] p-3">
       <p className="text-[color:var(--findable-ink-muted,#d0d6e0)] text-xs">
         결제일부터 7일 이내 청약철회, 또는 이용 중 해지·환불을 요청할 수 있어요.
-        요청은 운영팀에 바로 전달되고, 받은 날부터 3영업일 이내에 처리해 드려요.
+        이용한 날짜만큼만 공제하고, 위약금·수수료는 없어요. 요청은 운영팀에 바로
+        전달되고, 받은 날부터 3영업일 이내에 처리해 드려요.
       </p>
       <label
         className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs"
