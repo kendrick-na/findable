@@ -62,7 +62,7 @@ const PAGES_KO: Record<string, LegalDoc> = {
   },
   terms: {
     title: "이용약관",
-    updated: "2026년 7월 29일",
+    updated: "2026년 10월 5일",
     sections: [
       {
         h: "제1조 (목적)",
@@ -78,7 +78,7 @@ const PAGES_KO: Record<string, LegalDoc> = {
       },
       {
         h: "제4조 (요금 및 결제)",
-        p: "유료 플랜은 월/연 단위로 결제됩니다. 결제는 결제대행사 포트원(PortOne)을 통해 처리되며, 실제 카드 결제·정산은 포트원과 제휴한 카드사·PG사가 담당합니다. 결제 즉시 효력이 발생하며, 환불은 결제일로부터 7일 이내 미사용분에 한해 가능합니다.",
+        p: "유료 플랜은 월 단위로 결제됩니다(월 자동결제 또는 1개월 이용권). 결제는 결제대행사 포트원(PortOne)을 통해 처리되며, 실제 카드 결제·정산은 포트원과 제휴한 카드사·PG사가 담당합니다. 결제 즉시 효력이 발생하며, 환불은 결제일로부터 7일 이내 미사용분에 한해 가능합니다.",
       },
       {
         h: "제5조 (회사의 의무)",
@@ -141,7 +141,7 @@ const PAGES_EN: Record<string, LegalDoc> = {
   },
   terms: {
     title: "Terms of Service",
-    updated: "July 29, 2026",
+    updated: "October 5, 2026",
     sections: [
       {
         h: "Article 1 (Purpose)",
@@ -157,7 +157,7 @@ const PAGES_EN: Record<string, LegalDoc> = {
       },
       {
         h: "Article 4 (Fees and payment)",
-        p: "Paid plans are billed monthly or annually. Payments are processed through the payment provider PortOne, with actual card processing and settlement handled by PortOne's partnered card issuers and PG companies. Payments take effect immediately, and refunds are available within 7 days of payment, limited to the unused portion.",
+        p: "Paid plans are billed monthly (monthly auto-renewal or a one-month pass). Payments are processed through the payment provider PortOne, with actual card processing and settlement handled by PortOne's partnered card issuers and PG companies. Payments take effect immediately, and refunds are available within 7 days of payment, limited to the unused portion.",
       },
       {
         h: "Article 5 (Company obligations)",
