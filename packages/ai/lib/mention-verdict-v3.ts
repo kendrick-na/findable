@@ -22,6 +22,7 @@ import { getDomain } from "tldts";
 import { z } from "zod";
 import { isAbortError } from "./engines/provider-error";
 import {
+  canDemandOfficialEvidence,
   compactIdentity,
   hasOfficialIdentityEvidence,
   isOfficialDomain,
@@ -325,7 +326,7 @@ export async function verifyMentionV3(
   }
   if (
     judged.quality === "confirmed" &&
-    input.officialSite &&
+    canDemandOfficialEvidence(input) &&
     !hasOfficialEvidenceV3(input)
   ) {
     return {
