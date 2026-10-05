@@ -137,3 +137,95 @@ export function paymentIssuedAtFromPaymentId(paymentId: string): Date | null {
   const ms = Number.parseInt(raw, 36);
   return Number.isSafeInteger(ms) && ms > 0 ? new Date(ms) : null;
 }
+
+/**
+ * paymentId 위변조 허용 오차 — PortOne requestedAt(없으면 paidAt)과 ID 시각 조각의 차이.
+ * 결제창은 intent 직후 열리므로 정상 결제는 수 초~수 분 안에 든다(2026-10-05 P1-1).
+ */
+export const PAYMENT_ID_TIME_TOLERANCE_MS = 15 * 60 * 1000;
+
+const PAYABLE_PLANS = new Set<string>(PAYMENT_CATALOG.map((e) => e.plan));
+
+export interface ParsedPaymentId {
+  issuedAt: Date;
+  plan: PayablePlan;
+  userId: string;
+}
+
+/**
+ * buildPaymentId 형식과 **정확히** 같은 ID만 해석한다(대소문자·앞자리 0·잘린 조각 거부).
+ * 해석 결과로 다시 만든 ID가 원문과 같아야 한다.
+ */
+export function parsePaymentId(paymentId: string): ParsedPaymentId | null {
+  const parts = paymentId.split("-");
+  const plan = parts[1] ?? "";
+  if (parts[0] !== PAYMENT_ID_PREFIX || !PAYABLE_PLANS.has(plan)) {
+    return null;
+  }
+  const userId = userIdFromPaymentId(paymentId);
+  const issuedAt = paymentIssuedAtFromPaymentId(paymentId);
+  if (!(userId && issuedAt)) {
+    return null;
+  }
+  const payablePlan = plan as PayablePlan;
+  if (buildPaymentId(payablePlan, userId, issuedAt.getTime()) !== paymentId) {
+    return null;
+  }
+  return { plan: payablePlan, userId, issuedAt };
+}
+
+export type PaymentIdCheck =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "malformed"
+        | "plan_mismatch"
+        | "user_mismatch"
+        | "no_reference_time"
+        | "time_mismatch";
+    };
+
+/**
+ * 브라우저가 requestPayment 전에 paymentId 를 고칠 수 있다(시각 조각을 먼 미래로 → 만료 안 됨,
+ * plan 조각 변경 등). 권한 부여 전에 ID 가 실제 결제와 맞는지 확인한다.
+ *
+ * - 형식: buildPaymentId 와 정확히 같아야 한다.
+ * - plan 조각 = 결제 금액으로 역산한 plan.
+ * - userId(주면) = ID 에 심긴 사용자.
+ * - 시각 조각이 PortOne requestedAt(없으면 paidAt)과 ±15분 안. 둘 다 없으면 거부(fail-closed).
+ *   서버가 기록한 정기결제 회차처럼 시각 조각이 청구 예정 시각인 ID는 `skipTimeCheck` 로 넘긴다.
+ */
+export function checkPaymentIdIntegrity(
+  paymentId: string,
+  expected: {
+    paidAt?: string;
+    plan: PayablePlan;
+    requestedAt?: string;
+    skipTimeCheck?: boolean;
+    userId?: string;
+  }
+): PaymentIdCheck {
+  const parsed = parsePaymentId(paymentId);
+  if (!parsed) {
+    return { ok: false, reason: "malformed" };
+  }
+  if (parsed.plan !== expected.plan) {
+    return { ok: false, reason: "plan_mismatch" };
+  }
+  if (expected.userId && parsed.userId !== expected.userId) {
+    return { ok: false, reason: "user_mismatch" };
+  }
+  if (expected.skipTimeCheck) {
+    return { ok: true };
+  }
+  const reference = expected.requestedAt ?? expected.paidAt;
+  const referenceMs = reference ? new Date(reference).getTime() : Number.NaN;
+  if (Number.isNaN(referenceMs)) {
+    return { ok: false, reason: "no_reference_time" };
+  }
+  return Math.abs(parsed.issuedAt.getTime() - referenceMs) <=
+    PAYMENT_ID_TIME_TOLERANCE_MS
+    ? { ok: true }
+    : { ok: false, reason: "time_mismatch" };
+}

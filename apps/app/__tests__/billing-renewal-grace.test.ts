@@ -91,7 +91,8 @@ describe("유예 기간 계산", () => {
     expect(isPaidPeriodOver(RENEWAL_ID, now)).toBe(true);
     const recent = buildPaymentId("growth", USER_ID, now.getTime() - DAY);
     expect(isPaidPeriodOver(recent, now)).toBe(false);
-    expect(isPaidPeriodOver("partner-grant", now)).toBe(false);
+    // P1-1: an unparseable payment source counts as expired (never "forever").
+    expect(isPaidPeriodOver("partner-grant", now)).toBe(true);
   });
 });
 

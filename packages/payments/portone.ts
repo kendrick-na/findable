@@ -50,6 +50,8 @@ const PaymentSchema = z.object({
       pgProvider: z.string().optional(),
     })
     .optional(),
+  // 결제 요청 시점(모든 상태에 있다). paymentId 시각 조각 위변조 검사 기준(P1-1).
+  requestedAt: z.string().optional(),
   paidAt: z.string().optional(),
   // CancelledPayment·PartialCancelledPayment 의 취소 시각. 다른 상태에는 없다(선택 필드).
   cancelledAt: z.string().optional(),

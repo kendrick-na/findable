@@ -34,6 +34,7 @@ import { log } from "@repo/observability/log";
 import {
   buildPaymentId,
   cancelBillingKeySchedules,
+  checkPaymentIdIntegrity,
   deleteBillingKey,
   getPortOnePayment,
   isFailedEvent,
@@ -431,6 +432,40 @@ async function undoGrantIfRefunded(
 }
 
 /**
+ * Paid 웹훅의 paymentId 위변조 검사(P1-1).
+ * 서버가 조직에 기록한 정기결제 회차(billingNextPaymentId·billingLastPaymentId)는 브라우저가 만든
+ * ID가 아니고, 시각 조각이 청구 예정 시각이라 requestedAt 과 다를 수 있다 → 시각 검사만 건너뛴다.
+ */
+async function checkWebhookPaymentId(
+  userId: string,
+  paymentId: string,
+  input: {
+    payment: LookedUpPayment;
+    plan: NonNullable<ReturnType<typeof planForAmount>>;
+  }
+) {
+  const user = await database.user.findUnique({
+    where: { id: userId },
+    select: {
+      organization: {
+        select: { billingLastPaymentId: true, billingNextPaymentId: true },
+      },
+    },
+  });
+  const org = user?.organization;
+  const serverRecorded =
+    org?.billingNextPaymentId === paymentId ||
+    org?.billingLastPaymentId === paymentId;
+  return checkPaymentIdIntegrity(paymentId, {
+    plan: input.plan,
+    userId,
+    requestedAt: input.payment.requestedAt,
+    paidAt: input.payment.paidAt,
+    skipTimeCheck: serverRecorded,
+  });
+}
+
+/**
  * 정기결제는 항상 미래 예약을 정확히 한 건만 둔다.
  *
  * 최초 결제는 subscribe action이 다음 달 예약을 먼저 기록한다. 이후에는 그 예약 결제가
@@ -604,6 +639,20 @@ export const POST = async (request: Request): Promise<Response> => {
         amount: payment.amount.total,
       });
       return done("amount_not_in_catalog");
+    }
+
+    // 🔒 P1-1: 브라우저가 고친 paymentId 로는 부여하지 않는다(재전송해도 같은 결과 → 200).
+    const integrity = await checkWebhookPaymentId(userId, paymentId, {
+      plan,
+      payment,
+    });
+    if (!integrity.ok) {
+      log.error("payments.webhook.payment_id_mismatch", {
+        userId,
+        paymentId,
+        reason: integrity.reason,
+      });
+      return done(`payment_id_mismatch:${integrity.reason}`);
     }
 
     if (await isOlderThanRecordedRefund(userId, paymentId)) {

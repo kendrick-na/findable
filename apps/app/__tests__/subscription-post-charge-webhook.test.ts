@@ -9,7 +9,10 @@
  * @vitest-environment node
  */
 
-import { amountForPlan } from "@repo/payments/catalog";
+import {
+  amountForPlan,
+  paymentIssuedAtFromPaymentId,
+} from "@repo/payments/catalog";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const STARTER_AMOUNT = amountForPlan("starter") ?? 0;
@@ -258,12 +261,14 @@ vi.mock("@/lib/db/ensure-org", () => ({
 vi.mock("@repo/observability/error", () => ({ parseError: String }));
 vi.mock("@repo/observability/log", () => ({ log: fixture.log }));
 
+// PortOne always returns requestedAt; for our IDs it is the ID's issue time.
 const paidPayment = (paymentId: string, paidAt?: string) => ({
   id: paymentId,
   storeId: "store-test",
   status: "PAID",
   currency: "KRW",
   amount: { total: STARTER_AMOUNT },
+  requestedAt: paymentIssuedAtFromPaymentId(paymentId)?.toISOString(),
   paidAt,
 });
 
