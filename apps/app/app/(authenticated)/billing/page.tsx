@@ -10,6 +10,7 @@ import { env } from "@/env";
 import { Header } from "../components/header";
 import { PlanBadge } from "../components/plan-badge";
 import { CancelSubscription } from "../features/billing/cancel-subscription";
+import { RefundRequestForm } from "../features/billing/refund-request";
 import { SubscribeButton } from "../features/billing/subscribe-button";
 import { UpgradeButton } from "../features/billing/upgrade-button";
 import { RedeemForm } from "../features/invite/redeem-form";
@@ -30,9 +31,11 @@ const PAYABLE_PLANS = new Set(["starter", "growth", "scale"]);
 const TierCta = ({
   tier,
   webUrl,
+  termsHref,
 }: {
   tier: (typeof PRICING_TIERS)[number];
   webUrl: string;
+  termsHref: string;
 }) => {
   if (!(tier.plan && PAYABLE_PLANS.has(tier.plan))) {
     return (
@@ -64,18 +67,21 @@ const TierCta = ({
           label={`${tier.name} 월 자동결제 시작`}
           listPrice={list}
           plan={plan}
+          termsHref={termsHref}
         />
       )}
       <UpgradeButton
         contactHref={`${webUrl}/ko/contact`}
         label="1회만 결제하기"
         plan={plan}
+        termsHref={termsHref}
       />
       <UpgradeButton
         contactHref={`${webUrl}/ko/contact`}
         label="법인카드로 결제하기"
         paymentMethod="card"
         plan={plan}
+        termsHref={termsHref}
       />
     </div>
   );
@@ -130,6 +136,24 @@ const FeatureRow = ({ feature }: { feature: PricingFeature }) => {
   );
 };
 
+/** 정기결제 중일 때 다음 결제 한 줄. */
+const nextPaymentLabel = (
+  org: {
+    billingNextPaymentAt: Date | null;
+    billingStatus: string;
+  } | null
+): string => {
+  if (org?.billingNextPaymentAt) {
+    return `다음 결제 예정일: ${new Intl.DateTimeFormat("ko-KR", {
+      dateStyle: "long",
+      timeZone: "Asia/Seoul",
+    }).format(org.billingNextPaymentAt)}`;
+  }
+  return org?.billingStatus === "past_due"
+    ? "다음 결제 예약을 확인 중이에요."
+    : "매월 자동결제가 켜져 있어요.";
+};
+
 export const metadata: Metadata = {
   title: "요금제·업그레이드 · Findable",
   description: "현재 플랜과 업그레이드 옵션을 확인하세요.",
@@ -139,6 +163,8 @@ const BillingPage = async () => {
   const plan = await getCurrentPlan();
   const webUrl = env.NEXT_PUBLIC_WEB_URL;
   const meta = PLAN_META[plan];
+  // ⚖️ 결제 전 고지·요금제 화면이 같은 약관(환불 규정 포함)을 가리킨다.
+  const termsHref = `${webUrl}/ko/legal/terms`;
 
   // ⚖️ 정기결제 중이면 **해지 수단을 화면에 노출**해야 한다(전자상거래법 제5조 제4항).
   //   빌링키가 저장돼 있고 provider 가 portone 일 때만 = 실제로 해지할 대상이 있을 때만 띄운다.
@@ -182,18 +208,22 @@ const BillingPage = async () => {
             {hasSubscription && (
               <div className="mt-1 flex flex-col gap-2">
                 <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                  {org?.billingNextPaymentAt
-                    ? `다음 결제 예정일: ${new Intl.DateTimeFormat("ko-KR", {
-                        dateStyle: "long",
-                        timeZone: "Asia/Seoul",
-                      }).format(org.billingNextPaymentAt)}`
-                    : org?.billingStatus === "past_due"
-                      ? "다음 결제 예약을 확인 중이에요."
-                      : "매월 자동결제가 켜져 있어요."}
+                  {nextPaymentLabel(org)}
                 </p>
                 <CancelSubscription />
               </div>
             )}
+            {/* ⚖️ 환불·청약철회는 이메일 외에 앱 안에서도 요청할 수 있다(약관 제4조의3 초안 제5항).
+                유료 이용 중이거나 정기결제가 있는 조직에만 보인다 — 무료 조직엔 환불할 결제가 없다. */}
+            {(plan !== "free" || hasSubscription) && <RefundRequestForm />}
+            <a
+              className="self-start text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs underline underline-offset-4 hover:text-[color:var(--findable-ink,#f7f8f8)]"
+              href={termsHref}
+              rel="noopener"
+              target="_blank"
+            >
+              이용약관(환불 규정)
+            </a>
           </div>
           {plan === "free" && (
             <a
@@ -303,7 +333,11 @@ const BillingPage = async () => {
                       이용 중
                     </span>
                   ) : (
-                    <TierCta tier={tier} webUrl={webUrl} />
+                    <TierCta
+                      termsHref={termsHref}
+                      tier={tier}
+                      webUrl={webUrl}
+                    />
                   )}
                 </div>
               );

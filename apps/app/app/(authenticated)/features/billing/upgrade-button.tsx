@@ -1,12 +1,12 @@
 "use client";
 
 import { requestPayment } from "@portone/browser-sdk/v2";
-import { useUser } from "@repo/auth/client";
 import {
   trackCheckoutCompleted,
   trackCheckoutFailed,
   trackCheckoutStarted,
 } from "@repo/analytics/funnel";
+import { useUser } from "@repo/auth/client";
 import { Button } from "@repo/design-system/components/ui/button";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { cn } from "@repo/design-system/lib/utils";
@@ -16,6 +16,7 @@ import {
   createCheckoutIntent,
   verifyPaymentAndGrant,
 } from "@/app/actions/billing/checkout";
+import { PurchaseNotice } from "./purchase-notice";
 
 /**
  * 앱 내 업그레이드 결제 버튼 (결제→plan 자동화, 2026-07-30).
@@ -23,6 +24,9 @@ import {
  * PortOne env 미설정이면 상담 링크로 폴백(안 죽음).
  *
  * ⚠️ @repo/payments index 는 server-only 라 여기선 타입만 로컬 정의.
+ *
+ * ⚖️ 2026-10-05 — 정기결제(`SubscribeButton`)와 같이 **결제창 전에 청약철회·환불 고지 +
+ *   확인 체크**를 거친다(전자상거래법 제13조 제2항·제17조 제6항). 체크 전엔 결제 버튼이 꺼져 있다.
  */
 
 type PayablePlan = "starter" | "growth" | "scale";
@@ -40,16 +44,22 @@ export const UpgradeButton = ({
   featured,
   contactHref,
   paymentMethod = "easy-pay",
+  termsHref,
 }: {
   plan: PayablePlan;
   label: string;
   featured?: boolean;
   contactHref: string;
   paymentMethod?: PaymentMethod;
+  /** 이용약관(환불 규정) 주소 — 결제 전 고지에서 연결한다. */
+  termsHref: string;
 }) => {
   const router = useRouter();
   const { user } = useUser();
   const [isPending, setIsPending] = useState(false);
+  // ⚖️ 사전 고지 단계. 첫 클릭은 결제창이 아니라 고지를 연다.
+  const [isNoticeOpen, setNoticeOpen] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
   const className = cn(
     "inline-flex w-full items-center justify-center rounded-md px-4 py-2 font-medium text-sm transition-colors",
@@ -147,6 +157,7 @@ export const UpgradeButton = ({
       // 결제 성공 **그리고** 플랜 부여 성공 — 둘 다 된 경우만 완료로 센다.
       trackCheckoutCompleted({ plan, amountKrw: intent.amount });
       toast.success(`${verified.plan} 플랜이 활성화됐어요!`);
+      setNoticeOpen(false);
       // Clerk publicMetadata는 결제 서버가 갱신한다. 기존 세션 토큰을 그대로
       // 새로고침하면 방금 결제한 고객에게도 Free가 보일 수 있으므로 먼저 갱신한다.
       await user?.reload();
@@ -161,15 +172,53 @@ export const UpgradeButton = ({
     }
   };
 
+  if (!isNoticeOpen) {
+    return (
+      <button
+        className={className}
+        onClick={() => setNoticeOpen(true)}
+        type="button"
+      >
+        {label}
+      </button>
+    );
+  }
+
   return (
-    <Button
-      className={className}
-      disabled={isPending}
-      onClick={pay}
-      type="button"
-      variant="ghost"
-    >
-      {isPending ? "결제 진행 중…" : label}
-    </Button>
+    <div className="flex flex-col gap-3 rounded-md border border-[color:var(--findable-hairline-strong,#34343a)] bg-[color:var(--findable-surface-1,#0f1011)] p-4">
+      <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+        {label}
+      </p>
+      <PurchaseNotice kind="one-off" termsHref={termsHref} />
+
+      <label className="flex cursor-pointer items-start gap-2 text-[color:var(--findable-ink-muted,#d0d6e0)] text-xs">
+        <input
+          checked={agreed}
+          className="mt-0.5"
+          onChange={(e) => setAgreed(e.target.checked)}
+          type="checkbox"
+        />
+        <span>위 내용을 확인했습니다.</span>
+      </label>
+
+      <div className="flex gap-2">
+        <Button
+          className="flex-1"
+          disabled={!agreed || isPending}
+          onClick={pay}
+          size="sm"
+        >
+          {isPending ? "결제 진행 중…" : "동의하고 결제하기"}
+        </Button>
+        <Button
+          disabled={isPending}
+          onClick={() => setNoticeOpen(false)}
+          size="sm"
+          variant="ghost"
+        >
+          취소
+        </Button>
+      </div>
+    </div>
   );
 };

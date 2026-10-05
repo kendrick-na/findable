@@ -1,12 +1,12 @@
 "use client";
 
 import { requestIssueBillingKey } from "@portone/browser-sdk/v2";
-import { useUser } from "@repo/auth/client";
 import {
   trackCheckoutCompleted,
   trackCheckoutFailed,
   trackCheckoutStarted,
 } from "@repo/analytics/funnel";
+import { useUser } from "@repo/auth/client";
 import { Button } from "@repo/design-system/components/ui/button";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { cn } from "@repo/design-system/lib/utils";
@@ -18,6 +18,7 @@ import {
 } from "@/app/actions/billing/subscription";
 import { kakaoBillingKeyDisplayAmount } from "@/lib/billing/kakao-billing-key";
 import { describeSubscriptionError } from "@/lib/billing/subscription-error";
+import { PurchaseNotice } from "./purchase-notice";
 
 /**
  * 정기결제(월 자동결제) 등록 버튼 — 2026-08-11 세션N-18.
@@ -39,6 +40,35 @@ const BILLING_CHANNEL_KEY =
 
 const won = (n: number) => `₩${n.toLocaleString("ko-KR")}`;
 
+/**
+ * 🔴 `granted` 가 false 면 "결제는 됐는데 권한이 안 붙은" 상태다 — 성공으로 세지 않는다.
+ *   (단건 흐름의 `not_granted` 와 같은 판정. 두 흐름이 같은 규칙을 쓴다.)
+ */
+const trackConfirmOutcome = (plan: PayablePlan, granted: boolean) => {
+  if (granted) {
+    trackCheckoutCompleted({ plan, isSubscription: true });
+    return;
+  }
+  trackCheckoutFailed({
+    plan,
+    stage: "verify",
+    isSubscription: true,
+    reasonCode: "not_granted",
+  });
+};
+
+const subscribedMessage = (result: {
+  granted: boolean;
+  renewalScheduled?: boolean;
+}): string => {
+  if (!result.granted) {
+    return "결제는 완료됐어요. 권한 반영이 지연되면 새로고침해 주세요.";
+  }
+  return result.renewalScheduled
+    ? "정기결제가 시작되었어요."
+    : "첫 결제는 완료됐어요. 다음 결제 예약을 확인 중이니 잠시 후 다시 확인해 주세요.";
+};
+
 export const SubscribeButton = ({
   plan,
   label,
@@ -46,6 +76,7 @@ export const SubscribeButton = ({
   chargedPrice,
   featured,
   contactHref,
+  termsHref,
 }: {
   chargedPrice: number;
   contactHref: string;
@@ -53,6 +84,8 @@ export const SubscribeButton = ({
   label: string;
   listPrice: number;
   plan: PayablePlan;
+  /** 이용약관(환불 규정) 주소 — 결제 전 고지에서 연결한다. */
+  termsHref: string;
 }) => {
   const router = useRouter();
   const { user } = useUser();
@@ -131,26 +164,8 @@ export const SubscribeButton = ({
         return;
       }
 
-      // 🔴 `granted` 가 false 면 "결제는 됐는데 권한이 안 붙은" 상태다 — 성공으로 세지 않는다.
-      //   (단건 흐름의 `not_granted` 와 같은 판정. 두 흐름이 같은 규칙을 쓴다.)
-      if (result.granted) {
-        trackCheckoutCompleted({ plan, isSubscription: true });
-      } else {
-        trackCheckoutFailed({
-          plan,
-          stage: "verify",
-          isSubscription: true,
-          reasonCode: "not_granted",
-        });
-      }
-
-      toast.success(
-        result.granted && result.renewalScheduled
-          ? "정기결제가 시작되었어요."
-          : result.granted
-            ? "첫 결제는 완료됐어요. 다음 결제 예약을 확인 중이니 잠시 후 다시 확인해 주세요."
-            : "결제는 완료됐어요. 권한 반영이 지연되면 새로고침해 주세요."
-      );
+      trackConfirmOutcome(plan, result.granted);
+      toast.success(subscribedMessage(result));
       setNoticeOpen(false);
       // 결제 서버가 갱신한 publicMetadata를 현재 세션에도 반영한 뒤 화면을 다시 그린다.
       await user?.reload();
@@ -234,6 +249,8 @@ export const SubscribeButton = ({
           </dd>
         </div>
       </dl>
+
+      <PurchaseNotice kind="subscription" termsHref={termsHref} />
 
       <label className="flex cursor-pointer items-start gap-2 text-[color:var(--findable-ink-muted,#d0d6e0)] text-xs">
         <input
