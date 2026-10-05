@@ -18,6 +18,7 @@ import {
   getAppDictionary,
   getAppLocale,
 } from "@/lib/i18n";
+import { publicReportUrl } from "@/lib/public-report";
 import { Header } from "../components/header";
 import { AssignBrandForm } from "../features/brand/assign-brand-form";
 import { BrandProfileEditorServer } from "../features/brand/brand-profile-editor-server";
@@ -212,7 +213,11 @@ const BrandPage = async () => {
                                 className="inline-flex items-center gap-1 text-[color:var(--findable-primary,#ff7a4d)]"
                                 href={
                                   view?.external
-                                    ? `${webUrl}/ko/audit/${lastJob.id}`
+                                    ? publicReportUrl(
+                                        webUrl,
+                                        lastJob.id,
+                                        locale
+                                      )
                                     : `/history/${lastJob.id}`
                                 }
                                 rel={

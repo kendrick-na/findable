@@ -8,7 +8,10 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { cn } from "@repo/design-system/lib/utils";
 import { ChevronDownIcon, QuoteIcon } from "lucide-react";
 import { useState } from "react";
+import type { AppDictionary } from "@/lib/i18n";
 import type { TruthMirrorData } from "../../lib/truth-mirror-data";
+
+type TruthMirrorLabels = AppDictionary["truthMirror"];
 
 /**
  * 「측정 원문」 — AI 가 실제로 뭐라고 했나 (2026-08-17 세션N-37 · v4 탭7).
@@ -48,34 +51,52 @@ const BRIEFING_ENGINE_ID = "naver-briefing";
  * ⛔ 브리핑에 「우리를 안 말함」을 쓰면 *"네이버가 우리를 모른다"* 로 오독된다 —
  *   실제로는 *"그 질의에 브리핑 블록 자체가 안 떴다"* 이고, 그건 **정상 동작**이다.
  */
-const renderMentionBadge = (engineId: string, mentioned: boolean) => {
+const renderMentionBadge = (
+  engineId: string,
+  mentioned: boolean,
+  t: TruthMirrorLabels
+) => {
   if (mentioned) {
-    return <Badge variant="default">우리 브랜드로 확인됨</Badge>;
+    return <Badge variant="default">{t.badgeConfirmed}</Badge>;
   }
   if (engineId === BRIEFING_ENGINE_ID) {
-    return <Badge variant="secondary">이 질문엔 안 떠요</Badge>;
+    return <Badge variant="secondary">{t.badgeBriefingAbsent}</Badge>;
   }
-  return <Badge variant="secondary">우리 브랜드 확인 안 됨</Badge>;
+  return <Badge variant="secondary">{t.badgeNotConfirmed}</Badge>;
 };
 
 /** 기본으로 펼치는 카드 수. 나머지는 접는다(밀도 축소 — web 판과 같은 판단). */
 const DEFAULT_VISIBLE = 3;
 
-const SENTIMENT_LABEL: Record<string, string> = {
-  negative: "부정적으로",
-  neutral: "중립적으로",
-  positive: "좋게",
-};
+const sentimentLabel = (t: TruthMirrorLabels): Record<string, string> => ({
+  negative: t.toneNegative,
+  neutral: t.toneNeutral,
+  positive: t.tonePositive,
+});
 
 export const TruthMirrorSection = ({
   brandName,
   data,
+  isKo = true,
+  t,
 }: {
   brandName: string;
   data: TruthMirrorData;
+  /** 엔진 이름(`engineDisplayName`)의 언어. */
+  isKo?: boolean;
+  /** 사전 `app.truthMirror` (client 라 서버가 넘긴다). */
+  t: TruthMirrorLabels;
 }) => {
+  const SENTIMENT_LABEL = sentimentLabel(t);
+  // 「을/를」 조사는 한국어 문장에만 뜻이 있다 — 영어 문구에는 자리표시자가 없다.
+  const fillHeadline = (template: string) =>
+    template
+      .replace("{measured}", String(data.measuredCount))
+      .replace("{known}", String(data.knownCount))
+      .replace("{brand}", brandName)
+      .replace("{particle}", objectParticle(brandName));
   const [expanded, setExpanded] = useState(false);
-  const { engines, erroredCount, knownCount, measuredCount } = data;
+  const { engines, erroredCount, knownCount } = data;
   const visible = expanded ? engines : engines.slice(0, DEFAULT_VISIBLE);
   const hidden = engines.length - visible.length;
 
@@ -83,34 +104,22 @@ export const TruthMirrorSection = ({
     <section className="findable-card p-5">
       <div className="flex items-center gap-1.5 text-[color:var(--findable-primary,#ff7a4d)] text-xs">
         <QuoteIcon aria-hidden className="size-3.5" />
-        측정 원문 · AI별 대표 답변
+        {t.eyebrow}
       </div>
 
       <h2 className="mt-2 font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-        {knownCount === 0 ? (
-          <>
-            측정한 AI {measuredCount}곳 중 등록한 {brandName}
-            {objectParticle(brandName)} 확인한 곳은 없습니다
-          </>
-        ) : (
-          <>
-            측정한 AI {measuredCount}곳 중 {knownCount}곳이 등록한 {brandName}
-            {objectParticle(brandName)} 실제 브랜드로 확인했습니다
-          </>
-        )}
+        {fillHeadline(knownCount === 0 ? t.headlineNone : t.headlineSome)}
       </h2>
       <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-        공개 리포트의 ‘진실의 거울’ 요약을 뒷받침하는 <strong>대표 원문</strong>
-        이에요. 질문별 전체 원문과 날짜별 변화는 ‘추적 질문’에서 관리합니다.
-        브랜드명·별칭·공식 도메인 또는 공식 출처로 검산되는 답변만 확인으로
-        집계합니다.
+        {t.ledeBefore}
+        <strong>{t.ledeStrong}</strong>
+        {t.ledeAfter}
       </p>
 
       {/* 🔴 오류는 "모른다"가 아니다 — 분모에서 뺐다는 사실을 밝힌다. */}
       {erroredCount > 0 ? (
         <p className="mt-2 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-          {erroredCount}곳은 답을 못 받아 위 숫자에서 뺐어요(모른다는 뜻이
-          아니에요).
+          {t.errored.replace("{n}", String(erroredCount))}
         </p>
       ) : null}
 
@@ -127,18 +136,21 @@ export const TruthMirrorSection = ({
           >
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-                {engineDisplayName(engine.engineId)}
+                {engineDisplayName(engine.engineId, isKo)}
               </span>
-              {renderMentionBadge(engine.engineId, engine.brandMentioned)}
+              {renderMentionBadge(engine.engineId, engine.brandMentioned, t)}
               {engine.brandMentioned && engine.mentionPosition ? (
                 <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-                  {engine.mentionPosition}번째
+                  {t.position.replace("{n}", String(engine.mentionPosition))}
                 </span>
               ) : null}
               {/* 감성은 **말한 경우에만** 뜻이 있다 — 안 말했는데 "중립적"은 거짓이다. */}
               {engine.brandMentioned && engine.sentiment ? (
                 <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-                  {SENTIMENT_LABEL[engine.sentiment]} 말함
+                  {t.sentimentSaid.replace(
+                    "{tone}",
+                    SENTIMENT_LABEL[engine.sentiment] ?? ""
+                  )}
                 </span>
               ) : null}
             </div>
@@ -146,9 +158,9 @@ export const TruthMirrorSection = ({
             {engine.engineId === BRIEFING_ENGINE_ID ? (
               // 🔴 질의 축이 다름을 **그 자리에서** 밝힌다(기획서 §5-c).
               <p className="mt-1.5 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-                이 줄만 네이버 AI 브리핑이 뜨는 정보형 질문(업종에 따라
-                「효과·후기·장단점」 또는 「서비스·가격·후기」)으로 물었어요. 위
-                답변들과 <b>질문이 달라</b> 나란히 비교하진 마세요.
+                {t.briefingBefore}
+                <b>{t.briefingStrong}</b>
+                {t.briefingAfter}
               </p>
             ) : null}
 
@@ -170,7 +182,7 @@ export const TruthMirrorSection = ({
             ) : (
               // 원문이 없으면 **지어내지 않는다** — 없다고 말한다.
               <p className="mt-2 text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm">
-                답변 원문이 저장되지 않았어요.
+                {t.noExcerpt}
               </p>
             )}
           </li>
@@ -185,7 +197,7 @@ export const TruthMirrorSection = ({
           variant="outline"
         >
           <ChevronDownIcon aria-hidden className="size-4" />
-          나머지 {hidden}곳 더 보기
+          {t.showMore.replace("{n}", String(hidden))}
         </Button>
       ) : null}
     </section>

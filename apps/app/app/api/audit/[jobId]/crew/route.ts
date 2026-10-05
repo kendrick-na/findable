@@ -10,6 +10,7 @@ import { log } from "@repo/observability/log";
 import { after, NextResponse } from "next/server";
 import { auditJobScope } from "@/app/(authenticated)/lib/audit-job-scope";
 import { getPrimaryEmail } from "@/app/(authenticated)/lib/user";
+import { getAppDictionary } from "@/lib/i18n";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -25,15 +26,13 @@ export async function POST(
   { params }: { params: Promise<{ jobId: string }> }
 ) {
   const { jobId } = await params;
+  const t = (await getAppDictionary()).crewErrors;
   const user = await currentUser();
   const email = user ? getPrimaryEmail(user) : null;
   const { orgId } = await auth();
   const scope = auditJobScope(email, orgId);
   if (!scope) {
-    return NextResponse.json(
-      { error: "로그인이 필요합니다." },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: t.signIn }, { status: 401 });
   }
 
   const job = await database.auditJob.findFirst({
@@ -47,26 +46,17 @@ export async function POST(
     },
   });
   if (!job) {
-    return NextResponse.json(
-      { error: "측정 결과를 찾을 수 없습니다." },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: t.notFound }, { status: 404 });
   }
   if (job.status !== "completed" || !job.result) {
-    return NextResponse.json(
-      { error: "완료된 측정에서만 심층 분석할 수 있습니다." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: t.notCompleted }, { status: 400 });
   }
   if (!isPublishableAuditResult(withRecomputedAuditMetrics(job.result))) {
-    return NextResponse.json(
-      { error: "브랜드 판정 검증 후 심층 분석을 이용할 수 있습니다." },
-      { status: 409 }
-    );
+    return NextResponse.json({ error: t.notVerified }, { status: 409 });
   }
   if (job.crewStatus === "completed") {
     return NextResponse.json(
-      { error: "이미 심층 분석이 완료되었습니다.", crewStatus: "completed" },
+      { error: t.alreadyDone, crewStatus: "completed" },
       { status: 409 }
     );
   }
@@ -78,7 +68,7 @@ export async function POST(
     !isStale
   ) {
     return NextResponse.json(
-      { error: "심층 분석이 이미 진행 중입니다.", crewStatus: job.crewStatus },
+      { error: t.alreadyRunning, crewStatus: job.crewStatus },
       { status: 409 }
     );
   }
@@ -89,8 +79,7 @@ export async function POST(
   if (startedToday >= DAILY_CREW_CAP) {
     return NextResponse.json(
       {
-        error:
-          "오늘 심층 분석 실행 한도에 도달했습니다. 내일 다시 시도해 주세요.",
+        error: t.dailyLimit,
       },
       { status: 429 }
     );

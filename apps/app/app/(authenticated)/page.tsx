@@ -28,6 +28,7 @@ import {
   getAppLocale,
 } from "@/lib/i18n";
 import { hasCompletedSetup } from "@/lib/onboarding";
+import { publicReportUrl } from "@/lib/public-report";
 import { BrandSwitcher } from "./components/brand-switcher";
 import { DashboardAnswerBuckets } from "./components/dashboard-answer-buckets";
 import { DashboardDeepAnalysis } from "./components/dashboard-deep-analysis";
@@ -525,7 +526,11 @@ const App = async ({ searchParams }: AppProperties) => {
               measuredAt={data.latestMeasuredAt}
               reportUrl={
                 currentRunJob
-                  ? `${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`
+                  ? publicReportUrl(
+                      env.NEXT_PUBLIC_WEB_URL,
+                      currentRunJob.id,
+                      locale
+                    )
                   : null
               }
               t={dict.runContext}
@@ -572,7 +577,11 @@ const App = async ({ searchParams }: AppProperties) => {
                 {dict.dashboard.issueNotFinal}{" "}
                 <Link
                   className="underline underline-offset-2"
-                  href={`${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`}
+                  href={publicReportUrl(
+                    env.NEXT_PUBLIC_WEB_URL,
+                    currentRunJob.id,
+                    locale
+                  )}
                 >
                   {dict.dashboard.checkEvidence}
                 </Link>
@@ -689,6 +698,8 @@ const App = async ({ searchParams }: AppProperties) => {
                 <TruthMirrorSection
                   brandName={data.latestBrandName}
                   data={truthMirror}
+                  isKo={locale === "ko"}
+                  t={dict.truthMirror}
                 />
               </div>
             ) : null}

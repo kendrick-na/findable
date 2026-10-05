@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * @vitest-environment jsdom
  *
@@ -45,7 +46,11 @@ afterEach(() => {
 describe("HistoryAutoRefresh", () => {
   test("🔴 진행 중이 없으면 아무것도 렌더하지 않는다 (낭비 폴링 금지)", () => {
     const { container } = render(
-      <HistoryAutoRefresh hasPending={false} pendingCount={0} />
+      <HistoryAutoRefresh
+        hasPending={false}
+        pendingCount={0}
+        t={koDict.app.historyList}
+      />
     );
     expect(container.textContent).toBe("");
 
@@ -56,14 +61,24 @@ describe("HistoryAutoRefresh", () => {
 
   test("진행 중이면 건수와 소요시간을 알려준다 (침묵 금지)", () => {
     const { container } = render(
-      <HistoryAutoRefresh hasPending={true} pendingCount={2} />
+      <HistoryAutoRefresh
+        hasPending={true}
+        pendingCount={2}
+        t={koDict.app.historyList}
+      />
     );
     expect(container.textContent).toContain("2건 진행 중");
     expect(container.textContent).toContain("자동으로 갱신");
   });
 
   test("🔴 진행 중이면 주기적으로 서버 렌더를 다시 받는다", () => {
-    render(<HistoryAutoRefresh hasPending={true} pendingCount={1} />);
+    render(
+      <HistoryAutoRefresh
+        hasPending={true}
+        pendingCount={1}
+        t={koDict.app.historyList}
+      />
+    );
     expect(refresh).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(15_000);
@@ -75,7 +90,11 @@ describe("HistoryAutoRefresh", () => {
 
   test("🔴 상한(10분)을 넘기면 폴링을 멈추고 수동 갱신으로 넘긴다", () => {
     const { container } = render(
-      <HistoryAutoRefresh hasPending={true} pendingCount={1} />
+      <HistoryAutoRefresh
+        hasPending={true}
+        pendingCount={1}
+        t={koDict.app.historyList}
+      />
     );
     // ⚠️ `act` 로 감싸야 타이머 콜백 안의 setState 가 **화면에 반영**된다.
     //   감싸지 않으면 폴링은 멈추는데 안내 문구만 옛것으로 남아 테스트가 실패한다
@@ -95,7 +114,11 @@ describe("HistoryAutoRefresh", () => {
 
   test("수동 새로고침 버튼은 항상 있다 (자동이 실패해도 길이 남는다)", () => {
     const { container } = render(
-      <HistoryAutoRefresh hasPending={true} pendingCount={1} />
+      <HistoryAutoRefresh
+        hasPending={true}
+        pendingCount={1}
+        t={koDict.app.historyList}
+      />
     );
     const button = container.querySelector("button");
     expect(button?.textContent).toContain("지금 새로고침");

@@ -6,10 +6,7 @@ import { describe, expect, it } from "vitest";
 // Today these pages have a two-way insufficient-sample/verification message.
 // If a new incomplete-execution issue is added, falling through to the latter
 // would tell customers a false reason for a stopped measurement.
-const pages = [
-  ["actions", "../app/(authenticated)/actions/page.tsx"],
-  ["history detail", "../app/(authenticated)/history/[jobId]/page.tsx"],
-] as const;
+const pages = [["actions", "../app/(authenticated)/actions/page.tsx"]] as const;
 
 /**
  * 🔴 2026-10-06 — 대시보드는 문구를 사전(`app.dashboard.issue*`)으로 옮겼다.
@@ -52,6 +49,45 @@ describe("W0-3 dashboard incomplete-execution copy (dictionary)", () => {
     ).toBe(true);
     expect(dashboardDict("ko").issuePlanUnverified).toContain("질문 계획");
     expect(dashboardDict("en").issuePlanUnverified).toContain("question plan");
+  });
+});
+
+const HISTORY_DETAIL = readFileSync(
+  join(import.meta.dirname, "../app/(authenticated)/history/[jobId]/page.tsx"),
+  "utf8"
+);
+const detailDict = (lang: "ko" | "en") =>
+  JSON.parse(
+    readFileSync(
+      join(
+        import.meta.dirname,
+        `../../../packages/internationalization/dictionaries/${lang}.json`
+      ),
+      "utf8"
+    )
+  ).app.historyDetail as Record<string, string>;
+
+describe("W0-3 history detail incomplete-execution copy (dictionary)", () => {
+  it("RED: history detail maps incomplete execution to the interruption message", () => {
+    expect(
+      /=== "incomplete_execution"[\s\S]{0,120}t\.issueIncomplete/.test(
+        HISTORY_DETAIL
+      )
+    ).toBe(true);
+    expect(detailDict("ko").issueIncomplete).toMatch(
+      /(?:질문|측정)[\s\S]{0,100}(?:중단|미완료)/
+    );
+    expect(detailDict("en").issueIncomplete).toMatch(
+      /stopped|did not (?:fully )?complete/
+    );
+  });
+  it("history detail explains an unverified historical question plan without claiming a failed brand verdict", () => {
+    expect(
+      /=== "question_plan_unverified"[\s\S]{0,120}t\.issuePlanUnverified/.test(
+        HISTORY_DETAIL
+      )
+    ).toBe(true);
+    expect(detailDict("ko").issuePlanUnverified).toContain("질문 계획");
   });
 });
 

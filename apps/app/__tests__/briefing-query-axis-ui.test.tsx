@@ -101,8 +101,19 @@ describe("B-5 질의 축 표기 — 브리핑이 다른 질문임을 화면이 �
 
   it("🔴 **질의 축이 다르다는 안내**가 카드 안에 있다", () => {
     // 「효과·후기·장단점」으로 물었다는 사실을 그 자리에서 밝혀야 한다.
+    // 🔴 2026-10-06 — 앱 카드 문구는 사전(`app.truthMirror.briefingBefore`)으로 옮겨졌다.
+    const appKo = JSON.parse(
+      readFileSync(
+        join(
+          process.cwd(),
+          "../../packages/internationalization/dictionaries/ko.json"
+        ),
+        "utf8"
+      )
+    ).app.truthMirror.briefingBefore as string;
+    expect(APP_MIRROR).toContain("{t.briefingBefore}");
     for (const [name, src] of [
-      ["app", APP_MIRROR],
+      ["app", appKo],
       ["web", WEB_MIRROR],
     ] as const) {
       expect(src, `${name} 에 질의 축 안내가 없다`).toMatch(

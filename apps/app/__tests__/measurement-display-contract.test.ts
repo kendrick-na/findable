@@ -105,7 +105,6 @@ describe("W0-3a mixed AI/search and failed-engine display", () => {
   });
   it("history and persistent headers identify their stored mixed-channel rate", () => {
     for (const path of [
-      "app/(authenticated)/history/[jobId]/page.tsx",
       "app/(authenticated)/components/header-metric-context.tsx",
     ]) {
       const source = readFileSync(join(process.cwd(), path), "utf8");
@@ -129,6 +128,23 @@ describe("W0-3a mixed AI/search and failed-engine display", () => {
         )
       ).app.dashboard.headerMetricLabel as string;
     expect(label("ko")).toBe("AI·검색 등장률");
+    // 측정 상세도 같은 라벨(사전 `app.historyDetail.mentionRate`)을 쓴다.
+    const detail = readFileSync(
+      join(process.cwd(), "app/(authenticated)/history/[jobId]/page.tsx"),
+      "utf8"
+    );
+    expect(detail).toContain("{t.mentionRate}");
+    expect(
+      JSON.parse(
+        readFileSync(
+          join(
+            process.cwd(),
+            "../../packages/internationalization/dictionaries/ko.json"
+          ),
+          "utf8"
+        )
+      ).app.historyDetail.mentionRate
+    ).toBe("AI·검색 등장률");
     expect(label("en")).toMatch(/AI & search/);
     expect(label("en")).not.toMatch(/AI answer/i);
   });

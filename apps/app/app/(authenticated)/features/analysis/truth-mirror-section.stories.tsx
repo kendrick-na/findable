@@ -1,3 +1,5 @@
+import enDict from "@repo/internationalization/dictionaries/en.json";
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import { TruthMirrorSection } from "./truth-mirror-section";
 
@@ -12,6 +14,8 @@ import { TruthMirrorSection } from "./truth-mirror-section";
  *   ① 보통(일부는 알고 일부는 모름)  ② 오류가 섞인 경우  ③ 원문이 없는 행
  */
 const meta = {
+  // 문구는 사전에서 온다(`app.truthMirror`). JSON 직접 import — `getAppDictionary` 는 server-only.
+  args: { t: koDict.app.truthMirror },
   component: TruthMirrorSection,
   parameters: { layout: "padded" },
   title: "대시보드/진실의 거울",
@@ -162,4 +166,9 @@ export const 브리핑_노출: Story = {
       measuredCount: 1,
     },
   },
+};
+
+/** 영어 문구 눈확인 — 사전 `app.truthMirror` 영문판(첫 스토리와 같은 데이터). */
+export const 영어: Story = {
+  args: { ...보통.args, isKo: false, t: enDict.app.truthMirror },
 };

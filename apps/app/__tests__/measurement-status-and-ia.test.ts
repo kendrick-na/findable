@@ -3,6 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+const KO_APP = JSON.parse(
+  read("../../packages/internationalization/dictionaries/ko.json")
+).app;
 
 describe("측정 상태·결과 IA 계약", () => {
   it("검색 연동을 하나도 설정하지 않았을 때 0/0로 오해시키지 않는다", () => {
@@ -23,7 +26,10 @@ describe("측정 상태·결과 IA 계약", () => {
       "app/(authenticated)/components/audit-history-list.tsx"
     );
     expect(history).toContain("NEXT_PUBLIC_WEB_URL");
-    expect(history).toMatch(/\/ko\/audit\/\$\{job\.id\}/);
+    // 🔴 2026-10-06 — 링크는 `publicReportUrl` 단일 출처(ko → `/ko/audit/…`, en → `/audit/…`).
+    expect(history).toContain("publicReportUrl(webUrl, job.id, locale)");
+    const link = read("lib/public-report.ts");
+    expect(link).toMatch(/locale === "ko" \? "\/ko" : ""/);
   });
 
   it("실제 AI 응답이 없는 완료 회차는 이력에서도 0%가 아니라 측정 불가다", () => {
@@ -32,8 +38,11 @@ describe("측정 상태·결과 IA 계약", () => {
     );
     expect(history).toContain("withRecomputedAuditMetrics(job.result)");
     expect(history).toContain("!isUsableRun(result)");
-    expect(history).toMatch(/isPartial\s*\?\s*"잠정 결과"/);
-    expect(history).toMatch(/isUnavailable\s*\?\s*"측정 불가"/);
+    // 🔴 2026-10-06 — 라벨은 사전(`app.jobStatus`)으로 옮겨졌다.
+    expect(history).toMatch(/isPartial\s*\?\s*s\.partial/);
+    expect(history).toMatch(/isUnavailable\s*\?\s*s\.unavailable/);
+    expect(KO_APP.jobStatus.partial).toBe("잠정 결과");
+    expect(KO_APP.jobStatus.unavailable).toBe("측정 불가");
     expect(history).toMatch(/const sov = isUnavailable\s*\? null/);
   });
 
@@ -99,10 +108,17 @@ describe("측정 상태·결과 IA 계약", () => {
 
   it("내부 측정 상세는 종합 점수와 답변 등장률을 서로 다른 지표로 정의한다", () => {
     const detail = read("app/(authenticated)/history/[jobId]/page.tsx");
-    expect(detail).toContain("GEO 종합 진단 점수");
-    expect(detail).toContain("AI·검색 등장률");
-    expect(detail).toContain("5축 진단");
-    expect(detail).toContain("성공한 AI·검색 응답");
+    // 🔴 2026-10-06 — 문구는 사전(`app.historyDetail`)으로 옮겨졌다.
+    expect(detail).toContain("{t.geoScore}");
+    expect(detail).toContain("{t.mentionRate}");
+    expect(detail).toContain("{t.geoScoreNote}");
+    expect(detail).toContain("t.mentionRateBasis");
+    expect(KO_APP.historyDetail.geoScore).toBe("GEO 종합 진단 점수");
+    expect(KO_APP.historyDetail.mentionRate).toBe("AI·검색 등장률");
+    expect(KO_APP.historyDetail.geoScoreNote).toContain("5축 진단");
+    expect(KO_APP.historyDetail.mentionRateBasis).toContain(
+      "성공한 AI·검색 응답"
+    );
     expect(detail).toContain("successfulResponseCount(metrics)");
     expect(detail).toContain("countMeasurementCoverage");
     expect(detail).toContain('value.engineId !== "naver-briefing"');

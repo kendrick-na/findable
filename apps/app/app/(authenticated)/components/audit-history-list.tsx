@@ -8,15 +8,13 @@ import { Badge } from "@repo/design-system/components/ui/badge";
 import { cn } from "@repo/design-system/lib/utils";
 import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { env } from "@/env";
+import { type AppDictionary, type AppLocale, dateLocaleFor } from "@/lib/i18n";
+import { publicReportUrl } from "@/lib/public-report";
 import { extractBrandName, extractSov } from "../lib/dashboard-data";
 import { EmptyState } from "./empty-state";
 
-const STATUS_LABEL: Record<AuditJob["status"], string> = {
-  queued: "대기 중",
-  processing: "측정 중",
-  completed: "완료",
-  failed: "실패",
-};
+type StatusLabels = AppDictionary["jobStatus"];
+type ListLabels = AppDictionary["historyList"];
 
 // completed=초록 / processing·queued=노랑 / failed=빨강
 const STATUS_TONE: Record<AuditJob["status"], string> = {
@@ -26,30 +24,29 @@ const STATUS_TONE: Record<AuditJob["status"], string> = {
   failed: "bg-red-500/10 text-red-600 dark:text-red-400",
 };
 
-const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Asia/Seoul",
-});
-
 interface AuditHistoryListProps {
   jobs: AuditJob[];
+  locale: AppLocale;
+  status: StatusLabels;
+  t: ListLabels;
 }
 
 function actionLabel(
   status: AuditJob["status"],
-  isUnavailable: boolean
+  isUnavailable: boolean,
+  s: StatusLabels,
+  t: ListLabels
 ): string {
   if (isUnavailable) {
-    return "측정 불가 원인 보기";
+    return s.unavailableLink;
   }
   if (status === "failed") {
-    return "실패 사유 보기";
+    return t.failedReason;
   }
   if (status === "completed") {
-    return "결과 보기";
+    return s.viewResult;
   }
-  return "실시간 상태 보기";
+  return t.liveStatus;
 }
 
 function statusTone(
@@ -61,9 +58,10 @@ function statusTone(
 
 function statusLabel(
   status: AuditJob["status"],
-  isUnavailable: boolean
+  isUnavailable: boolean,
+  s: StatusLabels
 ): string {
-  return isUnavailable ? "측정 불가" : STATUS_LABEL[status];
+  return isUnavailable ? s.unavailable : s[status];
 }
 
 /** Failure details for failed/unusable runs; live progress otherwise. */
@@ -92,8 +90,18 @@ function hasCollectedEngineAnswer(result: unknown): boolean {
   );
 }
 
-export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
+export const AuditHistoryList = ({
+  jobs,
+  locale,
+  status: s,
+  t,
+}: AuditHistoryListProps) => {
   const webUrl = env.NEXT_PUBLIC_WEB_URL;
+  const dateFormatter = new Intl.DateTimeFormat(dateLocaleFor(locale), {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Seoul",
+  });
 
   // 🔴 S2'(2026-08-11 세션N-19) — 여기 가드가 **없어서** `/history` 가 완전 공백이었다.
   //   `jobs.map()` 은 빈 배열에서 빈 `<ul>` 을 렌더한다 → 제목 두 줄 아래가 **아무것도 없음**.
@@ -103,9 +111,9 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
   if (jobs.length === 0) {
     return (
       <EmptyState
-        description="브랜드를 등록하고 한 번만 측정하면, 그동안의 측정 결과가 여기에 시간순으로 쌓여요. 언제 무엇이 달라졌는지 되짚어볼 수 있어요."
+        description={t.emptyBody}
         icon={<ClockIcon className="size-5" />}
-        title="아직 측정한 적이 없어요"
+        title={t.emptyTitle}
       />
     );
   }
@@ -152,8 +160,8 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
                 variant="outline"
               >
                 {isPartial
-                  ? "잠정 결과"
-                  : statusLabel(job.status, isUnavailable)}
+                  ? s.partial
+                  : statusLabel(job.status, isUnavailable, s)}
               </Badge>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
@@ -161,19 +169,19 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
               {sov !== null && (
                 <span className="text-[color:var(--findable-ink,#f7f8f8)]">
                   {/* §5-3 교체표: SoV → 등장률(대시보드 히어로 카드와 같은 말) */}
-                  등장률{" "}
+                  {t.mentionRate}{" "}
                   <span className="font-semibold tabular-nums">{sov}%</span>
                 </span>
               )}
               <span className="ml-auto inline-flex items-center gap-1 text-[color:var(--findable-primary,#ff7a4d)]">
                 {isPartial
-                  ? "잠정 결과 보기"
-                  : actionLabel(job.status, isUnavailable)}
+                  ? s.partialLink
+                  : actionLabel(job.status, isUnavailable, s, t)}
                 {isDone && (
                   <>
                     <ExternalLinkIcon aria-hidden="true" className="size-3" />
                     <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-                      새 탭
+                      {s.newTab}
                     </span>
                   </>
                 )}
@@ -187,7 +195,7 @@ export const AuditHistoryList = ({ jobs }: AuditHistoryListProps) => {
             {isDone ? (
               <a
                 className={rowClassName}
-                href={`${webUrl}/ko/audit/${job.id}`}
+                href={publicReportUrl(webUrl, job.id, locale)}
                 rel="noopener noreferrer"
                 target="_blank"
               >

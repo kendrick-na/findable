@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * @vitest-environment jsdom
  *
@@ -131,7 +132,12 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
   test("대기·측정중 행은 실제 상태 화면으로 연결한다", () => {
     for (const status of ["queued", "processing"]) {
       const { container } = render(
-        <AuditHistoryList jobs={[jobFixture(status, `job-${status}`)]} />
+        <AuditHistoryList
+          jobs={[jobFixture(status, `job-${status}`)]}
+          locale="ko"
+          status={koDict.app.jobStatus}
+          t={koDict.app.historyList}
+        />
       );
       const link = container.querySelector("a");
       expect(link?.getAttribute("href")).toContain(
@@ -143,7 +149,12 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
 
   test("실패 행은 내부 상세의 실패 사유로 연결한다", () => {
     const { container } = render(
-      <AuditHistoryList jobs={[jobFixture("failed", "job-failed")]} />
+      <AuditHistoryList
+        jobs={[jobFixture("failed", "job-failed")]}
+        locale="ko"
+        status={koDict.app.jobStatus}
+        t={koDict.app.historyList}
+      />
     );
     expect(container.querySelector("a")?.getAttribute("href")).toBe(
       "/history/job-failed"
@@ -153,7 +164,12 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
 
   test("완료 행은 정식 공개 리포트로 연결한다", () => {
     const { container } = render(
-      <AuditHistoryList jobs={[jobFixture("completed", "job-done")]} />
+      <AuditHistoryList
+        jobs={[jobFixture("completed", "job-done")]}
+        locale="ko"
+        status={koDict.app.jobStatus}
+        t={koDict.app.historyList}
+      />
     );
     const link = container.querySelector("a");
     expect(link?.getAttribute("href")).toContain("/ko/audit/job-done");
@@ -164,6 +180,9 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
     const { container } = render(
       <AuditHistoryList
         jobs={[{ ...jobFixture("completed", "job-empty"), result: null }]}
+        locale="ko"
+        status={koDict.app.jobStatus}
+        t={koDict.app.historyList}
       />
     );
     expect(container.textContent).toContain("측정 불가");
@@ -198,6 +217,9 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
     const { container } = render(
       <AuditHistoryList
         jobs={[{ ...jobFixture("completed", "job-search-only"), result }]}
+        locale="ko"
+        status={koDict.app.jobStatus}
+        t={koDict.app.historyList}
       />
     );
     expect(container.textContent).toContain("측정 불가");
@@ -213,7 +235,14 @@ describe("AuditHistoryList 빈 상태 가드", () => {
     // ⚠️ `screen` 은 document 전체를 본다 — 이 저장소는 자동 cleanup 이 없어
     //   앞 테스트의 DOM 이 남아 "여러 개 찾음"으로 실패한다(실제로 겪음).
     //   → 이 블록은 **렌더한 container 안에서만** 조회한다.
-    const { container } = render(<AuditHistoryList jobs={[]} />);
+    const { container } = render(
+      <AuditHistoryList
+        jobs={[]}
+        locale="ko"
+        status={koDict.app.jobStatus}
+        t={koDict.app.historyList}
+      />
+    );
     const scoped = within(container);
 
     // 예전 회귀: 빈 <ul> 만 남아 본문이 사실상 비었다.
