@@ -162,9 +162,12 @@ const PAGES_KO: Record<string, LegalDoc> = {
       //   방판법 제53조(전속관할): 특수판매(계속거래 포함) 관련 소도 같다. 주소·거소가 분명하지 않으면
       //     「민사소송법」의 관계 규정을 준용한다.
       //   → 특정 법원(구 문구 "청주지방법원")을 관할로 정하면 소비자 거래에서는 위 조항에 반한다.
+      //   사업자 이용자(B2B): 위 전속관할은 소비자에게만 적용(전상법 제3조 제1항 — 사업자가 사업 목적으로
+      //     구매하는 거래는 적용 제외). 사업자 간에는 「민사소송법」 제29조 합의관할로 회사 본점 소재지
+      //     관할 지방법원을 제1심 법원으로 정한다(2026-10-05 대표 결정). 약관규제법 제14조 검토는 [확인필요].
       {
         h: "제7조 (분쟁 해결)",
-        p: "본 약관과 관련된 분쟁은 대한민국 법률을 따릅니다. 회사와 이용자 사이에 발생한 분쟁에 관한 소송은 「민사소송법」에 따른 관할 법원에 제기합니다. 다만, 이용자가 소비자인 경우에는 소 제기 당시 이용자의 주소를, 주소가 없는 경우에는 거소를 관할하는 지방법원의 전속관할로 하며, 소 제기 당시 이용자의 주소 또는 거소가 분명하지 않은 경우에는 「민사소송법」에 따른 관할 법원에 제기합니다.",
+        p: "본 약관과 관련된 분쟁은 대한민국 법률을 따릅니다. 회사와 이용자 사이에 발생한 분쟁에 관한 소송은 「민사소송법」에 따른 관할 법원에 제기합니다. 다만, 이용자가 소비자인 경우에는 소 제기 당시 이용자의 주소를, 주소가 없는 경우에는 거소를 관할하는 지방법원의 전속관할로 하며, 소 제기 당시 이용자의 주소 또는 거소가 분명하지 않은 경우에는 「민사소송법」에 따른 관할 법원에 제기합니다. 이용자가 사업자로서 영업을 위하여 서비스를 이용하는 경우에는 회사의 본점 소재지를 관할하는 지방법원을 제1심 관할 법원으로 합니다.",
       },
       // 📅 시행일(2026-10-05 대표 승인): 공지 2026-10-05 → 시행 2026-10-12(7일 전 공지).
       {
@@ -270,7 +273,7 @@ const PAGES_EN: Record<string, LegalDoc> = {
         h: "Article 7 (Dispute resolution)",
         // Sources: Article 36 of the E-Commerce Consumer Protection Act and Article 53 of the Door-to-Door
         //   Sales Act (see the Korean 제7조 comment). Korean text governs.
-        p: "Disputes related to these terms are governed by the laws of the Republic of Korea. Lawsuits between the Company and a user are filed with the court having jurisdiction under the Civil Procedure Act. However, if the user is a consumer, the district court with jurisdiction over the user's domicile at the time the suit is filed (or, if there is none, the user's residence) has exclusive jurisdiction; if the user's domicile or residence is unclear at that time, the suit is filed with the court having jurisdiction under the Civil Procedure Act.",
+        p: "Disputes related to these terms are governed by the laws of the Republic of Korea. Lawsuits between the Company and a user are filed with the court having jurisdiction under the Civil Procedure Act. However, if the user is a consumer, the district court with jurisdiction over the user's domicile at the time the suit is filed (or, if there is none, the user's residence) has exclusive jurisdiction; if the user's domicile or residence is unclear at that time, the suit is filed with the court having jurisdiction under the Civil Procedure Act. If the user uses the service as a business for business purposes, the district court with jurisdiction over the Company's head office is the court of first instance.",
       },
       {
         h: "Addendum",
