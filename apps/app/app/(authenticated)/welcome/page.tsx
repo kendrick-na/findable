@@ -86,6 +86,7 @@ const WelcomePage = async ({
     // 무료 공개 진단에서 가입한 사람은 같은 도메인을 다시 입력하지 않는다.
     const user = await currentUser();
     const email = user ? getPrimaryEmail(user) : null;
+    const dict = await getAppDictionary();
     const priorAudit = email
       ? await database.auditJob.findFirst({
           orderBy: { createdAt: "desc" },
@@ -94,11 +95,12 @@ const WelcomePage = async ({
         })
       : null;
     return (
-      <WelcomeIntro t={(await getAppDictionary()).onboarding}>
+      <WelcomeIntro t={dict.onboarding}>
         <AssignBrandForm
           initialDomain={priorAudit?.domain}
           mode="onboarding"
           nextHref="/welcome"
+          t={dict.brandForm}
         />
       </WelcomeIntro>
     );

@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { DeletePromptResult } from "@/app/actions/brand/delete-prompt";
 import type { EditPromptResult } from "@/app/actions/brand/edit-prompt";
+import type { AppDictionary } from "@/lib/i18n";
 
 /**
  * 저장된 추적 질문 목록 + 삭제 (세션N-41).
@@ -57,15 +58,17 @@ export interface PromptListItem {
  * ⚠️ enum 7개를 **전부** 덮는다. 빠지면 그 값만 영어로 새어 나간다(가드가 이걸 잡는다).
  * ⚠️ 러너 폴백 질문은 `category` 가 **null** 이다(runner.ts:181 — 넣지 않는다) → 배지 없음.
  */
-const CATEGORY_LABEL: Record<string, string> = {
-  best_in_category: "카테고리 1위",
-  alternative: "대안 찾기",
-  comparison: "비교",
-  recommendation: "추천",
-  problem_solving: "문제 해결",
-  buying_guide: "구매 가이드",
-  custom: "직접 추가",
-};
+const categoryLabels = (
+  t: AppDictionary["promptList"]
+): Record<string, string> => ({
+  best_in_category: t.categoryBestInCategory,
+  alternative: t.categoryAlternative,
+  comparison: t.categoryComparison,
+  recommendation: t.categoryRecommendation,
+  problem_solving: t.categoryProblemSolving,
+  buying_guide: t.categoryBuyingGuide,
+  custom: t.categoryCustom,
+});
 
 /**
  * 묶음 표시 순서 — **GEO 중요도 순**이다(가나다순·enum 선언순이 아니다).
@@ -122,6 +125,7 @@ export const PromptList = ({
   prompts,
   onDelete,
   onEdit,
+  t,
 }: {
   /**
    * 삭제 실행자. 서버 컴포넌트가 `deletePromptAction` 을 넘긴다.
@@ -138,7 +142,10 @@ export const PromptList = ({
     text: string;
   }) => Promise<EditPromptResult>;
   prompts: PromptListItem[];
+  /** 사전 `app.promptList` (client 라 서버가 넘긴다). */
+  t: AppDictionary["promptList"];
 }) => {
+  const CATEGORY_LABEL = categoryLabels(t);
   const router = useRouter();
   // 삭제 진행 중인 id. 낙관적 제거를 하지 않는다 — 실패 시 되돌리면
   //   "사라졌다 나타나는" 화면이 되고, 서버가 진실을 갖는 편이 정직하다.
@@ -164,12 +171,12 @@ export const PromptList = ({
       }
       toast.success(
         result.deletedTrackings > 0
-          ? `질문을 지웠어요. 이 질문의 측정 기록 ${result.deletedTrackings}건도 함께 삭제됐어요.`
-          : "질문을 지웠어요."
+          ? t.deletedWithRecords.replace("{n}", String(result.deletedTrackings))
+          : t.deleted
       );
       router.refresh();
     } catch {
-      toast.error("삭제하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      toast.error(t.deleteFailed);
     } finally {
       setDeleting(null);
     }
@@ -196,12 +203,12 @@ export const PromptList = ({
         toast.error(result.error);
         return;
       }
-      toast.success("질문을 고쳤어요. 이전 측정 기록은 그대로 남아요.");
+      toast.success(t.edited);
       setEditingId(null);
       setEditingText("");
       router.refresh();
     } catch {
-      toast.error("수정하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      toast.error(t.editFailed);
     } finally {
       setSaving(false);
     }
@@ -214,7 +221,7 @@ export const PromptList = ({
         className="rounded-lg border border-[color:var(--findable-hairline,#23252a)] border-dashed px-4 py-6 text-center text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm"
         style={{ wordBreak: "keep-all" }}
       >
-        아직 고른 질문이 없어요. 아래에서 제안을 받아 골라보세요.
+        {t.empty}
       </p>
     );
   }
@@ -250,13 +257,13 @@ export const PromptList = ({
             "오타 고치려다 기록 잃기 싫어서"인 경우가 많다. */}
         <span className="text-[10px] text-[color:var(--findable-ink-tertiary,#7e8289)]">
           {prompt.measuredCount > 0
-            ? `저장하면 텍스트만 바뀌고, 측정 기록 ${prompt.measuredCount}건은 그대로 남아요.`
-            : "저장하면 텍스트가 바뀌어요."}
+            ? t.editKeepsRecords.replace("{n}", String(prompt.measuredCount))
+            : t.editChangesText}
         </span>
       </div>
       <div className="flex shrink-0 gap-1">
         <Button
-          aria-label="수정 저장"
+          aria-label={t.saveEdit}
           disabled={saving || editingText.trim().length < 3}
           onClick={() => {
             saveEdit(prompt.id).catch(() => {
@@ -274,7 +281,7 @@ export const PromptList = ({
           )}
         </Button>
         <Button
-          aria-label="수정 취소"
+          aria-label={t.cancelEdit}
           disabled={saving}
           onClick={cancelEdit}
           size="sm"
@@ -310,7 +317,7 @@ export const PromptList = ({
                 className="font-medium text-[color:var(--findable-primary,#ff7a4d)] text-xs underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
                 href={`/prompts/${prompt.id}`}
               >
-                답변 원문 보기 ↗
+                {t.viewAnswers}
               </Link>
             ) : null}
             {prompt.category ? (
@@ -328,16 +335,15 @@ export const PromptList = ({
                     고객이 알 수 있어야 지울지 판단할 수 있다. */}
             <span className="text-[10px] text-[color:var(--findable-ink-tertiary,#7e8289)] tabular-nums">
               {prompt.measuredCount > 0
-                ? `측정 ${prompt.measuredCount}건`
-                : "아직 측정 전"}
+                ? t.measuredCount.replace("{n}", String(prompt.measuredCount))
+                : t.notMeasured}
             </span>
           </span>
           {/* 확인 문구는 **버튼 옆이 아니라 항목 안**에 — 무엇이 사라지는지
                   그 질문 바로 아래에서 읽혀야 한다. */}
           {isConfirming ? (
             <span className="text-[color:var(--findable-primary,#ff7a4d)] text-xs">
-              이 질문의 측정 기록 {prompt.measuredCount}건도 함께 사라져요. 한
-              번 더 누르면 삭제됩니다.
+              {t.deleteConfirm.replace("{n}", String(prompt.measuredCount))}
             </span>
           ) : null}
         </div>
@@ -345,7 +351,7 @@ export const PromptList = ({
         <div className="flex shrink-0 gap-1">
           {onEdit ? (
             <Button
-              aria-label={`${prompt.text} 수정`}
+              aria-label={t.editLabel.replace("{text}", prompt.text)}
               disabled={isDeleting}
               onClick={() => startEdit(prompt)}
               size="sm"
@@ -357,7 +363,7 @@ export const PromptList = ({
           ) : null}
           {onDelete ? (
             <Button
-              aria-label={`${prompt.text} 삭제`}
+              aria-label={t.deleteLabel.replace("{text}", prompt.text)}
               disabled={isDeleting}
               onClick={() => {
                 // 측정 기록이 없으면 잃을 게 없다 → 바로 삭제.
@@ -379,7 +385,7 @@ export const PromptList = ({
                 <>
                   <Trash2Icon aria-hidden="true" className="size-3.5" />
                   {isConfirming ? (
-                    <span className="ml-1 text-xs">삭제 확인</span>
+                    <span className="ml-1 text-xs">{t.confirmDelete}</span>
                   ) : null}
                 </>
               )}
@@ -416,7 +422,7 @@ export const PromptList = ({
               한눈에 보여야 "무엇을 더 넣을지" 판단할 수 있다(모집단 명시 규율). */}
           <h3 className="flex items-baseline gap-1.5 px-1 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
             {group.key === UNTAGGED
-              ? "유형 없음"
+              ? t.untagged
               : (CATEGORY_LABEL[group.key] ?? group.key)}
             <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] tabular-nums">
               {group.items.length}

@@ -5,6 +5,10 @@ import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
 import { ensureOrgExists } from "@/lib/db/ensure-org";
 import { scopedBrandById } from "@/lib/db/scoped";
+import { getAppDictionary } from "@/lib/i18n";
+
+/** 오류 문구 — 사전 `app.brandErrors`(요청 밖이면 기본 로케일 ko). */
+const brandErrors = async () => (await getAppDictionary()).brandErrors;
 
 /**
  * 브랜드 프로필(별칭·경쟁사) 저장 — 온보딩 `/welcome` 2·4단계가 쓴다.
@@ -112,19 +116,20 @@ const cleanList = (values: string[]): string[] => {
 };
 
 function validatedIdentity(
-  input: UpdateBrandProfileInput
+  input: UpdateBrandProfileInput,
+  t: { industryRequired: string; nameLength: string }
 ): { error: string } | { name?: string; industry?: IndustryValue } {
   const identity: { name?: string; industry?: IndustryValue } = {};
   if (input.name !== undefined) {
     const name = input.name.trim();
     if (name.length < 2 || name.length > MAX_LEN) {
-      return { error: "브랜드명은 2~60자로 입력해 주세요." };
+      return { error: t.nameLength };
     }
     identity.name = name;
   }
   if (input.industry !== undefined) {
     if (!(INDUSTRY_VALUES as readonly string[]).includes(input.industry)) {
-      return { error: "업종을 선택해 주세요." };
+      return { error: t.industryRequired };
     }
     identity.industry = input.industry as IndustryValue;
   }
@@ -137,7 +142,7 @@ export const updateBrandProfile = async (
   // 🔒 현재 org 소속인지 먼저 본다. 아니면 존재 여부를 흘리지 않는 동일 메시지.
   const owned = await scopedBrandById(input.brandId).catch(() => null);
   if (!owned) {
-    return { error: "해당 브랜드에 접근할 수 없습니다." };
+    return { error: (await brandErrors()).brandForbidden };
   }
 
   // 보낸 필드만 덮어쓴다 — 2단계만 하고 4단계를 건너뛴 사용자의 값을 지우지 않는다.
@@ -148,7 +153,7 @@ export const updateBrandProfile = async (
     name?: string;
     industry?: IndustryValue;
   } = {};
-  const identity = validatedIdentity(input);
+  const identity = validatedIdentity(input, await brandErrors());
   if ("error" in identity) {
     return identity;
   }
@@ -179,7 +184,7 @@ export const updateBrandProfile = async (
   //   "레코드 없음"으로 실패해 같은 단계가 반복된다 → 먼저 Clerk 에서 보장한다.
   if (updateOnboarding && (await ensureOrgExists()) !== owned.organizationId) {
     return {
-      error: "조직 정보를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      error: (await brandErrors()).orgNotReady,
     };
   }
 
@@ -207,6 +212,6 @@ export const updateBrandProfile = async (
         error instanceof Error ? error.message : "unknown"
       }`
     );
-    return { error: "저장 중 문제가 발생했습니다." };
+    return { error: (await brandErrors()).genericSaveFailed };
   }
 };

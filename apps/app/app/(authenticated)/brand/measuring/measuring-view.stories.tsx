@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import { MeasuringView } from "./measuring-view";
 
@@ -10,12 +11,15 @@ import { MeasuringView } from "./measuring-view";
 const meta: Meta<typeof MeasuringView> = {
   args: {
     createdAt: "2026-09-25T00:00:00.000Z",
+    dateLocale: "ko-KR",
     domain: "amorepacific.com",
     initialStatus: "processing",
     jobId: "job-1",
     // 계속 측정 중인 상태로 둔다(화면을 그대로 보기 위해).
     pollStatus: () => Promise.resolve("processing"),
     sampleUrl: "https://findable.co.kr/audit/sample?shared=1",
+    // 문구는 사전에서 온다(`app.measuring`). JSON 직접 import — `getAppDictionary` 는 server-only.
+    t: koDict.app.measuring,
   },
   component: MeasuringView,
   parameters: { layout: "fullscreen", nextjs: { appDirectory: true } },

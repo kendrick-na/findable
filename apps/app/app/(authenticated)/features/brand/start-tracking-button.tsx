@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { startOrgTracking } from "@/app/actions/brand/start-tracking";
 import { getTrackingStatus } from "@/app/actions/brand/tracking-status";
+import type { AppDictionary } from "@/lib/i18n";
 
 /**
  * "측정 시작" 버튼 — 로그인 org 사용자가 특정 브랜드의 AI 인용 audit을 트리거 (20번).
@@ -26,23 +27,27 @@ const POLL_TIMEOUT_MS = 4 * 60 * 1000;
 
 type Phase = "idle" | "starting" | "measuring";
 
-const PHASE_LABEL: Record<Phase, string> = {
-  idle: "측정 시작",
-  starting: "시작 중…",
-  measuring: "측정 중…",
-};
-
 export const StartTrackingButton = ({
   domain,
   brandName,
   // 대시보드의 추세 카드처럼 프로필 전체를 읽지 않는 표면은 서버 가드를 최종
   // 방어선으로 사용한다. 브랜드·측정 화면은 명시값을 넘겨 CTA부터 막는다.
   identityReady = true,
+  t,
 }: {
   domain: string;
   brandName: string;
   identityReady?: boolean;
+  /** 사전 `app.trackButton` (client 라 서버가 넘긴다). */
+  t: AppDictionary["trackButton"];
 }) => {
+  const phaseLabel: Record<Phase, string> = {
+    idle: t.idle,
+    starting: t.starting,
+    measuring: t.measuring,
+  };
+  const withBrand = (template: string) =>
+    template.replace("{brand}", brandName);
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -70,25 +75,19 @@ export const StartTrackingButton = ({
     timerRef.current = setInterval(async () => {
       if (!delayNotified && Date.now() - startedAt > POLL_TIMEOUT_MS) {
         delayNotified = true;
-        toast.info(
-          `${brandName} 측정이 예상보다 오래 걸려 상태를 계속 확인하고 있어요.`
-        );
+        toast.info(withBrand(t.slow));
       }
       try {
         const status = await getTrackingStatus(jobId);
         if (status === "completed") {
           stopPolling();
           setPhase("idle");
-          toast.success(
-            `${brandName} 측정 완료! 대시보드와 측정 이력에 반영됐어요.`
-          );
+          toast.success(withBrand(t.done));
           router.refresh();
         } else if (status === "failed") {
           stopPolling();
           setPhase("idle");
-          toast.error(
-            `${brandName} 측정에 실패했어요. 잠시 후 다시 시도해 주세요.`
-          );
+          toast.error(withBrand(t.failed));
           router.refresh();
         }
         // queued/processing → 다음 폴링까지 대기.
@@ -105,14 +104,14 @@ export const StartTrackingButton = ({
       if ("error" in result) {
         setPhase("idle");
         if (result.code === "unauthorized") {
-          toast.error("세션 인증에 실패했어요. 다시 로그인 후 시도해 주세요.");
+          toast.error(t.authFailed);
           return;
         }
         if (result.upgrade) {
           // 플랜 업그레이드로 풀리는 제한 → 이유 + 해결 경로를 함께 안내.
           toast.error(result.error, {
             action: {
-              label: "요금제 보기",
+              label: t.viewPlans,
               onClick: () => router.push("/billing"),
             },
           });
@@ -122,12 +121,12 @@ export const StartTrackingButton = ({
         return;
       }
       setPhase("measuring");
-      toast.success(`${brandName} 측정을 시작했어요. 보통 1~3분 정도 걸려요.`);
+      toast.success(withBrand(t.started));
       router.refresh();
       watchJob(result.jobId);
     } catch {
       setPhase("idle");
-      toast.error("측정을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      toast.error(t.startFailed);
     }
   };
 
@@ -140,7 +139,7 @@ export const StartTrackingButton = ({
       type="button"
       variant="outline"
     >
-      {identityReady ? PHASE_LABEL[phase] : "측정 기준 확인 필요"}
+      {identityReady ? phaseLabel[phase] : t.identityNeeded}
     </Button>
   );
 };

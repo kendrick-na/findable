@@ -76,7 +76,14 @@ const isAppLocale = (v: string | undefined): v is AppLocale =>
  * ⚠️ 서버 컴포넌트 전용(`cookies()`·`headers()`).
  */
 export async function getAppLocale(): Promise<AppLocale> {
-  const store = await cookies();
+  // 🔴 요청 밖(테스트·cron·백그라운드 작업)에서는 `cookies()` 가 throw 한다.
+  //   서버 액션이 오류 문구를 사전에서 읽게 되면서(2026-10-06) 그 경로가 생겼다 → 기본값(ko).
+  let store: Awaited<ReturnType<typeof cookies>>;
+  try {
+    store = await cookies();
+  } catch {
+    return APP_DEFAULT_LOCALE;
+  }
   const raw = store.get("NEXT_LOCALE")?.value?.split("-")[0];
   if (isAppLocale(raw)) {
     return raw;
@@ -84,11 +91,15 @@ export async function getAppLocale(): Promise<AppLocale> {
   if (!APP_ENGLISH_ENABLED) {
     return APP_DEFAULT_LOCALE;
   }
-  const requestHeaders = await headers();
-  return (
-    pickLocaleFromAcceptLanguage(requestHeaders.get("accept-language")) ??
-    APP_DEFAULT_LOCALE
-  );
+  try {
+    const requestHeaders = await headers();
+    return (
+      pickLocaleFromAcceptLanguage(requestHeaders.get("accept-language")) ??
+      APP_DEFAULT_LOCALE
+    );
+  } catch {
+    return APP_DEFAULT_LOCALE;
+  }
 }
 
 /**

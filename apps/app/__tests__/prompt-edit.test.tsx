@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 추적 질문 수정(RICE#8) — 2026-08-22 신설.
  *
@@ -38,7 +39,13 @@ const PROMPT = {
 
 describe("추적 질문 수정", () => {
   it("연필 버튼을 누르면 텍스트가 입력창으로 바뀐다", () => {
-    render(<PromptList onEdit={vi.fn()} prompts={[PROMPT]} />);
+    render(
+      <PromptList
+        onEdit={vi.fn()}
+        prompts={[PROMPT]}
+        t={koDict.app.promptList}
+      />
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "우리 브랜드 어때? 수정" })
     );
@@ -47,7 +54,13 @@ describe("추적 질문 수정", () => {
   });
 
   it("3자 미만이면 저장 버튼이 비활성 상태다", () => {
-    render(<PromptList onEdit={vi.fn()} prompts={[PROMPT]} />);
+    render(
+      <PromptList
+        onEdit={vi.fn()}
+        prompts={[PROMPT]}
+        t={koDict.app.promptList}
+      />
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "우리 브랜드 어때? 수정" })
     );
@@ -62,7 +75,13 @@ describe("추적 질문 수정", () => {
 
   it("저장하면 onEdit에 promptId·text를 넘긴다(id 유지)", async () => {
     const onEdit = vi.fn().mockResolvedValue({ ok: true });
-    render(<PromptList onEdit={onEdit} prompts={[PROMPT]} />);
+    render(
+      <PromptList
+        onEdit={onEdit}
+        prompts={[PROMPT]}
+        t={koDict.app.promptList}
+      />
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "우리 브랜드 어때? 수정" })
     );
@@ -80,7 +99,13 @@ describe("추적 질문 수정", () => {
   });
 
   it("측정 기록이 있으면 보존 안내 문구가 뜬다", () => {
-    render(<PromptList onEdit={vi.fn()} prompts={[PROMPT]} />);
+    render(
+      <PromptList
+        onEdit={vi.fn()}
+        prompts={[PROMPT]}
+        t={koDict.app.promptList}
+      />
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "우리 브랜드 어때? 수정" })
     );
@@ -88,7 +113,13 @@ describe("추적 질문 수정", () => {
   });
 
   it("취소 버튼을 누르면 편집이 닫힌다", () => {
-    render(<PromptList onEdit={vi.fn()} prompts={[PROMPT]} />);
+    render(
+      <PromptList
+        onEdit={vi.fn()}
+        prompts={[PROMPT]}
+        t={koDict.app.promptList}
+      />
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "우리 브랜드 어때? 수정" })
     );
@@ -97,7 +128,13 @@ describe("추적 질문 수정", () => {
   });
 
   it("Escape를 누르면 편집이 닫힌다", () => {
-    render(<PromptList onEdit={vi.fn()} prompts={[PROMPT]} />);
+    render(
+      <PromptList
+        onEdit={vi.fn()}
+        prompts={[PROMPT]}
+        t={koDict.app.promptList}
+      />
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "우리 브랜드 어때? 수정" })
     );
@@ -108,7 +145,7 @@ describe("추적 질문 수정", () => {
   });
 
   it("onEdit이 없으면 연필 버튼이 없다", () => {
-    render(<PromptList prompts={[PROMPT]} />);
+    render(<PromptList prompts={[PROMPT]} t={koDict.app.promptList} />);
     expect(
       screen.queryByRole("button", { name: "우리 브랜드 어때? 수정" })
     ).toBeNull();

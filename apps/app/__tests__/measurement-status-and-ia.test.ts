@@ -41,8 +41,15 @@ describe("측정 상태·결과 IA 계약", () => {
     const brand = read("app/(authenticated)/brand/page.tsx");
     const scoped = read("lib/db/scoped.ts");
     expect(brand).toContain("withRecomputedAuditMetrics(job.result)");
-    expect(brand).toContain('"잠정 결과"');
-    expect(brand).toContain('"잠정 결과 보기"');
+    // 🔴 2026-10-06 — 라벨은 사전(`app.jobStatus.partial*`)으로 옮겨졌다.
+    expect(brand).toMatch(
+      /isPartial\)\s*\{\s*return \{\s*label: t\.partial,\s*linkLabel: t\.partialLink/
+    );
+    const jobStatus = JSON.parse(
+      read("../../packages/internationalization/dictionaries/ko.json")
+    ).app.jobStatus;
+    expect(jobStatus.partial).toBe("잠정 결과");
+    expect(jobStatus.partialLink).toBe("잠정 결과 보기");
     expect(scoped).toContain(
       "!isUsableRun(withRecomputedAuditMetrics(latestJob.result))"
     );
@@ -77,8 +84,14 @@ describe("측정 상태·결과 IA 계약", () => {
     );
     expect(measuring).toContain('status === "queued"');
     expect(measuring).toContain('status === "processing"');
-    expect(measuring).toContain("대시보드");
-    expect(measuring).toContain("측정 이력");
+    // 🔴 2026-10-06 — 두 결과 위치 문구는 사전(`app.measuring.to*`)으로 옮겨졌다.
+    expect(measuring).toContain("{t.toDashboard}");
+    expect(measuring).toContain("{t.toHistory}");
+    const measuringKo = JSON.parse(
+      read("../../packages/internationalization/dictionaries/ko.json")
+    ).app.measuring;
+    expect(measuringKo.toDashboard).toContain("대시보드");
+    expect(measuringKo.toHistory).toContain("측정 이력");
     expect(measuring).toContain("jobId.slice(-8)");
     expect(measuring).toContain("createdAt");
     expect(measuring).not.toMatch(/\d+\s*%\s*완료/);
@@ -128,9 +141,14 @@ describe("측정 상태·결과 IA 계약", () => {
     const scoreboard = read(
       "app/(authenticated)/components/prompt-scoreboard.tsx"
     );
-    expect(prompts).toContain("질문 저장");
-    expect(prompts).toContain("다음 측정에 사용");
-    expect(prompts).toContain("결과 누적");
+    // 🔴 2026-10-06 — 흐름 문구는 사전(`app.promptsPage.flowBefore`)으로 옮겨졌다.
+    expect(prompts).toContain("{t.flowBefore}");
+    const flow = JSON.parse(
+      read("../../packages/internationalization/dictionaries/ko.json")
+    ).app.promptsPage.flowBefore;
+    expect(flow).toContain("질문 저장");
+    expect(flow).toContain("다음 측정에 사용");
+    expect(flow).toContain("결과 누적");
     expect(prompts).toContain("/#tracked-prompts");
     expect(scoreboard).toContain('id="tracked-prompts"');
   });

@@ -15,6 +15,10 @@ import { after } from "next/server";
 import { getAuditRuntimeReadiness } from "@/lib/audit/runtime-readiness";
 import { requireOrg } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
+import { getAppDictionary } from "@/lib/i18n";
+
+/** 오류 문구 — 사전 `app.brandErrors`(요청 밖이면 기본 로케일 ko). */
+const brandErrors = async () => (await getAppDictionary()).brandErrors;
 
 /**
  * "측정 시작" 서버 액션 — 로그인 org 사용자가 브랜드의 AI 인용 audit을 트리거 (20번, P2).
@@ -186,8 +190,8 @@ async function checkRemeasurePolicy(
     return {
       error:
         retryBlock === "no_progress"
-          ? "연속 두 번 응답을 저장하지 못해 자동 재시도를 멈췄어요. 운영팀에 문의해 주세요."
-          : "오늘 측정 실패가 세 번 발생해 추가 과금을 막았습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요.",
+          ? (await brandErrors()).retryStoppedSaveFailures
+          : (await brandErrors()).retryStoppedDailyFailures,
       code: "rate_limited",
     };
   }
@@ -211,8 +215,7 @@ async function checkRemeasurePolicy(
     recent.status === "processing" || recent.status === "queued";
   if (isRunning && !isStaleAuditJob(recent)) {
     return {
-      error:
-        "이 도메인은 지금 측정이 진행 중이에요. 1~3분 뒤 대시보드에서 결과를 확인해 주세요.",
+      error: (await brandErrors()).alreadyRunning,
       code: "rate_limited",
     };
   }
@@ -221,7 +224,7 @@ async function checkRemeasurePolicy(
     const status = await reconcileStaleAuditJob(recent);
     if (status !== "failed") {
       return {
-        error: "측정 상태가 갱신됐어요. 잠시 후 다시 확인해 주세요.",
+        error: (await brandErrors()).statusChanged,
         code: "rate_limited",
       };
     }
@@ -233,8 +236,7 @@ async function checkRemeasurePolicy(
     return null;
   }
   return {
-    error:
-      "무료 플랜은 같은 도메인을 24시간에 1회 측정할 수 있어요. 유료 플랜에서는 언제든 다시 측정할 수 있습니다.",
+    error: (await brandErrors()).freeDailyLimit,
     code: "rate_limited",
     upgrade: true,
   };
@@ -254,16 +256,16 @@ export const startOrgTracking = async (
   try {
     orgId = await requireOrg();
   } catch {
-    return { error: "로그인 후 조직을 선택해 주세요.", code: "unauthorized" };
+    return { error: (await brandErrors()).signInOrg, code: "unauthorized" };
   }
   if (!userId) {
-    return { error: "로그인 후 조직을 선택해 주세요.", code: "unauthorized" };
+    return { error: (await brandErrors()).signInOrg, code: "unauthorized" };
   }
 
   // 2) 입력 검증(감사 대상만).
   const domain = normalizeDomain(input.domain ?? "");
   if (!(domain && isValidDomain(domain))) {
-    return { error: "도메인 형식이 올바르지 않습니다. 예: example.com" };
+    return { error: (await brandErrors()).domainInvalidExample };
   }
   const brandName = input.brandName?.trim() || undefined;
 
@@ -278,8 +280,7 @@ export const startOrgTracking = async (
         missing: readiness.missing,
       });
       return {
-        error:
-          "측정 서버 설정이 준비되지 않았어요. 잠시 후 다시 시도하거나 운영팀에 문의해 주세요.",
+        error: (await brandErrors()).runnerNotConfigured,
         code: "not_configured",
       };
     }
@@ -288,15 +289,14 @@ export const startOrgTracking = async (
     const orgReady = await ensureOrgExists(orgId, userId);
     if (!orgReady) {
       return {
-        error:
-          "조직 정보 동기화 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+        error: (await brandErrors()).orgSyncFailed,
       };
     }
 
     // 5) org 스코프 brand 도출/생성.
     const brandId = await ensureOrgBrand(orgId, domain, brandName);
     if (!brandId) {
-      return { error: "브랜드 준비 중 문제가 발생했습니다." };
+      return { error: (await brandErrors()).brandPrepareFailed };
     }
 
     // 6) 브랜드에 저장된 업종을 job 으로 승계한다(2026-08-02).
@@ -313,8 +313,7 @@ export const startOrgTracking = async (
     // "정확한 측정"을 시작하지 못하게 한다.
     if (!(brandName && brandRecord?.industry && brandRecord.marketScope)) {
       return {
-        error:
-          "측정 기준을 먼저 확인해 주세요. 브랜드명·업종·타깃 시장을 저장하면 정확한 질문과 판별 기준으로 측정합니다.",
+        error: (await brandErrors()).identityRequired,
         code: "identity_incomplete",
       };
     }
@@ -383,6 +382,6 @@ export const startOrgTracking = async (
     return { ok: true, jobId: job.id };
   } catch (error) {
     log.error("audit.org.request_unhandled", { error: parseError(error) });
-    return { error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
+    return { error: (await brandErrors()).serverError };
   }
 };

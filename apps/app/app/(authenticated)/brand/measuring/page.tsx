@@ -5,13 +5,14 @@ import { redirect } from "next/navigation";
 import { getTrackingStatus } from "@/app/actions/brand/tracking-status";
 import { env } from "@/env";
 import { requireOrg } from "@/lib/db/scoped";
+import { dateLocaleFor, getAppDictionary, getAppLocale } from "@/lib/i18n";
 import { sampleReportUrl } from "@/lib/sample-report";
 import { Header } from "../../components/header";
 import { MeasuringView } from "./measuring-view";
 
-export const metadata: Metadata = {
-  title: "측정 중 · Findable",
-  description: "AI에게 물어보는 중이에요.",
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = (await getAppDictionary()).measuring;
+  return { title: t.metaTitle, description: t.metaDescription };
 };
 
 interface MeasuringPageProps {
@@ -56,16 +57,27 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
     redirect("/history");
   }
 
+  const [dict, locale] = await Promise.all([
+    getAppDictionary(),
+    getAppLocale(),
+  ]);
+
   return (
     <>
-      <Header page="측정 중" pages={["Findable"]} showMetric={false} />
+      <Header
+        page={dict.measuring.headerTitle}
+        pages={["Findable"]}
+        showMetric={false}
+      />
       <MeasuringView
         createdAt={job.createdAt.toISOString()}
+        dateLocale={dateLocaleFor(locale)}
         domain={job.domain}
         initialStatus={job.status}
         jobId={jobId}
         pollStatus={getTrackingStatus}
         sampleUrl={sampleReportUrl(env.NEXT_PUBLIC_WEB_URL)}
+        t={dict.measuring}
       />
     </>
   );

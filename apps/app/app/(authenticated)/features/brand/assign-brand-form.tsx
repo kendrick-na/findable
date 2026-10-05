@@ -20,6 +20,10 @@ import {
 } from "@/app/actions/brand/assign";
 import { suggestBrandIdentity } from "@/app/actions/brand/suggest-brand-identity";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
+import type { AppDictionary } from "@/lib/i18n";
+
+/** 이 폼의 문구 — 서버(`/brand`·`/welcome`)가 `app.brandForm` 사전에서 넘긴다. */
+export type BrandFormLabels = AppDictionary["brandForm"];
 
 interface FormState {
   error?: string;
@@ -43,30 +47,34 @@ const initialState: FormState = { status: "idle" };
  *   라벨에 "(질문 언어 기준)"을 병기해 엔진이 아니라 언어가 기준임을 명시한다
  *   — 사용자가 "국내 엔진만 본다"로 오해하지 않게. 상세=`docs/_적용/시장축_언어재설계_2026-08-21.md`.
  */
-const MARKET_SCOPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "both", label: "국내·해외 함께" },
-  { value: "korea", label: "국내 중심 (한국어 질문 기준)" },
-  { value: "global", label: "해외 중심 (영어 질문 기준)" },
+const marketScopeOptions = (
+  t: BrandFormLabels
+): Array<{ value: string; label: string }> => [
+  { value: "both", label: t.scopeOptionBoth },
+  { value: "korea", label: t.scopeOptionKorea },
+  { value: "global", label: t.scopeOptionGlobal },
 ];
 
-const MARKET_SCOPE_LABELS: Record<string, string> = {
-  korea: "국내 중심",
-  global: "해외 중심",
-  both: "국내·해외 함께",
-};
+const marketScopeLabels = (t: BrandFormLabels): Record<string, string> => ({
+  korea: t.scopeKorea,
+  global: t.scopeGlobal,
+  both: t.scopeBoth,
+});
 
-const INDUSTRY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "manufacturing", label: "제조·산업재 (반도체·부품·소재)" },
-  { value: "b2b_saas", label: "B2B SaaS·소프트웨어" },
-  { value: "beauty", label: "뷰티·화장품" },
-  { value: "fashion", label: "패션·의류" },
-  { value: "food", label: "식품·F&B" },
-  { value: "retail", label: "리테일·커머스" },
-  { value: "finance", label: "금융·핀테크" },
-  { value: "healthcare", label: "헬스케어·의료" },
-  { value: "education", label: "교육" },
-  { value: "content_ip", label: "콘텐츠·IP" },
-  { value: "other", label: "기타" },
+const industryOptions = (
+  t: BrandFormLabels
+): Array<{ value: string; label: string }> => [
+  { value: "manufacturing", label: t.industryManufacturing },
+  { value: "b2b_saas", label: t.industryB2bSaas },
+  { value: "beauty", label: t.industryBeauty },
+  { value: "fashion", label: t.industryFashion },
+  { value: "food", label: t.industryFood },
+  { value: "retail", label: t.industryRetail },
+  { value: "finance", label: t.industryFinance },
+  { value: "healthcare", label: t.industryHealthcare },
+  { value: "education", label: t.industryEducation },
+  { value: "content_ip", label: t.industryContentIp },
+  { value: "other", label: t.industryOther },
 ];
 
 const isBrandIdentityReady = ({
@@ -88,13 +96,11 @@ const isBrandIdentityReady = ({
   Boolean(name.trim() && marketScope && industry && confirmed) &&
   !pending;
 
-const nameHelp = (name: string, nameTouched: boolean) =>
-  name && !nameTouched
-    ? "도메인으로 자동으로 채웠어요. 다르면 고쳐주세요."
-    : "AI에게 물어볼 때 쓰는 이름이에요. 회사명과 브랜드명이 다르면 실제로 더 많이 불리는 쪽을 적어주세요.";
+const nameHelp = (name: string, nameTouched: boolean, t: BrandFormLabels) =>
+  name && !nameTouched ? t.nameAutoFilled : t.nameHelp;
 
-const submitLabel = (pending: boolean) =>
-  pending ? "측정을 시작하는 중…" : "확인하고 측정 시작";
+const submitLabel = (pending: boolean, t: BrandFormLabels) =>
+  pending ? t.submitting : t.submit;
 
 // ⚠️ 타깃 시장 선택지는 제거했다(2026-08-03). 기존 정의가 "국내 중심 = 한국 AI만"이라
 // 한국인이 가장 많이 쓰는 ChatGPT 를 제외하는 잘못된 축이었다. 언어축으로 재설계 후 복원.
@@ -118,13 +124,15 @@ interface AssignBrandFormProps {
   /** 온보딩에서도 측정에 쓰이는 세 값은 먼저 확인한다. */
   mode?: "management" | "onboarding";
   nextHref?: string;
+  t: BrandFormLabels;
 }
 
 export const AssignBrandForm = ({
   initialDomain = "",
   mode = "management",
   nextHref,
-}: AssignBrandFormProps = {}) => {
+  t,
+}: AssignBrandFormProps) => {
   const isOnboarding = mode === "onboarding";
   // Radix Select 는 네이티브 form 에 값을 싣지 않으므로 상태로 들고 액션에 직접 넘긴다
   // (audit-form.tsx 의 측정 언어 Select 와 동일 패턴).
@@ -251,7 +259,7 @@ export const AssignBrandForm = ({
       return;
     }
     if (state.measurement === "started") {
-      toast.success("측정을 시작했어요. 보통 1~3분 걸려요.");
+      toast.success(t.toastStarted);
       // 대기 화면으로. jobId 를 넘겨 그 화면이 진행 상태를 폴링한다.
       // 온보딩이면 다음 단계로, 아니면 기존대로 측정 대기 화면으로.
       router.push(nextHref ?? `/brand/measuring?job=${state.jobId ?? ""}`);
@@ -270,17 +278,16 @@ export const AssignBrandForm = ({
     }
     if (state.measurement === "rate_limited") {
       // 이미 결과가 있다는 뜻이다 — 등록은 됐으니 어디서 보는지 알린다.
-      toast.info(state.message ?? "오늘은 이미 측정했어요.", {
-        action: { label: "대시보드 보기", onClick: () => router.push("/") },
+      toast.info(state.message ?? t.toastRateLimited, {
+        action: { label: t.viewDashboard, onClick: () => router.push("/") },
       });
       router.refresh();
       return;
     }
     // failed — 브랜드는 저장됐다. 측정만 다시 시도하면 된다(아래 목록의 측정 버튼).
-    toast.error(
-      state.message ?? "브랜드는 등록했지만 측정을 시작하지 못했어요.",
-      { description: "위 목록에서 측정 시작을 다시 눌러 주세요." }
-    );
+    toast.error(state.message ?? t.toastFailed, {
+      description: t.toastFailedHint,
+    });
     router.refresh();
   }, [
     state.status,
@@ -289,6 +296,7 @@ export const AssignBrandForm = ({
     state.message,
     router,
     nextHref,
+    t,
   ]);
 
   return (
@@ -305,7 +313,7 @@ export const AssignBrandForm = ({
           도메인 하나만 채우면 등록·측정이 끝나는데 선택 입력이 위에 있으면
           "둘 다 채워야 하나" 로 읽힌다. */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="brand-domain">도메인</Label>
+        <Label htmlFor="brand-domain">{t.domainLabel}</Label>
         <Input
           autoComplete="url"
           id="brand-domain"
@@ -331,14 +339,12 @@ export const AssignBrandForm = ({
               e.currentTarget.blur();
             }
           }}
-          placeholder="예: amorepacific.com"
+          placeholder={t.domainPlaceholder}
           required
           value={domain}
         />
         {initialDomain ? (
-          <p className="text-muted-foreground text-xs">
-            무료 진단에서 입력한 도메인을 가져왔어요. 다르면 수정해 주세요.
-          </p>
+          <p className="text-muted-foreground text-xs">{t.domainFromAudit}</p>
         ) : null}
       </div>
       {detected ? (
@@ -347,19 +353,19 @@ export const AssignBrandForm = ({
           className="flex flex-col gap-1 rounded-md border border-[color:var(--findable-border,#2a2d31)] bg-[color:var(--findable-surface-2,rgba(255,255,255,0.03))] p-3"
         >
           <p className="font-medium text-sm">
-            이렇게 파악했어요
+            {t.detectedTitle}
             {detected.confidence === "low" ? (
               // 확신이 낮을 때만 확인을 **강하게** 요청한다(`market-scope.ts` 의 설계 의도:
               //   "low 면 UI 가 「맞나요?」 확인을 더 강하게 띄운다"). high 면 조용히 넘어간다.
               <span className="ml-1 font-normal text-[color:var(--signal-warn,#e0a458)]">
-                · 맞는지 확인해 주세요
+                {t.detectedLowConfidence}
               </span>
             ) : null}
           </p>
           <p className="text-sm">
-            타깃 시장{" "}
+            {t.targetMarket}{" "}
             <strong>
-              {MARKET_SCOPE_LABELS[marketScopeOverride ?? detected.scope]}
+              {marketScopeLabels(t)[marketScopeOverride ?? detected.scope]}
             </strong>
           </p>
           {/* 🔴 Profound f049 에 **없는 것** = 근거. 값만 던지면 고객은 무엇을 고쳐야
@@ -367,13 +373,13 @@ export const AssignBrandForm = ({
               직접 골랐으면 근거 대신 "직접 선택했다"고 말한다 — 감지 근거는 선택을
               덮어쓴 뒤엔 더 이상 사실이 아니다. */}
           <p className="text-muted-foreground text-xs">
-            {marketScopeOverride ? "직접 선택했어요." : detected.reason}
+            {marketScopeOverride ? t.chosenManually : detected.reason}
           </p>
         </div>
       ) : null}
       {showIdentity ? (
         <div className="flex flex-col gap-2">
-          <Label htmlFor="brand-market-scope">타깃 시장</Label>
+          <Label htmlFor="brand-market-scope">{t.targetMarket}</Label>
           <Select
             onValueChange={(value) => {
               setMarketScopeOverride(value);
@@ -382,20 +388,17 @@ export const AssignBrandForm = ({
             value={selectedMarketScope || undefined}
           >
             <SelectTrigger className="w-full" id="brand-market-scope">
-              <SelectValue placeholder="타깃 시장 선택" />
+              <SelectValue placeholder={t.scopePlaceholder} />
             </SelectTrigger>
             <SelectContent>
-              {MARKET_SCOPE_OPTIONS.map((opt) => (
+              {marketScopeOptions(t).map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <p className="text-muted-foreground text-xs">
-            제안값을 확인하고 필요하면 바꿔 주세요. 국내 중심이어도
-            ChatGPT·Claude는 측정합니다.
-          </p>
+          <p className="text-muted-foreground text-xs">{t.scopeHelp}</p>
         </div>
       ) : null}
       {showIdentity ? (
@@ -406,7 +409,7 @@ export const AssignBrandForm = ({
             쉬웠으므로, 별도 브랜드명이 없는 회사도 자연스럽게 채우도록 질문·placeholder를
             "우리를 부르는 이름"으로 넓힌다(HIG "offer choices/examples instead of
             blind text entry" — 질문 자체를 없애는 대신 답하기 쉽게 만드는 쪽). */}
-          <Label htmlFor="brand-name">뭐라고 부르나요?</Label>
+          <Label htmlFor="brand-name">{t.nameLabel}</Label>
           <Input
             autoComplete="off"
             id="brand-name"
@@ -417,18 +420,18 @@ export const AssignBrandForm = ({
               setName(e.target.value);
               setIdentityConfirmed(false);
             }}
-            placeholder="예: 설화수, 무신사 · 브랜드명이 따로 없다면 회사명(예: OO전자)"
+            placeholder={t.namePlaceholder}
             required
             value={name}
           />
           <p className="text-muted-foreground text-xs">
-            {nameHelp(name, nameTouched)}
+            {nameHelp(name, nameTouched, t)}
           </p>
         </div>
       ) : null}
       {showIdentity ? (
         <div className="flex flex-col gap-2">
-          <Label htmlFor="brand-industry">업종</Label>
+          <Label htmlFor="brand-industry">{t.industryLabel}</Label>
           {/* 🔴 S7-c(2026-08-11) — `SelectTrigger` 기본값이 **`w-fit`**(design-system)이라
             위의 브랜드 이름·도메인 입력칸(전폭)과 폭이 어긋났다. 같은 폼의 같은 등급
             입력인데 생김새가 달라 "덜 중요한 칸"으로 읽힌다(NN/g 4 일관성).
@@ -442,10 +445,10 @@ export const AssignBrandForm = ({
             value={industry || undefined}
           >
             <SelectTrigger className="w-full" id="brand-industry">
-              <SelectValue placeholder="업종을 선택해 주세요" />
+              <SelectValue placeholder={t.industryPlaceholder} />
             </SelectTrigger>
             <SelectContent>
-              {INDUSTRY_OPTIONS.map((opt) => (
+              {industryOptions(t).map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>
@@ -456,10 +459,7 @@ export const AssignBrandForm = ({
             달라집니다」. '처방'·'채널' 둘 다 내부 용어이고, 이 화면에서는 처방을
             아직 본 적이 없어 **참조할 대상조차 없다**. 게다가 이 문장만 '~합니다'체라
             화면의 나머지(해요체)와 말투가 어긋났다(진단 §원인④ · NN/g 2·4). */}
-          <p className="text-muted-foreground text-xs">
-            알려진 도메인은 업종을 제안합니다. 제안이 없거나 맞지 않다면 직접
-            고르세요. 판단하기 어려우면 ‘기타’를 선택할 수 있어요.
-          </p>
+          <p className="text-muted-foreground text-xs">{t.industryHelp}</p>
         </div>
       ) : null}
       {showIdentity ? (
@@ -470,10 +470,7 @@ export const AssignBrandForm = ({
             onChange={(event) => setIdentityConfirmed(event.target.checked)}
             type="checkbox"
           />
-          <span>
-            브랜드명·타깃 시장·업종을 확인했어요. 이 정보로 첫 측정을
-            시작합니다.
-          </span>
+          <span>{t.confirm}</span>
         </label>
       ) : null}
       {state.error ? (
@@ -494,7 +491,7 @@ export const AssignBrandForm = ({
             disabled={!canSubmit}
             type="submit"
           >
-            {submitLabel(isPending)}
+            {submitLabel(isPending, t)}
           </Button>
         </div>
       ) : null}

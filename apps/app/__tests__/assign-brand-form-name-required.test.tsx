@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 온보딩 1단계 — 브랜드 이름 필수화 회귀 테스트 (2026-08-21 10번 · 👤 결정).
  *
@@ -46,7 +47,9 @@ afterEach(() => {
 
 describe("브랜드 이름 칸 — 필수화 + 정적 사전 자동 채움", () => {
   it("이름 칸이 required 다", () => {
-    const { getByLabelText } = render(<AssignBrandForm />);
+    const { getByLabelText } = render(
+      <AssignBrandForm t={koDict.app.brandForm} />
+    );
     const nameInput = getByLabelText("뭐라고 부르나요?") as HTMLInputElement;
     expect(nameInput.required).toBe(true);
   });
@@ -56,7 +59,9 @@ describe("브랜드 이름 칸 — 필수화 + 정적 사전 자동 채움", () 
       name: "설화수",
       industry: "beauty",
     });
-    const { getByLabelText } = render(<AssignBrandForm />);
+    const { getByLabelText } = render(
+      <AssignBrandForm t={koDict.app.brandForm} />
+    );
     const domainInput = getByLabelText("도메인") as HTMLInputElement;
     const nameInput = getByLabelText("뭐라고 부르나요?") as HTMLInputElement;
 
@@ -68,7 +73,9 @@ describe("브랜드 이름 칸 — 필수화 + 정적 사전 자동 채움", () 
 
   it("사전에 없으면 채우지 않는다 (롱테일 브랜드는 직접 입력)", async () => {
     suggestBrandNameMock.mockResolvedValue({ name: null, industry: null });
-    const { getByLabelText } = render(<AssignBrandForm />);
+    const { getByLabelText } = render(
+      <AssignBrandForm t={koDict.app.brandForm} />
+    );
     const domainInput = getByLabelText("도메인") as HTMLInputElement;
     const nameInput = getByLabelText("뭐라고 부르나요?") as HTMLInputElement;
 
@@ -84,7 +91,9 @@ describe("브랜드 이름 칸 — 필수화 + 정적 사전 자동 채움", () 
       name: "설화수",
       industry: "beauty",
     });
-    const { getByLabelText } = render(<AssignBrandForm />);
+    const { getByLabelText } = render(
+      <AssignBrandForm t={koDict.app.brandForm} />
+    );
     const domainInput = getByLabelText("도메인") as HTMLInputElement;
     const nameInput = getByLabelText("뭐라고 부르나요?") as HTMLInputElement;
 

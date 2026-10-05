@@ -8,8 +8,12 @@ import { revalidatePath } from "next/cache";
 import { ensureOrgExists } from "@/lib/db/ensure-org";
 import { requireOrg, scopedBrandById } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
+import { getAppDictionary } from "@/lib/i18n";
 import { scheduleSiteReadinessRun } from "@/lib/site-readiness/schedule";
 import { startOrgTracking } from "./start-tracking";
+
+/** 오류 문구 — 사전 `app.brandErrors`(요청 밖이면 기본 로케일 ko). */
+const brandErrors = async () => (await getAppDictionary()).brandErrors;
 
 /**
  * 브랜드 소유 지정 — org 멤버 self(관리 액션). admin 게이트 아님.
@@ -159,7 +163,7 @@ const startMeasurementAfterAssign = async (
     );
     return {
       measurement: "failed",
-      message: "측정을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      message: (await brandErrors()).measureStartFailed,
     };
   }
 };
@@ -262,12 +266,15 @@ async function assignFailure(
   orgId: string
 ): Promise<{ error: string }> {
   if (error instanceof Error && error.message === "DUPLICATE_DOMAIN") {
-    return { error: "이미 등록된 도메인의 브랜드가 있습니다." };
+    return { error: (await brandErrors()).domainTaken };
   }
   if (error instanceof Error && error.message === "BRAND_LIMIT") {
     const brandLimit = planCapabilities(await getCurrentPlan()).brandLimit;
     return {
-      error: `현재 플랜은 브랜드를 ${brandLimit}개까지 등록할 수 있어요. 더 등록하려면 요금제를 올려주세요.`,
+      error: (await brandErrors()).brandLimit.replace(
+        "{limit}",
+        String(brandLimit)
+      ),
     };
   }
   if (
@@ -275,13 +282,13 @@ async function assignFailure(
     error.code === "P2034"
   ) {
     return {
-      error: "동시에 처리 중인 브랜드 변경이 있어요. 다시 시도해 주세요.",
+      error: (await brandErrors()).concurrentChange,
     };
   }
   log.error(
     `[brand/assign] failed for org ${orgId}: ${error instanceof Error ? error.message : "unknown"}`
   );
-  return { error: "브랜드 저장 중 문제가 발생했습니다." };
+  return { error: (await brandErrors()).saveFailed };
 }
 
 export const assignBrandOwner = async (
@@ -292,7 +299,7 @@ export const assignBrandOwner = async (
   try {
     orgId = await requireOrg();
   } catch {
-    return { error: "로그인 후 조직을 선택해 주세요." };
+    return { error: (await brandErrors()).signInOrg };
   }
 
   // 2) 입력 검증 — **도메인·이름 둘 다 필수**(2026-08-21 10번 · 👤 결정으로 전환).
@@ -302,11 +309,11 @@ export const assignBrandOwner = async (
   //    클라이언트 폼만으로는 부족해 서버에서도 막는다(폼 우회 방어).
   const domain = normalizeDomain(input.domain ?? "");
   if (!(domain && isValidDomain(domain))) {
-    return { error: "도메인 형식이 올바르지 않습니다. 예: example.com" };
+    return { error: (await brandErrors()).domainInvalidExample };
   }
   const name = input.name?.trim() ?? "";
   if (!name) {
-    return { error: "브랜드 이름(또는 회사명)을 입력해 주세요." };
+    return { error: (await brandErrors()).nameRequired };
   }
   // 업종은 선택 입력이다. 유효하지 않거나 비어있으면 null → 측정 시 자동 추론.
   const industry = toIndustry(input.industry);
@@ -318,7 +325,7 @@ export const assignBrandOwner = async (
       const owned = await scopedBrandById(input.brandId);
       if (!owned) {
         // 존재하지 않거나 다른 org 소속 → 존재 여부를 흘리지 않도록 동일 메시지.
-        return { error: "해당 브랜드에 접근할 수 없습니다." };
+        return { error: (await brandErrors()).brandForbidden };
       }
       const domainChanged = owned.domain !== domain;
       await updateOwnedBrand(owned.id, {
@@ -350,7 +357,7 @@ export const assignBrandOwner = async (
     //   2026-10-05 로컬 E2E 에서 2단계 "다음"이 같은 화면만 반복한 원인.
     if ((await ensureOrgExists()) !== orgId) {
       return {
-        error: "조직 정보를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.",
+        error: (await brandErrors()).orgNotReady,
       };
     }
 

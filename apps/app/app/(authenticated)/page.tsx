@@ -656,6 +656,7 @@ const App = async ({ searchParams }: AppProperties) => {
                       <StartTrackingButton
                         brandName={data.latestBrandName}
                         domain={data.latestBrandDomain}
+                        t={dict.trackButton}
                       />
                     ) : null
                   }

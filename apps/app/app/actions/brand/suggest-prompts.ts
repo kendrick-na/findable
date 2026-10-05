@@ -18,6 +18,10 @@ import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { requireOrg, scopedBrandById } from "@/lib/db/scoped";
+import { getAppDictionary } from "@/lib/i18n";
+
+/** 오류 문구 — 사전 `app.brandErrors`(요청 밖이면 기본 로케일 ko). */
+const brandErrors = async () => (await getAppDictionary()).brandErrors;
 
 /**
  * 프롬프트 자동 제안 마법사 서버 액션 (표준 백로그 1, 2026-07-30).
@@ -45,12 +49,12 @@ export const suggestPromptsAction = async (input: {
   try {
     await requireOrg();
   } catch {
-    return { error: "로그인 후 조직을 선택해 주세요." };
+    return { error: (await brandErrors()).signInOrg };
   }
 
   const brand = await scopedBrandById(input.brandId);
   if (!brand) {
-    return { error: "브랜드를 찾을 수 없습니다." };
+    return { error: (await brandErrors()).brandNotFound };
   }
 
   // Vercel Preview: no LLM call (brand identity + suggestion are both paid).
@@ -76,7 +80,7 @@ export const suggestPromptsAction = async (input: {
       error: parseError(error),
     });
     return {
-      error: "제안 생성 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+      error: (await brandErrors()).suggestFailed,
     };
   }
 };
@@ -91,7 +95,8 @@ export type SaveApprovedResult =
       requested?: number;
       limit?: number;
     }
-  | { error: string };
+  // `code` 는 화면이 분기할 때 쓴다 — 문구(언어마다 다름)에서 단어를 찾지 않는다.
+  | { error: string; code?: "prompt_limit" };
 
 // 🔴 N-42: `CATEGORY_MAP`(brand→recommendation · competitor→comparison)을 **없앴다**.
 //   모든 질문이 이 표를 거치며 `recommendation`·`comparison` **2종으로 뭉개져서**
@@ -106,12 +111,12 @@ export const saveApprovedPromptsAction = async (input: {
   try {
     await requireOrg();
   } catch {
-    return { error: "로그인 후 조직을 선택해 주세요." };
+    return { error: (await brandErrors()).signInOrg };
   }
 
   const brand = await scopedBrandById(input.brandId);
   if (!brand) {
-    return { error: "브랜드를 찾을 수 없습니다." };
+    return { error: (await brandErrors()).brandNotFound };
   }
 
   // 저장 상한 = 플랜 능력치(게이팅 단일 진실). free 5·starter 30·growth 150…
@@ -143,7 +148,7 @@ export const saveApprovedPromptsAction = async (input: {
     });
 
   if (clean.length === 0) {
-    return { error: "저장할 프롬프트를 하나 이상 선택해 주세요." };
+    return { error: (await brandErrors()).selectAtLeastOne };
   }
 
   // 이미 저장된 auto 프롬프트 + 이번 저장분이 플랜 상한을 넘으면 차단(누적 기준).
@@ -154,7 +159,11 @@ export const saveApprovedPromptsAction = async (input: {
   const remaining = Math.max(0, promptLimit - existingCount);
   if (remaining === 0) {
     return {
-      error: `현재 플랜의 추적 프롬프트 상한(${promptLimit}개)에 도달했어요. 더 많은 프롬프트를 추적하려면 요금제를 올려주세요.`,
+      error: (await brandErrors()).promptLimit.replace(
+        "{limit}",
+        String(promptLimit)
+      ),
+      code: "prompt_limit",
     };
   }
   const capped = clean.slice(0, remaining);
@@ -199,6 +208,6 @@ export const saveApprovedPromptsAction = async (input: {
       brandId: input.brandId,
       error: parseError(error),
     });
-    return { error: "프롬프트 저장 중 문제가 발생했습니다." };
+    return { error: (await brandErrors()).promptSaveFailed };
   }
 };

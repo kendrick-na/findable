@@ -18,7 +18,11 @@ import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
 import { scopedBrandById } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
+import { getAppDictionary } from "@/lib/i18n";
 import { ensureOrgBrand } from "./start-tracking";
+
+/** 오류 문구 — 사전 `app.brandErrors`(요청 밖이면 기본 로케일 ko). */
+const brandErrors = async () => (await getAppDictionary()).brandErrors;
 
 export interface CompleteActionInput {
   brandId: string;
@@ -46,13 +50,13 @@ export async function toggleActionCompletion(
   try {
     const { orgId, userId } = await auth();
     if (!(orgId && userId)) {
-      return { completed: false, error: "로그인이 필요합니다." };
+      return { completed: false, error: (await brandErrors()).signIn };
     }
 
     // org 소속 확인 — 남의 brandId 를 찔러보는 접근 차단.
     const brand = await scopedBrandById(input.brandId);
     if (!brand) {
-      return { completed: false, error: "브랜드를 찾을 수 없습니다." };
+      return { completed: false, error: (await brandErrors()).brandNotFound };
     }
 
     const target = input.target ?? "";
@@ -91,7 +95,7 @@ export async function toggleActionCompletion(
       kind: input.kind,
       error: error instanceof Error ? error.message : String(error),
     });
-    return { completed: false, error: "처리 중 문제가 발생했습니다." };
+    return { completed: false, error: (await brandErrors()).processingFailed };
   }
 }
 
@@ -141,7 +145,7 @@ export async function toggleActionCompletionByDomain(
 ): Promise<CompleteActionResult> {
   const { orgId } = await auth();
   if (!orgId) {
-    return { completed: false, error: "로그인이 필요합니다." };
+    return { completed: false, error: (await brandErrors()).signIn };
   }
 
   // 🔒 교차검증(같은 세션)에서 잡은 구멍 ①: **도메인 형식 검증**.
@@ -150,7 +154,7 @@ export async function toggleActionCompletionByDomain(
   //   형식이 깨진 값으로 Brand 가 생기면 이후 측정·매칭이 조용히 어긋난다.
   const domain = normalizeDomain(input.domain ?? "");
   if (!(domain && isValidDomain(domain))) {
-    return { completed: false, error: "도메인 형식이 올바르지 않습니다." };
+    return { completed: false, error: (await brandErrors()).domainInvalid };
   }
 
   // 🔒 교차검증에서 잡은 구멍 ②: **브랜드 수 게이팅**.
@@ -172,7 +176,10 @@ export async function toggleActionCompletionByDomain(
       if (brandCount >= brandLimit) {
         return {
           completed: false,
-          error: `현재 플랜은 브랜드를 ${brandLimit}개까지 등록할 수 있어요. 완료 표시는 요금제를 올린 뒤 이어서 할 수 있습니다.`,
+          error: (await brandErrors()).brandLimitComplete.replace(
+            "{limit}",
+            String(brandLimit)
+          ),
         };
       }
     }
@@ -182,7 +189,7 @@ export async function toggleActionCompletionByDomain(
   //   start-tracking 과 같은 함수를 써야 "org 내 domain 유일" 불변식이 한 곳에서 관리된다.
   const brandId = await ensureOrgBrand(orgId, domain, input.brandName);
   if (!brandId) {
-    return { completed: false, error: "브랜드를 연결하지 못했습니다." };
+    return { completed: false, error: (await brandErrors()).brandLinkFailed };
   }
 
   log.info("action.completion.by_domain", {
