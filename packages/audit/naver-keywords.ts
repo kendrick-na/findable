@@ -5,8 +5,9 @@
 // 인증(공식 샘플 naver/searchad-apidoc python-sample/examples 로 확인):
 //   base https://api.searchad.naver.com · 헤더 X-Timestamp·X-API-KEY·X-Customer·X-Signature
 //   서명 = base64(HMAC-SHA256(secretKey, `${timestamp}.${method}.${uri}`))
-// [확인필요] `/keywordstool` 경로·`hintKeywords`(최대 5개, 공백 불가)·응답 필드는 업계 문서 기준이다.
-//   키 발급 뒤 첫 실호출로 확인한다. 호출 한도·데이터 재사용 약관도 그때 확인.
+// `/keywordstool`·`hintKeywords`·`showDetail=1`·응답 필드(relKeyword·monthlyPcQcCnt·
+//   monthlyMobileQcCnt·compIdx)는 2026-10-05 실호출로 확인(힌트 5개 → 연관 752개).
+//   [확인필요] 호출 한도·데이터 재사용 약관은 아직 원문 확인 전.
 // 키가 없으면 null — 기능이 꺼진 것이지 오류가 아니다.
 
 import { createHmac } from "node:crypto";
