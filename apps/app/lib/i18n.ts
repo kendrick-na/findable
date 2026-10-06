@@ -52,9 +52,26 @@ export const APP_DEFAULT_LOCALE: AppLocale = "ko";
  *   → 핵심 화면(온보딩·대시보드·브랜드·기록·결제) 이관 + 👤 결정(약관·통화·용어집) 전까지 끈다.
  * ⚠️ 토글과 자동 감지는 **반드시 함께** 켜고 끈다. 감지만 켜면 영어 브라우저 사용자가
  *   반쯤 영어인 화면에 갇히고 되돌릴 버튼이 없다.
- * ⚠️ 꺼도 `/locale?locale=en` 경로와 쿠키는 그대로라 내부 확인은 가능하다.
+ * 🔴 정정(2026-10-07 관제 검증): 꺼져 있을 때 **운영에서는 쿠키도 무시한다**.
+ *   예전 main 은 토글을 항상 보여줘서, 그때 EN 을 누른 고객에게 1년짜리 `NEXT_LOCALE=en` 이 남아 있다.
+ *   토글을 숨긴 채 그 쿠키를 따르면 그 고객은 반쯤 영어인 화면에 갇히고 돌아갈 버튼이 없다.
+ *   → 내부 미리보기는 Vercel Preview·로컬 개발에서만 쿠키(`/locale?locale=en`)로 연다.
  */
 export const APP_ENGLISH_ENABLED = false;
+
+/**
+ * `NEXT_LOCALE` 쿠키를 따를지. 영어 공개 전에는 **Preview·로컬 개발에서만** 따른다
+ * (운영에서는 영어가 절대 나오지 않게). `VERCEL_ENV` 는 Vercel 이 배포 단위로 넣는 값이다.
+ */
+export function honorsLocaleCookie(): boolean {
+  if (APP_ENGLISH_ENABLED) {
+    return true;
+  }
+  return (
+    process.env.VERCEL_ENV === "preview" ||
+    process.env.NODE_ENV === "development"
+  );
+}
 
 /**
  * 날짜·숫자 표기용 BCP 47 태그. `toLocaleDateString(dateLocaleFor(locale))` 처럼 쓴다.
@@ -68,7 +85,8 @@ const isAppLocale = (v: string | undefined): v is AppLocale =>
 
 /**
  * 현재 요청의 로케일. 우선순위:
- *   ① `NEXT_LOCALE` 쿠키(사용자가 토글로 고른 값 — 브라우저 단위, 조직과 무관)
+ *   ① `NEXT_LOCALE` 쿠키(사용자가 토글로 고른 값 — 브라우저 단위, 조직과 무관).
+ *      단 `honorsLocaleCookie()` 일 때만(영어 공개 전 운영에서는 무시 → ko)
  *   ② `APP_ENGLISH_ENABLED` 일 때만: 브라우저 `Accept-Language` 의 ko/en 중 먼저 나오는 것
  *   ③ 기본(ko)
  * 📐 계정 단위 저장(기기 간 유지)은 아직 없다 — 페이지마다 Clerk 조회가 한 번 더 붙어
@@ -85,7 +103,7 @@ export async function getAppLocale(): Promise<AppLocale> {
     return APP_DEFAULT_LOCALE;
   }
   const raw = store.get("NEXT_LOCALE")?.value?.split("-")[0];
-  if (isAppLocale(raw)) {
+  if (honorsLocaleCookie() && isAppLocale(raw)) {
     return raw;
   }
   if (!APP_ENGLISH_ENABLED) {

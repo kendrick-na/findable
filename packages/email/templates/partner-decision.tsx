@@ -66,8 +66,8 @@ export const PartnerDecisionEmail = ({
                   <>
                     <Text className="m-0 text-zinc-600">
                       신청이 <strong>승인</strong>되었습니다. 이제 경쟁사
-                      비교·매일 자동 측정 등 Growth 기능을 사용하실 수
-                      있습니다. 아래 버튼으로 대시보드에 접속해 주세요.
+                      비교·매일 자동 측정 등 Growth 기능을 사용하실 수 있습니다.
+                      아래 버튼으로 대시보드에 접속해 주세요.
                     </Text>
                     <Button
                       className="mt-6 rounded-md bg-orange-500 px-5 py-3 font-semibold text-white"

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { pickLocaleFromAcceptLanguage } from "@/lib/accept-language";
 
 /**
@@ -48,8 +48,12 @@ describe("getAppLocale", () => {
     cookieJar.clear();
     acceptLanguage.current = null;
   });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
-  it("uses the toggle cookie first", async () => {
+  it("uses the toggle cookie first (where cookies are honoured: Preview)", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
     const { getAppLocale } = await import("@/lib/i18n");
     cookieJar.set("NEXT_LOCALE", "en");
     acceptLanguage.current = "ko-KR";
@@ -61,6 +65,24 @@ describe("getAppLocale", () => {
     expect(APP_ENGLISH_ENABLED).toBe(false);
     acceptLanguage.current = "en-US,en;q=0.9";
     expect(await getAppLocale()).toBe("ko");
+  });
+
+  // 🔴 2026-10-07 관제 검증: 예전에 EN 을 눌러 둔 고객이 숨겨진 토글 뒤에 갇히지 않게.
+  it("production with English closed: a leftover en cookie still gives Korean", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NODE_ENV", "production");
+    const { APP_ENGLISH_ENABLED, getAppLocale } = await import("@/lib/i18n");
+    expect(APP_ENGLISH_ENABLED).toBe(false);
+    cookieJar.set("NEXT_LOCALE", "en");
+    expect(await getAppLocale()).toBe("ko");
+  });
+
+  it("Vercel Preview: the en cookie opens the internal English preview", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("NODE_ENV", "production");
+    const { getAppLocale } = await import("@/lib/i18n");
+    cookieJar.set("NEXT_LOCALE", "en");
+    expect(await getAppLocale()).toBe("en");
   });
 
   it("ignores the marketing site's Next-Locale cookie (IP-based)", async () => {
