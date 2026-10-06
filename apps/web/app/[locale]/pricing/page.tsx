@@ -177,7 +177,7 @@ const TIERS_EN: Tier[] = [
     featured: false,
     features: [
       "30 tracked prompts / month",
-      "1 brand monitored",
+      "3 brands monitored",
       // ⭐ 2026-08-10 — KO 표와 동일 사실. 재측정은 작동 중, 리포트 메일은 아직 꺼짐.
       "Weekly automatic re-measurement",
       "Weekly automated report (coming soon)",
