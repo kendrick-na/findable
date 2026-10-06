@@ -291,8 +291,9 @@ export async function createInviteCode(input: {
       data: {
         code,
         label: input.label.trim(),
-        // ⛔ 부여 플랜은 growth 고정 — `Plan` enum 을 넓히면 상품 구성 변경이라
-        //   카카오페이 심사에 걸린다(~9월 초). 필요해지면 그때 연다.
+        // ⛔ 부여 플랜은 growth 고정 — `Plan` enum 을 넓히면 상품 구성 변경이다.
+        //   카카오페이 심사 완료(2026-09-22, cf405634). 상품 구성(플랜·가격) 변경 시
+        //   PG 변경 신고 필요 여부 [확인필요]. 필요해지면 그때 연다.
         grantPlan: "growth",
         grantDays: input.grantDays,
         validUntil: input.validUntil,

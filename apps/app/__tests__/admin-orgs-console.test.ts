@@ -82,7 +82,7 @@ describe("운영 콘솔 — 구조 계약", () => {
     expect(REVOKE_TO_FREE.test(actionsSource)).toBe(true);
   });
 
-  it("⛔ 부여 플랜을 growth 로 고정한다 (Plan enum 확장 = 심사 항목)", () => {
+  it("⛔ 부여 플랜을 growth 로 고정한다 (Plan enum 확장 = 상품 구성 변경)", () => {
     expect(GRANT_PLAN_FIXED.test(actionsSource)).toBe(true);
   });
 

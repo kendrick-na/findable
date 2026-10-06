@@ -4,9 +4,9 @@
  * KAIST 오버엣지 참여 기업에게 기간제 권한을 준다. 이 경로는 **돈을 안 받고 플랜을 올린다**
  * → 잘못 만들면 ① 영구 무료 ② 같은 코드 무한 재사용 ③ 결제 화면 오염이 된다.
  *
- * ⛔ **결제 경로 무접촉이 핵심 계약이다** — 카카오페이 심사 중(~9월 초)
- *   「상품명·가격·상세정보」는 유지해야 한다. 이 기능이 `packages/payments` 나
- *   요금제 카드 값을 건드리면 심사가 처음부터 다시 간다.
+ * ⛔ **결제 경로 무접촉이 핵심 계약이다** — 카카오페이 심사 완료(2026-09-22, cf405634).
+ *   이 기능은 무료 권한 부여라 `packages/payments`·요금제 카드 값과 섞이면 안 된다.
+ *   상품 구성(플랜·가격) 변경 시 PG 변경 신고 필요 여부 [확인필요].
  *
  * ⚠️ 네트워크·DB 를 타지 않는다 — 소스의 계약만 검사한다.
  */
@@ -96,14 +96,15 @@ describe("만료 처리 — 크론이 강하시킨다", () => {
   });
 });
 
-describe("⛔ 결제 경로 무접촉 (카카오페이 심사 보존)", () => {
+describe("⛔ 결제 경로 무접촉 (초대 코드는 상품 구성을 바꾸지 않는다)", () => {
   it("redeem 이 payments 를 import 하지 않는다", () => {
     expect(redeemSource).not.toContain("@repo/payments");
   });
 
   it("스키마에 초대 모델이 있고 기존 Plan enum 을 재사용한다", () => {
     // 🔴 `trial` 같은 **새 플랜 값을 추가하지 않는다** — Plan enum 변경은
-    //   상품 구성 변경이라 심사 항목에 걸린다. 기존 growth 를 기간제로 줄 뿐이다.
+    //   상품 구성 변경이다(심사 완료(2026-09-22, cf405634) · PG 변경 신고 필요 여부 [확인필요]).
+    //   기존 growth 를 기간제로 줄 뿐이다.
     expect(schemaSource).toContain("model InviteCode");
     expect(schemaSource).toContain("model InviteRedemption");
     const planEnum = PLAN_ENUM.exec(schemaSource)?.[1] ?? "";
