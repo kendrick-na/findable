@@ -5,12 +5,8 @@
 //   아래 설명문(`:307`)에선 `등장률` 이라 부르고 있었다(한 화면 두 이름).
 //   사전이 화면에 이미 있던 말 중 널리 쓰이는 쪽을 골랐으므로 설명문과 맞춰진다.
 import { engineDisplayName } from "@repo/audit/engine-labels";
-import {
-  engineRegion,
-  engineSourceState,
-  REGION_LABEL,
-} from "@repo/audit/market-scope";
-import { METRICS } from "@repo/audit/metric-dictionary";
+import { engineRegion, engineSourceState } from "@repo/audit/market-scope";
+import { metricCopy } from "@repo/audit/metric-dictionary";
 import { cn } from "@repo/design-system/lib/utils";
 import { ExternalLinkIcon } from "lucide-react";
 import type { AppDictionary } from "@/lib/i18n";
@@ -197,7 +193,10 @@ export const SourcesBoard = ({
                   .replace("{total}", String(mentionRate.total))
                   .replace("{mentioned}", String(mentionRate.mentioned))
           }
-          label={t.mentionLabel.replace("{metric}", METRICS.sov.label)}
+          label={t.mentionLabel.replace(
+            "{metric}",
+            metricCopy("sov", isKo).label
+          )}
           value={mentionRate.total === 0 ? "—" : `${mentionPct}%`}
         />
         <MetricCard
@@ -297,7 +296,7 @@ export const SourcesBoard = ({
               {/* 행과 같은 `max-w-2xl` — 헤더만 화면 끝에 있으면 제 그룹과 어긋나 보인다. */}
               <div className="flex max-w-2xl items-baseline justify-between gap-3">
                 <h3 className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-                  {REGION_LABEL[region]}
+                  {region === "korea" ? t.regionKorea : t.regionGlobal}
                   <span className="ml-2 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
                     {t.regionCount.replace("{n}", String(group.length))}
                   </span>

@@ -4,11 +4,10 @@
 // 🔴 등급 이름·엔진 이름은 `@repo/audit/action-rules` 한 곳에서 가져온다(웹과 문구가 갈리지 않게).
 // 상태·이벤트 없음 → 서버/클라이언트 어디서든 렌더된다.
 
-import {
-  type ActionGuide,
-  type DontItem,
-  EVIDENCE_GRADE_LABEL,
-  type EvidenceGrade,
+import type {
+  ActionGuide,
+  DontItem,
+  EvidenceGrade,
 } from "@repo/audit/action-rules";
 // 엔진 이름은 언어를 받는 원본(`engine-labels`)에서 — `action-rules` 판은 한국어 고정 별칭이다.
 import { engineDisplayName } from "@repo/audit/engine-labels";
@@ -26,15 +25,35 @@ const GRADE_TONE: Record<EvidenceGrade, string> = {
 /** 사전 `app.actionEvidence`. */
 export type ActionEvidenceLabels = AppDictionary["actionEvidence"];
 
-export const EvidenceGradeBadge = ({ grade }: { grade: EvidenceGrade }) => (
+// 등급 이름·뜻 — 사전 `app.actionEvidence.grade*`(한국어 원문은 `EVIDENCE_GRADE_LABEL` 과 같다).
+function gradeCopy(
+  grade: EvidenceGrade,
+  t: ActionEvidenceLabels
+): { label: string; meaning: string } {
+  const map: Record<EvidenceGrade, { label: string; meaning: string }> = {
+    strong: { label: t.gradeStrong, meaning: t.gradeStrongMeaning },
+    medium: { label: t.gradeMedium, meaning: t.gradeMediumMeaning },
+    weak: { label: t.gradeWeak, meaning: t.gradeWeakMeaning },
+    none: { label: t.gradeNone, meaning: t.gradeNoneMeaning },
+  };
+  return map[grade];
+}
+
+export const EvidenceGradeBadge = ({
+  grade,
+  t,
+}: {
+  grade: EvidenceGrade;
+  t: ActionEvidenceLabels;
+}) => (
   <span
     className={cn(
       "rounded-full border px-2 py-0.5 font-medium text-xs",
       GRADE_TONE[grade]
     )}
-    title={EVIDENCE_GRADE_LABEL[grade].meaning}
+    title={gradeCopy(grade, t).meaning}
   >
-    {EVIDENCE_GRADE_LABEL[grade].label}
+    {gradeCopy(grade, t).label}
   </span>
 );
 
@@ -84,9 +103,9 @@ export const ActionEvidenceGuide = ({
 }) => (
   <div className="flex flex-col gap-3 rounded border border-white/6 bg-white/[0.02] p-3">
     <div className="flex flex-wrap items-center gap-2">
-      <EvidenceGradeBadge grade={guide.evidenceGrade} />
+      <EvidenceGradeBadge grade={guide.evidenceGrade} t={t} />
       <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-        {EVIDENCE_GRADE_LABEL[guide.evidenceGrade].meaning}
+        {gradeCopy(guide.evidenceGrade, t).meaning}
       </span>
     </div>
     <dl className="flex flex-col gap-2">
@@ -159,7 +178,7 @@ export const DontList = ({
         key={d.title}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <EvidenceGradeBadge grade={d.evidenceGrade} />
+          <EvidenceGradeBadge grade={d.evidenceGrade} t={t} />
           <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
             {d.title}
           </span>

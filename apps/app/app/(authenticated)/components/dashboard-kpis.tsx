@@ -1,5 +1,5 @@
 import type { MetricKey } from "@repo/audit/metric-dictionary";
-import { directionHint, METRICS } from "@repo/audit/metric-dictionary";
+import { directionHint, metricCopy } from "@repo/audit/metric-dictionary";
 import {
   searchSamplingBlockedCopy,
   searchSamplingLabel,
@@ -484,7 +484,7 @@ export const DashboardKpis = ({
           //   검산하려 든다"*. 두 숫자 다 맞고, **한 카드에 둔 것**이 틀렸다.
           //   → 큰 숫자를 `sov` 로 유지하고 **질문을 sov 의 질문으로** 바꾼다.
           //     밑줄(7곳 중 7곳)은 엔진 축 그대로 두어 **서로 보완**하게 만든다.
-          label={METRICS.sov.question}
+          label={metricCopy("sov", isKo).question}
           sparkline={
             <KpiSparkline
               color="var(--findable-primary, #ff7a4d)"
@@ -500,7 +500,7 @@ export const DashboardKpis = ({
         <KpiCard
           // 🔴 방향은 지표 사전이 단독으로 정한다 — 화면이 "낮을수록 좋음"을
           //   직접 써넣으면 사전과 갈라질 수 있다(같은 수치 2벌 금지와 같은 규율).
-          directionNote={directionHint("rank")}
+          directionNote={directionHint("rank", isKo)}
           hint={positionHint(
             averageMentionPosition,
             previousMentionPosition,
@@ -513,7 +513,7 @@ export const DashboardKpis = ({
               ? `/compare?brand=${data.latestBrandId}`
               : "/compare"
           }
-          label={METRICS.rank.question}
+          label={metricCopy("rank", isKo).question}
           locked={!paid}
           lockedNote={t.rankLocked}
           sparkline={
@@ -561,7 +561,7 @@ export const DashboardKpis = ({
               ? `/actions?brand=${data.latestBrandId}`
               : "/actions"
           }
-          label={METRICS.sentiment.question}
+          label={metricCopy("sentiment", isKo).question}
           sparkline={
             <div className="flex flex-col gap-2">
               {/* D8: 스택바가 스파크라인 **위**. 스파크라인은 "시간에 따른 변화"고
@@ -633,7 +633,7 @@ export const DashboardKpis = ({
         {hasNoUsableResult ? t.summaryNoResult : ""}
       </p>
 
-      <MetricGlossary toggle={t.glossaryToggle} />
+      <MetricGlossary isKo={isKo} toggle={t.glossaryToggle} />
     </div>
   );
 };
@@ -660,7 +660,13 @@ export const DashboardKpis = ({
  *
  * ⚠️ 정의 문장을 여기 복제하지 않는다 — 사전이 단일 진실이다(같은 값 2벌 금지).
  */
-const MetricGlossary = ({ toggle }: { toggle: string }) => (
+const MetricGlossary = ({
+  isKo,
+  toggle,
+}: {
+  isKo: boolean;
+  toggle: string;
+}) => (
   <details className="group">
     <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs hover:text-[color:var(--findable-ink-subtle,#8a8f98)]">
       {/* marker 제거는 list-none + ::-webkit-details-marker 양쪽이 필요하다 */}
@@ -674,16 +680,16 @@ const MetricGlossary = ({ toggle }: { toggle: string }) => (
       {GLOSSARY_KEYS.map((key) => (
         <div className="flex flex-col gap-0.5" key={key}>
           <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-            {METRICS[key].label}
+            {metricCopy(key, isKo).label}
             {/* 방향은 사전이 단독으로 정한다 — 화면이 "낮을수록 좋음"을 직접 쓰지 않는다 */}
-            {directionHint(key) ? (
+            {directionHint(key, isKo) ? (
               <span className="ml-1.5 text-[color:var(--findable-ink-tertiary,#7e8289)]">
-                {directionHint(key)}
+                {directionHint(key, isKo)}
               </span>
             ) : null}
           </dt>
           <dd className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-            {METRICS[key].description}
+            {metricCopy(key, isKo).description}
           </dd>
         </div>
       ))}

@@ -53,8 +53,8 @@ describe("KPI 1번 카드 — 라벨과 값이 같은 축", () => {
     expect(
       card,
       "값은 %(sov)인데 라벨이 recognition(곳) 이면 검산이 깨진다"
-    ).toContain("METRICS.sov.question");
-    expect(card).not.toContain("METRICS.recognition.question");
+    ).toContain('metricCopy("sov", isKo).question');
+    expect(card).not.toContain('metricCopy("recognition"');
   });
 
   it("⛔ **사전이 두 지표를 다른 축으로 정의하고 있다** (전제 확인)", () => {

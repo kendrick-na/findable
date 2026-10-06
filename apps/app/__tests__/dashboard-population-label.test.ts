@@ -237,11 +237,11 @@ describe("대시보드 — 「측정 N회」와 카드가 다른 말을 하지 �
  *   검사하는 것은 **연결 계약**이다: `description` 을 읽고, 5종 전부를 덮는가.
  */
 /** 사전의 평문 정의를 화면이 읽는가. */
-const GLOSSARY_READS_DESCRIPTION = /METRICS\[\w+\]\.description/;
+const GLOSSARY_READS_DESCRIPTION = /metricCopy\(\w+, isKo\)\.description/;
 /** 뜻풀이가 `<details>` 네이티브인가(터치·키보드·스크린리더 무료 확보). */
 const GLOSSARY_NATIVE_DETAILS = /<details/;
 /** 방향 표식도 사전에서 가져오는가(화면이 직접 "낮을수록 좋음"을 쓰지 않는다). */
-const GLOSSARY_USES_DIRECTION_HINT = /directionHint\(key\)/;
+const GLOSSARY_USES_DIRECTION_HINT = /directionHint\(key, isKo\)/;
 /** 정의 문장을 화면에 복제했는가 — 사전 문장의 특징적 조각이 소스에 있으면 위반. */
 const GLOSSARY_DUPLICATED_TEXT = /답변 본문에 이름만 나오는/;
 /** 뜻풀이가 덮는 지표 목록(배열 리터럴)을 뽑아낸다. */

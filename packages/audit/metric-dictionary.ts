@@ -122,6 +122,8 @@ export interface MetricMeta {
   /** 평문 한 줄 정의. 🔴 툴팁이 아니라 **항상 보이는 자리**에 쓴다(Scrunch f062 구조). */
   description: string;
   direction: MetricDirection;
+  /** 영어 화면용(2026-10-06). 용어는 웹 영어판과 맞춘다(등장률 = Mention rate). */
+  en: { description: string; label: string; question: string };
   format: MetricFormat;
   /** 화면 라벨(명사형). */
   label: string;
@@ -151,6 +153,12 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
     format: "percent",
     direction: "higher",
     axis: "response",
+    en: {
+      label: "Mention rate",
+      question: "How often do we appear in AI and search?",
+      description:
+        "The share of judged AI answers and search results in which the brand appears.",
+    },
   },
 
   /** 인지 — `우리를 아는 AI`. 엔진 축이라 등장률과 분모가 다르다. */
@@ -161,6 +169,12 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
     format: "count",
     direction: "higher",
     axis: "uniqueEngine",
+    en: {
+      label: "AIs that know us",
+      question: "Does AI know us?",
+      description:
+        "The number of measured AIs that knew our brand when answering.",
+    },
   },
 
   /**
@@ -175,6 +189,12 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
     format: "rank",
     direction: "lower",
     axis: "response",
+    en: {
+      label: "Average rank",
+      question: "Where are we listed?",
+      description:
+        "Our position when AI lists several brands. A smaller number is better.",
+    },
   },
 
   /** 감성 — 유일하게 web·app 이름이 이미 일치하던 지표. */
@@ -185,6 +205,12 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
     format: "percent",
     direction: "higher",
     axis: "response",
+    en: {
+      label: "Positive share",
+      question: "Is it said positively?",
+      description:
+        "The share of answers mentioning us that describe us positively.",
+    },
   },
 
   /**
@@ -200,13 +226,37 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
     format: "count",
     direction: "higher",
     axis: "response",
+    en: {
+      label: "Citations",
+      question: "Does AI cite our pages as sources?",
+      description:
+        "AI linked our site as a source for its answer. This differs from a 'mention', where only our name appears in the answer text.",
+    },
   },
 } as const;
+
+/** 화면 언어에 맞는 라벨·질문·정의. 한국어가 기본(기존 호출부 그대로). */
+export function metricCopy(
+  key: MetricKey,
+  isKo = true
+): { description: string; label: string; question: string } {
+  const meta = METRICS[key];
+  return isKo
+    ? {
+        label: meta.label,
+        question: meta.question,
+        description: meta.description,
+      }
+    : meta.en;
+}
 
 /**
  * 방향 표식. 순위처럼 **낮을수록 좋은** 지표에만 꼬리표를 단다.
  * 높을수록 좋은 건 사람의 기본 직관이라 굳이 말하지 않는다(화면 소음).
  */
-export function directionHint(key: MetricKey): string | null {
-  return METRICS[key].direction === "lower" ? "낮을수록 좋음" : null;
+export function directionHint(key: MetricKey, isKo = true): string | null {
+  if (METRICS[key].direction !== "lower") {
+    return null;
+  }
+  return isKo ? "낮을수록 좋음" : "lower is better";
 }

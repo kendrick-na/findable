@@ -21,6 +21,7 @@ import {
 import { suggestBrandIdentity } from "@/app/actions/brand/suggest-brand-identity";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
 import type { AppDictionary } from "@/lib/i18n";
+import { marketScopeReason } from "@/lib/market-scope-reason";
 
 /** 이 폼의 문구 — 서버(`/brand`·`/welcome`)가 `app.brandForm` 사전에서 넘긴다. */
 export type BrandFormLabels = AppDictionary["brandForm"];
@@ -373,7 +374,9 @@ export const AssignBrandForm = ({
               직접 골랐으면 근거 대신 "직접 선택했다"고 말한다 — 감지 근거는 선택을
               덮어쓴 뒤엔 더 이상 사실이 아니다. */}
           <p className="text-muted-foreground text-xs">
-            {marketScopeOverride ? t.chosenManually : detected.reason}
+            {marketScopeOverride
+              ? t.chosenManually
+              : marketScopeReason(detected.reasonCode, t)}
           </p>
         </div>
       ) : null}

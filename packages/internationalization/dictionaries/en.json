@@ -986,7 +986,12 @@
       "industryLabel": "Industry",
       "industryPlaceholder": "Choose your industry",
       "industryHelp": "For known domains we suggest an industry. If there's no suggestion or it's wrong, choose one yourself. If you're not sure, you can pick ‘Other’.",
-      "confirm": "I've checked the brand name, target market and industry. Start the first measurement with this information."
+      "confirm": "I've checked the brand name, target market and industry. Start the first measurement with this information.",
+      "scopeReasonKoreaDomain": "Your domain is Korean (.kr), so we set it to Korea-focused.",
+      "scopeReasonDomesticIndustry": "Your industry mainly serves Korean customers, so we set it to Korea-focused. Change it if you're expanding abroad.",
+      "scopeReasonKoreanOnly": "You measure only in Korean, so we set it to Korea-focused.",
+      "scopeReasonEnglishOnly": "You measure only in English, so we set it to Global-focused.",
+      "scopeReasonBoth": "We look at Korea and global together. Change it to focus on one."
     },
     "jobStatus": {
       "queued": "Queued",
@@ -1558,7 +1563,9 @@
       "diagNoLinks": "No source links were found in this measurement. The mention rate ({mention}%) is based on answer text; citations mostly come from search-based engines (Naver, Daum, Perplexity).",
       "diagThirdParty": "Your brand appeared in {mention} of answers. The most common type among the source candidates shown alongside was {kind}, and your own domain was {owned}. This doesn't confirm that any individual link supports what was said about your brand.",
       "diagLowOwned": "Your own domain was {owned} of the source candidates shown alongside answers that mentioned you. This doesn't confirm that any individual link supports what was said about your brand.",
-      "diagOk": "Your own domain was {owned} of the source candidates shown alongside answers that mentioned you. Whether it backs specific cited sentences needs separate checking."
+      "diagOk": "Your own domain was {owned} of the source candidates shown alongside answers that mentioned you. Whether it backs specific cited sentences needs separate checking.",
+      "regionKorea": "Korean market",
+      "regionGlobal": "Global market"
     },
     "actionsPage": {
       "metaTitle": "What to do now · Findable",
@@ -1607,7 +1614,15 @@
       "failCondition": "When to revisit",
       "disclaimer": "Effort, re-measure timing and revisit conditions are Findable's internal working estimates and don't prove an effect.",
       "quotesTitle": "What AI actually answered",
-      "source": "Source: {label}"
+      "source": "Source: {label}",
+      "gradeStrong": "Strong evidence",
+      "gradeStrongMeaning": "A prerequisite confirmed by official documentation.",
+      "gradeMedium": "Moderate evidence",
+      "gradeMediumMeaning": "Backed by large observational studies or official documentation. Most of it is correlation, so the effect isn't guaranteed.",
+      "gradeWeak": "Weak evidence",
+      "gradeWeakMeaning": "Only a few experiments, or not enough replication.",
+      "gradeNone": "No evidence",
+      "gradeNoneMeaning": "No confirmed effect, or a risk of backfiring or breaking platform rules."
     },
     "sentimentSection": {
       "aria": "Positive {positive}, neutral {neutral}, negative {negative} ({total} total)",

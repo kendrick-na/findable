@@ -986,7 +986,12 @@
       "industryLabel": "업종",
       "industryPlaceholder": "업종을 선택해 주세요",
       "industryHelp": "알려진 도메인은 업종을 제안합니다. 제안이 없거나 맞지 않다면 직접 고르세요. 판단하기 어려우면 ‘기타’를 선택할 수 있어요.",
-      "confirm": "브랜드명·타깃 시장·업종을 확인했어요. 이 정보로 첫 측정을 시작합니다."
+      "confirm": "브랜드명·타깃 시장·업종을 확인했어요. 이 정보로 첫 측정을 시작합니다.",
+      "scopeReasonKoreaDomain": "한국 도메인(.kr)이라 국내 중심으로 잡았습니다.",
+      "scopeReasonDomesticIndustry": "국내 고객을 주로 상대하는 업종이라 국내 중심으로 잡았습니다. 해외 진출 중이라면 바꿔주세요.",
+      "scopeReasonKoreanOnly": "한국어로만 측정해 국내 중심으로 잡았습니다.",
+      "scopeReasonEnglishOnly": "영어로만 측정해 해외 중심으로 잡았습니다.",
+      "scopeReasonBoth": "국내·해외를 함께 봅니다. 한쪽만 보시려면 바꿔주세요."
     },
     "jobStatus": {
       "queued": "대기 중",
@@ -1558,7 +1563,9 @@
       "diagNoLinks": "이번 측정에서는 출처 링크를 못 찾았어요. 등장률({mention}%)은 답변 본문 기준이며, 인용은 검색 기반 엔진(네이버·다음· Perplexity)에서 주로 모여요.",
       "diagThirdParty": "브랜드는 답변에 {mention} 등장했습니다. 함께 표시된 출처 후보 중 가장 많은 종류는 {kind}이고 자사 도메인은 {owned}입니다. 개별 링크가 브랜드 설명의 근거인지 확인한 결과는 아닙니다.",
       "diagLowOwned": "브랜드 등장 답변에 함께 표시된 출처 후보 중 자사 도메인은 {owned}입니다. 개별 링크가 브랜드 설명의 근거인지 확인한 결과는 아닙니다.",
-      "diagOk": "브랜드 등장 답변에 함께 표시된 출처 후보 중 자사 도메인은 {owned}입니다. 실제 인용 문장과의 연결은 별도 확인이 필요합니다."
+      "diagOk": "브랜드 등장 답변에 함께 표시된 출처 후보 중 자사 도메인은 {owned}입니다. 실제 인용 문장과의 연결은 별도 확인이 필요합니다.",
+      "regionKorea": "한국 시장",
+      "regionGlobal": "글로벌 시장"
     },
     "actionsPage": {
       "metaTitle": "지금 할 일 · Findable",
@@ -1607,7 +1614,15 @@
       "failCondition": "재점검 조건",
       "disclaimer": "작업 시간·재측정 시점·재점검 조건은 Findable 내부 운영 기준·추정이며 효과를 입증하지 않습니다.",
       "quotesTitle": "AI가 실제로 이렇게 답했습니다",
-      "source": "출처: {label}"
+      "source": "출처: {label}",
+      "gradeStrong": "근거 강함",
+      "gradeStrongMeaning": "공식 문서로 확인된 전제 조건입니다.",
+      "gradeMedium": "근거 보통",
+      "gradeMediumMeaning": "대규모 관찰 연구나 공식 문서가 있습니다. 대부분 상관관계라 효과를 보장하지는 않습니다.",
+      "gradeWeak": "근거 약함",
+      "gradeWeakMeaning": "소수 실험뿐이거나 재현이 부족합니다.",
+      "gradeNone": "근거 없음",
+      "gradeNoneMeaning": "효과가 확인되지 않았거나, 역효과·규정 위반 위험이 있습니다."
     },
     "sentimentSection": {
       "aria": "긍정 {positive}, 보통 {neutral}, 부정 {negative} (총 {total}건)",

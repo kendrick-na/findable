@@ -203,7 +203,9 @@ export default async function AuditHistoryDetail({
           <section className="findable-card p-5">
             <h2 className="font-semibold text-lg">{t.notCompletedTitle}</h2>
             <p className="mt-2 text-muted-foreground text-sm">
-              {job.errorMessage ?? t.notCompletedBody}
+              {/* 러너가 저장한 실패 문장은 한국어(또는 내부 오류 원문)다 — 영어 화면엔 사전 문장만 쓴다. */}
+              {(locale === "ko" ? job.errorMessage : null) ??
+                t.notCompletedBody}
             </p>
             <Link className="mt-4 inline-block text-sm underline" href="/brand">
               {t.remeasure}
