@@ -33,10 +33,16 @@ interface EditorLabels {
   googlePreview: string;
   moderationSubmitted: string;
   moderationWaiting: string;
+  newsletterHint: string;
+  newsletterSend: string;
   readerPreview: string;
   save: string;
   saved: string;
   saving: string;
+  scheduleAt: string;
+  scheduledWaiting: string;
+  scheduleHint: string;
+  scheduleWithdrawn: string;
   searchSettings: string;
   seoDescriptionLabel: string;
   seoTitleLabel: string;
@@ -53,6 +59,7 @@ interface EditorLabels {
   withdrawingReview: string;
   withdrawnReview: string;
   withdrawReview: string;
+  withdrawSchedule: string;
 }
 
 function ReviewWaitingBanner({
@@ -234,9 +241,7 @@ export function ContentEditor({
       <section className="findable-card flex flex-col gap-5 p-5 md:p-6">
         {content.status === "scheduled" ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm">
-            <span>
-              예약 발행 대기 중입니다. 철회하면 다시 편집할 수 있습니다.
-            </span>
+            <span>{labels.scheduledWaiting}</span>
             <Button
               onClick={() =>
                 startSaving(async () => {
@@ -245,13 +250,13 @@ export function ContentEditor({
                     toast.error(result.error);
                     return;
                   }
-                  toast.success("예약을 철회했습니다.");
+                  toast.success(labels.scheduleWithdrawn);
                   router.refresh();
                 })
               }
               variant="outline"
             >
-              예약 철회
+              {labels.withdrawSchedule}
             </Button>
           </div>
         ) : null}
@@ -328,7 +333,7 @@ export function ContentEditor({
             className="grid gap-2 text-[color:var(--findable-ink-muted,#d0d6e0)] text-sm"
             htmlFor="content-scheduled-at"
           >
-            예약 발행 시각
+            {labels.scheduleAt}
             <Input
               disabled={!editable}
               id="content-scheduled-at"
@@ -338,9 +343,7 @@ export function ContentEditor({
               value={scheduledAt}
             />
             <span className="text-[11px] text-[color:var(--findable-ink-tertiary,#7e8289)]">
-              비워 두면 승인 직후 발행합니다. 입력 시 현재 브라우저 시간대를
-              사용하며, Hobby 운영 환경에서는 매일 03:00(KST)에 예약분을
-              처리합니다.
+              {labels.scheduleHint}
             </span>
           </label>
           <label className="flex items-start gap-3 rounded-md border border-white/5 p-3 text-sm">
@@ -353,10 +356,10 @@ export function ContentEditor({
             />
             <span>
               <strong className="block text-[color:var(--findable-ink,#f7f8f8)]">
-                발행 후 구독자에게 이메일 보내기
+                {labels.newsletterSend}
               </strong>
               <span className="mt-1 block text-[color:var(--findable-ink-subtle,#8a8f98)] leading-5">
-                발행이 완료된 글만 뉴스레터 대기열에 들어갑니다.
+                {labels.newsletterHint}
               </span>
             </span>
           </label>

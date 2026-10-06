@@ -14,7 +14,9 @@ import { getAppDictionary } from "@/lib/i18n";
 import { Header } from "../../components/header";
 import { ContentEditor } from "./content-editor";
 
-export const metadata: Metadata = { title: "콘텐츠 편집 · Findable" };
+export const generateMetadata = async (): Promise<Metadata> => ({
+  title: (await getAppDictionary()).content.editMetaTitle,
+});
 
 export default async function ContentDetailPage({
   params,
@@ -169,6 +171,13 @@ export default async function ContentDetailPage({
             withdrawingReview: c.withdrawingReview,
             withdrawnReview: c.withdrawnReview,
             googlePreview: c.googlePreview,
+            scheduledWaiting: c.scheduledWaiting,
+            scheduleWithdrawn: c.scheduleWithdrawn,
+            withdrawSchedule: c.withdrawSchedule,
+            scheduleAt: c.scheduleAt,
+            scheduleHint: c.scheduleHint,
+            newsletterSend: c.newsletterSend,
+            newsletterHint: c.newsletterHint,
           }}
           onApprove={approveContent}
           onCancelSchedule={cancelScheduledContent}

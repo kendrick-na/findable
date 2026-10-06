@@ -10,6 +10,7 @@ import type { ContentActionResult } from "@/app/actions/content/manage";
 export function GenerateDraftButton({
   brands,
   brandLabel,
+  createdToast,
   createLabel,
   label,
   locale,
@@ -18,6 +19,8 @@ export function GenerateDraftButton({
 }: {
   brands: { id: string; name: string; domain: string }[];
   brandLabel: string;
+  /** 초안 생성 완료 토스트(사전 `app.content.draftCreated`). */
+  createdToast: string;
   createLabel: string;
   label: string;
   locale: "ko" | "en";
@@ -40,7 +43,7 @@ export function GenerateDraftButton({
         toast.error(result.error);
         return;
       }
-      toast.success(locale === "ko" ? "초안을 만들었어요" : "Draft created");
+      toast.success(createdToast);
       if (result.contentId) {
         router.push(`/insights/${result.contentId}`);
       }

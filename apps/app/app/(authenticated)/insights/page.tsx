@@ -10,13 +10,16 @@ import {
 } from "@/app/actions/content/manage";
 import { contentPerformance } from "@/lib/content/performance";
 import { scopedBrands, scopedContents } from "@/lib/db/scoped";
-import { getAppDictionary, getAppLocale } from "@/lib/i18n";
+import { type AppDictionary, getAppDictionary, getAppLocale } from "@/lib/i18n";
+
+type ContentLabels = AppDictionary["content"];
+
 import { Header } from "../components/header";
 import { GenerateDraftButton } from "./generate-draft-button";
 
-export const metadata: Metadata = {
-  title: "콘텐츠 인사이트 · Findable",
-  description: "측정 액션을 SEO/GEO 콘텐츠로 만들고 검수해 발행합니다.",
+export const generateMetadata = async (): Promise<Metadata> => {
+  const c = (await getAppDictionary()).content;
+  return { title: c.metaTitle, description: c.metaDescription };
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -40,8 +43,12 @@ const CONTENT_STATUSES = [
 ] as const;
 
 function PerformanceSignals({
+  c,
+  isKo,
   performance,
 }: {
+  c: ContentLabels;
+  isKo: boolean;
   performance?: NonNullable<Awaited<ReturnType<typeof contentPerformance>>>;
 }) {
   if (!performance) {
@@ -49,30 +56,54 @@ function PerformanceSignals({
   }
   return (
     <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-white/45">
-      <span>최적화 준비도 {performance.optimizationReadiness}%</span>
-      <span>· 색인 가능 {performance.indexEligibility ? "예" : "아니오"}</span>
-      <span>· AI 인용 {performance.citationDetected ? "감지" : "미감지"}</span>
-      <ScoreChangeSignal performance={performance} />
+      <span>
+        {c.readiness.replace("{n}", String(performance.optimizationReadiness))}
+      </span>
+      <span>
+        {c.indexable.replace(
+          "{value}",
+          performance.indexEligibility ? c.yes : c.no
+        )}
+      </span>
+      <span>
+        {c.aiCitation.replace(
+          "{value}",
+          performance.citationDetected ? c.detected : c.notDetected
+        )}
+      </span>
+      <ScoreChangeSignal c={c} isKo={isKo} performance={performance} />
     </div>
   );
 }
 
 function ScoreChangeSignal({
+  c,
+  isKo,
   performance,
 }: {
+  c: ContentLabels;
+  isKo: boolean;
   performance: NonNullable<Awaited<ReturnType<typeof contentPerformance>>>;
 }) {
   if (performance.scoreComparisonBlocked) {
     // W1 정책: 네이버 검색 표본 방식이 바뀐 두 회차의 GEO 점수는 비교하지 않는다.
-    return <span>· 재측정 변화 {searchSamplingBlockedCopy(true)}</span>;
+    return (
+      <span>
+        {c.scoreChange.replace("{value}", searchSamplingBlockedCopy(isKo))}
+      </span>
+    );
   }
   if (performance.scoreDelta === null) {
-    return <span>· 발행 후 재측정 필요</span>;
+    return <span>{c.needsRemeasure}</span>;
   }
   return (
     <span>
-      · 재측정 변화 {performance.scoreDelta > 0 ? "+" : ""}
-      {performance.scoreDelta}점
+      {c.scoreChange.replace(
+        "{value}",
+        c.scorePoints
+          .replace("{sign}", performance.scoreDelta > 0 ? "+" : "")
+          .replace("{n}", String(performance.scoreDelta))
+      )}
     </span>
   );
 }
@@ -128,7 +159,7 @@ export default async function InsightsPage({
                 className="inline-flex items-center gap-2 rounded-md border border-white/10 px-4 py-2 text-sm"
                 href="/insights/settings"
               >
-                <Settings2Icon className="size-4" /> 채널 설정
+                <Settings2Icon className="size-4" /> {c.channelSettings}
               </Link>
               {brands[0] ? (
                 <GenerateDraftButton
@@ -138,6 +169,7 @@ export default async function InsightsPage({
                     name: brand.name,
                     domain: brand.domain,
                   }))}
+                  createdToast={c.draftCreated}
                   createLabel={c.createBlank}
                   label={c.generate}
                   locale={locale}
@@ -256,6 +288,8 @@ export default async function InsightsPage({
                   </p>
                   {content.status === "published" ? (
                     <PerformanceSignals
+                      c={c}
+                      isKo={locale === "ko"}
                       performance={performanceById.get(content.id)}
                     />
                   ) : null}
