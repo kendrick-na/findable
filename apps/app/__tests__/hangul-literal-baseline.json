@@ -1,6 +1,5 @@
 {
   "app/(authenticated)/components/header-metric-context.tsx": 1,
   "app/(authenticated)/features/brand/prompt-wizard.tsx": 1,
-  "app/(authenticated)/features/site-readiness/execution-playbook.tsx": 22,
-  "app/(authenticated)/site-audit/integrations/page.tsx": 127
+  "app/(authenticated)/features/site-readiness/execution-playbook.tsx": 22
 }
