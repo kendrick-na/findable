@@ -1,3 +1,4 @@
+import { isAuditContinuationPending } from "@repo/audit/audit-execution-lease";
 import { isStaleAuditJob } from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
@@ -87,6 +88,7 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
         createdAt={job.createdAt.toISOString()}
         dateLocale={dateLocaleFor(locale)}
         domain={job.domain}
+        initialContinuing={isAuditContinuationPending(job)}
         initialStatus={job.status}
         jobId={jobId}
         pollStatus={getTrackingStatus}

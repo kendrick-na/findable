@@ -2,9 +2,11 @@
 
 import type { AnswerBucketSummary } from "@repo/audit/answer-buckets";
 import type { AuditPublicationIssue } from "@repo/audit/normalize-stored-metrics";
+import { askedDiscoveryQuestionCount } from "@repo/audit/question-coverage";
 import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
 import {
   AnswerBucketBoard,
+  type DiscoveryCoverageCopy,
   type MatrixAnswer,
   QuestionEngineMatrix,
 } from "./answer-buckets";
@@ -29,6 +31,7 @@ function provisionalReason(
 /** A provisional run exposes channel evidence, never the blended GEO score. */
 export function ProvisionalEvidenceView({
   brandName,
+  discoveryCoverageCopy,
   discoveryPromptCount,
   domain,
   isKo,
@@ -37,6 +40,7 @@ export function ProvisionalEvidenceView({
   summary,
 }: {
   brandName: string;
+  discoveryCoverageCopy?: DiscoveryCoverageCopy;
   discoveryPromptCount?: number;
   domain: string;
   isKo: boolean;
@@ -75,6 +79,8 @@ export function ProvisionalEvidenceView({
         </p>
       </div>
       <AnswerBucketBoard
+        discoveryAskedCount={askedDiscoveryQuestionCount(rows)}
+        discoveryCoverageCopy={discoveryCoverageCopy}
         discoveryPromptCount={discoveryPromptCount}
         isKo={isKo}
         searchSamplingVersion={searchSamplingVersionOf({

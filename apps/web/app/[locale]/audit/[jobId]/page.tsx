@@ -7,6 +7,7 @@ import {
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { database } from "@repo/database";
+import { getDictionary } from "@repo/internationalization";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { createMetadata } from "@repo/seo/metadata";
@@ -92,6 +93,8 @@ async function loadSummaryJob(jobId: string) {
 const AuditResultPage = async ({ params }: AuditResultPageProps) => {
   const { locale, jobId } = await params;
   const summaryJob = await loadSummaryJob(jobId);
+  // 결과 화면은 ko/en 두 벌만 쓴다(isKo) — 사전도 그 둘 중에서 고른다.
+  const dictionary = await getDictionary(locale.startsWith("ko") ? "ko" : "en");
 
   return (
     <div className="dark relative min-h-screen w-full overflow-hidden bg-zinc-950 text-zinc-100">
@@ -116,6 +119,7 @@ const AuditResultPage = async ({ params }: AuditResultPageProps) => {
           />
         )}
         <AuditResultView
+          copy={{ discoveryCoverage: dictionary.web.audit.discoveryCoverage }}
           correctionNoticeShown={Boolean(
             summaryJob?.metricBasisChanged || summaryJob?.adviceBasisChanged
           )}

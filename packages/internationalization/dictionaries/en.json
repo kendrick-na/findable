@@ -61,6 +61,12 @@
           "cta": "Book the meeting"
         }
       }
+    },
+    "audit": {
+      "discoveryCoverage": {
+        "partial": "Only {measured} of {planned} questions were measured.",
+        "none": "Not measured this time."
+      }
     }
   },
   "app": {
@@ -1032,6 +1038,7 @@
       "identityNeeded": "Check measurement settings"
     },
     "measuring": {
+      "continuing": "Measuring the remaining questions",
       "mood1": "Asking several AI engines about your brand",
       "mood2": "Looking for brand mentions in the answers",
       "mood3": "Checking your competitors too",

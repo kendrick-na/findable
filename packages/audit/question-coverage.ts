@@ -31,6 +31,41 @@ function questionKey(row: Record<string, unknown>): string | null {
     : null;
 }
 
+/**
+ * 이름 없는 질문(discovery) 중 **실제로 물어본** 질문 수(2026-10-06).
+ *
+ * 질문 시작 마감이 일부 질문을 잘라도 회차는 공개된다(discovery 는 점수에 안 들어간다).
+ * 화면이 「질문 n개 중 m개만 측정했어요」라고 말하려면 계획 수(measurementContext
+ * .discoveryPromptCount)와 이 값이 필요하다. 엔진 실패 답도 「물어본 것」으로 센다 —
+ * 실패는 기존 「측정 실패 n개는 뺐어요」 문구가 따로 말한다.
+ */
+export function askedDiscoveryQuestionCount(rows: unknown): number {
+  if (!Array.isArray(rows)) {
+    return 0;
+  }
+  const asked = new Set<string>();
+  for (const candidate of rows) {
+    if (
+      !(
+        isRow(candidate) &&
+        typeof candidate.engineId === "string" &&
+        isDiscoveryAnswer(candidate)
+      )
+    ) {
+      continue;
+    }
+    const group = answerGroup(candidate.engineId);
+    if (group === "briefing" || group === "retired") {
+      continue;
+    }
+    const key = questionKey(candidate);
+    if (key !== null) {
+      asked.add(key);
+    }
+  }
+  return asked.size;
+}
+
 /** Search exposure and failed AI calls cannot complete a planned AI question. */
 export function questionCoverage(
   result: Record<string, unknown>

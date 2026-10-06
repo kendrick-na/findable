@@ -55,6 +55,7 @@ export const MeasuringView = ({
   createdAt,
   jobId,
   domain,
+  initialContinuing = false,
   initialStatus,
   pollStatus,
   sampleUrl,
@@ -70,6 +71,8 @@ export const MeasuringView = ({
   jobId: string;
   /** 무엇을 측정 중인지. 지금 화면에서 유일하게 개인화된 정보다. */
   domain: string | null;
+  /** 이 화면에 들어온 시점에 이미 이어가기 대기였는지(queued + leaseUntil). */
+  initialContinuing?: boolean;
   initialStatus: "queued" | "processing";
   /**
    * 진행 상태 폴링 — **주입받는다**(N-44).
@@ -103,6 +106,9 @@ export const MeasuringView = ({
   const router = useRouter();
   const [view, setView] = useState<ViewState>("measuring");
   const [status, setStatus] = useState<"queued" | "processing">(initialStatus);
+  // 한 번 이어가기에 들어가면 완료/실패까지 「남은 질문을 이어서」 안내를 유지한다.
+  const [continuing, setContinuing] = useState(initialContinuing);
+  const continuingCopy = continuing ? t.continuing : undefined;
   const [moodIndex, setMoodIndex] = useState(0);
   const [moodVisible, setMoodVisible] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -158,6 +164,7 @@ export const MeasuringView = ({
         } else if (status === "needs_continuation") {
           // 질문이 남아 남은 질문만 이어서 잰다 — 사용자에게는 계속 「물어보는 중」이다.
           setStatus("processing");
+          setContinuing(true);
           await requestContinuationOnce();
         } else if (status === "queued" || status === "processing") {
           continuationRequested &&= status !== "processing";
@@ -196,7 +203,7 @@ export const MeasuringView = ({
               aria-live="polite"
               className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]"
             >
-              {status === "queued" ? t.queued : t.asking}
+              {continuingCopy ?? (status === "queued" ? t.queued : t.asking)}
             </h1>
             {domain ? (
               <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
@@ -244,7 +251,7 @@ export const MeasuringView = ({
             {t.slowTitle}
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            {t.slowBody}
+            {continuingCopy ?? t.slowBody}
           </p>
         </div>
       )}
