@@ -17,7 +17,11 @@
 //   보강4(전 렌즈): DB 실재 engineId 집합으로 필터(코드 상수 아님) → 고아 engineId 삽입 차단.
 //   D5(확정): 실패/stub 엔진행은 Tracking에 넣지 않음(진짜 0언급과 인프라 실패 혼동 방지).
 
-import { costOf, type EngineResponse } from "@repo/ai/lib/engines";
+import {
+  costOf,
+  type EngineCost,
+  type EngineResponse,
+} from "@repo/ai/lib/engines";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { isTrackableResponse } from "./tracking-eligibility";
@@ -141,6 +145,24 @@ export interface TaggedEngineResponse extends EngineResponse {
   promptLang: "ko" | "en";
   /** 이 응답을 만든 프롬프트 원문. flat() 후 소실되므로 runner가 태깅해 보존. */
   promptText: string;
+  /**
+   * 재생(reconcile) 전용 — 측정 당시 `result.cost.perEngine` 에 굳은 원가(2026-10-07).
+   *   `undefined` = 실시간 기록(지금 `costOf` 로 계산) · 객체 = 그대로 저장(재가격 금지) ·
+   *   `null` = 저장 원가 없음 → costKrw/costBasis 를 null(「미측정」)로 남긴다.
+   */
+  storedCost?: { basis: EngineCost["basis"]; krw: number } | null;
+}
+
+/** Tracking 행에 쓸 원가. 재생 행은 저장 원가를 그대로 쓴다(현재 단가로 소급하지 않는다). */
+function trackingCost(r: TaggedEngineResponse): {
+  costBasis: string | null;
+  costKrw: number | null;
+} {
+  if (r.storedCost === null) {
+    return { costKrw: null, costBasis: null };
+  }
+  const cost = r.storedCost ?? costOf(r);
+  return { costKrw: cost.krw, costBasis: cost.basis };
 }
 
 /** The runner's core path uses the same stable prompt ordinal as the key writer. */
@@ -313,7 +335,8 @@ export async function persistAuditTracking(
         //   토큰 수를 안 남기면 나중에 되돌아와 계산할 방법이 없다 —
         //   단가가 바뀌어도 `inputTokens`·`outputTokens` 만 있으면 재계산은 가능하다.
         //   그래서 **산출값(costKrw)과 원재료(토큰)를 같이** 저장한다.
-        const cost = costOf(r);
+        //   🔴 재생(reconcile) 행은 측정 당시 저장 원가를 그대로 쓴다(재가격 금지 · 2026-10-07).
+        const cost = trackingCost(r);
         return {
           brandId,
           promptId: textToPromptId.get(r.promptText) as string,
@@ -336,8 +359,8 @@ export async function persistAuditTracking(
           //   집계에서 null 을 0원으로 세면 "공짜로 돌고 있다"는 착각을 만든다.
           inputTokens: r.usage?.inputTokens ?? null,
           outputTokens: r.usage?.outputTokens ?? null,
-          costKrw: cost.krw,
-          costBasis: cost.basis,
+          costKrw: cost.costKrw,
+          costBasis: cost.costBasis,
           trackingRowKey:
             auditJobId && r.promptIndex !== undefined
               ? `${auditJobId}|${trackingAxis}|${r.promptIndex}|${r.engineId}`

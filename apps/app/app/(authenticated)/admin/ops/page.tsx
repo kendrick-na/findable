@@ -259,6 +259,19 @@ const AdminOpsPage = async () => {
               ))}
             </div>
           )}
+          {/* 🔴 이 합계가 빠뜨리는 것(2026-10-07): Tracking 은 성공 응답만 적재한다.
+                ① 네이버 브리핑 실패(렌더는 됐는데 블록 없음 등)도 Firecrawl 1크레딧이 나가고
+                   진단 결과 원가(result.cost)에는 잡히지만, 여기 합계에는 없다.
+                ② Tracking 행에는 원가 규칙 버전이 없다 — v2(웹검색료·gpt-5.4 정가) 배포
+                   이전 행은 v1 단가(과소)로 남아 있다(소급하지 않음). */}
+          {costMeasured > 0 && (
+            <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+              ※ 네이버 브리핑 실패 호출의 Firecrawl 크레딧(회당 1)은 진단 결과
+              원가에는 포함되지만 이 합계에는 빠져 있어요. 원가모델
+              v2(2026-10-07 배포) 이전 행은 v1 단가(웹검색료 미포함)로 남아
+              있어요.
+            </p>
+          )}
         </Section>
 
         {/* audit 현황 */}

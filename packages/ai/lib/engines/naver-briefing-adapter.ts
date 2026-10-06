@@ -318,10 +318,16 @@ export const naverBriefingAdapter: EngineAdapter = async (query) => {
     };
     const html = json.data?.rawHtml ?? json.data?.html;
     if (!html) {
+      // 💰 Firecrawl 공식 과금 규칙(https://docs.firecrawl.dev/billing · 2026-10-07 확인):
+      //   *"Firecrawl returned no document: 0 credits"* — 문서를 못 돌려준 실패는 미과금,
+      //   반대로 문서를 돌려줬으면(대상 페이지가 4xx 여도) 과금된다.
+      //   → `data`(문서)가 아예 없으면 0크레딧, 문서는 왔는데 HTML 이 비었으면 1크레딧.
+      //   ⚠️ 「문서는 왔는데 rawHtml 이 빈 경우」를 문서가 직접 다루지는 않는다 — [확인필요]
+      //     (청구서 대조 전까지 과소 기록을 피하는 쪽으로 1크레딧 산입).
       return makeErrorResponse(
         `Firecrawl 응답에 HTML 없음: ${json.error ?? "unknown"}`,
         Date.now() - start,
-        FIRECRAWL_CREDITS_PER_SCRAPE
+        json.data ? FIRECRAWL_CREDITS_PER_SCRAPE : undefined
       );
     }
 

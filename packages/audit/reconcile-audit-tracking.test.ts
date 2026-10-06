@@ -10,7 +10,13 @@ vi.mock("@repo/database", () => ({
     auditJob: { findUnique },
     $executeRawUnsafe: executeRawUnsafe,
     organization: { findUnique: organizationFindUnique },
-    engine: { findMany: vi.fn(async () => [{ id: "chatgpt" }]) },
+    engine: {
+      findMany: vi.fn(async () => [
+        { id: "chatgpt" },
+        { id: "claude" },
+        { id: "perplexity" },
+      ]),
+    },
   },
 }));
 vi.mock("./tracking", async () => ({
@@ -108,6 +114,61 @@ describe("reconcileAuditTracking", () => {
       "completed",
       3
     );
+  });
+
+  it("🔴 재생은 저장된 result.cost 를 그대로 쓴다 — 현재 단가로 재가격하지 않는다(v1 소급 금지)", async () => {
+    const row = (engineId: string, promptIndex: number) => ({
+      engineId,
+      promptIndex,
+      promptText: `질문${promptIndex}`,
+      promptLang: "ko",
+      trackingInputCaptured: true,
+      rawResponse: "result",
+      citedSources: [],
+      brandMentioned: true,
+      isStub: false,
+      errorMessage: null,
+      shareOfVoice: 1,
+      usage: { costModel: "token", inputTokens: 100, outputTokens: 1000 },
+    });
+    findUnique.mockResolvedValue({
+      status: "completed",
+      organizationId: "org-1",
+      brandId: "brand-1",
+      completedAt: new Date("2026-09-01T00:00:00Z"),
+      result: {
+        // v1 회차(costModelVersion 없음) — chatgpt output 이 $10 로 기록됐던 시절.
+        cost: {
+          totalKrw: 30,
+          perEngine: [
+            { engineId: "chatgpt", krw: 14.15, basis: "token" },
+            { engineId: "gemini", krw: 0, basis: "free" },
+            { engineId: "claude", krw: 9.9, basis: "token" },
+          ],
+        },
+        engineResponses: [
+          row("chatgpt", 0),
+          { ...row("gemini", 0), promptKind: "discovery" },
+          row("claude", 1),
+          // perEngine 에 대응 항목이 없는 행 → 「미측정」(null), 현재 단가로 채우지 않는다.
+          row("perplexity", 1),
+        ],
+      },
+      postprocessing: { tracking: "unknown" },
+    });
+    persistAuditTracking.mockResolvedValue("completed");
+    executeRawUnsafe.mockResolvedValue(1);
+
+    await reconcileAuditTracking("job-v1");
+    const { tagged } = persistAuditTracking.mock.calls[0]?.[0] as {
+      tagged: { engineId: string; storedCost: unknown }[];
+    };
+    expect(tagged.map((t) => [t.engineId, t.storedCost])).toEqual([
+      ["chatgpt", { krw: 14.15, basis: "token" }],
+      // discovery 행은 걸러져도 인덱스 정렬이 유지된다(claude = perEngine[2]).
+      ["claude", { krw: 9.9, basis: "token" }],
+      ["perplexity", null],
+    ]);
   });
 
   it("finalizes a nothing-to-write replay as not_applicable instead of retrying", async () => {

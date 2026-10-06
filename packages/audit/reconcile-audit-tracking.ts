@@ -83,12 +83,49 @@ function readAuditTrackingStage(postprocessing: unknown): unknown {
     : undefined;
 }
 
+const COST_BASES = new Set(["token", "credit", "browser", "free", "unknown"]);
+
+/**
+ * 측정 당시 저장된 원가(`result.cost.perEngine[i]`)를 그대로 꺼낸다.
+ * 🔴 재생(reconcile)은 **재가격하지 않는다** — 지금 단가표(원가모델 v2)로 다시 계산하면
+ *   v1 회차가 v2 값으로 소급된다(「과거 기록은 소급하지 않는다」 원칙 위반 · 2026-10-07).
+ *   perEngine 은 runner 가 `engineResponses` 와 **같은 flat 순서**로 만든다(runner.ts auditCost(flat)).
+ * 저장 원가가 없거나 엔진이 어긋나면 `null` = 「미측정」(0원도, 현재 단가도 아니다).
+ */
+function storedCostAt(
+  perEngine: unknown,
+  index: number,
+  engineId: unknown
+): NonNullable<TaggedEngineResponse["storedCost"]> | null {
+  const entry = Array.isArray(perEngine) ? perEngine[index] : undefined;
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const { krw, basis, engineId: costEngine } = entry as Record<string, unknown>;
+  if (
+    costEngine !== engineId ||
+    typeof krw !== "number" ||
+    !Number.isFinite(krw) ||
+    typeof basis !== "string" ||
+    !COST_BASES.has(basis)
+  ) {
+    return null;
+  }
+  return {
+    krw,
+    basis: basis as NonNullable<TaggedEngineResponse["storedCost"]>["basis"],
+  };
+}
+
 function readReplayableAuditResponses(result: {
+  cost?: { perEngine?: unknown };
   engineResponses?: Record<string, unknown>[];
 }): TaggedEngineResponse[] {
+  const perEngine = result.cost?.perEngine;
   return (Array.isArray(result.engineResponses) ? result.engineResponses : [])
+    .map((row, index) => ({ row, index }))
     .filter(
-      (row) =>
+      ({ row }) =>
         row !== null &&
         typeof row === "object" &&
         !Array.isArray(row) &&
@@ -98,8 +135,9 @@ function readReplayableAuditResponses(result: {
         typeof row.promptText === "string" &&
         typeof row.promptLang === "string"
     )
-    .map((row) => ({
+    .map(({ row, index }) => ({
       ...(row as unknown as TaggedEngineResponse),
+      storedCost: storedCostAt(perEngine, index, row.engineId),
       rawResponse: String(row.rawResponse ?? ""),
       citedSources: Array.isArray(row.citedSources) ? row.citedSources : [],
       shareOfVoice:
@@ -247,6 +285,7 @@ export async function reconcileAuditTracking(
     return "skipped";
   }
   const result = job.result as {
+    cost?: { perEngine?: unknown };
     engineResponses?: Record<string, unknown>[];
   };
   const tagged = readReplayableAuditResponses(result);
