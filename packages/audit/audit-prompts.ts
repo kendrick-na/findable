@@ -1,5 +1,6 @@
 import { conjunctionParticle, objectParticle, topicParticle } from "./actions";
 import type { PromptKind } from "./answer-buckets";
+import type { DemandProvenance } from "./demand-prompts";
 import { MAX_DISCOVERY_PROMPTS } from "./prompt-limits";
 
 /** 질문 언어별로 넣을 브랜드 표기. en 은 공식 로마자 표기가 없으면 ko 와 같다. */
@@ -79,6 +80,11 @@ export function generateAuditPrompts(
 // ──────────────────────────────────────────────────────────────────
 
 export interface RunPrompt {
+  /**
+   * 실제 수요 기반 이름 없는 질문의 출처(키워드·월 검색량·주제) — MEASUREMENT_DEMAND_PROMPTS
+   * 가 켜졌을 때만 채운다. 꺼져 있으면 항상 undefined 라 checkpoint JSON 이 기존과 같다.
+   */
+  demand?: DemandProvenance;
   /** 없으면 브랜드 이름 질문(폴백 4개). 저장 질문은 실행 전 분류한다. */
   kind?: PromptKind;
   lang: "ko" | "en";

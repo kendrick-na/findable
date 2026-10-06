@@ -1,5 +1,6 @@
 import type { EngineResponse } from "@repo/ai/lib/engines";
 import type { RunPrompt } from "./audit-prompts";
+import type { DemandQuestionSet } from "./demand-prompts";
 import type { OfficialSiteIdentity } from "./official-site-identity";
 
 export interface AuditCheckpointScope {
@@ -12,6 +13,8 @@ export interface AuditCheckpointScope {
 export interface AuditCheckpointContext {
   brandName: string;
   brandVariants: string[];
+  /** 실제 수요 기반 질문 전체(MEASUREMENT_DEMAND_PROMPTS 일 때만). 재개 시 결과에 그대로 싣는다. */
+  demandQuestionSet?: DemandQuestionSet;
   identityGrounded: boolean;
   officialSiteIdentity: OfficialSiteIdentity;
 }

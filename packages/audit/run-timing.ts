@@ -6,6 +6,7 @@ type Stage =
   | "official_site"
   | "competitors"
   | "resolve_prompts"
+  | "demand_prompts"
   | "prompt_query"
   | "engine_query"
   | "verify_mentions"

@@ -19,6 +19,7 @@ const transaction = vi.fn();
 // flag-off contract ("never touches PromptAttempt before the migration") is provable.
 const ledgerTableAccess = vi.fn();
 const realContracts = vi.hoisted(() => ({ enabled: false }));
+const resolveDemandDiscovery = vi.fn();
 let briefingEnabled = false;
 const log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
 
@@ -115,6 +116,10 @@ vi.mock("./tracking", () => ({
     ),
 }));
 vi.mock("./briefing-runner", () => ({ runBriefingForAuditJob }));
+vi.mock("./demand-run-prompts", () => ({
+  DEMAND_PROMPTS_TIMEOUT_MS: 15_000,
+  resolveDemandDiscovery,
+}));
 vi.mock("./pdf-generator", () => ({ generateAuditPdf }));
 vi.mock("./keys", () => ({ keys }));
 vi.mock("./normalize-stored-metrics", async () =>
@@ -336,6 +341,62 @@ describe("runAuditJob offline lifecycle contracts", () => {
         sql.filter((text) => text.includes('"finishedAt" ='))
       ).toHaveLength(2);
       expect(terminalCalls().length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("MEASUREMENT_DEMAND_PROMPTS flag", () => {
+    const savedPrompts = [
+      { id: "prompt-a", text: "saved a", language: "en", trackings: [] },
+    ];
+    const demand = {
+      market: "US",
+      topic: "제품 추천",
+      keyword: "pdrn serum",
+      volume: 22_200,
+      source: "google",
+      expanded: false,
+    };
+    const checkpointPrompts = () =>
+      auditJobUpdate.mock.calls
+        .map(([call]) => call?.data?.checkpoint?.prompts)
+        .find(Array.isArray) as Record<string, unknown>[] | undefined;
+
+    it("flag off (default): never collects demand data; prompts unchanged", async () => {
+      vi.stubEnv("MEASUREMENT_DEMAND_PROMPTS", "");
+      promptFindMany.mockResolvedValue(savedPrompts);
+      await (await loadRunner())(input);
+      expect(resolveDemandDiscovery).not.toHaveBeenCalled();
+      expect(checkpointPrompts()?.map((p) => p.text)).toEqual(["saved a"]);
+      expect(JSON.stringify(terminalCalls())).not.toContain("promptDemand");
+      vi.unstubAllEnvs();
+    });
+
+    it("flag on: fills only the discovery slot and stores provenance", async () => {
+      vi.stubEnv("MEASUREMENT_DEMAND_PROMPTS", "true");
+      promptFindMany.mockResolvedValue(savedPrompts);
+      resolveDemandDiscovery.mockResolvedValue({
+        prompts: [
+          {
+            kind: "discovery",
+            lang: "en",
+            text: "What's the best PDRN serum?",
+            demand,
+          },
+        ],
+        set: { version: 1, questions: { KR: [], US: [] } },
+      });
+      await (await loadRunner())(input);
+      expect(resolveDemandDiscovery).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 2, language: "en", scope: "global" })
+      );
+      expect(checkpointPrompts()?.map((p) => p.text)).toEqual([
+        "saved a",
+        "What's the best PDRN serum?",
+      ]);
+      const stored = JSON.stringify(terminalCalls());
+      expect(stored).toContain('"promptDemand"');
+      expect(stored).toContain('"demandQuestionSet"');
+      vi.unstubAllEnvs();
     });
   });
 
