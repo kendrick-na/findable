@@ -142,3 +142,58 @@ export function estimateRevenueOpportunity(
     ],
   };
 }
+
+// ── 헤드라인 v3 (2026-10-05 대표 승인) ──────────────────────────────────────
+// 「매달 약 ○○원어치 매출이 AI 추천을 거친다」 = 고객사 실제 연매출 × AI 관여 구매 비중 7% ÷ 12.
+// 위 D×A×ΔS×CTR×CVR×AOV 는 가정이 여섯 개라 「근거가 뭐냐」에 답하기 어려워, 고객사 자기 매출에서 출발한다.
+// 🔴 연매출은 출처·연도가 붙은 확인값만 받는다(추정 금지). 없으면 null — 표지·메일의 돈 문장이 통째로 빠진다.
+// 표현 원칙: 「AI가 관여하는 매출」이지 「놓친 매출」이 아니다.
+
+/** 한국 소비자 중 AI 쇼핑 도우미를 주로 쓰는 비율 — 크리테오 2026 뷰티 쇼퍼 조사. */
+export const AI_INVOLVED_PURCHASE_SHARE = 0.07;
+export const AI_INVOLVED_PURCHASE_SOURCE =
+  "크리테오 「5 beauty shopper trends 2026」 — 한국 소비자 7%가 AI 쇼핑 도우미를 주로 사용 https://www.criteo.com/blog/5-beauty-shopper-trends-2026/";
+
+export interface ConfirmedRevenue {
+  /** 연매출(원). */
+  annual: number;
+  /** 예: "NICE평가정보(사람인 기업정보)". */
+  source: string;
+  /** 회계 연도. */
+  year: number;
+}
+
+/** 리포트 config.revenue_opportunity 와 같은 모양(저장값만 화면에 쓴다). */
+export interface AiRoutedRevenue {
+  ai_share_pct: number;
+  annual_revenue: number;
+  basis: string[];
+  future: string;
+  monthly: number;
+  revenue_source: string;
+}
+
+export function aiRoutedRevenue(
+  revenue: ConfirmedRevenue | null | undefined
+): AiRoutedRevenue | null {
+  if (
+    !(revenue && Number.isFinite(revenue.annual)) ||
+    revenue.annual <= 0 ||
+    !revenue.source.trim()
+  ) {
+    return null;
+  }
+  return {
+    annual_revenue: revenue.annual,
+    revenue_source: `${revenue.source}, ${revenue.year}년`,
+    ai_share_pct: Math.round(AI_INVOLVED_PURCHASE_SHARE * 100),
+    monthly: Math.round((revenue.annual * AI_INVOLVED_PURCHASE_SHARE) / 12),
+    basis: [
+      `연매출: ${revenue.source} 공개 기업정보 ${revenue.year}년 값`,
+      `AI가 관여하는 구매 비중 7%: ${AI_INVOLVED_PURCHASE_SOURCE}`,
+      "AI 답변에 출처로 인용된 브랜드는 클릭이 약 35% 더 많습니다 — Seer Interactive 2025-09 https://www.seerinteractive.com/insights/aio-impact-on-google-ctr-september-2025-update",
+    ],
+    future:
+      "2030년에는 온라인 매출의 10~20%가 AI 에이전트를 거쳐 판매될 것이라는 전망도 있습니다(모건스탠리, 미국 기준 전망).",
+  };
+}

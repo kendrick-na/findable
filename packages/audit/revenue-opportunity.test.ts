@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { parseKeywordTool, signNaverSearchAd } from "./naver-keywords";
-import { estimateRevenueOpportunity } from "./revenue-opportunity";
+import {
+  aiRoutedRevenue,
+  estimateRevenueOpportunity,
+} from "./revenue-opportunity";
 
 describe("revenue opportunity v2", () => {
   it("refuses to invent a number without measured demand or order value", () => {
@@ -106,5 +109,26 @@ describe("naver keyword tool client", () => {
       },
     ]);
     expect(parseKeywordTool({})).toEqual([]);
+  });
+});
+
+describe("aiRoutedRevenue — 헤드라인(연매출 × 7% ÷ 12)", () => {
+  it("프란츠 2025 연매출 72억 6,272만 원 → 월 약 4,237만 원", () => {
+    const r = aiRoutedRevenue({
+      annual: 7_262_720_000,
+      source: "NICE평가정보(사람인 기업정보)",
+      year: 2025,
+    });
+    expect(r?.monthly).toBe(42_365_867);
+    expect(r?.ai_share_pct).toBe(7);
+    expect(r?.revenue_source).toBe("NICE평가정보(사람인 기업정보), 2025년");
+  });
+
+  it("확인된 매출이 없으면 숫자를 만들지 않는다", () => {
+    expect(aiRoutedRevenue(null)).toBeNull();
+    expect(aiRoutedRevenue({ annual: 0, source: "x", year: 2025 })).toBeNull();
+    expect(
+      aiRoutedRevenue({ annual: 1_000_000_000, source: " ", year: 2025 })
+    ).toBeNull();
   });
 });
