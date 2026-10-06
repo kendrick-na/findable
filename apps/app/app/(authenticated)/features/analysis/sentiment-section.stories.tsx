@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import { SentimentSection } from "./sentiment-section";
 
@@ -22,6 +23,8 @@ import { SentimentSection } from "./sentiment-section";
  * 숫자는 **브랜드별 실측 그대로**다(지어내지 않는다).
  */
 const meta = {
+  // 문구는 사전에서 온다(`app.sentimentSection`). JSON 직접 import — `getAppDictionary` 는 server-only.
+  args: { t: koDict.app.sentimentSection },
   component: SentimentSection,
   parameters: { layout: "padded" },
   title: "대시보드/평가(감성)",

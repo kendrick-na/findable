@@ -25,6 +25,8 @@ const STATUS_TONE: Record<AuditJob["status"], string> = {
 };
 
 interface AuditHistoryListProps {
+  /** 빈 상태 기본 버튼 문구(사전 `app.common`). */
+  common: AppDictionary["common"];
   jobs: AuditJob[];
   locale: AppLocale;
   status: StatusLabels;
@@ -91,6 +93,7 @@ function hasCollectedEngineAnswer(result: unknown): boolean {
 }
 
 export const AuditHistoryList = ({
+  common,
   jobs,
   locale,
   status: s,
@@ -113,6 +116,7 @@ export const AuditHistoryList = ({
       <EmptyState
         description={t.emptyBody}
         icon={<ClockIcon className="size-5" />}
+        t={common}
         title={t.emptyTitle}
       />
     );

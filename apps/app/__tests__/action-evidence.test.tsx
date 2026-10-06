@@ -9,6 +9,7 @@ import {
   DONT_LIST,
   EVIDENCE_GRADE_LABEL,
 } from "@repo/audit/action-rules";
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import { cleanup, render, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -32,7 +33,9 @@ const naverGuide = { ...guide, engines: ["naver"] };
 
 describe("ActionEvidenceGuide", () => {
   it("6칸과 착각 인용, 출처 링크가 모두 보인다", () => {
-    const { container } = render(<ActionEvidenceGuide guide={guide} />);
+    const { container } = render(
+      <ActionEvidenceGuide guide={guide} t={koDict.app.actionEvidence} />
+    );
     const view = within(container);
     expect(view.getByText(EVIDENCE_GRADE_LABEL.medium.label)).toBeTruthy();
     expect(view.getByText("Google 검색(AI 개요), Gemini")).toBeTruthy();
@@ -52,7 +55,9 @@ describe("ActionEvidenceGuide", () => {
   });
 
   it("네이버는 AI가 아니라 검색 노출 채널로 표시한다", () => {
-    const { container } = render(<ActionEvidenceGuide guide={naverGuide} />);
+    const { container } = render(
+      <ActionEvidenceGuide guide={naverGuide} t={koDict.app.actionEvidence} />
+    );
     expect(container.textContent).toContain("적용 채널");
     expect(container.textContent).toContain("네이버 검색 노출");
     expect(container.textContent).not.toContain("적용되는 AI");
@@ -66,6 +71,7 @@ describe("ActionEvidenceGuide", () => {
           engines: [],
           effortHours: { min: 2, max: 4, per: "week" },
         }}
+        t={koDict.app.actionEvidence}
       />
     );
     expect(container.textContent).toContain("측정 채널 전체");
@@ -75,7 +81,9 @@ describe("ActionEvidenceGuide", () => {
 
 describe("DontList", () => {
   it("5건 모두 '근거 없음' 글자 배지와 출처가 있다", () => {
-    const { container } = render(<DontList donts={DONT_LIST} />);
+    const { container } = render(
+      <DontList donts={DONT_LIST} t={koDict.app.actionEvidence} />
+    );
     const items = container.querySelectorAll("li > div");
     expect(items.length).toBe(DONT_LIST.length);
     expect(

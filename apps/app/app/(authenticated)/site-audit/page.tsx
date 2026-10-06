@@ -78,16 +78,16 @@ const SiteAuditPage = async ({
           <>
             <section className="findable-card flex flex-wrap items-center justify-between gap-4 p-5">
               <div>
-                <p className="font-medium text-sm">Google 검색 성과 연결</p>
+                <p className="font-medium text-sm">{t.googleConnectTitle}</p>
                 <p className="mt-1 text-sm text-white/50">
-                  사이트 진단과 별도로 실제 노출·클릭·세션을 연결해 확인하세요.
+                  {t.googleConnectBody}
                 </p>
               </div>
               <Link
                 className="rounded-md border border-white/15 px-4 py-2 text-sm hover:bg-white/5"
                 href={`/site-audit/integrations${brand ? `?brand=${brand.id}` : ""}`}
               >
-                Search Console·GA4 연결
+                {t.googleConnectCta}
               </Link>
             </section>
             {brands.length > 1 ? (
@@ -144,6 +144,7 @@ const SiteAuditPage = async ({
                 ))}
               </div>
             }
+            t={dictionary.lockedSurface}
             title={t.lockedTitle}
             unlockPlan="Growth"
           />

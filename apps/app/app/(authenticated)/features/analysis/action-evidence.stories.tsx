@@ -1,4 +1,5 @@
 import { DONT_LIST } from "@repo/audit/action-rules";
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import { ActionEvidenceGuide, DontList } from "./action-evidence";
 
@@ -11,6 +12,8 @@ import { ActionEvidenceGuide, DontList } from "./action-evidence";
  * 데이터 = 공개 진단 b7f319e1(노우버스)에서 `buildGeoActions` 가 실제로 만든 첫 카드.
  */
 const meta = {
+  // 문구는 사전에서 온다(`app.actionEvidence`). JSON 직접 import — `getAppDictionary` 는 server-only.
+  args: { t: koDict.app.actionEvidence },
   component: ActionEvidenceGuide,
   parameters: { layout: "padded" },
   title: "대시보드/지금 할 일 — 근거 등급",
@@ -97,5 +100,5 @@ export const 하지_마세요: Story = {
       ],
     },
   },
-  render: () => <DontList donts={DONT_LIST} />,
+  render: () => <DontList donts={DONT_LIST} t={koDict.app.actionEvidence} />,
 };

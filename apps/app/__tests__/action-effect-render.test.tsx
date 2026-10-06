@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * @vitest-environment jsdom
  * 완료 당시 값과 현재 값의 차이는 실행 효과가 아니다. 고객 카드 렌더 계약.
@@ -33,6 +34,8 @@ describe("완료 카드의 효과 수치 차단", () => {
       <ActionList
         actions={[completed]}
         currentSov={60}
+        evidence={koDict.app.actionEvidence}
+        t={koDict.app.actionList}
         target={{ kind: "tracked", brandId: "brand-1" }}
       />
     );

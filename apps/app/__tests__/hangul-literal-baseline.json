@@ -1,27 +1,12 @@
 {
-  "app/(authenticated)/actions/page.tsx": 23,
-  "app/(authenticated)/alerts/page.tsx": 21,
-  "app/(authenticated)/compare/page.tsx": 20,
-  "app/(authenticated)/components/analysis-brand-picker.tsx": 3,
-  "app/(authenticated)/components/empty-state.tsx": 2,
   "app/(authenticated)/components/header-metric-context.tsx": 1,
-  "app/(authenticated)/components/locked-surface.tsx": 3,
   "app/(authenticated)/content-performance/page.tsx": 31,
-  "app/(authenticated)/features/analysis/action-evidence.tsx": 13,
-  "app/(authenticated)/features/analysis/action-list.tsx": 8,
-  "app/(authenticated)/features/analysis/competitor-board.tsx": 26,
-  "app/(authenticated)/features/analysis/sentiment-section.tsx": 18,
-  "app/(authenticated)/features/analysis/sources-board.tsx": 41,
   "app/(authenticated)/features/brand/prompt-wizard.tsx": 1,
   "app/(authenticated)/features/site-readiness/execution-playbook.tsx": 22,
-  "app/(authenticated)/features/site-readiness/pagespeed-panel.tsx": 2,
-  "app/(authenticated)/features/site-readiness/site-readiness-form.tsx": 1,
   "app/(authenticated)/insights/[contentId]/content-editor.tsx": 9,
   "app/(authenticated)/insights/[contentId]/page.tsx": 1,
   "app/(authenticated)/insights/generate-draft-button.tsx": 1,
   "app/(authenticated)/insights/page.tsx": 10,
   "app/(authenticated)/insights/settings/page.tsx": 14,
-  "app/(authenticated)/site-audit/integrations/page.tsx": 127,
-  "app/(authenticated)/site-audit/page.tsx": 3,
-  "app/(authenticated)/sources/page.tsx": 17
+  "app/(authenticated)/site-audit/integrations/page.tsx": 127
 }

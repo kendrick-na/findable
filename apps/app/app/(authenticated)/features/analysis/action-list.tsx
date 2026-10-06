@@ -13,7 +13,14 @@ import {
   toggleActionCompletion,
   toggleActionCompletionByDomain,
 } from "@/app/actions/brand/complete-action";
-import { ActionEvidenceGuide, DontList } from "./action-evidence";
+import type { AppDictionary } from "@/lib/i18n";
+import {
+  ActionEvidenceGuide,
+  type ActionEvidenceLabels,
+  DontList,
+} from "./action-evidence";
+
+type ActionListLabels = AppDictionary["actionList"];
 
 /**
  * 이 액션이 어디에 붙는가 — 두 경로를 하나의 UI 로 다룬다 (2026-08-10 세션N-13).
@@ -48,25 +55,35 @@ export interface ActionItem {
   where?: string;
 }
 
-const PRIORITY_META: Record<number, { label: string; tone: string }> = {
+const priorityMeta = (
+  t: ActionListLabels
+): Record<number, { label: string; tone: string }> => ({
   3: {
-    label: "지금 하세요",
+    label: t.priorityNow,
     tone: "bg-[color:var(--findable-primary,#ff7a4d)]/15 text-[color:var(--findable-primary,#ff7a4d)]",
   },
-  2: { label: "다음 단계", tone: "bg-sky-500/12 text-sky-300" },
+  2: { label: t.priorityNext, tone: "bg-sky-500/12 text-sky-300" },
   1: {
-    label: "참고",
+    label: t.priorityFyi,
     tone: "bg-white/8 text-[color:var(--findable-ink-subtle,#8a8f98)]",
   },
-};
+});
 
 export const ActionList = ({
   actions,
   currentSov,
+  evidence,
+  isKo = true,
+  t,
   target,
 }: {
   actions: ActionItem[];
   currentSov: number | null;
+  /** 사전 `app.actionEvidence`. */
+  evidence: ActionEvidenceLabels;
+  isKo?: boolean;
+  /** 사전 `app.actionList`. */
+  t: ActionListLabels;
   target: ActionTarget;
 }) => (
   <div className="flex flex-col gap-3">
@@ -74,7 +91,10 @@ export const ActionList = ({
       <ActionCard
         action={action}
         currentSov={currentSov}
+        evidence={evidence}
+        isKo={isKo}
         key={`${action.kind}:${action.target}`}
+        t={t}
         target={target}
       />
     ))}
@@ -84,12 +104,19 @@ export const ActionList = ({
 const ActionCard = ({
   action,
   currentSov,
+  evidence,
+  isKo,
+  t,
   target,
 }: {
   action: ActionItem;
   currentSov: number | null;
+  evidence: ActionEvidenceLabels;
+  isKo: boolean;
+  t: ActionListLabels;
   target: ActionTarget;
 }) => {
+  const PRIORITY_META = priorityMeta(t);
   const [done, setDone] = useState(action.completed);
   const [pending, startTransition] = useTransition();
   const meta = PRIORITY_META[action.priority] ?? PRIORITY_META[1];
@@ -119,7 +146,7 @@ const ActionCard = ({
         toast.error(result.error);
         return;
       }
-      toast.success(next ? "완료로 표시했어요" : "완료를 취소했어요");
+      toast.success(next ? t.marked : t.unmarked);
     });
   };
 
@@ -155,7 +182,7 @@ const ActionCard = ({
       </p>
 
       {action.donts && action.donts.length > 0 ? (
-        <DontList donts={action.donts} />
+        <DontList donts={action.donts} t={evidence} />
       ) : (
         <div className="rounded border border-white/6 bg-white/[0.02] p-3">
           <p className="whitespace-pre-line text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
@@ -164,19 +191,21 @@ const ActionCard = ({
         </div>
       )}
 
-      {action.guide && <ActionEvidenceGuide guide={action.guide} />}
+      {action.guide && (
+        <ActionEvidenceGuide guide={action.guide} isKo={isKo} t={evidence} />
+      )}
 
       {(action.where || action.verification) && (
         <div className="grid gap-2 rounded border border-sky-400/10 bg-sky-400/[0.03] p-3 text-sm leading-relaxed">
           {action.where && (
             <p className="text-[color:var(--findable-ink-muted,#d0d6e0)]">
-              <span className="font-medium text-sky-300">수정 위치 · </span>
+              <span className="font-medium text-sky-300">{t.where}</span>
               {action.where}
             </p>
           )}
           {action.verification && (
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-              <span className="font-medium text-sky-300">검증 방법 · </span>
+              <span className="font-medium text-sky-300">{t.verify}</span>
               {action.verification}
             </p>
           )}
@@ -187,7 +216,7 @@ const ActionCard = ({
         {/* 6칸이 있으면 출처는 그 안에 링크로 있다 — 한 줄 요약을 겹쳐 쓰지 않는다. */}
         {action.source && !action.guide && !action.donts && (
           <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-            근거: {action.source}
+            {t.evidence.replace("{source}", action.source)}
           </p>
         )}
         <Button
@@ -202,7 +231,7 @@ const ActionCard = ({
           ) : (
             <CheckIcon className="size-3.5" />
           )}
-          {done ? "완료됨" : "완료로 표시"}
+          {done ? t.done : t.markDone}
         </Button>
       </div>
     </div>

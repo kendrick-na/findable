@@ -2,6 +2,9 @@ import { listPriceForPlan, type PayablePlan } from "@repo/payments/catalog";
 import { ArrowUpRight, LockIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import type { AppDictionary } from "@/lib/i18n";
+
+type LockedSurfaceLabels = AppDictionary["lockedSurface"];
 
 /**
  * 잠금 버튼에 붙일 가격 문구 (S4 원인③ · 2026-08-11 세션N-19).
@@ -15,13 +18,17 @@ import type { ReactNode } from "react";
  *   ⚠️ 표시가는 `listKrw`(세전 390,000)를 쓴다. 요금제 표의 `price` 와 같은 축이라야
  *   고객이 두 화면을 비교했을 때 어긋나 보이지 않는다(청구액 429,000 은 결제 단계 표기).
  */
-function unlockLabel(unlockPlan: string): string {
+function unlockLabel(unlockPlan: string, t: LockedSurfaceLabels): string {
   const krw = listPriceForPlan(unlockPlan.toLowerCase() as PayablePlan);
   if (krw === null) {
     // 카탈로그에 없는 플랜명이 오면 가격 없이 폴백(없는 숫자를 만들지 않는다).
-    return `${unlockPlan}로 열기`;
+    return t.unlock.replace("{plan}", unlockPlan);
   }
-  return `월 ${Math.round(krw / 10_000)}만원 ${unlockPlan}로 열기`;
+  // 금액은 카탈로그 그대로 — 한국어는 「만원」, 영어는 원 단위로만 표기를 바꾼다.
+  return t.unlockWithPrice
+    .replace("{man}", String(Math.round(krw / 10_000)))
+    .replace("{won}", krw.toLocaleString("en-US"))
+    .replace("{plan}", unlockPlan);
 }
 
 interface LockedSurfaceProps {
@@ -35,6 +42,8 @@ interface LockedSurfaceProps {
    * 거기 링크를 넣으면 **눌리지 않는다**(실측으로 잡음).
    */
   sampleUrl?: string;
+  /** 사전 `app.lockedSurface`. */
+  t: LockedSurfaceLabels;
   title: string;
   // 어떤 플랜에서 열리는지 표기(예: "Pro").
   unlockPlan: string;
@@ -51,6 +60,7 @@ export const LockedSurface = ({
   bullets,
   preview,
   sampleUrl,
+  t,
 }: LockedSurfaceProps) => (
   <div className="relative overflow-hidden">
     {/* 🔴 S6-c#1(2026-08-11) — `opacity-30 blur-[5px]` 는 **대비 1.74:1**(WCAG AA 4.5 미달)로
@@ -116,7 +126,7 @@ export const LockedSurface = ({
             className="findable-btn-primary inline-flex items-center rounded-md px-5 py-2.5 font-medium text-sm"
             href="/billing"
           >
-            {unlockLabel(unlockPlan)}
+            {unlockLabel(unlockPlan, t)}
           </Link>
           {sampleUrl && (
             <a
@@ -125,7 +135,7 @@ export const LockedSurface = ({
               rel="noopener noreferrer"
               target="_blank"
             >
-              실제 결과 예시 보기
+              {t.sample}
               <ArrowUpRight className="size-4" />
             </a>
           )}

@@ -42,6 +42,8 @@ export interface SiteReadinessLabels {
   checkItems: Record<ReadinessCheckId, { advice: string; title: string }>;
   crawlDescription: string;
   crawlTitle: string;
+  /** `{start}`·`{end}` 자리표시자(CrUX 기간). */
+  cruxPeriod: string;
   cta: string;
   description: string;
   discoveredLabel: string;
@@ -84,6 +86,7 @@ export interface SiteReadinessLabels {
   responseSizeLabel: string;
   resultCta: string;
   resultDescription: string;
+  resultNav: string;
   resultTitle: string;
   schemaColumn: string;
   severity: Record<ReadinessSeverity, string>;
@@ -601,7 +604,7 @@ export function SiteReadinessForm({
             </Link>
           </div>
 
-          <nav aria-label="진단 결과 바로가기" className="flex flex-wrap gap-2">
+          <nav aria-label={labels.resultNav} className="flex flex-wrap gap-2">
             <a
               className="rounded-full border border-orange-400/25 bg-orange-400/10 px-3 py-1.5 text-orange-100 text-xs hover:bg-orange-400/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
               href="#priority-checks"

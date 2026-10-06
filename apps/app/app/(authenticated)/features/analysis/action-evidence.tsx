@@ -9,9 +9,11 @@ import {
   type DontItem,
   EVIDENCE_GRADE_LABEL,
   type EvidenceGrade,
-  engineDisplayName,
 } from "@repo/audit/action-rules";
+// 엔진 이름은 언어를 받는 원본(`engine-labels`)에서 — `action-rules` 판은 한국어 고정 별칭이다.
+import { engineDisplayName } from "@repo/audit/engine-labels";
 import { cn } from "@repo/design-system/lib/utils";
+import type { AppDictionary } from "@/lib/i18n";
 
 const GRADE_TONE: Record<EvidenceGrade, string> = {
   strong:
@@ -20,6 +22,9 @@ const GRADE_TONE: Record<EvidenceGrade, string> = {
   weak: "border-white/15 text-[color:var(--findable-ink-subtle,#8a8f98)]",
   none: "border-red-400/30 text-red-300",
 };
+
+/** 사전 `app.actionEvidence`. */
+export type ActionEvidenceLabels = AppDictionary["actionEvidence"];
 
 export const EvidenceGradeBadge = ({ grade }: { grade: EvidenceGrade }) => (
   <span
@@ -33,18 +38,27 @@ export const EvidenceGradeBadge = ({ grade }: { grade: EvidenceGrade }) => (
   </span>
 );
 
-function effortLabel(effort: ActionGuide["effortHours"]): string {
+function effortLabel(
+  effort: ActionGuide["effortHours"],
+  t: ActionEvidenceLabels
+): string {
   const range =
     effort.min === effort.max
-      ? `${effort.min}시간`
-      : `${effort.min}~${effort.max}시간`;
-  return effort.per === "week" ? `매주 약 ${range}` : `약 ${range}`;
+      ? t.hoursOne.replace("{n}", String(effort.min))
+      : t.hoursRange
+          .replace("{min}", String(effort.min))
+          .replace("{max}", String(effort.max));
+  return (effort.per === "week" ? t.weekly : t.about).replace("{range}", range);
 }
 
-function channelsLabel(engines: string[]): string {
+function channelsLabel(
+  engines: string[],
+  t: ActionEvidenceLabels,
+  isKo: boolean
+): string {
   return engines.length === 0
-    ? "측정 채널 전체"
-    : engines.map(engineDisplayName).join(", ");
+    ? t.allChannels
+    : engines.map((id) => engineDisplayName(id, isKo)).join(", ");
 }
 
 const Row = ({ label, children }: { children: string; label: string }) => (
@@ -59,7 +73,15 @@ const Row = ({ label, children }: { children: string; label: string }) => (
 );
 
 /** 카드 6칸 — 근거 등급·출처 / 적용 채널 / 예상 작업 시간 / 재측정 권장 시점 / 다시 잴 숫자 / 재점검 조건. */
-export const ActionEvidenceGuide = ({ guide }: { guide: ActionGuide }) => (
+export const ActionEvidenceGuide = ({
+  guide,
+  isKo = true,
+  t,
+}: {
+  guide: ActionGuide;
+  isKo?: boolean;
+  t: ActionEvidenceLabels;
+}) => (
   <div className="flex flex-col gap-3 rounded border border-white/6 bg-white/[0.02] p-3">
     <div className="flex flex-wrap items-center gap-2">
       <EvidenceGradeBadge grade={guide.evidenceGrade} />
@@ -68,20 +90,19 @@ export const ActionEvidenceGuide = ({ guide }: { guide: ActionGuide }) => (
       </span>
     </div>
     <dl className="flex flex-col gap-2">
-      <Row label="적용 채널">{channelsLabel(guide.engines)}</Row>
-      <Row label="예상 작업 시간">{effortLabel(guide.effortHours)}</Row>
-      <Row label="재측정 권장 시점">{guide.effectLag}</Row>
-      <Row label="다시 잴 숫자">{guide.remeasureMetric}</Row>
-      <Row label="재점검 조건">{guide.failCondition}</Row>
+      <Row label={t.channels}>{channelsLabel(guide.engines, t, isKo)}</Row>
+      <Row label={t.effort}>{effortLabel(guide.effortHours, t)}</Row>
+      <Row label={t.lag}>{guide.effectLag}</Row>
+      <Row label={t.metric}>{guide.remeasureMetric}</Row>
+      <Row label={t.failCondition}>{guide.failCondition}</Row>
     </dl>
     <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-      작업 시간·재측정 시점·재점검 조건은 Findable 내부 운영 기준·추정이며
-      효과를 입증하지 않습니다.
+      {t.disclaimer}
     </p>
     {guide.quotes && guide.quotes.length > 0 && (
       <div className="flex flex-col gap-2">
         <p className="font-medium text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-          AI가 실제로 이렇게 답했습니다
+          {t.quotesTitle}
         </p>
         {guide.quotes.map((q) => (
           <blockquote
@@ -89,18 +110,24 @@ export const ActionEvidenceGuide = ({ guide }: { guide: ActionGuide }) => (
             key={`${q.engineId}:${q.excerpt.slice(0, 24)}`}
           >
             <span className="font-medium text-[color:var(--findable-ink-muted,#d0d6e0)]">
-              {engineDisplayName(q.engineId)}
+              {engineDisplayName(q.engineId, isKo)}
             </span>{" "}
             {q.excerpt}
           </blockquote>
         ))}
       </div>
     )}
-    <SourceLinks sources={guide.sources} />
+    <SourceLinks sources={guide.sources} t={t} />
   </div>
 );
 
-const SourceLinks = ({ sources }: { sources: ActionGuide["sources"] }) => (
+const SourceLinks = ({
+  sources,
+  t,
+}: {
+  sources: ActionGuide["sources"];
+  t: ActionEvidenceLabels;
+}) => (
   <ul className="flex flex-col gap-1">
     {sources.map((s) => (
       <li className="text-xs" key={s.url}>
@@ -110,7 +137,7 @@ const SourceLinks = ({ sources }: { sources: ActionGuide["sources"] }) => (
           rel="noopener noreferrer"
           target="_blank"
         >
-          출처: {s.label}
+          {t.source.replace("{label}", s.label)}
         </a>
       </li>
     ))}
@@ -118,7 +145,13 @@ const SourceLinks = ({ sources }: { sources: ActionGuide["sources"] }) => (
 );
 
 /** 「하지 마세요」 — 항목마다 이유와 출처. 등급은 항상 '근거 없음'. */
-export const DontList = ({ donts }: { donts: DontItem[] }) => (
+export const DontList = ({
+  donts,
+  t,
+}: {
+  donts: DontItem[];
+  t: ActionEvidenceLabels;
+}) => (
   <ul className="flex flex-col gap-3">
     {donts.map((d) => (
       <li
@@ -134,7 +167,7 @@ export const DontList = ({ donts }: { donts: DontItem[] }) => (
         <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
           {d.reason}
         </p>
-        <SourceLinks sources={d.sources} />
+        <SourceLinks sources={d.sources} t={t} />
       </li>
     ))}
   </ul>

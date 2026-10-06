@@ -79,6 +79,7 @@ const HistoryPage = async () => {
           t={t}
         />
         <AuditHistoryList
+          common={dict.common}
           jobs={jobs}
           locale={locale}
           status={dict.jobStatus}

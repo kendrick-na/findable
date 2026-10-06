@@ -149,7 +149,11 @@ describe("측정 상태·결과 IA 계약", () => {
     expect(actions).toContain(
       "domain: { in: brands.map((brand) => brand.domain) }"
     );
-    expect(actions).toContain("다른 브랜드의 과거 처방은 섞지 않아요");
+    // 🔴 2026-10-06 — 안내 문구는 사전(`app.actionsPage.noMixing`)으로 옮겨졌다.
+    expect(actions).toContain("{t.noMixing}");
+    expect(KO_APP.actionsPage.noMixing).toContain(
+      "다른 브랜드의 과거 처방은 섞지 않아요"
+    );
   });
 
   it("추적 질문의 저장·측정·결과 위치를 한 화면에서 설명한다", () => {

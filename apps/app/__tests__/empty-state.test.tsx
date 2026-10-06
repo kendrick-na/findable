@@ -58,6 +58,7 @@ describe("EmptyState (공용)", () => {
         ctaHref="/brand"
         ctaLabel="측정 시작하기"
         description="여기에 무엇이 보일지 설명."
+        t={koDict.app.common}
         title="아직 측정한 적이 없어요"
       />
     );
@@ -71,7 +72,7 @@ describe("EmptyState (공용)", () => {
 
   test("샘플 링크는 넘겼을 때만 나온다 (지어낸 예시 대신 실제 회차)", () => {
     const { container, rerender } = render(
-      <EmptyState description="설명" title="제목" />
+      <EmptyState description="설명" t={koDict.app.common} title="제목" />
     );
     // sampleHref 없으면 외부 링크가 아예 없어야 한다.
     expect(container.querySelectorAll('a[target="_blank"]').length).toBe(0);
@@ -80,6 +81,7 @@ describe("EmptyState (공용)", () => {
       <EmptyState
         description="설명"
         sampleHref="https://example.com/audit/x?shared=1"
+        t={koDict.app.common}
         title="제목"
       />
     );
@@ -133,6 +135,7 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
     for (const status of ["queued", "processing"]) {
       const { container } = render(
         <AuditHistoryList
+          common={koDict.app.common}
           jobs={[jobFixture(status, `job-${status}`)]}
           locale="ko"
           status={koDict.app.jobStatus}
@@ -150,6 +153,7 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
   test("실패 행은 내부 상세의 실패 사유로 연결한다", () => {
     const { container } = render(
       <AuditHistoryList
+        common={koDict.app.common}
         jobs={[jobFixture("failed", "job-failed")]}
         locale="ko"
         status={koDict.app.jobStatus}
@@ -165,6 +169,7 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
   test("완료 행은 정식 공개 리포트로 연결한다", () => {
     const { container } = render(
       <AuditHistoryList
+        common={koDict.app.common}
         jobs={[jobFixture("completed", "job-done")]}
         locale="ko"
         status={koDict.app.jobStatus}
@@ -179,6 +184,7 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
   test("실제 AI 응답이 없는 완료 행은 0%가 아닌 측정 불가로 연결한다", () => {
     const { container } = render(
       <AuditHistoryList
+        common={koDict.app.common}
         jobs={[{ ...jobFixture("completed", "job-empty"), result: null }]}
         locale="ko"
         status={koDict.app.jobStatus}
@@ -216,6 +222,7 @@ describe("AuditHistoryList 상태별 결과 링크", () => {
     };
     const { container } = render(
       <AuditHistoryList
+        common={koDict.app.common}
         jobs={[{ ...jobFixture("completed", "job-search-only"), result }]}
         locale="ko"
         status={koDict.app.jobStatus}
@@ -237,6 +244,7 @@ describe("AuditHistoryList 빈 상태 가드", () => {
     //   → 이 블록은 **렌더한 container 안에서만** 조회한다.
     const { container } = render(
       <AuditHistoryList
+        common={koDict.app.common}
         jobs={[]}
         locale="ko"
         status={koDict.app.jobStatus}

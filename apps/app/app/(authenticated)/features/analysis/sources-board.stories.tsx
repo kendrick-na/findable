@@ -23,7 +23,12 @@ import { SourcesBoard } from "./sources-board";
  */
 const meta = {
   // 상대 시간 문구는 사전에서 온다(`app.relativeTime`).
-  args: { relativeTime: koDict.app.relativeTime },
+  args: {
+    kindLabels: koDict.app.sourceKinds,
+    relativeTime: koDict.app.relativeTime,
+    // 문구는 사전에서 온다(`app.sourcesBoard`). JSON 직접 import — `getAppDictionary` 는 server-only.
+    t: koDict.app.sourcesBoard,
+  },
   component: SourcesBoard,
   parameters: { layout: "padded" },
   title: "대시보드/출처 · AI별(권역 분리)",

@@ -10,6 +10,7 @@
 
 import { cn } from "@repo/design-system/lib/utils";
 import { ChevronDownIcon } from "lucide-react";
+import type { AppDictionary } from "@/lib/i18n";
 import type { CompetitorAnalysis } from "../../lib/analysis-data";
 import { isMyBrand } from "../../lib/analysis-data";
 import {
@@ -25,8 +26,11 @@ const MAX_ROWS = 10;
 export const CompetitorBoard = ({
   data,
   relativeTime,
+  t,
 }: {
   data: CompetitorAnalysis;
+  /** 사전 `app.competitorBoard`. */
+  t: AppDictionary["competitorBoard"];
   /** 상대 시간 문구(사전 `app.relativeTime`). */
   relativeTime: RelativeTimeLabels;
 }) => {
@@ -41,18 +45,22 @@ export const CompetitorBoard = ({
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryCard
-          hint="AI 답변 순위표에서의 내 위치"
-          label="내 순위"
-          value={myRank >= 0 ? `${myRank + 1}위` : "순위권 밖"}
+          hint={t.myRankHint}
+          label={t.myRank}
+          value={
+            myRank >= 0
+              ? t.rankValue.replace("{n}", String(myRank + 1))
+              : t.outOfRanking
+          }
         />
         <SummaryCard
-          hint="경쟁 지형에 등장한 브랜드 수"
-          label="경쟁 브랜드"
-          value={`${landscape.ranking.length}개`}
+          hint={t.brandsHint}
+          label={t.brands}
+          value={t.brandsValue.replace("{n}", String(landscape.ranking.length))}
         />
         <SummaryCard
-          hint={`AI 답변 ${responsesParsed}건에서 추출`}
-          label="마지막 측정"
+          hint={t.lastHint.replace("{n}", String(responsesParsed))}
+          label={t.last}
           value={formatMeasuredAt(measuredAt, relativeTime)}
         />
       </div>
@@ -60,11 +68,10 @@ export const CompetitorBoard = ({
       <div className="findable-card flex flex-col gap-5 p-6">
         <div className="flex flex-col gap-1">
           <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-            누가 더 많이 나오나
+            {t.title}
           </h2>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            AI가 &ldquo;추천&rdquo;·&ldquo;순위&rdquo;를 답할 때 어떤 브랜드를
-            몇 번째로 꺼내는지 모았어요.
+            {t.lede}
           </p>
         </div>
 
@@ -89,7 +96,7 @@ export const CompetitorBoard = ({
                   title={row.name}
                 >
                   {row.name}
-                  {mine && " (우리)"}
+                  {mine && t.ours}
                 </span>
                 <div className="h-6 flex-1 overflow-hidden rounded bg-[color:var(--findable-surface-2,#141516)]">
                   <div
@@ -106,7 +113,7 @@ export const CompetitorBoard = ({
                   {row.shareOfVoice}%
                 </span>
                 <span className="hidden w-20 shrink-0 whitespace-nowrap text-right text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs tabular-nums sm:inline">
-                  평균 {row.averageRank}위
+                  {t.averageRank.replace("{n}", String(row.averageRank))}
                 </span>
               </div>
             );
@@ -122,7 +129,7 @@ export const CompetitorBoard = ({
         <details className="group hidden sm:block">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs hover:text-[color:var(--findable-ink-subtle,#8a8f98)]">
             <span className="[&::-webkit-details-marker]:hidden">
-              이 순위, 무슨 뜻인가요?
+              {t.glossaryToggle}
             </span>
             <ChevronDownIcon
               aria-hidden="true"
@@ -130,34 +137,27 @@ export const CompetitorBoard = ({
             />
           </summary>
           <p className="mt-2 border-[color:var(--findable-hairline,#26292e)] border-l-2 pl-3 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-            왼쪽 번호는 &ldquo;얼마나 자주 등장했는지&rdquo;(등장률) 기준
-            순위예요. 오른쪽 &ldquo;평균&rdquo;은 등장했을 때 실제로 몇 번째로
-            언급됐는지의 평균이라 서로 다른 걸 나타내요. 그래서 등장은 적어도
-            나올 때마다 항상 1위인 브랜드가, 자주 등장하지만 순위는 오르내리는
-            브랜드보다 평균 순위가 더 좋을 수 있어요.
+            {t.glossary}
           </p>
         </details>
 
         {!landscape.brandInRanking && (
           <p className="rounded border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-300/90 text-sm">
-            {landscape.brandFound
-              ? "답변 본문에는 나오지만 추천 순위표에는 못 올랐어요. 순위를 묻는 질문에서 밀린다는 뜻이에요."
-              : "이번 측정의 순위표에서 우리를 찾지 못했어요."}
+            {landscape.brandFound ? t.foundNotRanked : t.notFound}
           </p>
         )}
 
         <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-          ※ AI가 답변에 나열한 순서를 모은 <strong>상대 지표</strong>예요. 실제
-          시장 점유율이 아니라 &ldquo;AI 답변에 얼마나 자주, 몇 번째로
-          나오는지&rdquo;를 뜻해요.
+          {t.noteBefore}
+          <strong>{t.noteStrong}</strong>
+          {t.noteAfter}
           {landscape.sampleSize < LOW_CONFIDENCE_SAMPLE &&
-            ` 이번 표본이 ${landscape.sampleSize}건으로 적어 순위가 바뀔 수 있어요 — 측정을 더 쌓아보세요.`}
+            t.lowSample.replace("{n}", String(landscape.sampleSize))}
           {/* 🔴 변별력 없는 분포 고지 (2026-08-06 세션N-7)
               무료 진단(www)은 이 경우 섹션을 **숨긴다**. 여기는 경쟁 비교 **전용 페이지**라
               숨기면 빈 화면이 되므로, 대신 "순위로 읽지 말라"고 명시한다(같은 판정·다른 처방).
               실측: 라이브 5건 중 3건이 사실상 동률이었다(전원 2% 등). */}
-          {!landscape.discriminative &&
-            " 다만 이번엔 브랜드별 차이가 거의 없어요 — 순위로 읽기보다 “함께 거론된 이름들”로 보시는 게 정확해요."}
+          {!landscape.discriminative && t.flat}
         </p>
       </div>
     </div>

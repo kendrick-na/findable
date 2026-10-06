@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 // Today these pages have a two-way insufficient-sample/verification message.
 // If a new incomplete-execution issue is added, falling through to the latter
 // would tell customers a false reason for a stopped measurement.
-const pages = [["actions", "../app/(authenticated)/actions/page.tsx"]] as const;
 
 /**
  * 🔴 2026-10-06 — 대시보드는 문구를 사전(`app.dashboard.issue*`)으로 옮겼다.
@@ -91,22 +90,40 @@ describe("W0-3 history detail incomplete-execution copy (dictionary)", () => {
   });
 });
 
-describe("W0-3 proposed incomplete-execution issue copy", () => {
-  for (const [label, path] of pages) {
-    it(`RED: ${label} explicitly maps incomplete execution to measurement interruption`, () => {
-      const source = readFileSync(new URL(path, import.meta.url), "utf8");
-      expect(/=== "incomplete_execution"/.test(source)).toBe(true);
-      expect(
-        /incomplete_execution[\s\S]{0,450}(?:질문|측정)[\s\S]{0,100}(?:중단|미완료)/.test(
-          source
-        )
-      ).toBe(true);
-    });
-    it(`${label} explains an unverified historical question plan without claiming a failed brand verdict`, () => {
-      const source = readFileSync(new URL(path, import.meta.url), "utf8");
-      expect(
-        /=== "question_plan_unverified"[\s\S]{0,250}질문 계획/.test(source)
-      ).toBe(true);
-    });
-  }
+const ACTIONS = readFileSync(
+  join(import.meta.dirname, "../app/(authenticated)/actions/page.tsx"),
+  "utf8"
+);
+const actionsDict = (lang: "ko" | "en") =>
+  JSON.parse(
+    readFileSync(
+      join(
+        import.meta.dirname,
+        `../../../packages/internationalization/dictionaries/${lang}.json`
+      ),
+      "utf8"
+    )
+  ).app.actionsPage as Record<string, string>;
+
+// 🔴 2026-10-06 — 「지금 할 일」도 사전(`app.actionsPage.held*`)으로 옮겨졌다. 같은 계약을 사전 기준으로.
+describe("W0-3 actions incomplete-execution copy (dictionary)", () => {
+  it("RED: actions maps incomplete execution to the interruption message", () => {
+    expect(
+      /=== "incomplete_execution"[\s\S]{0,80}t\.heldIncomplete/.test(ACTIONS)
+    ).toBe(true);
+    expect(actionsDict("ko").heldIncomplete).toMatch(
+      /(?:질문|측정)[\s\S]{0,100}(?:중단|미완료)/
+    );
+    expect(actionsDict("en").heldIncomplete).toMatch(
+      /stopped|didn't fully complete/
+    );
+  });
+  it("actions explains an unverified historical question plan without claiming a failed brand verdict", () => {
+    expect(
+      /=== "question_plan_unverified"[\s\S]{0,80}t\.heldPlanUnverified/.test(
+        ACTIONS
+      )
+    ).toBe(true);
+    expect(actionsDict("ko").heldPlanUnverified).toContain("질문 계획");
+  });
 });

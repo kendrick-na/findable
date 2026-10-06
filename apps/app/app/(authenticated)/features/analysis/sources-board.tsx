@@ -13,13 +13,14 @@ import {
 import { METRICS } from "@repo/audit/metric-dictionary";
 import { cn } from "@repo/design-system/lib/utils";
 import { ExternalLinkIcon } from "lucide-react";
+import type { AppDictionary } from "@/lib/i18n";
+import { fillRich } from "@/lib/rich-text";
 import type {
   CitedDomainStat,
   EngineMentionStat,
   SourceKind,
   SourcesAnalysis,
 } from "../../lib/analysis-data";
-import { SOURCE_KIND_LABEL } from "../../lib/analysis-data";
 import {
   formatMeasuredAt,
   type RelativeTimeLabels,
@@ -50,9 +51,12 @@ const KIND_TONE: Record<SourceKind, string> = {
 //   `naver`, 다른 화면은 `네이버` 라고 부르게 된다(이 저장소의 "이름 4개" 사고와 같은 유형).
 //   (2026-09-29) 이름은 `@repo/audit/engine-labels` 한 곳이 정한다 — 네이버는 「네이버 검색 노출」,
 //   다음은 「다음 검색 노출」처럼 **실제로 잰 것**을 부른다.
-export function engineLabel(id: string): string {
-  return engineDisplayName(id);
+export function engineLabel(id: string, isKo = true): string {
+  return engineDisplayName(id, isKo);
 }
+
+type BoardLabels = AppDictionary["sourcesBoard"];
+type KindLabels = AppDictionary["sourceKinds"];
 
 function percent(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 100) : 0;
@@ -88,9 +92,13 @@ const REGION_ORDER = ["korea", "global"] as const;
 const EngineRow = ({
   engine,
   groundingEnabled,
+  isKo,
+  t,
 }: {
   engine: EngineMentionStat;
   groundingEnabled: boolean;
+  isKo: boolean;
+  t: BoardLabels;
 }) => {
   const state = engineSourceState(engine.engineId, groundingEnabled);
   return (
@@ -98,10 +106,12 @@ const EngineRow = ({
     //   **어느 줄의 숫자인지 눈으로 잇기 어렵다**(스크린샷 2026-08-17). 모바일은 원래 좁아 무영향.
     <div className="flex max-w-2xl items-baseline gap-3 border-white/5 border-b py-2 last:border-b-0">
       <span className="min-w-0 flex-1 truncate text-[color:var(--findable-ink-muted,#d0d6e0)] text-sm">
-        {engineLabel(engine.engineId)}
+        {engineLabel(engine.engineId, isKo)}
       </span>
       <span className="shrink-0 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm tabular-nums">
-        등장 {engine.mentioned}/{engine.total}
+        {t.mentioned
+          .replace("{mentioned}", String(engine.mentioned))
+          .replace("{total}", String(engine.total))}
       </span>
       {state === "collected" ? (
         <span
@@ -112,7 +122,7 @@ const EngineRow = ({
               : "text-[color:var(--findable-ink,#f7f8f8)]"
           )}
         >
-          인용 {engine.citations}
+          {t.citations.replace("{n}", String(engine.citations))}
         </span>
       ) : (
         // 🔴 모바일(390px)에서 잘리지 않게 짧게 쓴다. 실측: 「출처를 밝히지 않는 AI」는
@@ -125,7 +135,7 @@ const EngineRow = ({
         //   📕 이 저장소 최다 사고 — **못 잰 것을 0이라 부르기**. 정직하게 갈라 말한다.
         //   ⭐ 그라운딩을 켜면 이 분기는 **저절로 사라진다**(플래그를 보고 판정한다).
         <span className="shrink-0 text-right text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-          {state === "never" ? "출처 안 밝힘" : "출처 미수집"}
+          {state === "never" ? t.neverSource : t.notCollected}
         </span>
       )}
     </div>
@@ -135,8 +145,17 @@ const EngineRow = ({
 export const SourcesBoard = ({
   data,
   relativeTime,
+  isKo = true,
+  kindLabels,
+  t,
 }: {
   data: SourcesAnalysis;
+  /** 엔진 이름(`engineDisplayName`)의 언어. */
+  isKo?: boolean;
+  /** 사전 `app.sourceKinds`. */
+  kindLabels: KindLabels;
+  /** 사전 `app.sourcesBoard`. */
+  t: BoardLabels;
   /** 상대 시간 문구(사전 `app.relativeTime`). */
   relativeTime: RelativeTimeLabels;
 }) => {
@@ -162,9 +181,7 @@ export const SourcesBoard = ({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs leading-relaxed">
-        이 화면의 링크는 브랜드가 등장한 AI 답변에 함께 표시된 출처 후보입니다.
-        각 링크가 브랜드 설명의 어느 문장을 뒷받침하는지는 별도로 검증되지
-        않았으므로, 브랜드를 실제로 인용한 횟수로 해석하지 마세요.
+        {t.disclaimer}
       </p>
       {/* Mention vs Citation — 이 화면의 존재 이유. 두 축을 나란히 세운다. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -175,36 +192,42 @@ export const SourcesBoard = ({
         <MetricCard
           hint={
             mentionRate.total === 0
-              ? "이번 측정에서는 분석할 AI 답변을 받지 못했어요"
-              : `AI 답변 ${mentionRate.total}건 중 ${mentionRate.mentioned}건에 브랜드가 등장`
+              ? t.noAnswers
+              : t.mentionHint
+                  .replace("{total}", String(mentionRate.total))
+                  .replace("{mentioned}", String(mentionRate.mentioned))
           }
-          label={`${METRICS.sov.label} (Mention)`}
+          label={t.mentionLabel.replace("{metric}", METRICS.sov.label)}
           value={mentionRate.total === 0 ? "—" : `${mentionPct}%`}
         />
         <MetricCard
           hint={
             ownedCitations.total === 0
-              ? "이번 측정에서는 출처 링크를 못 찾았어요"
-              : `브랜드 등장 답변의 출처 후보 ${ownedCitations.total}건 중 내 도메인 ${ownedCitations.owned}건`
+              ? t.noLinks
+              : t.ownedHint
+                  .replace("{total}", String(ownedCitations.total))
+                  .replace("{owned}", String(ownedCitations.owned))
           }
-          label="출처 후보 중 우리 사이트 비율"
+          label={t.ownedLabel}
           value={ownedCitations.total === 0 ? "—" : `${ownedPct}%`}
         />
         <MetricCard
           hint={
             topKind
-              ? `출처로 가장 많이 걸린 종류 (${topKind.citations}건)`
-              : "출처로 걸린 링크가 아직 없어요"
+              ? t.topKindHint.replace("{n}", String(topKind.citations))
+              : t.noKind
           }
-          label="주요 출처"
-          value={topKind ? SOURCE_KIND_LABEL[topKind.kind] : "—"}
+          label={t.topKindLabel}
+          value={topKind ? kindLabels[topKind.kind] : "—"}
         />
       </div>
 
       {/* 진단 문장 — 숫자만 두면 해석이 사용자 몫이 된다. */}
       <DiagnosisNote
+        kindLabels={kindLabels}
         mentionPct={mentionPct}
         ownedPct={ownedPct}
+        t={t}
         topKind={topKind?.kind}
         topKindShare={topKind?.share ?? 0}
         totalCitations={ownedCitations.total}
@@ -214,10 +237,10 @@ export const SourcesBoard = ({
         <div className="findable-card flex flex-col gap-4 p-6">
           <div className="flex flex-col gap-1">
             <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-              출처 유형 구성
+              {t.kindsTitle}
             </h2>
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              AI가 답의 근거로 어떤 종류의 문서를 걸었는지 비중이에요.
+              {t.kindsLede}
             </p>
           </div>
           {/* 100% 누적 막대 */}
@@ -237,7 +260,7 @@ export const SourcesBoard = ({
                   className={cn("size-2.5 rounded-full", KIND_BAR[kind.kind])}
                 />
                 <span className="text-[color:var(--findable-ink-muted,#d0d6e0)]">
-                  {SOURCE_KIND_LABEL[kind.kind]}
+                  {kindLabels[kind.kind]}
                 </span>
                 <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] tabular-nums">
                   {kind.share}%
@@ -252,11 +275,10 @@ export const SourcesBoard = ({
       <div className="findable-card flex flex-col gap-5 p-6">
         <div className="flex flex-col gap-1">
           <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-            AI별 등장 · 출처
+            {t.enginesTitle}
           </h2>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            우리를 말하면서도 링크가 0인 곳은, 답은 하지만 출처를 걸지 않는
-            곳이에요.
+            {t.enginesLede}
           </p>
         </div>
         {REGION_ORDER.map((region) => {
@@ -277,11 +299,16 @@ export const SourcesBoard = ({
                 <h3 className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
                   {REGION_LABEL[region]}
                   <span className="ml-2 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-                    AI {group.length}곳
+                    {t.regionCount.replace("{n}", String(group.length))}
                   </span>
                 </h3>
                 <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm tabular-nums">
-                  {total === 0 ? "—" : `등장 ${percent(mentioned, total)}%`}
+                  {total === 0
+                    ? "—"
+                    : t.regionMention.replace(
+                        "{n}",
+                        String(percent(mentioned, total))
+                      )}
                 </span>
               </div>
               <div className="flex flex-col">
@@ -289,7 +316,9 @@ export const SourcesBoard = ({
                   <EngineRow
                     engine={engine}
                     groundingEnabled={groundingEnabled}
+                    isKo={isKo}
                     key={engine.engineId}
+                    t={t}
                   />
                 ))}
               </div>
@@ -303,28 +332,33 @@ export const SourcesBoard = ({
         <div className="findable-card flex flex-col gap-4 p-6">
           <div className="flex flex-col gap-1">
             <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-              출처로 걸린 링크
+              {t.domainsTitle}
             </h2>
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              {formatMeasuredAt(measuredAt, relativeTime)} 측정 기준 · 많이 걸린
-              순
+              {t.domainsBasis.replace(
+                "{when}",
+                formatMeasuredAt(measuredAt, relativeTime)
+              )}
             </p>
           </div>
           <div className="flex flex-col">
             {rows.map((row) => (
-              <DomainRow key={row.domain} row={row} />
+              <DomainRow
+                isKo={isKo}
+                key={row.domain}
+                kindLabels={kindLabels}
+                row={row}
+              />
             ))}
           </div>
           {hidden > 0 && (
             <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-              그 외 {hidden}곳은 횟수가 적어 줄였어요.
+              {t.hidden.replace("{n}", String(hidden))}
             </p>
           )}
           {filteredCitations > 0 && (
             <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-              ※ 브랜드와 무관한 검색 결과 {filteredCitations}건은 집계에서
-              제외했어요. 네이버·다음은 질문 문구로 검색한 결과를 함께 돌려주기
-              때문에, 우리가 나오지 않은 문서가 섞여요.
+              {t.filtered.replace("{n}", String(filteredCitations))}
             </p>
           )}
         </div>
@@ -341,7 +375,15 @@ const KIND_BAR: Record<SourceKind, string> = {
   other: "bg-[color:var(--findable-ink-tertiary,#7e8289)]",
 };
 
-const DomainRow = ({ row }: { row: CitedDomainStat }) => (
+const DomainRow = ({
+  isKo,
+  kindLabels,
+  row,
+}: {
+  isKo: boolean;
+  kindLabels: KindLabels;
+  row: CitedDomainStat;
+}) => (
   <div className="flex items-start gap-3 border-white/5 border-b py-3 last:border-b-0">
     <span className="w-8 shrink-0 text-right text-[color:var(--findable-ink,#f7f8f8)] text-sm tabular-nums">
       {row.citations}
@@ -363,7 +405,7 @@ const DomainRow = ({ row }: { row: CitedDomainStat }) => (
             KIND_TONE[row.kind]
           )}
         >
-          {SOURCE_KIND_LABEL[row.kind]}
+          {kindLabels[row.kind]}
         </span>
       </div>
       {row.sampleTitle && (
@@ -373,7 +415,7 @@ const DomainRow = ({ row }: { row: CitedDomainStat }) => (
       )}
     </div>
     <span className="hidden shrink-0 text-right text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs sm:block">
-      {row.engines.map(engineLabel).join(" · ")}
+      {row.engines.map((id) => engineLabel(id, isKo)).join(" · ")}
     </span>
   </div>
 );
@@ -408,12 +450,16 @@ const LOW_OWNED_CITATION_PCT = 20;
 const HIGH_THIRD_PARTY_SHARE = 40;
 
 const DiagnosisNote = ({
+  kindLabels,
   mentionPct,
   ownedPct,
+  t,
   topKind,
   topKindShare,
   totalCitations,
 }: {
+  kindLabels: KindLabels;
+  t: BoardLabels;
   mentionPct: number;
   ownedPct: number;
   topKind?: SourceKind;
@@ -423,9 +469,7 @@ const DiagnosisNote = ({
   if (totalCitations === 0) {
     return (
       <p className="rounded border border-white/10 bg-white/[0.03] px-4 py-3 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-        이번 측정에서는 출처 링크를 못 찾았어요. 등장률(
-        {mentionPct}%)은 답변 본문 기준이며, 인용은 검색 기반 엔진(네이버·다음·
-        Perplexity)에서 주로 모여요.
+        {t.diagNoLinks.replace("{mention}", String(mentionPct))}
       </p>
     );
   }
@@ -437,13 +481,15 @@ const DiagnosisNote = ({
   if (lowOwned && thirdPartyHeavy) {
     return (
       <p className="rounded border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-200/90 text-sm leading-relaxed">
-        브랜드는 답변에 <strong>{mentionPct}%</strong> 등장했습니다. 함께 표시된
-        출처 후보 중 가장 많은 종류는{" "}
-        <strong>
-          {SOURCE_KIND_LABEL[topKind]}({topKindShare}%)
-        </strong>
-        이고 자사 도메인은 <strong>{ownedPct}%</strong>입니다. 개별 링크가
-        브랜드 설명의 근거인지 확인한 결과는 아닙니다.
+        {fillRich(t.diagThirdParty, {
+          kind: (
+            <strong>
+              {kindLabels[topKind]}({topKindShare}%)
+            </strong>
+          ),
+          mention: <strong>{mentionPct}%</strong>,
+          owned: <strong>{ownedPct}%</strong>,
+        })}
       </p>
     );
   }
@@ -451,18 +497,16 @@ const DiagnosisNote = ({
   if (lowOwned) {
     return (
       <p className="rounded border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-amber-200/90 text-sm leading-relaxed">
-        브랜드 등장 답변에 함께 표시된 출처 후보 중 자사 도메인은{" "}
-        <strong>{ownedPct}%</strong>입니다. 개별 링크가 브랜드 설명의 근거인지
-        확인한 결과는 아닙니다.
+        {fillRich(t.diagLowOwned, {
+          owned: <strong>{ownedPct}%</strong>,
+        })}
       </p>
     );
   }
 
   return (
     <p className="rounded border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-emerald-200/90 text-sm leading-relaxed">
-      브랜드 등장 답변에 함께 표시된 출처 후보 중 자사 도메인은{" "}
-      <strong>{ownedPct}%</strong>입니다. 실제 인용 문장과의 연결은 별도 확인이
-      필요합니다.
+      {fillRich(t.diagOk, { owned: <strong>{ownedPct}%</strong> })}
     </p>
   );
 };

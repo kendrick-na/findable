@@ -31,53 +31,60 @@ interface EmptyStateProps {
   /** 실제 측정 회차 링크(선택) — 가짜 예시 대신 진짜를 보여줄 때만. */
   sampleHref?: string;
   sampleLabel?: string;
+  /** 기본 버튼 문구 — 사전 `app.common`(`startMeasuring`·`seeSampleFirst`). */
+  t: { seeSampleFirst: string; startMeasuring: string };
   /** ① 이 화면이 무엇인지. */
   title: string;
 }
 
 export const EmptyState = ({
   ctaHref = "/brand",
-  ctaLabel = "측정 시작하기",
+  ctaLabel: ctaLabelProp,
   description,
   icon,
   sampleHref,
-  sampleLabel = "결과 예시 먼저 보기",
+  sampleLabel: sampleLabelProp,
+  t,
   title,
-}: EmptyStateProps) => (
-  // 🔴 S7-2차(2026-08-11) — 카드가 **가로 전폭**(1130px)을 잡아 글이 중앙에 외롭게
-  //   떠 보였고, 아래로 700px 가까이 빈 검정이 남아 **"만들다 만 화면"** 으로 읽혔다
-  //   (고객사 시연에서 신뢰가 먼저 깎이는 자리 · Apple Craft · NN/g 8).
-  //   → 읽기 좋은 폭으로 제한하고 가운데 정렬한다. `/actions`·`/history`·`compare`·
-  //     `sources` **4화면이 이 컴포넌트를 공유**하므로 한 줄로 전부 개선된다.
-  <div className="findable-card mx-auto flex w-full max-w-2xl flex-col items-center gap-3 p-12 text-center">
-    {icon ? (
-      <span className="flex size-10 items-center justify-center rounded-lg bg-[color:var(--findable-primary,#ff7a4d)]/12 text-[color:var(--findable-primary,#ff7a4d)]">
-        {icon}
-      </span>
-    ) : null}
-    <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-xl">
-      {title}
-    </h2>
-    <p className="max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-      {description}
-    </p>
-    <div className="mt-1 flex flex-col items-center gap-3 sm:flex-row">
-      <Link
-        className="rounded-md bg-[color:var(--findable-primary,#ff7a4d)] px-4 py-2 font-medium text-black text-sm transition-opacity hover:opacity-90"
-        href={ctaHref}
-      >
-        {ctaLabel}
-      </Link>
-      {sampleHref ? (
-        <a
-          className="rounded-md border border-[color:var(--findable-hairline,#23252a)] px-4 py-2 font-medium text-[color:var(--findable-ink-muted,#d0d6e0)] text-sm transition-colors hover:border-[color:var(--findable-ink-subtle,#8a8f98)] hover:text-[color:var(--findable-ink,#f7f8f8)]"
-          href={sampleHref}
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          {sampleLabel}
-        </a>
+}: EmptyStateProps) => {
+  const ctaLabel = ctaLabelProp ?? t.startMeasuring;
+  const sampleLabel = sampleLabelProp ?? t.seeSampleFirst;
+  return (
+    // 🔴 S7-2차(2026-08-11) — 카드가 **가로 전폭**(1130px)을 잡아 글이 중앙에 외롭게
+    //   떠 보였고, 아래로 700px 가까이 빈 검정이 남아 **"만들다 만 화면"** 으로 읽혔다
+    //   (고객사 시연에서 신뢰가 먼저 깎이는 자리 · Apple Craft · NN/g 8).
+    //   → 읽기 좋은 폭으로 제한하고 가운데 정렬한다. `/actions`·`/history`·`compare`·
+    //     `sources` **4화면이 이 컴포넌트를 공유**하므로 한 줄로 전부 개선된다.
+    <div className="findable-card mx-auto flex w-full max-w-2xl flex-col items-center gap-3 p-12 text-center">
+      {icon ? (
+        <span className="flex size-10 items-center justify-center rounded-lg bg-[color:var(--findable-primary,#ff7a4d)]/12 text-[color:var(--findable-primary,#ff7a4d)]">
+          {icon}
+        </span>
       ) : null}
+      <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-xl">
+        {title}
+      </h2>
+      <p className="max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+        {description}
+      </p>
+      <div className="mt-1 flex flex-col items-center gap-3 sm:flex-row">
+        <Link
+          className="rounded-md bg-[color:var(--findable-primary,#ff7a4d)] px-4 py-2 font-medium text-black text-sm transition-opacity hover:opacity-90"
+          href={ctaHref}
+        >
+          {ctaLabel}
+        </Link>
+        {sampleHref ? (
+          <a
+            className="rounded-md border border-[color:var(--findable-hairline,#23252a)] px-4 py-2 font-medium text-[color:var(--findable-ink-muted,#d0d6e0)] text-sm transition-colors hover:border-[color:var(--findable-ink-subtle,#8a8f98)] hover:text-[color:var(--findable-ink,#f7f8f8)]"
+            href={sampleHref}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            {sampleLabel}
+          </a>
+        ) : null}
+      </div>
     </div>
-  </div>
-);
+  );
+};

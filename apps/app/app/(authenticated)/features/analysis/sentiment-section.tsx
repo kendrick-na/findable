@@ -22,7 +22,18 @@
 //   (전 데이터셋 negative 0건). "부정 없음 = 좋음" 으로 읽히게 두면 **못 잰 걸 좋은 소식으로
 //   파는 것**이다 — 이 저장소가 반복해 온 "못 잰 것을 0점이라 부르기"와 같은 잘못.
 
+import type { AppDictionary } from "@/lib/i18n";
+import { fillRich } from "@/lib/rich-text";
 import type { SentimentSummary } from "../../lib/dashboard-data";
+
+type SentimentLabels = AppDictionary["sentimentSection"];
+
+const fillCounts = (template: string, summary: SentimentSummary) =>
+  template
+    .replace("{positive}", String(summary.positive))
+    .replace("{neutral}", String(summary.neutral))
+    .replace("{negative}", String(summary.negative))
+    .replace("{total}", String(summary.total));
 
 /** 질문·엔진 단위 감성 분해 한 줄. */
 export interface SentimentBreakdownRow {
@@ -41,6 +52,8 @@ export interface Props {
   /** 질문별 분해. 쿼리 변경 0 — 호출부가 이미 들고 있는 행을 접어서 넘긴다. */
   byPrompt: SentimentBreakdownRow[];
   summary: SentimentSummary | null;
+  /** 사전 `app.sentimentSection`. */
+  t: SentimentLabels;
 }
 
 const pct = (part: number, total: number) =>
@@ -50,7 +63,13 @@ const pct = (part: number, total: number) =>
  * 감성 분포 막대. 긍정·중립·부정을 **비중 그대로** 그린다.
  * 색 규율(§9): 긍정=단청 · 중립=hairline-strong · 부정=danger.
  */
-const DistributionBar = ({ summary }: { summary: SentimentSummary }) => {
+const DistributionBar = ({
+  summary,
+  t,
+}: {
+  summary: SentimentSummary;
+  t: SentimentLabels;
+}) => {
   const segments = [
     {
       key: "positive",
@@ -71,7 +90,7 @@ const DistributionBar = ({ summary }: { summary: SentimentSummary }) => {
 
   return (
     <div
-      aria-label={`긍정 ${summary.positive}, 보통 ${summary.neutral}, 부정 ${summary.negative} (총 ${summary.total}건)`}
+      aria-label={fillCounts(t.aria, summary)}
       className="flex h-2 w-full overflow-hidden rounded-full bg-[color:var(--findable-hairline,#2a2d31)]"
       role="img"
     >
@@ -91,9 +110,11 @@ const DistributionBar = ({ summary }: { summary: SentimentSummary }) => {
 /** 분해 목록(질문별·엔진별). 행이 없으면 통째로 그리지 않는다. */
 const BreakdownList = ({
   rows,
+  t,
   title,
 }: {
   rows: SentimentBreakdownRow[];
+  t: SentimentLabels;
   title: string;
 }) => {
   if (rows.length === 0) {
@@ -117,11 +138,10 @@ const BreakdownList = ({
               </span>
               {/* 🔴 분모를 항상 함께 적는다 — 비중만 말하면 1건짜리와 30건짜리가 같아 보인다. */}
               <span className="shrink-0 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs tabular-nums">
-                긍정 {r.summary.positive} · 보통 {r.summary.neutral} · 부정{" "}
-                {r.summary.negative} · 총 {r.summary.total}
+                {fillCounts(t.rowCounts, r.summary)}
               </span>
             </div>
-            <DistributionBar summary={r.summary} />
+            <DistributionBar summary={r.summary} t={t} />
           </li>
         ))}
       </ul>
@@ -129,18 +149,17 @@ const BreakdownList = ({
   );
 };
 
-export const SentimentSection = ({ summary, byPrompt, byEngine }: Props) => {
+export const SentimentSection = ({ summary, byPrompt, byEngine, t }: Props) => {
   // 🔴 0건 상태 필수 — 미언급 행은 `sentiment=null` 이라 저인지도 브랜드는 대부분 빈다.
   //   "감성 0%" 가 아니라 **"판정할 답변이 없다"** 고 말한다(0과 없음은 다르다).
   if (!summary) {
     return (
       <section className="findable-card flex flex-col gap-2 p-6">
         <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-base">
-          AI가 우리를 어떻게 말하나
+          {t.title}
         </h2>
         <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm leading-relaxed">
-          아직 판정할 답변이 없어요. AI가 우리를 언급한 답변에서만 어떻게
-          말하는지 읽을 수 있어요 — 먼저 등장률을 올리는 게 순서예요.
+          {t.empty}
         </p>
       </section>
     );
@@ -156,10 +175,10 @@ export const SentimentSection = ({ summary, byPrompt, byEngine }: Props) => {
     <section className="findable-card flex flex-col gap-5 p-6">
       <div className="flex flex-col gap-1">
         <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-base">
-          AI가 우리를 어떻게 말하나
+          {t.title}
         </h2>
         <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm">
-          우리를 언급한 답변 {summary.total}건을 읽은 결과예요.
+          {t.basis.replace("{n}", String(summary.total))}
         </p>
       </div>
 
@@ -169,35 +188,34 @@ export const SentimentSection = ({ summary, byPrompt, byEngine }: Props) => {
             {neutralPct}%
           </span>
           <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            가 밋밋한 서술
+            {t.neutralShare}
           </span>
         </div>
-        <DistributionBar summary={summary} />
+        <DistributionBar summary={summary} t={t} />
         <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs tabular-nums">
-          긍정 {summary.positive} · 보통 {summary.neutral} · 부정{" "}
-          {summary.negative} · 총 {summary.total}건
+          {fillCounts(t.totalCounts, summary)}
         </p>
       </div>
 
       {/* ⭐ 중립이 왜 문제인지 — 이 섹션의 존재 이유. */}
       {neutralDominant ? (
         <p className="rounded-lg border border-[color:var(--findable-hairline,#2a2d31)] bg-[color:var(--findable-surface-2,rgba(255,255,255,0.02))] px-4 py-3 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-          AI가 우리를 <strong>사실만 건조하게</strong> 말하고 있어요. 틀린 건
-          아니지만 <strong>고를 이유를 못 주는 상태</strong>예요. 아래 처방 중
-          차별점이 담긴 문장을 늘리는 것부터 손대면 달라져요.
+          {fillRich(t.neutralDominant, {
+            dry: <strong>{t.dry}</strong>,
+            noReason: <strong>{t.noReason}</strong>,
+          })}
         </p>
       ) : null}
 
       {/* ⚠️ 부정 0건을 성과로 표기하지 않는다 — 분류기가 못 잡는 것이지 없는 게 아니다. */}
       {summary.negative === 0 ? (
         <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-          * 부정 표현은 키워드로만 찾고 있어서 놓치는 경우가 있어요. 부정 0건을
-          &ldquo;문제 없음&rdquo;으로 읽지 마세요.
+          {t.negativeCaveat}
         </p>
       ) : null}
 
-      <BreakdownList rows={byPrompt} title="질문별" />
-      <BreakdownList rows={byEngine} title="AI별" />
+      <BreakdownList rows={byPrompt} t={t} title={t.byPrompt} />
+      <BreakdownList rows={byEngine} t={t} title={t.byEngine} />
     </section>
   );
 };
