@@ -1,8 +1,13 @@
 // Findable 7 엔진 라우터 + 병렬 호출 오케스트레이터
 
+import {
+  chatgptRoutedAdapter,
+  isChatgptWebShadowEnabled,
+  type ShadowHandle,
+  startChatgptWebShadow,
+} from "./chatgpt-source";
 import { chatgptWebAdapter } from "./chatgpt-web-adapter";
 import {
-  chatgptAdapter,
   claudeAdapter,
   geminiAdapter,
   perplexityAdapter,
@@ -21,12 +26,19 @@ import type {
 } from "./types";
 
 export * from "./aggregate";
+export {
+  CHATGPT_WEB_ENGINE_SET,
+  chatgptEngineSetKey,
+  isChatgptWebShadowEnabled,
+  readChatgptSource,
+} from "./chatgpt-source";
 export * from "./cost";
 export { NAVER_SEARCH_SAMPLING_VERSION } from "./korean-adapters";
 export * from "./types";
 
 const ADAPTERS: Record<EngineId, EngineAdapter> = {
-  chatgpt: chatgptAdapter,
+  // 경로 스위치(2026-10-07): CHATGPT_SOURCE=api(기본)면 기존 API 어댑터 그대로.
+  chatgpt: chatgptRoutedAdapter,
   "chatgpt-web": chatgptWebAdapter,
   claude: claudeAdapter,
   perplexity: perplexityAdapter,
@@ -181,6 +193,17 @@ export async function queryAllEngines(
       /* logging is best-effort */
     }
   };
+  // 🔎 ChatGPT 웹 섀도(CHATGPT_WEB_SHADOW=true) — 메인과 **동시에** 시작하고, 메인 배치가
+  //   끝나면 grace 만큼만 기다린다. 결과는 chatgpt 행의 `shadowChatgptWeb` 에만 붙는다.
+  let shadow: ShadowHandle | null = null;
+  try {
+    shadow =
+      engineIds.includes("chatgpt") && isChatgptWebShadowEnabled()
+        ? startChatgptWebShadow(base)
+        : null;
+  } catch {
+    shadow = null; // 섀도는 어떤 경우에도 메인을 깨지 않는다.
+  }
   const settled = await Promise.allSettled(
     engineIds.map(async (engineId) => {
       observe({ engineId, phase: "started" });
@@ -197,7 +220,7 @@ export async function queryAllEngines(
       }
     })
   );
-  return settled.map((result, i) => {
+  const responses = settled.map((result, i): EngineResponse => {
     if (result.status === "fulfilled") {
       return result.value;
     }
@@ -222,4 +245,24 @@ export async function queryAllEngines(
       isStub: false,
     };
   });
+  if (shadow) {
+    await attachChatgptWebShadow(responses, shadow);
+  }
+  return responses;
+}
+
+async function attachChatgptWebShadow(
+  responses: EngineResponse[],
+  shadow: ShadowHandle
+): Promise<void> {
+  const index = responses.findIndex((r) => r.engineId === "chatgpt");
+  try {
+    const result = await shadow.finish(responses[index]);
+    const main = responses[index];
+    if (main) {
+      responses[index] = { ...main, shadowChatgptWeb: result };
+    }
+  } catch {
+    /* 섀도 실패는 메인 결과에 아무 영향도 주지 않는다. */
+  }
 }

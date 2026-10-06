@@ -19,6 +19,7 @@ import {
 import {
   aggregateAudit,
   auditCost,
+  chatgptEngineSetKey,
   NAVER_SEARCH_SAMPLING_VERSION,
   partitionCitedSources,
 } from "@repo/ai/lib/engines";
@@ -1062,7 +1063,15 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         krw: Math.round(c.krw * 100) / 100,
         basis: c.basis,
       })),
+      // ChatGPT 웹 섀도 원가(CHATGPT_WEB_SHADOW=true 일 때만). totalKrw 에 이미 포함.
+      ...(cost.shadowKrw === undefined
+        ? {}
+        : { shadowKrw: Math.round(cost.shadowKrw * 100) / 100 }),
     };
+    // ChatGPT 측정 방식 세트(CHATGPT_SOURCE=web 일 때만 값이 있다). 어댑터가 행마다 남기지만,
+    //   60초 상한으로 끊긴 행처럼 usage 가 없는 chatgpt 행도 같은 설정으로 표시해야
+    //   한 회차 안에서 「혼재」로 오판하지 않는다.
+    const runChatgptEngineSet = chatgptEngineSetKey();
 
     // 액션 입력 신호 조립 — 프롬프트별 언급 여부(갭 액션의 핵심)와 출처 유형 분포.
     //   sevenEngineResponses[i] 는 prompts[i] 에 1:1 대응하지만, 검증 교정은 flat 에만
@@ -1209,6 +1218,16 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
               naverSamplingVersion: NAVER_SEARCH_SAMPLING_VERSION,
             }
           : {}),
+        // ChatGPT 수집 경로(2026-10-07). 미기재 = 기존 API(legacy) — 비교 가드가 이 값을 본다.
+        ...(r.engineId === "chatgpt" &&
+        (r.usage?.chatgptEngineSet ?? runChatgptEngineSet)
+          ? {
+              chatgptEngineSet:
+                r.usage?.chatgptEngineSet ?? runChatgptEngineSet,
+            }
+          : {}),
+        // ChatGPT 웹 섀도(CHATGPT_WEB_SHADOW=true) — 저장 전용. 점수·버킷·집계에 안 쓴다.
+        ...(r.shadowChatgptWeb ? { shadowChatgptWeb: r.shadowChatgptWeb } : {}),
         engineId: r.engineId,
         brandMentioned: r.brandMentioned,
         mentionPosition: r.mentionPosition,

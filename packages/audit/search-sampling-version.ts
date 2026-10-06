@@ -13,6 +13,13 @@
  * `compareAcrossSearchSampling` or `sameSearchSamplingSeries`. A blocked
  * comparison returns `delta: null` plus a reason; callers render
  * "비교 불가(측정 방식 변경)" instead of a number or 0.
+ *
+ * ➕ ChatGPT collection source (2026-10-07). When ops sets `CHATGPT_SOURCE=web`,
+ * chatgpt rows carry `chatgptEngineSet` (e.g. `chatgpt-web-v1`). The run's
+ * version then becomes `<search version>+<engine set>` so a web-collected run
+ * is never compared with an API-collected one through the same guard. Runs
+ * without the marker (every run before the switch) keep their exact old
+ * version string, so nothing already stored changes.
  */
 
 /** Naver rows without a sampling marker (pre-W1 blog-first sample or synthesis). */
@@ -25,10 +32,15 @@ export const MIXED_SEARCH_SAMPLING_VERSION = "mixed";
 export const SEARCH_SAMPLING_CHANGED = "search_sampling_changed" as const;
 export type SearchSamplingBlockReason = typeof SEARCH_SAMPLING_CHANGED;
 
+/** Joins the search version and the ChatGPT engine set into one comparison key. */
+export const ENGINE_SET_SEPARATOR = "+";
+
 interface NaverRowLike {
+  chatgptEngineSet?: unknown;
   engineId?: unknown;
   naverSamplingVersion?: unknown;
   naverSource?: unknown;
+  usage?: unknown;
 }
 
 /**
@@ -36,6 +48,56 @@ interface NaverRowLike {
  * Missing `engineResponses` (very old results) is treated as legacy.
  */
 export function searchSamplingVersionOf(result: unknown): string {
+  const base = naverSamplingVersionOf(result);
+  const chatgpt = chatgptEngineSetOf(result);
+  if (chatgpt === null) {
+    return base;
+  }
+  if (
+    chatgpt === MIXED_SEARCH_SAMPLING_VERSION ||
+    base === MIXED_SEARCH_SAMPLING_VERSION
+  ) {
+    return MIXED_SEARCH_SAMPLING_VERSION;
+  }
+  return `${base}${ENGINE_SET_SEPARATOR}${chatgpt}`;
+}
+
+function rowChatgptEngineSet(row: NaverRowLike): string {
+  if (typeof row.chatgptEngineSet === "string") {
+    return row.chatgptEngineSet;
+  }
+  const usage = row.usage as { chatgptEngineSet?: unknown } | null | undefined;
+  return usage && typeof usage.chatgptEngineSet === "string"
+    ? usage.chatgptEngineSet
+    : "";
+}
+
+/**
+ * The ChatGPT engine set of one run: null = API (legacy — no marker on any
+ * chatgpt row, or no chatgpt row), a set key, or "mixed" when rows disagree.
+ */
+export function chatgptEngineSetOf(result: unknown): string | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return null;
+  }
+  const rows = (result as { engineResponses?: unknown }).engineResponses;
+  if (!Array.isArray(rows)) {
+    return null;
+  }
+  const sets = new Set<string>();
+  for (const row of rows as NaverRowLike[]) {
+    if (row && typeof row === "object" && row.engineId === "chatgpt") {
+      sets.add(rowChatgptEngineSet(row));
+    }
+  }
+  if (sets.size > 1) {
+    return MIXED_SEARCH_SAMPLING_VERSION;
+  }
+  const only = [...sets][0];
+  return only ? only : null;
+}
+
+function naverSamplingVersionOf(result: unknown): string {
   if (!result || typeof result !== "object" || Array.isArray(result)) {
     return LEGACY_SEARCH_SAMPLING_VERSION;
   }
@@ -166,13 +228,20 @@ export function searchSamplingLabel(
   version: string | null | undefined,
   isKo: boolean
 ): string | null {
-  const normalized = normalizeSearchSamplingVersion(version);
+  const [normalized = "", engineSet] =
+    normalizeSearchSamplingVersion(version).split(ENGINE_SET_SEPARATOR);
   if (normalized === NO_SEARCH_SAMPLING_VERSION) {
     return null;
   }
   const label = VERSION_LABELS[normalized];
+  let base = isKo ? `검색 표본 ${normalized}` : `Search sample ${normalized}`;
   if (label) {
-    return isKo ? label.ko : label.en;
+    base = isKo ? label.ko : label.en;
   }
-  return isKo ? `검색 표본 ${normalized}` : `Search sample ${normalized}`;
+  if (!engineSet) {
+    return base;
+  }
+  return isKo
+    ? `${base} · ChatGPT 웹 화면 수집`
+    : `${base} · ChatGPT collected from web UI`;
 }

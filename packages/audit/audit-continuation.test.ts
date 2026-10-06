@@ -130,6 +130,7 @@ vi.mock("./official-site-identity", () => ({
 }));
 vi.mock("@repo/ai/lib/engines", () => ({
   NAVER_SEARCH_SAMPLING_VERSION: "interleave-v1",
+  chatgptEngineSetKey: () => undefined,
   aggregateAudit: vi.fn(() => ({
     sov: 0,
     enginesWithMention: [],

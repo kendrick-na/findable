@@ -65,6 +65,7 @@ vi.mock("./official-site-identity", () => ({
 }));
 vi.mock("@repo/ai/lib/engines", () => ({
   NAVER_SEARCH_SAMPLING_VERSION: "interleave-v1",
+  chatgptEngineSetKey: () => undefined,
   aggregateAudit,
   auditCost: vi.fn(() => ({
     costModelVersion: 2,
@@ -371,6 +372,49 @@ describe("runAuditJob offline lifecycle contracts", () => {
       pdf: "skipped",
     });
     expect(persistAuditTracking).toHaveBeenCalled();
+  });
+
+  it("stores the ChatGPT web shadow and engine-set marker without touching the scored fields", async () => {
+    const shadow = {
+      outcome: "ok",
+      text: "web answer",
+      citations: [],
+      brandMentioned: false,
+      durationMs: 5,
+      error: null,
+      creditsUsed: 1,
+      comparison: { mentionAgreement: false, citationOverlap: null },
+    };
+    queryPromptsSequentially.mockResolvedValue([
+      [
+        {
+          ...response(),
+          shadowChatgptWeb: shadow,
+          usage: {
+            inputTokens: null,
+            outputTokens: null,
+            costModel: "credit",
+            source: "web",
+            chatgptEngineSet: "chatgpt-web-v1",
+          },
+        },
+      ],
+      [response()],
+    ]);
+    const runAuditJob = await loadRunner();
+
+    await runAuditJob(input);
+
+    const rows = terminalCalls()[0].data.result.engineResponses;
+    expect(rows[0]).toMatchObject({
+      engineId: "chatgpt",
+      brandMentioned: true,
+      shadowChatgptWeb: shadow,
+      chatgptEngineSet: "chatgpt-web-v1",
+    });
+    // Second chatgpt row has no marker in its usage; flags are off in this run → stays legacy.
+    expect(rows[1].chatgptEngineSet).toBeUndefined();
+    expect(rows[1].shadowChatgptWeb).toBeUndefined();
   });
 
   it("does not overwrite a completed job when Tracking fails after commit", async () => {

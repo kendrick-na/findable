@@ -17,6 +17,12 @@
 //   ⚠️ 과거 기록은 **소급 재계산하지 않는다**(v1 값은 v1 대로 남긴다).
 //
 // 단가는 USD. LLM 단가 = USD per 1M tokens. 환율은 USD_TO_KRW 로 일괄 환산.
+//
+// ➕ 2026-10-07 ChatGPT 웹 수집(CHATGPT_SOURCE=web · CHATGPT_WEB_SHADOW=true) 원가 — v2 범위 안의 추가.
+//   플래그를 안 켜면 들어오는 입력이 없어 **기존 계산은 한 줄도 안 바뀐다**(그래서 버전 유지).
+//   · 웹 수집 = Firecrawl scrape(actions 포함) 1회 = 1크레딧(응답 metadata.creditsUsed 가 있으면 그 값).
+//   · 웹 실패 후 API 폴백 = gpt-5.4 토큰 + OpenAI 웹검색 $10/1,000회 + 앞서 쓴 웹 크레딧.
+//   · 섀도 = 메인과 별도로 Firecrawl 크레딧이 나간다 → `auditCost` 가 별도 항목으로 더한다.
 // ⚠️ chatgpt·claude 는 실제로는 Letsur 게이트웨이로 청구된다 — 아래는 **원 제공사 공식 정가**다.
 //    Letsur 의 재판매 단가·수수료는 [확인필요](청구서 대조 전까지 정가로 둔다).
 
@@ -62,10 +68,14 @@ const TOKEN_PRICES: Partial<Record<EngineId, TokenPrice>> = {
  *   · perplexity Agent: search_web $0.0025 / call. ⚠️ Agent 응답의 `usage.cost` 가 있으면
  *     그게 우선이고(이미 포함), 이 값은 provider 원가가 빠졌을 때만 쓴다.
  *     출처: https://docs.perplexity.ai/getting-started/pricing
- * ⚠️ chatgpt 는 검색 도구를 붙이지 않는다(Chat Completions 호출) → 검색료 없음.
+ *   · chatgpt: OpenAI Responses `web_search` $10 / 1,000 calls(+검색 결과 토큰은 입력 단가 — 토큰에 이미 포함).
+ *     출처: https://developers.openai.com/api/docs/pricing (2026-10-07 확인).
+ *     ⚠️ 기본 API 경로는 검색 도구를 안 붙인다(webSearchRequests 미기재 → 검색료 0).
+ *        CHATGPT_SOURCE=web 의 **폴백 경로**만 붙인다.
  *    gemini 그라운딩은 플래그 기본 off 이고 엔진 자체가 무료 티어로 잡힌다 — 켜면 재검토.
  */
 const WEB_SEARCH_USD_PER_REQUEST: Partial<Record<EngineId, number>> = {
+  chatgpt: 10 / 1000,
   claude: 10 / 1000,
   perplexity: 0.0025,
 };
@@ -88,7 +98,12 @@ const GATEWAY_MODEL_PRICES: Record<string, GatewayPrice> = {
     webSearchUsdPerRequest: 10 / 1000,
   },
   // <272K 컨텍스트 구간(우리 호출은 전부 이 구간).
-  "openai/gpt-5.4": { inputPerM: 2.5, outputPerM: 15 },
+  "openai/gpt-5.4": {
+    inputPerM: 2.5,
+    outputPerM: 15,
+    // 검색 도구를 붙인 호출(ChatGPT 웹 수집 폴백)만 횟수가 기록된다.
+    webSearchUsdPerRequest: 10 / 1000,
+  },
   "anthropic/claude-haiku-4.5": { inputPerM: 1, outputPerM: 5 },
   "perplexity/sonar": { inputPerM: 0.25, outputPerM: 2.5 },
   "google/gemini-2.5-flash": { inputPerM: 0.3, outputPerM: 2.5 },
@@ -229,8 +244,39 @@ function tokenCost(res: EngineResponse): EngineCost {
   };
 }
 
+/** Firecrawl 크레딧 수 → KRW. */
+export function firecrawlCreditsKrw(credits: number): number {
+  return credits * FIRECRAWL_USD_PER_CREDIT * USD_TO_KRW;
+}
+
+/**
+ * ChatGPT 웹 수집 1회 예상 원가(KRW) — 화면·문서 안내용. 공식 1크레딧/scrape × 크레딧 단가 상한.
+ *   ⚠️ [확인필요] actions 가 붙은 scrape 가 Interact(브라우저 분당 2크레딧)로 따로 과금되는지.
+ *   공식 단가표는 scrape 1크레딧/페이지만 명시하고 actions 할증은 적지 않았다(2026-10-07).
+ */
+export const CHATGPT_WEB_KRW_PER_CALL = firecrawlCreditsKrw(
+  FIRECRAWL_CREDITS_PER_SCRAPE
+);
+
 // EngineResponse 1건 → 원가(KRW). usage 없으면 costModel 로 근사.
+//   웹 수집이 실패해 API 로 폴백한 행은 **앞서 쓴 웹 크레딧**을 더한다.
 export function costOf(res: EngineResponse): EngineCost {
+  const base = baseCostOf(res);
+  const prior = res.usage?.priorAttemptCreditsUsed;
+  if (!isFiniteNonNegative(prior) || prior === 0) {
+    return base;
+  }
+  const note = `웹 수집 실패분 Firecrawl ${prior}크레딧 포함`;
+  return {
+    ...base,
+    krw: base.krw + firecrawlCreditsKrw(prior),
+    basis:
+      base.basis === "free" || base.basis === "unknown" ? "credit" : base.basis,
+    note: base.note ? `${base.note} · ${note}` : note,
+  };
+}
+
+function baseCostOf(res: EngineResponse): EngineCost {
   const { engineId, usage, durationMs } = res;
 
   // stub 은 실호출이 없으니 0원.
@@ -275,12 +321,11 @@ function inferCostModel(engineId: EngineId): EngineCost["basis"] {
   if (engineId === "naver-briefing") {
     return "credit"; // 2026-07-29 Firecrawl 전환 이후.
   }
-  if (
-    engineId === "gemini" ||
-    engineId === "daum" ||
-    engineId === "chatgpt-web"
-  ) {
-    return "free"; // gemini=무료티어, daum=검색스크랩, chatgpt-web=웹UI(베타·미과금)
+  if (engineId === "chatgpt-web") {
+    return "credit"; // 2026-10-07 Firecrawl 전환 이후(이전 Stagehand 시절엔 실호출이 없었다).
+  }
+  if (engineId === "gemini" || engineId === "daum") {
+    return "free"; // gemini=무료티어, daum=검색스크랩
   }
   if (TOKEN_PRICES[engineId]) {
     return "token";
@@ -293,19 +338,41 @@ export interface AuditCost {
   costModelVersion: number; // 이 합계를 낸 원가 규칙 버전(COST_MODEL_VERSION)
   measuredEngines: number; // token/credit/browser 로 실제 산정된 엔진 수
   perEngine: EngineCost[];
+  /** ChatGPT 웹 섀도 수집 원가 합(KRW). 섀도가 없으면 생략. totalKrw 에 이미 포함. */
+  shadowKrw?: number;
   totalKrw: number;
 }
 
+/** 섀도 1건 원가. 크레딧 기록이 없으면(미설정·HTTP 오류 = 문서 없음) 0원이라 항목도 없다. */
+export function shadowCostOf(res: EngineResponse): EngineCost | null {
+  const credits = res.shadowChatgptWeb?.creditsUsed;
+  if (!isFiniteNonNegative(credits) || credits === 0) {
+    return null;
+  }
+  return {
+    engineId: "chatgpt-web",
+    krw: firecrawlCreditsKrw(credits),
+    basis: "credit",
+    note: `ChatGPT 웹 섀도 · Firecrawl ${credits}크레딧`,
+  };
+}
+
 export function auditCost(responses: EngineResponse[]): AuditCost {
-  const perEngine = responses.map(costOf);
-  const totalKrw = perEngine.reduce((sum, c) => sum + c.krw, 0);
-  const measuredEngines = perEngine.filter(
+  const mainCosts = responses.map(costOf);
+  const measuredEngines = mainCosts.filter(
     (c) => c.basis === "token" || c.basis === "credit" || c.basis === "browser"
   ).length;
+  // 섀도 웹 수집은 점수엔 안 들어가지만 **돈은 나간다** → 별도 항목으로 총원가에 더한다.
+  const shadowCosts = responses.flatMap((res) => shadowCostOf(res) ?? []);
+  const perEngine = [...mainCosts, ...shadowCosts];
+  const totalKrw = perEngine.reduce((sum, c) => sum + c.krw, 0);
   return {
     totalKrw,
     perEngine,
     measuredEngines,
     costModelVersion: COST_MODEL_VERSION,
+    ...(shadowCosts.length > 0
+      ? { shadowKrw: shadowCosts.reduce((sum, c) => sum + c.krw, 0) }
+      : {}),
   };
 }

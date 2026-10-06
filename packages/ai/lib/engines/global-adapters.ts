@@ -13,14 +13,16 @@
 // 모델 슬러그 규칙: 버전은 점(.) 사용, 하이픈 X. 예: anthropic/claude-sonnet-4.6
 
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAI, openai } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
-import { generateText, type LanguageModel } from "ai";
+import { gateway, generateText, type LanguageModel } from "ai";
 import {
   classifyLetsurUnavailable,
   GATEWAY_MESSAGES_URL,
+  isGatewayFallbackAvailable,
   isLetsurCircuitOpen,
   type LetsurFallbackReason,
+  letsurUnavailableReasonFromError,
   logLetsurFallback,
   readGatewayFallback,
   tripLetsurCircuit,
@@ -988,6 +990,218 @@ function logProviderFailure(
 }
 
 export const chatgptAdapter: EngineAdapter = makeGatewayAdapter("chatgpt");
+
+// ──────────────────────────────────────────────────────────────────
+// 🔎 ChatGPT API + 웹검색(2026-10-07) — `CHATGPT_SOURCE=web` 일 때 **웹 수집 실패 폴백** 전용.
+//
+// 공식 근거(2026-10-07 확인):
+//   · OpenAI Responses API 웹검색 = `tools: [{ type: "web_search" }]`, 답의 출처는
+//     `output_text.annotations[].type === "url_citation"`.
+//     https://developers.openai.com/api/docs/guides/tools-web-search
+//   · 요금: 웹검색 $10 / 1,000회 + 검색 결과 토큰은 모델 입력 단가.
+//     https://developers.openai.com/api/docs/pricing
+//   · AI SDK `@ai-sdk/openai` 의 기본 모델 = Responses 모델(`createLanguageModel → createResponsesModel`,
+//     설치본 3.0.54 dist 실측) → 기존 chatgpt 호출도 이미 Letsur `/v1/responses` 를 탄다.
+//     웹검색은 `provider.tools.webSearch({})` 하나만 더 붙이면 된다(새 의존성 0).
+//   · Vercel AI Gateway 도 OpenAI provider-executed 도구를 그대로 받는다
+//     (`@ai-sdk/gateway` docs「Provider-Executed Tools」: `web_search: openai.tools.webSearch({})`).
+// ⚠️ [확인필요] Letsur 가 `web_search` 도구를 OpenAI 로 그대로 넘기는지는 라이브로 확인 못 했다.
+//   그래서 Letsur 가 **어떤 이유로든** 실패하면(불가 분류 여부와 무관) Gateway 로 한 번 더 간다.
+// ──────────────────────────────────────────────────────────────────
+
+const CHATGPT_SEARCH_TOOL = "web_search";
+
+interface SearchAttempt {
+  model: LanguageModel;
+  route: Pick<EngineUsage, "fallback" | "modelId" | "provider">;
+  tools: Record<string, unknown>;
+  via: "letsur" | "gateway";
+}
+
+function chatgptSearchAttempts(): SearchAttempt[] {
+  const attempts: SearchAttempt[] = [];
+  const letsur = getLetsurProvider();
+  const letsurUsable = Boolean(letsur) && !isLetsurCircuitOpen();
+  if (letsur && letsurUsable) {
+    attempts.push({
+      via: "letsur",
+      model: letsur(LETSUR_MODEL_IDS.chatgpt),
+      tools: { [CHATGPT_SEARCH_TOOL]: letsur.tools.webSearch({}) },
+      route: {},
+    });
+  }
+  if (isGatewayFallbackAvailable()) {
+    attempts.push({
+      via: "gateway",
+      model: gateway(MODEL_DEFAULTS.chatgpt),
+      tools: { [CHATGPT_SEARCH_TOOL]: openai.tools.webSearch({}) },
+      route: {
+        provider: "gateway",
+        modelId: MODEL_DEFAULTS.chatgpt,
+        // Letsur 를 원래 경로로 쓸 수 있는 환경에서 Gateway 로 갔다면 폴백이다.
+        ...(letsur ? { fallback: "gateway" as const } : {}),
+      },
+    });
+  }
+  return attempts;
+}
+
+/** 결과에서 provider 가 실행한 웹검색 호출 수. 못 세면 null(= 미수집, 0원 아님). */
+export function countChatgptWebSearchCalls(
+  content: unknown,
+  sourceCount: number
+): number | null {
+  const parts = Array.isArray(content) ? content : [];
+  const calls = parts.filter(
+    (part) =>
+      typeof part === "object" &&
+      part !== null &&
+      (part as { type?: unknown }).type === "tool-call" &&
+      (part as { toolName?: unknown }).toolName === CHATGPT_SEARCH_TOOL
+  ).length;
+  if (calls === 0 && sourceCount > 0) {
+    return null; // 출처는 있는데 호출 기록이 없다 → SDK 표현 차이. 횟수를 지어내지 않는다.
+  }
+  return calls;
+}
+
+async function runChatgptSearchAttempt(
+  attempt: SearchAttempt,
+  query: EngineQuery,
+  start: number
+): Promise<EngineResponse> {
+  const result = await generateText({
+    model: attempt.model,
+    tools: attempt.tools as never,
+    prompt: query.prompt,
+    abortSignal: query.signal,
+    ...(attempt.via === "gateway"
+      ? {
+          providerOptions: {
+            gateway: {
+              tags: [
+                "findable",
+                "engine:chatgpt",
+                "chatgpt:api_fallback",
+                `lang:${query.language}`,
+              ],
+            },
+          },
+        }
+      : {}),
+  });
+  const text = sanitizeEngineText(result.text);
+  if (text.length === 0) {
+    throw new Error("chatgpt web_search: empty answer");
+  }
+  const citedSources = mapProviderSources(result.sources);
+  const mention = detectBrandMention(
+    text,
+    query.brandName,
+    query.brandVariants
+  );
+  return {
+    engineId: "chatgpt",
+    rawResponse: text,
+    brandMentioned: mention.mentioned,
+    ...mentionPositionFields(text, query.brandName, query.brandVariants),
+    sentiment: estimateSentiment(text, query.brandName),
+    // 🔴 provider 가 준 url_citation 만 신뢰한다(본문 URL 폴백 금지 — N-48).
+    citedSources,
+    shareOfVoice: estimateShareOfVoice(
+      text,
+      query.brandName,
+      query.brandVariants
+    ),
+    errorMessage: null,
+    durationMs: Date.now() - start,
+    isStub: false,
+    usage: {
+      inputTokens: result.usage?.inputTokens ?? null,
+      outputTokens: result.usage?.outputTokens ?? null,
+      costModel: "token",
+      webSearchRequests: countChatgptWebSearchCalls(
+        result.content,
+        citedSources.length
+      ),
+      ...attempt.route,
+    },
+  };
+}
+
+const CHATGPT_SEARCH_CTX = {
+  callSite: "engine.chatgpt.web_search",
+  engineId: "chatgpt",
+};
+
+/** 실패한 시도를 기록하고 다음 Gateway 시도의 폴백 사유를 돌려준다. */
+function noteSearchAttemptFailure(
+  attempt: SearchAttempt,
+  error: unknown,
+  fallbackReason: LetsurFallbackReason | null
+): LetsurFallbackReason | null {
+  logProviderFailure("chatgpt", attempt.via === "letsur", error);
+  if (attempt.via === "letsur") {
+    const reason = letsurUnavailableReasonFromError(error);
+    if (reason) {
+      tripLetsurCircuit(reason, CHATGPT_SEARCH_CTX.callSite);
+    }
+    // 분류 안 된 실패(예: 도구 미지원 400)도 Gateway 로 한 번 더 간다.
+    //   단 `ai.letsur.fallback` 로그는 「Letsur 불가」로 분류된 경우만 남긴다(사유를 지어내지 않는다).
+    return reason;
+  }
+  if (fallbackReason) {
+    logLetsurFallback(CHATGPT_SEARCH_CTX, fallbackReason, "failed");
+  }
+  return fallbackReason;
+}
+
+/**
+ * ChatGPT 를 **API + 웹검색**으로 부른다. Letsur → (어떤 실패든) Gateway 순.
+ * 절대 throw 하지 않는다(측정 마감 abort 제외) — 전부 실패하면 오류 응답.
+ */
+export const chatgptApiSearchAdapter: EngineAdapter = async (query) => {
+  const start = Date.now();
+  const attempts = chatgptSearchAttempts();
+  if (attempts.length === 0) {
+    return makeStubResponse("chatgpt", query.prompt, Date.now() - start);
+  }
+  let lastError: unknown = null;
+  // Letsur 를 건너뛰었으면(차단기 열림) 그 사실이 폴백 사유다.
+  let fallbackReason: LetsurFallbackReason | null =
+    attempts[0]?.via === "gateway" && getLetsurProvider()
+      ? "circuit_open"
+      : null;
+  for (const attempt of attempts) {
+    try {
+      const response = await runChatgptSearchAttempt(attempt, query, start);
+      if (attempt.via === "gateway" && fallbackReason) {
+        logLetsurFallback(CHATGPT_SEARCH_CTX, fallbackReason, "ok");
+      }
+      return response;
+    } catch (error) {
+      if (isAbortError(error) || query.signal?.aborted) {
+        throw error;
+      }
+      fallbackReason = noteSearchAttemptFailure(attempt, error, fallbackReason);
+      lastError = error;
+    }
+  }
+  return {
+    engineId: "chatgpt",
+    rawResponse: "",
+    brandMentioned: false,
+    mentionPosition: null,
+    mentionListSize: null,
+    sentiment: null,
+    citedSources: [],
+    shareOfVoice: null,
+    errorMessage:
+      lastError instanceof Error ? lastError.message : String(lastError),
+    durationMs: Date.now() - start,
+    isStub: false,
+  };
+};
 export const claudeAdapter: EngineAdapter = makeGatewayAdapter("claude");
 export const perplexityAdapter: EngineAdapter =
   makeGatewayAdapter("perplexity");
