@@ -18,6 +18,7 @@
 //   🔴 예전엔 `x-vercel-cron` 헤더 폴백이 있었고 그게 **외부에서 스푸핑 가능한 구멍**이었다.
 //      되살리지 말 것 → `packages/security/cron.ts` 주석 참고.
 
+import { continueOldestPendingAudit } from "@repo/audit/audit-continuation";
 import {
   AUDIT_JOB_QUEUE_STALE_ERROR,
   staleAuditJobsWhere,
@@ -29,7 +30,9 @@ import { captureOpsAlert } from "@repo/observability/ops-alert";
 import { denyIfNotCron } from "@repo/security/cron";
 import type { NextRequest } from "next/server";
 
-export const maxDuration = 30;
+// 2026-10-06: 시간창이 지난 이어가기 대기 1건을 잠정 마감한다(새 질문 없음 · 저장된 답의
+//   판정·집계·커밋). 판정 LLM 호출이 있을 수 있어 30초로는 모자라 300초로 올린다.
+export const maxDuration = 300;
 
 // crew 단계 전용 임계값. crew route STALE_AFTER_MS(15분)와 동일.
 const STALE_AFTER_MS = 15 * 60 * 1000;
@@ -80,6 +83,23 @@ export const GET = async (request: NextRequest) => {
     },
   });
 
+  // 3) 🔴 시간창이 지난 이어가기 대기(queued + leaseUntil 경과)는 **실패가 아니라 잠정 마감**.
+  //   위 1)의 queued 정리는 leaseUntil 이 있는 행을 건드리지 않는다(stale-job).
+  //   claim 을 거치므로 같은 순간 늦게 온 이어가기·앱 cron 과 두 번 마감되지 않는다.
+  const continuationStartedAtMs = Date.now();
+  let finalizedContinuation: string | null = null;
+  try {
+    const outcome = await continueOldestPendingAudit({
+      invocationStartedAtMs: continuationStartedAtMs,
+      expiredOnly: true,
+    });
+    finalizedContinuation = outcome?.ran ? outcome.jobId : null;
+  } catch (error) {
+    log.error("cron.sweep-stuck-jobs.continuation_finalize_failed", {
+      error: String(error),
+    });
+  }
+
   const swept = { crew: crew.count, fast: fast.count };
   const tracking = await sweepAuditTrackingReconciliation(now);
   if (
@@ -113,5 +133,9 @@ export const GET = async (request: NextRequest) => {
     });
   }
 
-  return Response.json({ ok: true, swept: { ...swept, tracking } });
+  return Response.json({
+    ok: true,
+    swept: { ...swept, tracking },
+    finalizedContinuation,
+  });
 };

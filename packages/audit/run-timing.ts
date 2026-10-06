@@ -11,6 +11,7 @@ type Stage =
   | "verify_mentions"
   | "verdict_chunk"
   | "aggregate"
+  | "continuation_request"
   | "db_commit";
 interface Detail {
   chunkIndex?: number;

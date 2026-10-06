@@ -37,6 +37,10 @@
 //      → `packages/security/cron.ts` 로 통일(fail closed). **폴백을 되살리지 말 것.**
 
 import {
+  type AuditContinuationOutcome,
+  continueOldestPendingAudit,
+} from "@repo/audit/audit-continuation";
+import {
   type DigestEntry,
   selectDigestEntries,
 } from "@repo/audit/digest-filter";
@@ -308,6 +312,33 @@ async function sendDigests(digestByOrg: DigestByOrg): Promise<number> {
   return sent;
 }
 
+/**
+ * 마감으로 잘린 측정의 이어가기(2026-10-06) — 화면을 닫아도 측정이 끝나게 하는 안전망.
+ *
+ * 이어가기 대기(queued + leaseUntil) 중 가장 오래 기다린 **한 건**만 남은 질문을 잰다.
+ * 고객이 이미 시작한 측정을 마무리하는 일이라 자동 측정 범위 스위치(off 포함)와 무관하게 돈다
+ * — 원가 상한은 Job 당 이어가기 2회(MAX_AUDIT_CONTINUATIONS)다.
+ * 실패를 가둔다(만료·안내 단계와 같은 규칙). 이 실행이 유료 호출을 했으면 새 자동 측정은
+ * 다음 30분 실행으로 미룬다(한 호출 = 유료 실행 1건 · 300초 상한).
+ */
+async function runPendingContinuation(
+  invocationStartedAtMs: number
+): Promise<AuditContinuationOutcome | null> {
+  try {
+    return await continueOldestPendingAudit({ invocationStartedAtMs });
+  } catch (error) {
+    log.error("cron.auto-refresh.continuation_failed", {
+      error: String(error),
+    });
+    return null;
+  }
+}
+
+/** 이어가기가 이번 호출의 유료 실행 1건을 썼으면 새 측정 상한은 0. */
+const triggerLimitAfter = (
+  continuation: AuditContinuationOutcome | null
+): number => (continuation?.ran ? 0 : MAX_TRIGGERS_PER_RUN);
+
 const NO_EXPIRY = { expired: 0, scanned: 0, failed: 0 };
 
 /**
@@ -411,6 +442,9 @@ export const GET = async (request: NextRequest) => {
   // 0-c) 정기결제 갱신 사전 안내(스위치 기본 꺼짐 · Preview 미발송 · 예약 결제당 1통).
   const renewalNotices = await runRenewalNotices(new Date(now));
 
+  // 0-d) 마감으로 잘린 측정 이어가기 — 측정 범위 스위치 **앞**(고객이 시작한 측정의 마무리).
+  const continuation = await runPendingContinuation(invocationStartedAtMs);
+
   // 측정 범위 스위치는 결제 만료(0-b)·갱신 안내(0-c) **뒤**에 둔다 — 측정을 멈춰도
   //   만료 강하와 사전 안내는 계속 돌아야 한다.
   const scope = autoMeasurementScope();
@@ -419,6 +453,7 @@ export const GET = async (request: NextRequest) => {
     return Response.json({
       ok: true,
       autoMeasurement: scope,
+      continuation,
       dueCount: 0,
       triggered: 0,
       digestsSent: 0,
@@ -436,7 +471,8 @@ export const GET = async (request: NextRequest) => {
 
   // 3) 오래된 것 우선, 상한까지만 트리거(원가 보호).
   due.sort((a, b) => a.lastMeasuredMs - b.lastMeasuredMs);
-  const batch = due.slice(0, MAX_TRIGGERS_PER_RUN);
+  // 이어가기가 이번 호출의 유료 실행 1건을 이미 썼으면 새 측정은 다음 실행으로 미룬다.
+  const batch = due.slice(0, triggerLimitAfter(continuation));
 
   let triggered = 0;
   // org별 알림 후보 — 측정이 성공한 브랜드만 담는다(발송은 루프 뒤 한 번에).
@@ -499,6 +535,8 @@ export const GET = async (request: NextRequest) => {
         brandVariants: item.brandVariants,
         organizationId: item.orgId,
         brandId: item.brandId,
+        // 마감으로 질문이 남으면 이어가기 대기로 멈추고 다음 cron 실행이 이어서 잰다.
+        continueWhenTruncated: true,
       });
       const finalized = await database.auditJob.findUnique({
         where: { id: job.id },
@@ -536,6 +574,7 @@ export const GET = async (request: NextRequest) => {
 
   const result = {
     autoMeasurement: scope,
+    continuation,
     dueCount: due.length,
     triggered,
     digestsSent,
@@ -546,7 +585,12 @@ export const GET = async (request: NextRequest) => {
     paymentExpiry.renewalGrace.expired +
     paymentExpiry.cancelledPeriodEnd.expired +
     paymentExpiry.oneOffPeriodEnd.expired;
-  if (triggered > 0 || paymentExpired > 0 || renewalNotices.sent > 0) {
+  if (
+    triggered > 0 ||
+    continuation?.ran ||
+    paymentExpired > 0 ||
+    renewalNotices.sent > 0
+  ) {
     log.info("cron.auto-refresh.triggered", result);
   }
   return Response.json({ ok: true, ...result });

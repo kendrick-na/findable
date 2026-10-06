@@ -72,6 +72,25 @@ describe("serverless audit timeout recovery", () => {
     );
   });
 
+  it("never fails a continuation wait, even after its window ends (it is finalized as provisional instead)", async () => {
+    const pending = {
+      ...oldJob,
+      status: "queued" as const,
+      createdAt: new Date(Date.now() - AUDIT_JOB_QUEUE_STALE_AFTER_MS - 60_000),
+      attemptStartedAt: new Date(
+        Date.now() - AUDIT_JOB_QUEUE_STALE_AFTER_MS - 60_000
+      ),
+      leaseUntil: new Date(Date.now() + 60_000),
+    };
+    expect(isStaleAuditJob(pending)).toBe(false);
+    expect(await reconcileStaleAuditJob(pending)).toBe("queued");
+
+    const expired = { ...pending, leaseUntil: new Date(Date.now() - 1000) };
+    expect(isStaleAuditJob(expired)).toBe(false);
+    expect(await reconcileStaleAuditJob(expired)).toBe("queued");
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
   it("expires an abandoned execution lease", async () => {
     updateMany.mockResolvedValue({ count: 1 });
     const expired = {

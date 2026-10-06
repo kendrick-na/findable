@@ -16,8 +16,20 @@ export interface AuditCheckpointContext {
   officialSiteIdentity: OfficialSiteIdentity;
 }
 
+export interface AuditCheckpointContinuation {
+  /** 지금까지 허락된 이어가기 횟수(1부터). MAX_AUDIT_CONTINUATIONS 를 넘지 않는다. */
+  count: number;
+  /** 마지막으로 이어가기를 요청한 시각(ISO). 관측용. */
+  requestedAt: string;
+}
+
 export interface AuditCheckpoint {
   context: AuditCheckpointContext;
+  /**
+   * 마감(질문 시작 상한)으로 잘린 회차의 이어가기 기록(2026-10-06).
+   * 없으면 아직 한 번도 이어가지 않은 회차다. 질문 계획(planKey)에는 들어가지 않는다.
+   */
+  continuation?: AuditCheckpointContinuation;
   /** Bump when provider selection or adapter semantics change. Old plans fail closed. */
   engineConfigVersion: 1;
   enginePlan: string[][];
@@ -42,6 +54,11 @@ export interface AuditCheckpoint {
 export const MAX_AUDIT_ATTEMPTS = 3;
 export const MAX_NO_PROGRESS_FAILURES = 2;
 export const MAX_CHECKPOINT_AGE_MS = 24 * 60 * 60 * 1000;
+/**
+ * 마감으로 잘린 회차를 새 함수 호출로 이어 측정하는 최대 횟수(2026-10-06 관제탑 결정).
+ * 원래 실행 1회 + 이어가기 2회 = 최대 3번의 호출. 그래도 남으면 오늘처럼 잠정으로 마감한다.
+ */
+export const MAX_AUDIT_CONTINUATIONS = 2;
 
 /** Bind a checkpoint to its original Job, not merely to a matching brand. */
 export function assertCheckpointProvenance(
@@ -125,6 +142,14 @@ const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const nullableString = (value: unknown): boolean =>
   value === null || typeof value === "string";
+const validContinuation = (value: unknown): boolean =>
+  value === undefined ||
+  (object(value) &&
+    Number.isInteger(value.count) &&
+    (value.count as number) >= 1 &&
+    (value.count as number) <= MAX_AUDIT_CONTINUATIONS &&
+    typeof value.requestedAt === "string" &&
+    Number.isFinite(Date.parse(value.requestedAt)));
 
 /** Refuse corrupt or cross-brand checkpoints before any paid provider call. */
 export function readAuditCheckpoint(
@@ -163,6 +188,7 @@ export function readAuditCheckpoint(
     (retry.attemptStartResponses as number) < 0 ||
     !Number.isInteger(retry.noProgressFailures) ||
     (retry.noProgressFailures as number) < 0 ||
+    !validContinuation(value.continuation) ||
     !object(context) ||
     typeof context.brandName !== "string" ||
     !Array.isArray(context.brandVariants) ||

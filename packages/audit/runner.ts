@@ -40,6 +40,7 @@ import {
 } from "./answer-buckets";
 import {
   claimAuditExecution,
+  requestAuditContinuation,
   saveQuestionCheckpoint,
 } from "./audit-execution-lease";
 import {
@@ -55,6 +56,7 @@ import { checkBrandNameAgainstSite } from "./brand-name-check";
 import {
   type AuditCheckpoint,
   assertCheckpointProvenance,
+  MAX_AUDIT_CONTINUATIONS,
   makeAuditCheckpoint,
   readAuditCheckpoint,
 } from "./checkpoint";
@@ -119,11 +121,24 @@ export interface AuditRunInput {
   brandName?: string;
   brandVariants?: string[];
   /**
+   * 마감(질문 시작 상한)으로 질문이 남으면 잠정 공개 대신 「이어가기 대기」로 멈출지(2026-10-06).
+   * 이어가기를 실제로 집어 갈 주체(측정 화면 폴링·30분 cron)가 있는 호출부만 켠다.
+   * 꺼져 있거나(무료 진단·관리자 1건 측정) 이어가기를 MAX_AUDIT_CONTINUATIONS 번 다 썼으면
+   * 기존 계약대로 잠정(provisional)으로 마감한다.
+   */
+  continueWhenTruncated?: boolean;
+  /**
    * 고객이 앱에서 입력한 상호·사업자등록번호(Brand.legalName·businessNumber).
    * 홈페이지 푸터에서 읽은 값보다 우선한다(필드별). 없으면 푸터 값 그대로.
    */
   customerIdentity?: CustomerIdentityInput;
   domain: string;
+  /**
+   * 이어가기 대기 시간창이 지난 회차를 **새 질문 없이** 잠정으로 마감한다(2026-10-06).
+   * checkpoint 에 저장된 답만으로 집계·완료 커밋·Tracking(1회)을 한다 — 이어가기 이전의
+   * 「잘리면 잠정 공개」 계약과 같다. 저장된 checkpoint 가 없으면 실패한다(새 측정 금지).
+   */
+  finalizeOnly?: boolean;
   /**
    * 업종(AuditJob.industry). 언급 품질 검증에서 동명이인 분별 단서로 쓴다
    * ("기아"가 자동차인지 야구단인지). 없어도 동작하며, 있으면 판정 정확도가 올라간다.
@@ -610,6 +625,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     if (!savedJob) {
       throw new Error("Audit job disappeared after claim");
     }
+    if (input.finalizeOnly && !savedCheckpoint) {
+      throw new Error("Audit finalize-only run has no saved checkpoint");
+    }
     if (savedCheckpoint) {
       assertCheckpointProvenance(savedCheckpoint, savedJob.createdAt);
       assertCheckpointMode(savedCheckpoint, ai.stubMode);
@@ -871,13 +889,54 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             });
           },
           // 마감(270초) 전 35초 미만이면 새 질문을 시작하지 않고 저장된 지점에서 멈춘다.
+          //   잠정 마감 전용 실행(finalizeOnly)은 마감을 시작 시각으로 둬 유료 질문을
+          //   하나도 시작하지 않는다(저장된 답만 쓴다).
           {
             invocationStartedAtMs: budget.invocationStartedAtMs,
-            stopStartingAtMs: budget.stopStartingAtMs,
+            stopStartingAtMs: input.finalizeOnly
+              ? budget.invocationStartedAtMs
+              : budget.stopStartingAtMs,
           }
         ),
       { promptCount: prompts.length }
     );
+
+    // 🔴 마감으로 질문이 남았을 때의 이어가기(2026-10-06).
+    //   남은 질문이 있고 이어가기 횟수가 남았으면 여기서 멈춘다: 집계·완료 커밋·Tracking·PDF
+    //   어느 것도 하지 않는다(시계열·추세는 최종 완료 때 **한 번만** 반영된다).
+    //   checkpoint 에 받은 답이 그대로 남아 다음 호출은 남은 질문만 묻는다.
+    //   다 썼으면 아래로 내려가 기존 계약대로 잠정(provisional) 공개한다.
+    const remainingQuestions = prompts.length - sevenEngineResponses.length;
+    const continuationsUsed = checkpoint.continuation?.count ?? 0;
+    if (
+      remainingQuestions > 0 &&
+      input.continueWhenTruncated &&
+      !input.finalizeOnly &&
+      continuationsUsed < MAX_AUDIT_CONTINUATIONS
+    ) {
+      const continuation = {
+        count: continuationsUsed + 1,
+        requestedAt: new Date().toISOString(),
+      };
+      const requeued = await timed("continuation_request", () =>
+        requestAuditContinuation(input.jobId, leaseToken, {
+          ...checkpoint,
+          responses: sevenEngineResponses,
+          continuation,
+        })
+      );
+      if (!requeued) {
+        throw new Error("Audit continuation lost its processing job");
+      }
+      log.info("audit.continuation.requested", {
+        jobId: input.jobId,
+        completedQuestions: sevenEngineResponses.length,
+        totalQuestions: prompts.length,
+        continuation: continuation.count,
+      });
+      finishJob();
+      return;
+    }
 
     // 20번(dual-write): flat() 하면 각 응답이 어느 프롬프트에서 나왔는지 소실된다.
     //   Tracking은 promptId(=프롬프트별)로 정규화 저장하므로, flat 이전에 프롬프트 원문/언어를
@@ -1095,6 +1154,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         resume: {
           originCreatedAt: checkpoint.originCreatedAt,
           attempt: checkpoint.retry.attempt,
+          // 이어가기를 한 회차만 남긴다(없던 키라 기존 회차 결과는 그대로).
+          ...(checkpoint.continuation
+            ? { continuations: checkpoint.continuation.count }
+            : {}),
         },
         officialSiteIdentity,
         // A customer-confirmed organisation brand may run when its public site
@@ -1345,6 +1408,25 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       return;
     }
     finishJob();
+    // 이어가기를 거친 회차의 끝(완료 커밋이 실제로 된 뒤에만 남긴다).
+    if (checkpoint.continuation || input.finalizeOnly) {
+      log.info(
+        remainingQuestions === 0
+          ? "audit.continuation.completed"
+          : "audit.continuation.finalized_provisional",
+        {
+          jobId: input.jobId,
+          completedQuestions: sevenEngineResponses.length,
+          totalQuestions: prompts.length,
+          continuation: continuationsUsed,
+          ...(remainingQuestions > 0
+            ? {
+                reason: input.finalizeOnly ? "window_expired" : "limit_reached",
+              }
+            : {}),
+        }
+      );
+    }
     // 원가계기(유닛이코노믹스): 진단 1건 실비용을 로그로도 실측 축적(result.cost 와 동일).
     log.info("audit.job.completed", {
       jobId: input.jobId,
