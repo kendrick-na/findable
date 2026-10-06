@@ -57,8 +57,11 @@ export const PLAN_META: Record<Plan, PlanMeta> = {
   growth: {
     label: "Growth",
     tone: "gradient",
+    // 🔴 2026-10-06(👤 승인) — 「리포트 Export」 를 뺐다: 리포트 내보내기(Notion·Docs)는 아직 없고,
+    //   데이터 내보내기(CSV)는 Starter 부터 열린다. 「자동 추적」 은 Starter 도 주간으로 있어
+    //   Growth 의 실제 차이인 「매일」 로 적는다. 화면 문구는 사전 `app.billing.blurbGrowth`.
     blurb:
-      "경쟁사 비교·자동 추적·리포트 Export가 열리는 성장 플랜입니다. 추적 프롬프트 150개·5 브랜드.",
+      "경쟁사 비교·매일 자동 측정이 열리는 성장 플랜입니다. 추적 질문 150개·5 브랜드.",
   },
   scale: {
     label: "Scale",
