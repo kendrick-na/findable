@@ -71,6 +71,30 @@ const WEB_SEARCH_USD_PER_REQUEST: Partial<Record<EngineId, number>> = {
 };
 
 /**
+ * Vercel AI Gateway 경로(Letsur 불가 폴백 포함)의 **모델별** 단가 — 2026-10-07 확인.
+ *   근거 ① https://vercel.com/docs/ai-gateway/pricing — *"AI Gateway charges no markup and
+ *        no platform fee on tokens. You pay the provider's list price"* (토큰 정가 그대로).
+ *   근거 ② https://ai-gateway.vercel.sh/v1/models 의 `pricing`(USD/token · web_search USD/1,000회).
+ * ⚠️ 슬러그가 여기 없으면(FINDABLE_MODEL_* 로 바꾼 경우) 엔진 기본 단가로 **추정하지 않고**
+ *   `unknown`(단가 미등록)으로 남긴다 — 다른 모델 값을 빌려 쓰면 원가가 조용히 틀린다.
+ */
+interface GatewayPrice extends TokenPrice {
+  webSearchUsdPerRequest?: number;
+}
+const GATEWAY_MODEL_PRICES: Record<string, GatewayPrice> = {
+  "anthropic/claude-sonnet-4.6": {
+    inputPerM: 3,
+    outputPerM: 15,
+    webSearchUsdPerRequest: 10 / 1000,
+  },
+  // <272K 컨텍스트 구간(우리 호출은 전부 이 구간).
+  "openai/gpt-5.4": { inputPerM: 2.5, outputPerM: 15 },
+  "anthropic/claude-haiku-4.5": { inputPerM: 1, outputPerM: 5 },
+  "perplexity/sonar": { inputPerM: 0.25, outputPerM: 2.5 },
+  "google/gemini-2.5-flash": { inputPerM: 0.3, outputPerM: 2.5 },
+};
+
+/**
  * Firecrawl `/v2/scrape` 1회 = 1크레딧(rawHtml 형식, enhanced 프록시 할증 없음).
  *   출처: https://www.firecrawl.dev/pricing ("Scrape … 1 / page"),
  *        https://docs.firecrawl.dev/api-reference/endpoint/scrape ("Enhanced proxies carry no credit surcharge")
@@ -131,6 +155,49 @@ function webSearchFee(res: EngineResponse): { usd: number; note?: string } {
   return { usd: count * perRequest, note: `웹검색 ${count}회` };
 }
 
+// Gateway 경로: 실제로 응답한 모델 슬러그의 단가로 계산한다.
+function gatewayTokenCost(res: EngineResponse): EngineCost {
+  const { engineId, usage } = res;
+  const modelId = usage?.modelId;
+  const price = modelId ? GATEWAY_MODEL_PRICES[modelId] : undefined;
+  const route =
+    usage?.fallback === "gateway" ? "Letsur→Gateway 폴백" : "Gateway";
+  if (!price) {
+    return {
+      engineId,
+      krw: 0,
+      basis: "unknown",
+      note: `${route} · 모델 단가 미등록(${modelId ?? "모델 미기록"})`,
+    };
+  }
+  if (usage?.inputTokens == null || usage?.outputTokens == null) {
+    return {
+      engineId,
+      krw: 0,
+      basis: "unknown",
+      note: `${route} · 토큰 미측정`,
+    };
+  }
+  const searches = usage.webSearchRequests;
+  const searchUsd =
+    price.webSearchUsdPerRequest !== undefined && isFiniteNonNegative(searches)
+      ? searches * price.webSearchUsdPerRequest
+      : 0;
+  const usd =
+    (usage.inputTokens / 1_000_000) * price.inputPerM +
+    (usage.outputTokens / 1_000_000) * price.outputPerM +
+    searchUsd;
+  return {
+    engineId,
+    krw: usd * USD_TO_KRW,
+    basis: "token",
+    note:
+      searchUsd > 0
+        ? `${route} · ${modelId} · 웹검색 ${searches}회`
+        : `${route} · ${modelId}`,
+  };
+}
+
 function tokenCost(res: EngineResponse): EngineCost {
   const { engineId, usage } = res;
   // provider 가 직접 계산한 원가가 있으면 그게 정답이다(토큰·도구료 포함).
@@ -141,6 +208,9 @@ function tokenCost(res: EngineResponse): EngineCost {
       basis: "token",
       note: "provider 보고 원가(USD)",
     };
+  }
+  if (usage?.provider === "gateway") {
+    return gatewayTokenCost(res);
   }
   const price = TOKEN_PRICES[engineId];
   if (!(price && usage?.inputTokens != null && usage?.outputTokens != null)) {

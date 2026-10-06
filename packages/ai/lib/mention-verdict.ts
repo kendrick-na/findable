@@ -20,13 +20,16 @@
 //    그게 의도다 — 기존 점수가 부풀려져 있었다.
 
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { getDomain } from "tldts";
 import { z } from "zod";
 import { describeProviderError, isAbortError } from "./engines/provider-error";
 import { detectBrandMention } from "./engines/utils";
+import {
+  HELPER_GATEWAY_MODEL_ID,
+  letsurModelWithFallback,
+} from "./letsur-fallback";
 
 export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
 
@@ -34,13 +37,13 @@ const LETSUR_VERDICT_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
 
 export async function verdictModel() {
-  const letsurKey = process.env.LETSUR_API_KEY;
-  if (letsurKey) {
-    const letsur = createOpenAI({
-      baseURL: "https://gw.letsur.ai/v1",
-      apiKey: letsurKey,
-    });
-    return letsur(LETSUR_VERDICT_MODEL_ID);
+  // 🔴 Letsur 불가(유닛 소진·만료·인증)면 같은 호출을 Gateway 로 명시적 폴백(letsur-fallback.ts).
+  const letsur = letsurModelWithFallback(LETSUR_VERDICT_MODEL_ID, {
+    callSite: "mention-verdict",
+    gatewayModelId: HELPER_GATEWAY_MODEL_ID,
+  });
+  if (letsur) {
+    return letsur;
   }
   // `models` reads server-only API keys at module evaluation time. Load it only
   // when an ambiguous response really needs an LLM verdict; pure rule tests and

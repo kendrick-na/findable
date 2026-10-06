@@ -123,13 +123,29 @@ export interface EngineUsage {
    * 공식 단가표: scrape 1크레딧/페이지, enhanced 프록시 할증 없음.
    */
   creditsUsed?: number | null;
+  /**
+   * Letsur 불가로 Vercel AI Gateway 에 **대신** 보낸 호출이면 `"gateway"`(2026-10-07 신설).
+   * 원래 경로(Letsur·직접 키)로 끝난 호출에는 붙지 않는다.
+   */
+  fallback?: "gateway";
   inputTokens: number | null;
+  /** 실제로 응답한 모델 슬러그(Gateway 경로에서만 채움). cost.ts 가 이 모델 단가로 계산한다. */
+  modelId?: string;
   outputTokens: number | null;
+  /**
+   * 실제 청구 경로. `"gateway"` = Vercel AI Gateway(Letsur 폴백 포함). 미기재 = 기존 직접 경로.
+   */
+  provider?: "gateway";
   /**
    * provider 가 **응답에 직접 적어 준** 이번 호출 총원가(USD). 있으면 단가표 계산보다 우선한다.
    * 현재 Perplexity Agent API(`usage.cost.total_cost`)만 채운다. 원가모델 v2 신설.
    */
   providerCostUsd?: number | null;
+  /**
+   * claude 웹검색을 원했지만(FINDABLE_CLAUDE_WEB_SEARCH=1) 폴백 경로에서 **검색 없이** 답했다.
+   * → 이 응답의 「출처 0」은 「AI 가 아무것도 안 봤다」가 아니라 **미수집**이다.
+   */
+  searchUnavailable?: boolean;
   /**
    * 이번 호출에서 provider 가 실행·과금한 웹검색 횟수. 원가모델 v2 신설.
    *   · claude 웹검색 경로: `usage.server_tool_use.web_search_requests`

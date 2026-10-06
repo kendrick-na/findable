@@ -6,11 +6,14 @@
 // 판정(detectBrandMention)은 [brandName, ...variants] 전부를 substring 매칭하므로
 // variants에 "설화수"가 들어가기만 하면 됨. 프롬프트에는 대표명(한글 우선) 사용.
 
-import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { isAbortError } from "./engines/provider-error";
+import {
+  HELPER_GATEWAY_MODEL_ID,
+  letsurModelWithFallback,
+} from "./letsur-fallback";
 import { models } from "./models";
 
 // LLM 추론 모델 — Letsur 키 우선(결함감사 §20-보강, 2026-07-30).
@@ -21,13 +24,13 @@ const LETSUR_BRAND_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
 
 function brandInferModel() {
-  const letsurKey = process.env.LETSUR_API_KEY;
-  if (letsurKey) {
-    const letsur = createOpenAI({
-      baseURL: "https://gw.letsur.ai/v1",
-      apiKey: letsurKey,
-    });
-    return letsur(LETSUR_BRAND_MODEL_ID);
+  // 🔴 Letsur 불가(유닛 소진·만료·인증)면 같은 호출을 Gateway 로 명시적 폴백(letsur-fallback.ts).
+  const letsur = letsurModelWithFallback(LETSUR_BRAND_MODEL_ID, {
+    callSite: "brand-identity",
+    gatewayModelId: HELPER_GATEWAY_MODEL_ID,
+  });
+  if (letsur) {
+    return letsur;
   }
   return models.chat;
 }

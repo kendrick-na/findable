@@ -20,10 +20,13 @@
 //   - 확신 없으면 other/mixed. 추측으로 채우지 않는다(환각 방지, brand-identity 동일 정책).
 //   - LLM 실패해도 동작해야 한다 → 전 구간 폴백.
 
-import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
+import {
+  HELPER_GATEWAY_MODEL_ID,
+  letsurModelWithFallback,
+} from "./letsur-fallback";
 import { models } from "./models";
 
 /** DB Industry enum과 정렬 (packages/database/prisma/schema.prisma). */
@@ -291,13 +294,13 @@ const LETSUR_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
 
 function industryInferModel() {
-  const letsurKey = process.env.LETSUR_API_KEY;
-  if (letsurKey) {
-    const letsur = createOpenAI({
-      baseURL: "https://gw.letsur.ai/v1",
-      apiKey: letsurKey,
-    });
-    return letsur(LETSUR_MODEL_ID);
+  // 🔴 Letsur 불가(유닛 소진·만료·인증)면 같은 호출을 Gateway 로 명시적 폴백(letsur-fallback.ts).
+  const letsur = letsurModelWithFallback(LETSUR_MODEL_ID, {
+    callSite: "industry-profile",
+    gatewayModelId: HELPER_GATEWAY_MODEL_ID,
+  });
+  if (letsur) {
+    return letsur;
   }
   return models.chat;
 }

@@ -11,10 +11,13 @@
 // 패턴: brand-identity.ts와 동일 — generateObject + zod + Letsur haiku 라우팅 + confident
 //   게이트 + 실패 시 정적 폴백(환각·조용한 실패 방지).
 
-import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
+import {
+  HELPER_GATEWAY_MODEL_ID,
+  letsurModelWithFallback,
+} from "./letsur-fallback";
 import { models } from "./models";
 
 // brand-identity.ts와 동일 모델 라우팅(Letsur haiku 우선, 구조화 출력 라이브 검증됨).
@@ -22,13 +25,13 @@ const LETSUR_SUGGEST_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
 
 function suggestModel() {
-  const letsurKey = process.env.LETSUR_API_KEY;
-  if (letsurKey) {
-    const letsur = createOpenAI({
-      baseURL: "https://gw.letsur.ai/v1",
-      apiKey: letsurKey,
-    });
-    return letsur(LETSUR_SUGGEST_MODEL_ID);
+  // 🔴 Letsur 불가(유닛 소진·만료·인증)면 같은 호출을 Gateway 로 명시적 폴백(letsur-fallback.ts).
+  const letsur = letsurModelWithFallback(LETSUR_SUGGEST_MODEL_ID, {
+    callSite: "prompt-suggestions",
+    gatewayModelId: HELPER_GATEWAY_MODEL_ID,
+  });
+  if (letsur) {
+    return letsur;
   }
   return models.chat;
 }
