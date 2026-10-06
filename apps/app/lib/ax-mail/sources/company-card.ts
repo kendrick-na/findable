@@ -1,5 +1,6 @@
 import "server-only";
 
+import { type ContactEmailResult, findContactEmails } from "./contact-email";
 import { type FscCorpOutline, fetchFscCorp } from "./fsc-corp";
 import { normalizeBizNo } from "./http";
 import { fetchMfdsCosmetics, type MfdsPage } from "./mfds-cosmetics";
@@ -15,6 +16,8 @@ import { type DartCompany, type DartResult, fetchDart } from "./opendart";
  *  - 소스가 비면 칸도 null. 다른 칸으로 추정해서 채우지 않는다(예: 직원수로 매출 추정 금지).
  *  - 매출은 DART 사업보고서에서만, 사업연도·접수번호와 함께. 비상장 중소기업은 대부분 null 이 정상이다.
  *  - 「직원수」(금융위 종업원수)와 「국민연금 가입자수」는 뜻이 달라 칸을 나눈다.
+ *  - 연락처(contacts)는 도메인이 있을 때만 — 회사 홈페이지에 **공개된** 문의·제휴 메일(`./contact-email.ts`).
+ *    후보마다 찾은 페이지 주소·시각이 붙는다(수신 근거 ④ public_contact 에 그대로 남긴다).
  */
 
 export type CardSource = "nts" | "fsc" | "nps" | "mfds" | "opendart" | "input";
@@ -43,6 +46,12 @@ export interface CompanyCardQuery {
   name: string;
 }
 
+/** 연락처 칸 — 공개 페이지에서 찾은 회사 메일 후보(순위순, 개인정보보호책임자는 맨 뒤). */
+export interface CompanyContacts extends ContactEmailResult {
+  fetchedAt: string;
+  source: "website";
+}
+
 export interface CompanyCard {
   address: Fact<string> | null;
   /** 국세청 상태 (계속/휴업/폐업) */
@@ -51,6 +60,8 @@ export interface CompanyCard {
     state: NtsStatus["state"];
     closedOn: string | null;
   }> | null;
+  /** 도메인 없으면 null */
+  contacts: CompanyContacts | null;
   /** 식약처 화장품 업 등록(책임판매·제조) */
   cosmeticsLicenses: Fact<
     { kind: string | null; permittedOn: string | null; region: string | null }[]
@@ -82,6 +93,8 @@ export interface CompanyCard {
 
 /** 소스별 원 결과 — undefined = 호출 안 함, null = 사용 불가 */
 export interface SourceResults {
+  /** 홈페이지 공개 메일 — 도메인 있을 때만 호출 */
+  contacts?: ContactEmailResult | null;
   fsc?: FscCorpOutline[] | null;
   mfds?: MfdsPage | null;
   nps?: NpsWorkplace | null;
@@ -278,6 +291,19 @@ export function mergeCompanyCard(
       fact(fsc?.address, "fsc", fetchedAt, fscAsOf),
       fact(nps?.address, "nps", fetchedAt, npsAsOf)
     ),
+    contacts:
+      domain && results.contacts !== undefined
+        ? {
+            ...(results.contacts ?? {
+              candidates: [],
+              checkedUrls: [],
+              skippedReason: "unavailable",
+              status: "unavailable" as const,
+            }),
+            fetchedAt,
+            source: "website",
+          }
+        : null,
     businessStatus: nts
       ? fact(
           { closedOn: nts.closedOn, label: nts.stateLabel, state: nts.state },
@@ -365,8 +391,9 @@ export async function buildCompanyCard(
 ): Promise<CompanyCard> {
   const now = options.now ?? new Date();
   const bizNo = normalizeBizNo(query.businessNumber);
+  const domain = normalizeDomain(query.domain);
   const common = { signal: options.signal, timeoutMs: options.timeoutMs };
-  const [nts, fsc, nps, mfds, opendart] = await Promise.all([
+  const [nts, fsc, nps, mfds, opendart, contacts] = await Promise.all([
     bizNo ? fetchNtsStatus(bizNo, common) : Promise.resolve(undefined),
     fetchFscCorp({ businessNumber: bizNo, name: query.name }, common),
     fetchNpsWorkplace({ businessNumber: bizNo, name: query.name }, common),
@@ -375,10 +402,17 @@ export async function buildCompanyCard(
       ? fetchMfdsCosmetics({ businessNumber: bizNo }, common)
       : Promise.resolve(undefined),
     fetchDart({ businessNumber: bizNo, name: query.name }, { ...common, now }),
+    domain
+      ? findContactEmails({
+          brandNames: [query.name],
+          domain,
+          signal: options.signal,
+        })
+      : Promise.resolve(undefined),
   ]);
   return mergeCompanyCard(
     query,
-    { fsc, mfds, nps, nts, opendart },
+    { contacts, fsc, mfds, nps, nts, opendart },
     now.toISOString()
   );
 }
