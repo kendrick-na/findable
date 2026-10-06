@@ -4,12 +4,13 @@
 //   Vercel Serverless 는 Browserbase 로 나가는 아웃바운드 WebSocket(wss/connectOverCDP)을
 //   구조적으로 못 맺는다(region·timeout 무관, 2026-07-29 실측 확정).
 //   → WebSocket 을 버리고 Firecrawl `/v2/scrape` HTTP 한 방으로 렌더된 HTML 을 받는다.
-//   Browserbase·playwright-core 의존성 제거. 네이버 KR 캡차는 Firecrawl location=KR 에 위임.
+//   Browserbase·playwright-core 의존성 제거. 한국 지역 렌더는 Firecrawl location=KR 로 요청한다.
 //   상세=메모리 reference_vercel_browserbase_stagehand.
 //
 // 동작:
-//   1. Firecrawl POST /v2/scrape (url=네이버 검색, rawHtml, location KR, waitFor)
+//   1. Firecrawl POST /v2/scrape (url=네이버 검색, rawHtml, location KR, waitFor, proxy=NAVER_BRIEFING_PROXY)
 //   2. 응답 HTML 에서 AI 브리핑 블록([data-block-id^="ai-briefing"]) 문자열 파싱
+//      — 블록이 없고 봇 확인·접근 제한 화면이면 `[봇확인]` 실패로 기록(우회·재시도 없음)
 //   3. 브랜드 언급/출처 추출
 //
 // ✅ 캡차 검증 완료(2026-08-17 세션N-38) — 이 주석의 *"라이브 검증 필요"* 는 **낡았다**.
@@ -37,6 +38,53 @@ import {
 } from "./utils";
 
 const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v2/scrape";
+
+/**
+ * Firecrawl 프록시 모드 — env `NAVER_BRIEFING_PROXY` = `basic` | `auto` (2026-10-07 CEO 결정).
+ *
+ * 방침: 네이버 AI 브리핑 측정은 계속하되 **봇 확인(캡차)을 피해 가는 동작은 쓰지 않는다.**
+ *
+ * 각 모드가 하는 일 — Firecrawl 공식 문서(https://docs.firecrawl.dev/features/proxies,
+ * 2026-10-07 확인) 원문 요지:
+ *   - `basic`: 대부분의 사이트용 기본 프록시. 실패하면 그대로 실패로 돌아온다.
+ *   - `auto` : basic 이 실패하면 Firecrawl 이 **enhanced 프록시로 자동 재시도**한다.
+ *   - (`enhanced` 는 복잡한 사이트용 프록시 — 여기서는 받지 않는다.)
+ *   과금은 모드와 무관하게 1크레딧/scrape — 공식 과금 문서(https://docs.firecrawl.dev/billing):
+ *   enhanced·auto 승격은 "+0", 승격 재시도는 따로 과금되지 않는다.
+ *
+ * 기본값은 **`auto`(기존 동작 유지)** — 운영 확인 전에 프로덕션 성공률이 바뀌지 않게 하기 위함.
+ * 👤 운영 할 일: `NAVER_BRIEFING_PROXY=basic` 으로 바꾼 뒤 `audit.briefing.*` 로그·저장된
+ *   errorMessage 로 성공률(노출/미노출 vs 실패·`[봇확인]` 비율)을 확인하고, 문제없으면 basic 고정.
+ * 어느 모드든 우리 코드는 봇 확인 화면을 만나면 **깨끗한 실패**로 기록하고 끝낸다 —
+ *   더 강한 프록시로 다시 요청하지 않는다(`detectNaverChallenge`).
+ * 허용값 외(빈 값·오타·`enhanced`)는 기본값 `auto` 로 본다.
+ */
+export type NaverBriefingProxyMode = "basic" | "auto";
+
+export const DEFAULT_NAVER_BRIEFING_PROXY: NaverBriefingProxyMode = "auto";
+
+export function naverBriefingProxyMode(
+  raw: string | undefined = process.env.NAVER_BRIEFING_PROXY
+): NaverBriefingProxyMode {
+  const v = raw?.trim().toLowerCase();
+  if (v === "basic" || v === "auto") {
+    return v;
+  }
+  return DEFAULT_NAVER_BRIEFING_PROXY;
+}
+
+/**
+ * 봇 확인·접근 제한 화면 표지. **브리핑 블록이 없을 때만** 검사한다(정상 SERP 오탐 방지).
+ * ⚠️ 네이버 차단 화면의 실제 문구는 이 저장소에서 아직 채집된 적이 없다 — [확인필요].
+ *   일반적인 캡차/챌린지 표지(Cloudflare 계열 포함)로 보수적으로 잡는다.
+ */
+const NAVER_CHALLENGE_RE =
+  /ncaptcha|자동입력 ?방지|비정상적인 (?:검색|접근|요청)|일시적으로 제한|challenges\.cloudflare\.com|cf-chl-|cf-turnstile|Verify you are human/i;
+
+/** 응답 HTML 이 봇 확인·접근 제한 화면인가. 테스트용 export. */
+export function detectNaverChallenge(html: string): boolean {
+  return NAVER_CHALLENGE_RE.test(html);
+}
 const STUB_NOTICE =
   "[STUB] 네이버 AI 브리핑 추적은 FIRECRAWL_API_KEY 설정이 필요합니다.";
 
@@ -292,7 +340,9 @@ export const naverBriefingAdapter: EngineAdapter = async (query) => {
         onlyMainContent: false, // AI 브리핑 블록 유지 위해 전체 페이지 필요.
         waitFor: 3500, // JS 렌더 대기(AI 브리핑 동적 로딩).
         location: { country: "KR", languages: ["ko-KR"] },
-        proxy: "auto", // basic 실패 시 enhanced 재시도(네이버 캡차 대응).
+        // basic=기본 프록시만 · auto=basic 실패 시 Firecrawl 이 enhanced 로 자동 재시도.
+        //   기본 auto(기존 유지) — 위 `naverBriefingProxyMode` 주석의 운영 전환 절차 참고.
+        proxy: naverBriefingProxyMode(),
         timeout: 60_000,
       }),
       signal: query.signal,
@@ -332,6 +382,15 @@ export const naverBriefingAdapter: EngineAdapter = async (query) => {
     }
 
     const block = extractBriefingBlock(html);
+    if (!block && detectNaverChallenge(html)) {
+      // 봇 확인·접근 제한 화면 — 우회하지 않는다. 「미노출」로 오기록하지 않고 실패로 남긴다.
+      //   렌더는 됐으므로 크레딧은 나갔다(1크레딧 산입).
+      return makeErrorResponse(
+        `${BRIEFING_FAIL_PREFIX.challenge} 네이버가 봇 확인·접근 제한 화면을 반환 — 우회하지 않고 실패로 기록`,
+        Date.now() - start,
+        FIRECRAWL_CREDITS_PER_SCRAPE
+      );
+    }
     if (!block) {
       return makeErrorResponse(
         "AI 브리핑 미노출 — 이 질의에는 네이버 AI 브리핑이 표시되지 않습니다 (정답형/탐색형 아님)",

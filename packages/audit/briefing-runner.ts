@@ -51,8 +51,18 @@ function isUnrecoverableBriefingFailure(
   }
   return (
     errorMessage.startsWith(BRIEFING_FAIL_PREFIX.credits) ||
-    errorMessage.startsWith(BRIEFING_FAIL_PREFIX.auth)
+    errorMessage.startsWith(BRIEFING_FAIL_PREFIX.auth) ||
+    // 봇 확인 화면(2026-10-07) — 우회하지 않는다. 다른 질의로 다시 두드리지 않고 멈춘다.
+    errorMessage.startsWith(BRIEFING_FAIL_PREFIX.challenge)
   );
+}
+
+/** 즉시 멈춘 실패의 운영자 안내 한 줄. */
+function unrecoverableBriefingHint(errorMessage: string | null): string {
+  if (errorMessage?.startsWith(BRIEFING_FAIL_PREFIX.challenge)) {
+    return "네이버 봇 확인 화면 — 우회하지 않고 실패로 기록했습니다(재시도 없음).";
+  }
+  return "Firecrawl 크레딧 충전 또는 FIRECRAWL_API_KEY 재설정이 필요합니다.";
 }
 
 // runner.ts의 result 형태 (JSON deserialize 후). EngineId 브랜딩은 소실됨.
@@ -409,7 +419,7 @@ export async function runBriefingForAuditJob(
           jobId,
           reason: first.errorMessage?.slice(0, 200),
           attemptedPrompts: i,
-          hint: "Firecrawl 크레딧 충전 또는 FIRECRAWL_API_KEY 재설정이 필요합니다.",
+          hint: unrecoverableBriefingHint(first.errorMessage),
         });
         break;
       }
