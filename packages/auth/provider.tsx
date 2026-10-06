@@ -1,6 +1,6 @@
 "use client";
 
-import { koKR } from "@clerk/localizations";
+import { enUS, koKR } from "@clerk/localizations";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import type { Theme } from "@clerk/types";
@@ -29,13 +29,23 @@ const localization = {
   formFieldInputPlaceholder__password: "비밀번호를 입력하세요",
 };
 
+// 영어 화면용(2026-10-06). 같은 이유로 소셜 버튼 짧은 라벨만 문장으로 덮는다
+//   (enUS 원본: ManyInView = "{{provider|titleize}}", 긴 라벨 = "Continue with …").
+const localizationEn = {
+  ...enUS,
+  socialButtonsBlockButtonManyInView: "Continue with {{provider|titleize}}",
+};
+
 type AuthProviderProperties = ComponentProps<typeof ClerkProvider> & {
   privacyUrl?: string;
   termsUrl?: string;
   helpUrl?: string;
+  /** 로그인·가입 위젯 언어. 없으면 한국어(기존 동작). */
+  locale?: "ko" | "en";
 };
 
 export const AuthProvider = ({
+  locale = "ko",
   privacyUrl,
   termsUrl,
   helpUrl,
@@ -109,7 +119,7 @@ export const AuthProvider = ({
           variables,
         } as ComponentProps<typeof ClerkProvider>["appearance"]
       }
-      localization={localization}
+      localization={locale === "en" ? localizationEn : localization}
     />
   );
 };

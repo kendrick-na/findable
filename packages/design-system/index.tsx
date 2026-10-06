@@ -8,17 +8,25 @@ type DesignSystemProviderProperties = ThemeProviderProps & {
   privacyUrl?: string;
   termsUrl?: string;
   helpUrl?: string;
+  /** 로그인 위젯(Clerk) 언어. 없으면 한국어. */
+  authLocale?: "ko" | "en";
 };
 
 export const DesignSystemProvider = ({
   children,
+  authLocale,
   privacyUrl,
   termsUrl,
   helpUrl,
   ...properties
 }: DesignSystemProviderProperties) => (
   <ThemeProvider {...properties}>
-    <AuthProvider helpUrl={helpUrl} privacyUrl={privacyUrl} termsUrl={termsUrl}>
+    <AuthProvider
+      helpUrl={helpUrl}
+      locale={authLocale}
+      privacyUrl={privacyUrl}
+      termsUrl={termsUrl}
+    >
       <TooltipProvider>{children}</TooltipProvider>
       <Toaster />
     </AuthProvider>

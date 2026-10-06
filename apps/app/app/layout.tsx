@@ -47,6 +47,7 @@ const RootLayout = async ({ children }: RootLayoutProperties) => (
             잉크4·표면4·헤어라인3 토큰이 전부 다크 전제로만 설계돼 있다.
             web 결과페이지도 이미 같은 선택을 했다(`audit/[jobId]/page.tsx` className="dark"). */}
         <DesignSystemProvider
+          authLocale={await getAppLocale()}
           forcedTheme="dark"
           helpUrl={env.NEXT_PUBLIC_DOCS_URL}
           privacyUrl={new URL(

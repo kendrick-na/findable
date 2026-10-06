@@ -113,7 +113,9 @@ const AlertsPage = async () => {
             preview={<AlertsPreview t={t} />}
             t={dict.lockedSurface}
             title={t.title}
-            unlockPlan="Growth"
+            // 🔴 2026-10-06 — 위 게이트는 `isPaid`(Starter 부터 열림)인데 버튼만 「Growth로 열기」였다.
+            //   더 비싼 플랜을 사야 열리는 것처럼 보이므로 실제 최소 플랜으로 맞춘다.
+            unlockPlan="Starter"
           />
         )}
       </div>
