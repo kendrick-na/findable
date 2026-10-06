@@ -186,14 +186,22 @@ vi.mock("./action-rules", () => ({
 }));
 vi.mock("./geo-score", () => ({ geoAxisScores: vi.fn(() => ({ total: 0 })) }));
 
+import { log } from "@repo/observability/log";
 import {
   continueAuditJob,
   continueOldestPendingAudit,
 } from "./audit-continuation";
-import { isAuditContinuationPending } from "./audit-execution-lease";
+import {
+  AUDIT_CONTINUATION_WINDOW_MS,
+  isAuditContinuationPending,
+} from "./audit-execution-lease";
 import { readAuditCheckpoint } from "./checkpoint";
 import { runAuditJob } from "./runner";
-import { isStaleAuditJob } from "./stale-job";
+import {
+  isStaleAuditJob,
+  reconcileStaleAuditJob,
+  staleAuditJobsWhere,
+} from "./stale-job";
 
 const T0 = new Date("2026-10-06T03:00:00.000Z");
 const QUESTION_MS = 120_000;
@@ -304,7 +312,12 @@ describe("truncated round continuation", () => {
       organizationId: "org-1",
     });
 
-    expect(outcome).toEqual({ jobId: "job-1", ran: true, status: "completed" });
+    expect(outcome).toEqual({
+      jobId: "job-1",
+      mode: "continue",
+      ran: true,
+      status: "completed",
+    });
     // 이미 받은 답은 다시 묻지 않는다 — 질문마다 정확히 한 번.
     expect(askedPrompts).toHaveLength(4);
     expect(new Set(askedPrompts).size).toBe(4);
@@ -339,7 +352,12 @@ describe("truncated round continuation", () => {
 
     const last = await continueAuditJob("job-1", freshInvocation());
 
-    expect(last).toEqual({ jobId: "job-1", ran: true, status: "completed" });
+    expect(last).toEqual({
+      jobId: "job-1",
+      mode: "continue",
+      ran: true,
+      status: "completed",
+    });
     // 2 + 2 + 2 = 6 of 8 — 세 번째 이어가기는 없다.
     expect(askedPrompts).toHaveLength(6);
     expect(new Set(askedPrompts).size).toBe(6);
@@ -396,6 +414,107 @@ describe("truncated round continuation", () => {
     });
     expect(await continueOldestPendingAudit(freshInvocation())).toBeNull();
     expect(askedPrompts).toHaveLength(0);
+  });
+
+  it("finalizes an expired wait as provisional from stored answers, Tracking once", async () => {
+    await runAuditJob({ ...input, ...freshInvocation() });
+    expect(askedPrompts).toHaveLength(2);
+
+    // 2시간 시간창이 지나도록 아무도 집어 가지 않았다 — 그래도 실패로 정리되지 않는다.
+    vi.advanceTimersByTime(AUDIT_CONTINUATION_WINDOW_MS + 60_000);
+    expect(isStaleAuditJob(job() as never)).toBe(false);
+    expect(await reconcileStaleAuditJob(job() as never)).toBe("queued");
+    expect(job().status).toBe("queued");
+    // 일반 대기열 정리 조건에도 걸리지 않는다.
+    expect(matches(job(), staleAuditJobsWhere("queued", new Date()))).toBe(
+      false
+    );
+
+    const outcome = await continueOldestPendingAudit({
+      ...freshInvocation(),
+      expiredOnly: true,
+    });
+
+    expect(outcome).toEqual({
+      jobId: "job-1",
+      mode: "finalize",
+      ran: true,
+      status: "completed",
+    });
+    // 새 유료 질문 0개 — 저장된 2개 질문의 답만으로 마감.
+    expect(askedPrompts).toHaveLength(2);
+    const result = job().result as {
+      engineResponses: unknown[];
+      promptsCount: number;
+    };
+    expect(result.promptsCount).toBe(4);
+    expect(result.engineResponses).toHaveLength(2 * 4);
+    expect(job().errorMessage ?? null).toBeNull();
+    expect(mocks.persistAuditTracking).toHaveBeenCalledTimes(1);
+    expect(log.info).toHaveBeenCalledWith(
+      "audit.continuation.expired",
+      expect.objectContaining({ continuation: 1 })
+    );
+    expect(log.info).toHaveBeenCalledWith(
+      "audit.continuation.finalized_provisional",
+      expect.objectContaining({ reason: "window_expired", continuation: 1 })
+    );
+  });
+
+  it("the cleanup cron only picks expired waits", async () => {
+    await runAuditJob({ ...input, ...freshInvocation() });
+    expect(
+      await continueOldestPendingAudit({
+        ...freshInvocation(),
+        expiredOnly: true,
+      })
+    ).toBeNull();
+    expect(job().status).toBe("queued");
+  });
+
+  it("never finalizes twice when a late continuation races the cleanup", async () => {
+    await runAuditJob({ ...input, ...freshInvocation() });
+    vi.advanceTimersByTime(AUDIT_CONTINUATION_WINDOW_MS + 60_000);
+
+    const [screen, sweep] = await Promise.all([
+      continueAuditJob("job-1", {
+        ...freshInvocation(),
+        organizationId: "org-1",
+      }),
+      continueOldestPendingAudit({ ...freshInvocation(), expiredOnly: true }),
+    ]);
+
+    expect(screen.ran && sweep?.ran).toBe(true);
+    expect(askedPrompts).toHaveLength(2);
+    expect(job().status).toBe("completed");
+    expect(mocks.persistAuditTracking).toHaveBeenCalledTimes(1);
+    expect(
+      vi
+        .mocked(log.info)
+        .mock.calls.filter(
+          ([event]) => event === "audit.continuation.finalized_provisional"
+        )
+    ).toHaveLength(1);
+    expect(log.warn).toHaveBeenCalledWith("audit.job.claim_skipped", {
+      jobId: "job-1",
+    });
+  });
+
+  it("logs requested/started/completed with the continuation count", async () => {
+    await runAuditJob({ ...input, ...freshInvocation() });
+    await continueAuditJob("job-1", freshInvocation());
+    expect(log.info).toHaveBeenCalledWith(
+      "audit.continuation.requested",
+      expect.objectContaining({ continuation: 1, totalQuestions: 4 })
+    );
+    expect(log.info).toHaveBeenCalledWith(
+      "audit.continuation.started",
+      expect.objectContaining({ continuation: 1 })
+    );
+    expect(log.info).toHaveBeenCalledWith(
+      "audit.continuation.completed",
+      expect.objectContaining({ continuation: 1, completedQuestions: 4 })
+    );
   });
 
   it("keeps today's provisional contract when the caller did not opt in", async () => {

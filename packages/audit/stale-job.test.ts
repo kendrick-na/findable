@@ -72,8 +72,7 @@ describe("serverless audit timeout recovery", () => {
     );
   });
 
-  it("keeps a continuation-pending job alive past the plain queue limit until its window ends", async () => {
-    updateMany.mockResolvedValue({ count: 1 });
+  it("never fails a continuation wait, even after its window ends (it is finalized as provisional instead)", async () => {
     const pending = {
       ...oldJob,
       status: "queued" as const,
@@ -85,22 +84,11 @@ describe("serverless audit timeout recovery", () => {
     };
     expect(isStaleAuditJob(pending)).toBe(false);
     expect(await reconcileStaleAuditJob(pending)).toBe("queued");
-    expect(updateMany).not.toHaveBeenCalled();
 
     const expired = { ...pending, leaseUntil: new Date(Date.now() - 1000) };
-    expect(isStaleAuditJob(expired)).toBe(true);
-    expect(await reconcileStaleAuditJob(expired)).toBe("failed");
-    expect(updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          status: "queued",
-          leaseUntil: { lt: expect.any(Date) },
-        }),
-        data: expect.objectContaining({
-          errorMessage: AUDIT_JOB_QUEUE_STALE_ERROR,
-        }),
-      })
-    );
+    expect(isStaleAuditJob(expired)).toBe(false);
+    expect(await reconcileStaleAuditJob(expired)).toBe("queued");
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it("expires an abandoned execution lease", async () => {

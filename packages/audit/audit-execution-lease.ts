@@ -39,8 +39,8 @@ export async function saveQuestionCheckpoint(
 
 /**
  * 이어가기 대기 시간창(2026-10-06). 이 안에 화면(폴링) 또는 30분 cron 이 이어가기를 집어 간다.
- * cron 이 30분마다 한 건씩 돌므로 여러 번의 기회를 준다. 지나면 기존 대기열 만료 규칙대로
- * `QUEUE_START_TIMEOUT` 실패로 정리된다(stale-job).
+ * cron 이 30분마다 한 건씩 돌므로 여러 번의 기회를 준다. 지나면 **실패가 아니라** 새 질문 없이
+ * 저장된 답으로 잠정 마감한다(`continueAuditJob` finalize · 정리 cron/앱 cron/화면 폴링).
  */
 export const AUDIT_CONTINUATION_WINDOW_MS = 2 * 60 * 60 * 1000;
 

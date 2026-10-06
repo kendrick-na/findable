@@ -14,6 +14,9 @@
  *                                                          checkpoint.continuation.count += 1
  *   이어가기 대기 ──claim(새 함수 호출 = 새 300초)──▶ processing ── 남은 질문만 ── …
  *   이어가기 2회를 다 쓰고도 남음 → 기존과 똑같이 잠정(provisional)으로 completed.
+ *   이어가기 대기 시간창(2시간)이 지나도록 아무도 안 집어 감 → 실패가 아니라
+ *     **새 질문 없이** 저장된 답으로 잠정(provisional) completed(finalizeOnly · Tracking 1회).
+ *     같은 claim 을 거치므로 늦게 온 이어가기와 동시에 마감되지 않는다.
  *
  *   · 동시 실행 금지: 이어가기는 반드시 `claimAuditExecution`(queued→processing 원자 갱신)을
  *     거친다. 화면과 cron 이 같은 순간 집어도 한쪽만 이긴다(진 쪽은 claim_skipped 로 끝).
@@ -35,12 +38,16 @@ const stringList = (value: unknown): string[] =>
       )
     : [];
 
+export type AuditContinuationMode = "continue" | "finalize";
+
 export type AuditContinuationOutcome =
-  | { jobId: string; ran: true; status: string }
+  | { jobId: string; mode: AuditContinuationMode; ran: true; status: string }
   | { jobId: string; ran: false; reason: "not_found" | "not_pending" };
 
 /**
- * 이어가기 대기 Job 하나를 이어서 실행한다(남은 질문만).
+ * 이어가기 대기 Job 하나를 처리한다.
+ *   · 시간창 안 → 남은 질문만 이어서 실행(mode=continue).
+ *   · 시간창이 지남 → 새 질문 없이 저장된 답으로 잠정 마감(mode=finalize).
  *
  * 입력은 Job 행에서 다시 만든다 — 호출부(화면 서버액션·cron)가 값을 넘기지 않아
  * org↔brand 정합을 서버가 보장한다. `organizationId` 를 주면 그 org 의 Job 만 다룬다.
@@ -66,22 +73,29 @@ export async function continueAuditJob(
       industry: true,
       organizationId: true,
       brandId: true,
+      checkpoint: true,
     },
   });
   if (!job) {
     return { jobId, ran: false, reason: "not_found" };
   }
-  if (
-    !(isAuditContinuationPending(job) && job.organizationId && job.brandId) ||
-    (job.leaseUntil && job.leaseUntil.getTime() < Date.now())
-  ) {
+  if (!(isAuditContinuationPending(job) && job.organizationId && job.brandId)) {
     return { jobId, ran: false, reason: "not_pending" };
   }
+  const mode: AuditContinuationMode =
+    job.leaseUntil && job.leaseUntil.getTime() < Date.now()
+      ? "finalize"
+      : "continue";
   const brand = await database.brand.findUnique({
     where: { id: job.brandId },
     select: { name: true, entityVariants: true, marketScope: true },
   });
-  log.info("audit.job.continuation_started", { jobId });
+  log.info(
+    mode === "finalize"
+      ? "audit.continuation.expired"
+      : "audit.continuation.started",
+    { jobId, continuation: continuationCountOf(job.checkpoint) }
+  );
   await runAuditJob({
     invocationStartedAtMs: options.invocationStartedAtMs,
     jobId: job.id,
@@ -94,28 +108,52 @@ export async function continueAuditJob(
     industry: job.industry ?? undefined,
     marketScope: brand?.marketScope ?? undefined,
     continueWhenTruncated: true,
+    finalizeOnly: mode === "finalize",
   });
   const finished = await database.auditJob.findUnique({
     where: { id: job.id },
     select: { status: true },
   });
-  return { jobId, ran: true, status: finished?.status ?? "unknown" };
+  return { jobId, mode, ran: true, status: finished?.status ?? "unknown" };
+}
+
+/** 로그용 — 지금까지 허락된 이어가기 횟수(checkpoint.continuation.count). 없으면 0. */
+function continuationCountOf(checkpoint: unknown): number {
+  if (
+    checkpoint &&
+    typeof checkpoint === "object" &&
+    !Array.isArray(checkpoint) &&
+    "continuation" in checkpoint
+  ) {
+    const continuation = checkpoint.continuation;
+    if (
+      continuation &&
+      typeof continuation === "object" &&
+      !Array.isArray(continuation) &&
+      "count" in continuation &&
+      typeof continuation.count === "number"
+    ) {
+      return continuation.count;
+    }
+  }
+  return 0;
 }
 
 /**
- * cron 용 — 이어가기 대기 중 **가장 오래 기다린 것 하나**를 이어서 실행한다.
+ * cron 용 — 이어가기 대기 중 **가장 오래 기다린 것 하나**를 처리한다
+ * (시간창이 지난 것이 가장 오래됐으므로 잠정 마감이 먼저 처리된다).
  * 한 cron 호출은 유료 실행 1건만 한다(300초 상한 · auto-refresh-tracking 규칙).
  * 대기 건이 없으면 null.
  */
 export async function continueOldestPendingAudit(options: {
   invocationStartedAtMs: number;
-  now?: Date;
+  /** 시간창이 지난 대기(잠정 마감)만 처리한다 — 정리 cron 용. */
+  expiredOnly?: boolean;
 }): Promise<AuditContinuationOutcome | null> {
-  const now = options.now ?? new Date();
   const pending = await database.auditJob.findFirst({
     where: {
       status: "queued",
-      leaseUntil: { gte: now },
+      leaseUntil: options.expiredOnly ? { lt: new Date() } : { not: null },
       organizationId: { not: null },
       brandId: { not: null },
     },

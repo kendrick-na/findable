@@ -302,7 +302,7 @@ describe("sweep cron and per-job staleness share one criterion", () => {
       },
     ],
     [
-      "continuation window expired",
+      "continuation window expired (finalized, never swept)",
       {
         status: "queued",
         createdAt: minutes(-200),
