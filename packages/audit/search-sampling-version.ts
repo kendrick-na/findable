@@ -228,7 +228,10 @@ export function searchSamplingLabel(
   version: string | null | undefined,
   isKo: boolean
 ): string | null {
-  const [normalized = "", engineSet] =
+  // The ChatGPT engine-set suffix (`+chatgpt-web-v1`) stays in the version
+  // string for the comparison guard, but is not shown to the user
+  // (CEO decision 2026-10-07: not worth a visible label).
+  const [normalized = ""] =
     normalizeSearchSamplingVersion(version).split(ENGINE_SET_SEPARATOR);
   if (normalized === NO_SEARCH_SAMPLING_VERSION) {
     return null;
@@ -238,10 +241,5 @@ export function searchSamplingLabel(
   if (label) {
     base = isKo ? label.ko : label.en;
   }
-  if (!engineSet) {
-    return base;
-  }
-  return isKo
-    ? `${base} · ChatGPT 웹 화면 수집`
-    : `${base} · ChatGPT collected from web UI`;
+  return base;
 }

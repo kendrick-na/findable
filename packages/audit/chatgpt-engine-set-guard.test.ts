@@ -79,9 +79,13 @@ describe("ChatGPT source switch guard (CHATGPT_SOURCE=web)", () => {
     expect(searchSamplingVersionOf(mixed)).toBe(MIXED_SEARCH_SAMPLING_VERSION);
   });
 
-  it("labels the web method next to the search label", () => {
+  it("does not show the web method in the visible search label", () => {
+    // CEO 2026-10-07: the engine set stays in the version (guard) only.
     expect(searchSamplingLabel(`${V1}+${WEB}`, true)).toBe(
-      "검색 표본 v2 · 블로그·뉴스·웹문서 교차 · ChatGPT 웹 화면 수집"
+      "검색 표본 v2 · 블로그·뉴스·웹문서 교차"
+    );
+    expect(searchSamplingLabel(`${V1}+${WEB}`, false)).toBe(
+      "Search sample v2 · blog/news/web interleaved"
     );
     expect(searchSamplingLabel(V1, true)).toBe(
       "검색 표본 v2 · 블로그·뉴스·웹문서 교차"
