@@ -49,9 +49,11 @@ type ViewState = "measuring" | "slow" | "failed";
 
 export const MeasuringView = ({
   continueJob,
+  continuingLabel,
   createdAt,
   jobId,
   domain,
+  initialContinuing = false,
   initialStatus,
   pollStatus,
   sampleUrl,
@@ -61,10 +63,17 @@ export const MeasuringView = ({
    * 폴링이 `needs_continuation` 을 보면 대기 한 번당 한 번 부른다. 없으면 cron 이 이어받는다.
    */
   continueJob?: (jobId: string) => Promise<unknown>;
+  /**
+   * 이어가기 중 안내 문구(사전 `app.measuring.continuing`) — 페이지가 사전에서 골라 내려준다.
+   * 없으면(스토리 등) 기존 문구 그대로.
+   */
+  continuingLabel?: string;
   createdAt: string;
   jobId: string;
   /** 무엇을 측정 중인지. 지금 화면에서 유일하게 개인화된 정보다. */
   domain: string | null;
+  /** 이 화면에 들어온 시점에 이미 이어가기 대기였는지(queued + leaseUntil). */
+  initialContinuing?: boolean;
   initialStatus: "queued" | "processing";
   /**
    * 진행 상태 폴링 — **주입받는다**(N-44).
@@ -93,6 +102,9 @@ export const MeasuringView = ({
   const router = useRouter();
   const [view, setView] = useState<ViewState>("measuring");
   const [status, setStatus] = useState<"queued" | "processing">(initialStatus);
+  // 한 번 이어가기에 들어가면 완료/실패까지 「남은 질문을 이어서」 안내를 유지한다.
+  const [continuing, setContinuing] = useState(initialContinuing);
+  const continuingCopy = continuing ? continuingLabel : undefined;
   const [moodIndex, setMoodIndex] = useState(0);
   const [moodVisible, setMoodVisible] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -148,6 +160,7 @@ export const MeasuringView = ({
         } else if (status === "needs_continuation") {
           // 질문이 남아 남은 질문만 이어서 잰다 — 사용자에게는 계속 「물어보는 중」이다.
           setStatus("processing");
+          setContinuing(true);
           await requestContinuationOnce();
         } else if (status === "queued" || status === "processing") {
           continuationRequested &&= status !== "processing";
@@ -186,9 +199,10 @@ export const MeasuringView = ({
               aria-live="polite"
               className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]"
             >
-              {status === "queued"
-                ? "측정 대기 중이에요"
-                : "AI 7곳에 물어보고 있어요"}
+              {continuingCopy ??
+                (status === "queued"
+                  ? "측정 대기 중이에요"
+                  : "AI 7곳에 물어보고 있어요")}
             </h1>
             {domain ? (
               <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
@@ -234,7 +248,8 @@ export const MeasuringView = ({
             측정이 조금 오래 걸리고 있어요
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            아직 완료되지 않았어요. 계속 상태를 확인하고 있습니다.
+            {continuingCopy ??
+              "아직 완료되지 않았어요. 계속 상태를 확인하고 있습니다."}
           </p>
         </div>
       )}

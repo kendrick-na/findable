@@ -61,6 +61,12 @@
           "cta": "미팅 예약하기"
         }
       }
+    },
+    "audit": {
+      "discoveryCoverage": {
+        "partial": "질문 {planned}개 중 {measured}개만 측정했어요.",
+        "none": "이번에는 측정하지 못했어요."
+      }
     }
   },
   "app": {
@@ -143,6 +149,9 @@
       "loading": "불러오는 중…",
       "retry": "다시 시도",
       "upgrade": "업그레이드"
+    },
+    "measuring": {
+      "continuing": "남은 질문을 이어서 측정하고 있어요"
     },
     "emptyState": {
       "heading": "내 브랜드는 AI 답변에 얼마나 등장할까요?",

@@ -1,3 +1,4 @@
+import { isAuditContinuationPending } from "@repo/audit/audit-execution-lease";
 import { isStaleAuditJob } from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
@@ -6,6 +7,7 @@ import { continueOrgTracking } from "@/app/actions/brand/continue-tracking";
 import { getTrackingStatus } from "@/app/actions/brand/tracking-status";
 import { env } from "@/env";
 import { requireOrg } from "@/lib/db/scoped";
+import { getAppDictionary } from "@/lib/i18n";
 import { sampleReportUrl } from "@/lib/sample-report";
 import { Header } from "../../components/header";
 import { MeasuringView } from "./measuring-view";
@@ -69,13 +71,17 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
     redirect("/history");
   }
 
+  const t = await getAppDictionary();
+
   return (
     <>
       <Header page="측정 중" pages={["Findable"]} showMetric={false} />
       <MeasuringView
         continueJob={continueOrgTracking}
+        continuingLabel={t.measuring.continuing}
         createdAt={job.createdAt.toISOString()}
         domain={job.domain}
+        initialContinuing={isAuditContinuationPending(job)}
         initialStatus={job.status}
         jobId={jobId}
         pollStatus={getTrackingStatus}

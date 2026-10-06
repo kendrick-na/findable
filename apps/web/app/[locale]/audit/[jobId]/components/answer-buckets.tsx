@@ -93,20 +93,62 @@ function toggleCopy(open: boolean, isKo: boolean): string {
   return isKo ? "원문 전체 보기" : "Show full answer";
 }
 
+/** 이름 없는 질문이 마감으로 잘렸을 때의 문구(사전 `web.audit.discoveryCoverage`). */
+export interface DiscoveryCoverageCopy {
+  /** 아무것도 묻지 못했을 때. */
+  none: string;
+  /** 일부만 물었을 때. `{planned}`·`{measured}` 자리표시자. */
+  partial: string;
+}
+
+function discoveryPartialNote(
+  copy: DiscoveryCoverageCopy | undefined,
+  planned: number | undefined,
+  asked: number | undefined
+): string | null {
+  if (!copy || planned === undefined || asked === undefined) {
+    return null;
+  }
+  if (asked <= 0 || asked >= planned) {
+    return null;
+  }
+  return copy.partial
+    .replace("{planned}", String(planned))
+    .replace("{measured}", String(asked));
+}
+
 export function AnswerBucketBoard({
   summary,
   isKo,
   discoveryPromptCount,
+  discoveryAskedCount,
+  discoveryCoverageCopy,
   searchSamplingVersion,
 }: {
   summary: AnswerBucketSummary;
   isKo: boolean;
   /** 러너가 만든 이름 없는 질문 수. undefined = 그 기능 이전 회차(말하지 않는다). */
   discoveryPromptCount?: number;
+  /**
+   * 그중 실제로 물어본 질문 수(`askedDiscoveryQuestionCount`). 마감으로 일부가 잘리면
+   * 계획보다 작다 — 그때만 「질문 n개 중 m개만 측정」을 덧붙인다(2026-10-06).
+   */
+  discoveryAskedCount?: number;
+  /** 위 안내 문구(사전). 없으면 안내 없이 기존 표시 그대로. */
+  discoveryCoverageCopy?: DiscoveryCoverageCopy;
   /** 이 회차 네이버 검색 표본 방식(`searchSamplingVersionOf`). 라벨로만 쓴다. */
   searchSamplingVersion?: string | null;
 }) {
   const { ai } = summary;
+  const discoveryNote = discoveryPartialNote(
+    discoveryCoverageCopy,
+    discoveryPromptCount,
+    discoveryAskedCount
+  );
+  const discoveryNotMeasured =
+    Boolean(discoveryCoverageCopy) &&
+    (discoveryPromptCount ?? 0) > 0 &&
+    discoveryAskedCount === 0;
   return (
     <div className="mt-6" data-testid="answer-bucket-board">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -182,15 +224,18 @@ export function AnswerBucketBoard({
               (isKo
                 ? ` 측정 실패 ${summary.discovery.engineError}개는 뺐어요.`
                 : ` ${summary.discovery.engineError} failed answers excluded.`)}
+            {discoveryNote && (
+              <span data-testid="discovery-partial"> {discoveryNote}</span>
+            )}
           </li>
         ) : (
-          discoveryPromptCount === 0 && (
-            <li className="break-keep" data-testid="discovery-line">
-              {isKo
-                ? "이름 없이 묻는 질문 — 공식 사이트 제목·설명에서 업종 단서를 찾지 못해 이번엔 만들지 않았어요."
-                : "Unbranded questions — none this run: no category cue was found in the official site's title or description."}
-            </li>
-          )
+          <DiscoveryFallbackLine
+            discoveryPromptCount={discoveryPromptCount}
+            isKo={isKo}
+            notMeasuredCopy={
+              discoveryNotMeasured ? discoveryCoverageCopy?.none : undefined
+            }
+          />
         )}
         <SearchExposureLine
           isKo={isKo}
@@ -199,6 +244,44 @@ export function AnswerBucketBoard({
         />
       </ul>
     </div>
+  );
+}
+
+/**
+ * 이름 없는 질문 결과가 없을 때의 한 줄.
+ *   · 계획 0개 → 기존 안내(업종 단서 없음).
+ *   · 계획은 있는데 하나도 못 물음(마감) → 줄을 지우지 않고 「이번에는 측정하지 못했어요」.
+ */
+function DiscoveryFallbackLine({
+  discoveryPromptCount,
+  isKo,
+  notMeasuredCopy,
+}: {
+  discoveryPromptCount?: number;
+  isKo: boolean;
+  notMeasuredCopy?: string;
+}) {
+  if (notMeasuredCopy) {
+    return (
+      <li className="break-keep" data-testid="discovery-line">
+        <span className="font-medium text-zinc-300">
+          {isKo
+            ? "이름 없이 물었을 때 추천됨"
+            : "Recommended without your name"}
+        </span>{" "}
+        — <span data-testid="discovery-not-measured">{notMeasuredCopy}</span>
+      </li>
+    );
+  }
+  if (discoveryPromptCount !== 0) {
+    return null;
+  }
+  return (
+    <li className="break-keep" data-testid="discovery-line">
+      {isKo
+        ? "이름 없이 묻는 질문 — 공식 사이트 제목·설명에서 업종 단서를 찾지 못해 이번엔 만들지 않았어요."
+        : "Unbranded questions — none this run: no category cue was found in the official site's title or description."}
+    </li>
   );
 }
 

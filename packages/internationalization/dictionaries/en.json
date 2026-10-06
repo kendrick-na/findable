@@ -61,6 +61,12 @@
           "cta": "Book the meeting"
         }
       }
+    },
+    "audit": {
+      "discoveryCoverage": {
+        "partial": "Only {measured} of {planned} questions were measured.",
+        "none": "Not measured this time."
+      }
     }
   },
   "app": {
@@ -143,6 +149,9 @@
       "loading": "Loading…",
       "retry": "Try again",
       "upgrade": "Upgrade"
+    },
+    "measuring": {
+      "continuing": "Measuring the remaining questions"
     },
     "emptyState": {
       "heading": "How often does your brand show up in AI answers?",

@@ -55,6 +55,7 @@ import {
   MIN_VERIFIED_ANSWERS,
   PROVISIONAL_MAX_UNVERIFIED_SHARE,
 } from "@repo/audit/normalize-stored-metrics";
+import { askedDiscoveryQuestionCount } from "@repo/audit/question-coverage";
 import { detailedRankLabel } from "@repo/audit/rank-label";
 import {
   searchSamplingBlockedCopy,
@@ -89,6 +90,7 @@ import {
   AnswerBucketBoard,
   AnswerBucketPill,
   BrandNameMismatchNotice,
+  type DiscoveryCoverageCopy,
   QuestionEngineMatrix,
 } from "./answer-buckets";
 import { CompetitorBenchmark } from "./competitor-benchmark";
@@ -97,7 +99,13 @@ import { NaverVsAiGap } from "./naver-vs-ai-gap";
 import { ProvisionalEvidenceView } from "./provisional-evidence-view";
 import { TruthMirror } from "./truth-mirror";
 
+/** 서버(page)가 사전에서 골라 내려주는 문구 — 클라이언트는 사전 파일을 직접 읽지 않는다. */
+interface AuditResultCopy {
+  discoveryCoverage: DiscoveryCoverageCopy;
+}
+
 interface Props {
+  copy?: AuditResultCopy;
   correctionNoticeShown?: boolean;
   jobId: string;
   locale: string;
@@ -779,6 +787,7 @@ function totalFiveAxis(view: FiveAxisView): number {
 // ──────────────────────────────────────────────────────────────────
 
 export function AuditResultView({
+  copy,
   correctionNoticeShown = false,
   jobId,
   locale,
@@ -997,7 +1006,12 @@ export function AuditResultView({
             provisional={auditPublicationIssue(displayResult) !== null}
           />
         )}
-      <CompletedView job={job} locale={locale} result={displayResult} />
+      <CompletedView
+        copy={copy}
+        job={job}
+        locale={locale}
+        result={displayResult}
+      />
       {auditPublicationIssue(displayResult) === null && (
         <ViralBar job={job} locale={locale} />
       )}
@@ -1648,10 +1662,12 @@ function ProcessingState({
 // ──────────────────────────────────────────────────────────────────
 
 function CompletedView({
+  copy,
   job,
   result,
   locale,
 }: {
+  copy?: AuditResultCopy;
   job: JobResponse;
   result: JobResult;
   locale: string;
@@ -1708,6 +1724,7 @@ function CompletedView({
         />
         <ProvisionalEvidenceView
           brandName={result.brandName}
+          discoveryCoverageCopy={copy?.discoveryCoverage}
           discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
           domain={result.domain}
           isKo={isKo}
@@ -1737,6 +1754,7 @@ function CompletedView({
         />
 
         <HeroSection
+          discoveryCoverageCopy={copy?.discoveryCoverage}
           isKo={isKo}
           job={job}
           provisional={provisional}
@@ -1833,11 +1851,13 @@ function ProvisionalMaskNotice({ isKo }: { isKo: boolean }) {
 // ──────────────────────────────────────────────────────────────────
 
 function HeroSection({
+  discoveryCoverageCopy,
   job,
   result,
   isKo,
   provisional = false,
 }: {
+  discoveryCoverageCopy?: DiscoveryCoverageCopy;
   job: JobResponse;
   result: JobResult;
   isKo: boolean;
@@ -2066,6 +2086,10 @@ function HeroSection({
           읽혔다. 이제 비율은 **답변 기준**(이 4칸)과 **엔진 기준**(아래 KPI) 둘뿐이고
           각각 라벨에 기준을 적는다. */}
       <AnswerBucketBoard
+        discoveryAskedCount={askedDiscoveryQuestionCount(
+          result.engineResponses
+        )}
+        discoveryCoverageCopy={discoveryCoverageCopy}
         discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
         isKo={isKo}
         searchSamplingVersion={searchSamplingVersionOf(result)}
