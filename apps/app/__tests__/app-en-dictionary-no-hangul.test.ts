@@ -14,6 +14,8 @@ const PENDING_LEGAL_EN = "영어판 승인 대기(법정 고지·동의)";
 const ALLOWED_HANGUL: Record<string, string> = {
   // 한국 정보통신망법상 광고 메일 표기 「(광고)」 를 그대로 가리킨다.
   "axMail.errorAdNotice": "법정 표기 문자열",
+  // 기존고객 메일 제목에 남기는 법정 표기 「(광고)」 를 그대로 인용한다(2026-10-07).
+  "axMail.legalBody": "법정 표기 문자열",
   // 공개 영문 약관(Key summary)이 버튼 이름을 한국어 그대로 병기한다 — 문장을 바꾸지 않는다.
   "purchaseNotice.requestVia": "공개 영문 약관 문장 그대로",
   // 「한국어 표기 통합 추적」 기능 설명 — 한글 표기 예시 자체가 내용이다.
