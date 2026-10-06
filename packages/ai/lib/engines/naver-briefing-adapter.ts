@@ -25,6 +25,7 @@
 //    → 편입 설계 = `docs/_적용/브리핑_본류편입_기획_2026-08-17.md`(질의 축을 따로 둔다).
 
 import { BRIEFING_FAIL_PREFIX } from "./briefing-failure";
+import { FIRECRAWL_CREDITS_PER_SCRAPE } from "./cost";
 import { isAbortError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type { CitedSource, EngineAdapter, EngineResponse } from "./types";
@@ -78,13 +79,18 @@ function makeStubResponse(prompt: string, durationMs: number): EngineResponse {
     errorMessage: null,
     durationMs,
     isStub: true,
-    usage: { inputTokens: null, outputTokens: null, costModel: "browser" },
+    usage: { inputTokens: null, outputTokens: null, costModel: "credit" },
   };
 }
 
+/**
+ * @param creditsUsed Firecrawl 이 **이미 크레딧을 쓴** 실패(렌더 성공 후 블록 없음 등)면 그 수.
+ *   HTTP 오류처럼 과금 여부를 모르는 실패는 생략 → 원가 0 으로 남는다(원가모델 v2).
+ */
 function makeErrorResponse(
   message: string,
-  durationMs: number
+  durationMs: number,
+  creditsUsed?: number
 ): EngineResponse {
   return {
     engineId: "naver-briefing",
@@ -98,7 +104,12 @@ function makeErrorResponse(
     errorMessage: message,
     durationMs,
     isStub: false,
-    usage: { inputTokens: null, outputTokens: null, costModel: "browser" },
+    usage: {
+      inputTokens: null,
+      outputTokens: null,
+      costModel: "credit",
+      ...(creditsUsed === undefined ? {} : { creditsUsed }),
+    },
   };
 }
 
@@ -309,7 +320,8 @@ export const naverBriefingAdapter: EngineAdapter = async (query) => {
     if (!html) {
       return makeErrorResponse(
         `Firecrawl 응답에 HTML 없음: ${json.error ?? "unknown"}`,
-        Date.now() - start
+        Date.now() - start,
+        FIRECRAWL_CREDITS_PER_SCRAPE
       );
     }
 
@@ -317,7 +329,9 @@ export const naverBriefingAdapter: EngineAdapter = async (query) => {
     if (!block) {
       return makeErrorResponse(
         "AI 브리핑 미노출 — 이 질의에는 네이버 AI 브리핑이 표시되지 않습니다 (정답형/탐색형 아님)",
-        Date.now() - start
+        Date.now() - start,
+        // 🔴 렌더는 성공했다 → Firecrawl 크레딧은 이미 나갔다. 0원으로 두면 과소 기록이다.
+        FIRECRAWL_CREDITS_PER_SCRAPE
       );
     }
 
@@ -352,8 +366,13 @@ export const naverBriefingAdapter: EngineAdapter = async (query) => {
       errorMessage: null,
       durationMs: Date.now() - start,
       isStub: false,
-      // 원가계기: Firecrawl 크레딧 과금(browser 계열로 근사). 1~5 크레딧/호출.
-      usage: { inputTokens: null, outputTokens: null, costModel: "browser" },
+      // 원가계기(v2): Firecrawl scrape = 공식 1크레딧/페이지(rawHtml·enhanced 프록시 할증 없음).
+      usage: {
+        inputTokens: null,
+        outputTokens: null,
+        costModel: "credit",
+        creditsUsed: FIRECRAWL_CREDITS_PER_SCRAPE,
+      },
     };
   } catch (error) {
     if (isAbortError(error) || query.signal?.aborted) {

@@ -186,6 +186,36 @@ export function parseAnthropicMessages(body: unknown): {
   return { sources, text: parts.join("\n").trim() };
 }
 
+function finiteNumberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * `/v1/messages` 응답의 `usage` 에서 원가 재료를 뽑는다.
+ * 웹검색 횟수 = `usage.server_tool_use.web_search_requests`
+ *   (공식 문서 https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool 「Usage and pricing」).
+ * ⚠️ 이 경로는 검색 도구를 **항상** 붙이므로, 횟수가 없으면 0 이 아니라 `null`(=미수집)이다.
+ */
+export function parseAnthropicUsage(body: unknown): {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  webSearchRequests: number | null;
+} {
+  const usage =
+    body && typeof body === "object"
+      ? (body as { usage?: Record<string, unknown> }).usage
+      : undefined;
+  const serverToolUse =
+    usage && typeof usage.server_tool_use === "object"
+      ? (usage.server_tool_use as Record<string, unknown> | null)
+      : null;
+  return {
+    inputTokens: finiteNumberOrNull(usage?.input_tokens),
+    outputTokens: finiteNumberOrNull(usage?.output_tokens),
+    webSearchRequests: finiteNumberOrNull(serverToolUse?.web_search_requests),
+  };
+}
+
 const STUB_NOTICE =
   "[STUB] AI Gateway 인증 미설정 (VERCEL_OIDC_TOKEN 권장). 실제 엔진 호출 없이 더미 응답을 반환합니다.";
 
@@ -393,9 +423,7 @@ async function runClaudeWithWebSearch(
     if (!res.ok) {
       return null;
     }
-    const body = (await res.json()) as {
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
+    const body: unknown = await res.json();
     const { sources, text: rawText } = parseAnthropicMessages(body);
     if (rawText.length === 0) {
       return null;
@@ -422,11 +450,8 @@ async function runClaudeWithWebSearch(
       errorMessage: null,
       durationMs: Date.now() - start,
       isStub: false,
-      usage: {
-        inputTokens: body.usage?.input_tokens ?? null,
-        outputTokens: body.usage?.output_tokens ?? null,
-        costModel: "token",
-      },
+      // 🔴 웹검색 횟수까지 싣는다(원가모델 v2) — 검색료($10/1,000회)가 토큰과 **별도** 청구된다.
+      usage: { ...parseAnthropicUsage(body), costModel: "token" },
     };
   } catch (error) {
     if (isAbortError(error) || query.signal?.aborted) {
@@ -455,8 +480,55 @@ async function tryClaudeWebSearch(
 interface PerplexityAgentResult {
   inputTokens: number | null;
   outputTokens: number | null;
+  /** provider 가 계산해 준 이번 호출 총원가(USD) — `usage.cost.total_cost`. */
+  providerCostUsd: number | null;
   sources: ReturnType<typeof mapProviderSources>;
   text: string;
+  /** 웹검색 실행 횟수 — `usage.tool_calls_details.search_web.invocation`. 없으면 null. */
+  webSearchRequests: number | null;
+}
+
+// Agent API 문서 예시의 도구 이름은 `search_web` 이다. 표기 흔들림에 대비해 `web_search` 도 본다.
+const PERPLEXITY_SEARCH_TOOL_KEYS = ["search_web", "web_search"] as const;
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Agent API `usage` 에서 원가 재료를 뽑는다.
+ *   `usage.cost.total_cost`(USD) · `usage.tool_calls_details.<tool>.invocation`
+ *   출처: https://docs.perplexity.ai/api-reference/agent-post (ResponsesUsage·ResponsesCost)
+ */
+function perplexityUsageCost(usage: Record<string, unknown> | undefined): {
+  providerCostUsd: number | null;
+  webSearchRequests: number | null;
+} {
+  const cost = asRecord(usage?.cost);
+  const totalCost = cost?.total_cost;
+  const details = asRecord(usage?.tool_calls_details);
+  let webSearchRequests: number | null = null;
+  for (const key of PERPLEXITY_SEARCH_TOOL_KEYS) {
+    const invocation = asRecord(details?.[key])?.invocation;
+    if (typeof invocation === "number" && Number.isFinite(invocation)) {
+      webSearchRequests = (webSearchRequests ?? 0) + invocation;
+    }
+  }
+  // 도구 상세는 왔는데 검색 키가 없으면 = 검색 0회(미수집이 아니다).
+  if (webSearchRequests === null && details) {
+    webSearchRequests = 0;
+  }
+  return {
+    providerCostUsd:
+      typeof totalCost === "number" &&
+      Number.isFinite(totalCost) &&
+      totalCost >= 0
+        ? totalCost
+        : null,
+    webSearchRequests,
+  };
 }
 
 function records(value: unknown): Record<string, unknown>[] {
@@ -501,7 +573,14 @@ export function parsePerplexityAgentResponse(
   body: unknown
 ): PerplexityAgentResult {
   if (!body || typeof body !== "object") {
-    return { text: "", sources: [], inputTokens: null, outputTokens: null };
+    return {
+      text: "",
+      sources: [],
+      inputTokens: null,
+      outputTokens: null,
+      providerCostUsd: null,
+      webSearchRequests: null,
+    };
   }
   const root = body as Record<string, unknown>;
   const output = records(root.output);
@@ -516,6 +595,7 @@ export function parsePerplexityAgentResponse(
       typeof usage?.input_tokens === "number" ? usage.input_tokens : null,
     outputTokens:
       typeof usage?.output_tokens === "number" ? usage.output_tokens : null,
+    ...perplexityUsageCost(usage),
   };
 }
 
@@ -598,6 +678,9 @@ async function runPerplexityAgent(
       usage: {
         inputTokens: parsed.inputTokens,
         outputTokens: parsed.outputTokens,
+        // 원가모델 v2: provider 원가가 있으면 그걸 쓰고, 없으면 토큰+검색료로 계산한다.
+        providerCostUsd: parsed.providerCostUsd,
+        webSearchRequests: parsed.webSearchRequests,
         costModel: "token",
       },
     };

@@ -115,10 +115,29 @@ export interface CitedSource {
 
 // 엔진 호출당 토큰 사용량(원가 산정용). LLM 엔진만 채워지고, 크롤링/검색형은 null.
 export interface EngineUsage {
-  // 이 엔진이 원가에 잡히는 방식. token=토큰과금 / browser=Browserbase 세션시간 / free=무료티어 / unknown.
-  costModel: "token" | "browser" | "free" | "unknown";
+  // 이 엔진이 원가에 잡히는 방식. token=토큰과금 / credit=Firecrawl 크레딧 /
+  //   browser=Browserbase 세션시간(구식·하위호환) / free=무료티어 / unknown.
+  costModel: "token" | "credit" | "browser" | "free" | "unknown";
+  /**
+   * Firecrawl 이 이번 호출에 소비한 크레딧 수(naver-briefing). 원가모델 v2(2026-10-07) 신설.
+   * 공식 단가표: scrape 1크레딧/페이지, enhanced 프록시 할증 없음.
+   */
+  creditsUsed?: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  /**
+   * provider 가 **응답에 직접 적어 준** 이번 호출 총원가(USD). 있으면 단가표 계산보다 우선한다.
+   * 현재 Perplexity Agent API(`usage.cost.total_cost`)만 채운다. 원가모델 v2 신설.
+   */
+  providerCostUsd?: number | null;
+  /**
+   * 이번 호출에서 provider 가 실행·과금한 웹검색 횟수. 원가모델 v2 신설.
+   *   · claude 웹검색 경로: `usage.server_tool_use.web_search_requests`
+   *   · perplexity Agent: `usage.tool_calls_details.search_web.invocation`
+   * ⚠️ `undefined` = 검색 도구를 **안 붙인** 호출(검색료 없음).
+   *    `null` = 검색 도구를 붙였는데 응답에 횟수가 **없었다**(= 미수집, 0원 아님).
+   */
+  webSearchRequests?: number | null;
 }
 
 export interface EngineResponse {

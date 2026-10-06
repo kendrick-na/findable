@@ -1050,6 +1050,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // 원가계기(유닛이코노믹스): 진단 1건 실비용을 result 에도 담아 조회 가능하게(운영/대시보드용).
     const cost = auditCost(flat);
     const costSummary = {
+      // 🔴 원가 규칙 버전(2026-10-07 v2 신설). 일일 점검이 v1(과소 기록)·v2 회차를 가르는 키.
+      //   과거 회차는 소급하지 않는다 — 이 필드가 없으면 v1 이다.
+      costModelVersion: cost.costModelVersion,
       totalKrw: Math.round(cost.totalKrw * 100) / 100,
       measuredEngines: cost.measuredEngines,
       totalCalls: flat.length,
@@ -1432,6 +1435,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       jobId: input.jobId,
       sov: metrics.sov,
       costKrw: costSummary.totalKrw,
+      costModelVersion: costSummary.costModelVersion,
       costMeasuredEngines: cost.measuredEngines,
       costPerEngine: cost.perEngine.map((c) => ({
         engine: c.engineId,

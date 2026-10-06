@@ -67,6 +67,7 @@ vi.mock("@repo/ai/lib/engines", () => ({
   NAVER_SEARCH_SAMPLING_VERSION: "interleave-v1",
   aggregateAudit,
   auditCost: vi.fn(() => ({
+    costModelVersion: 2,
     totalKrw: 0,
     measuredEngines: 0,
     perEngine: [],
@@ -363,6 +364,8 @@ describe("runAuditJob offline lifecycle contracts", () => {
 
     const completed = terminalCalls()[0];
     expect(completed.data.result.engineResponses).toHaveLength(2);
+    // 원가모델 v2: 저장되는 result.cost 에 규칙 버전이 실려야 일일 점검이 전/후를 가른다.
+    expect(completed.data.result.cost.costModelVersion).toBe(2);
     expect(completed.data.postprocessing).toMatchObject({
       tracking: "pending",
       pdf: "skipped",

@@ -84,5 +84,8 @@ it("parses Perplexity Agent text and its documented search result sources", () =
     ],
     inputTokens: null,
     outputTokens: null,
+    // 원가모델 v2: usage 가 없는 응답은 원가 재료도 null(=미수집).
+    providerCostUsd: null,
+    webSearchRequests: null,
   });
 });

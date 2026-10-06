@@ -21,6 +21,7 @@ const STALE_AFTER_MS = 15 * 60 * 1000;
  */
 const COST_BASIS_LABEL: Record<string, string> = {
   token: "토큰 과금",
+  credit: "Firecrawl 크레딧",
   browser: "브라우저 세션",
   free: "무료 티어",
   unknown: "미측정",
