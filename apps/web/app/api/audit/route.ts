@@ -27,6 +27,11 @@ import { checkBotId } from "botid/server";
 import type { NextRequest } from "next/server";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+import {
+  DEFAULT_DAILY_FREE_BUDGET_KRW,
+  dailyFreeJobCap,
+  FREE_AUDIT_AVG_COST_KRW,
+} from "../../../lib/free-audit-budget";
 import { resolveIsOwner } from "./_lib/owner";
 
 export const runtime = "nodejs";
@@ -132,15 +137,13 @@ type GateResult =
 //    → 정확한 "원화 합계" 상한은 스키마 변경이 필요하므로, 지금은 **건수 × 실측 평균단가**로
 //      환산해 상한을 건다. 마이그레이션 0으로 오늘 방어를 켜는 게 우선.
 //    → 정밀화(costKrw 컬럼 추가 후 SUM)는 투두_마스터에 남긴다.
-const FREE_AUDIT_AVG_COST_KRW = 250; // 실측 150~300원의 보수적 중앙값(cost.ts 기준)
+// 🔴 평균단가는 원가모델 v2 기준으로 재보정했다(2026-10-07 · 250→1,000원). 산식은
+//   `lib/free-audit-budget.ts` 주석 참조.
 // 무료 진단 일일 예산. 초과 시 신규 무료 측정만 정지(유료·admin·캐시 히트는 계속 동작).
 const DAILY_FREE_BUDGET_KRW = Number(
-  process.env.FINDABLE_DAILY_FREE_BUDGET_KRW ?? 50_000
+  process.env.FINDABLE_DAILY_FREE_BUDGET_KRW ?? DEFAULT_DAILY_FREE_BUDGET_KRW
 );
-const DAILY_FREE_JOB_CAP = Math.max(
-  1,
-  Math.floor(DAILY_FREE_BUDGET_KRW / FREE_AUDIT_AVG_COST_KRW)
-);
+const DAILY_FREE_JOB_CAP = dailyFreeJobCap(DAILY_FREE_BUDGET_KRW);
 
 /**
  * 오늘 실행된 무료 진단 건수가 예산 상한을 넘었는지.
