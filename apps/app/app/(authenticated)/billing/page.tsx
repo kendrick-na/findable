@@ -1,4 +1,4 @@
-import { PLAN_META } from "@repo/auth/plan";
+import type { Plan } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth } from "@repo/auth/server";
 import { database } from "@repo/database";
@@ -8,7 +8,13 @@ import { CheckIcon, ClockIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { redeemInviteCode } from "@/app/actions/invite/redeem";
 import { env } from "@/env";
-import { dateLocaleFor, getAppDictionary, getAppLocale } from "@/lib/i18n";
+import {
+  type AppDictionary,
+  type AppLocale,
+  dateLocaleFor,
+  getAppDictionary,
+  getAppLocale,
+} from "@/lib/i18n";
 import { Header } from "../components/header";
 import { PlanBadge } from "../components/plan-badge";
 import { CancelSubscription } from "../features/billing/cancel-subscription";
@@ -16,7 +22,12 @@ import { RefundRequestForm } from "../features/billing/refund-request";
 import { SubscribeButton } from "../features/billing/subscribe-button";
 import { UpgradeButton } from "../features/billing/upgrade-button";
 import { RedeemForm } from "../features/invite/redeem-form";
-import { listFor, PRICING_TIERS, type PricingFeature } from "../lib/pricing";
+import {
+  listFor,
+  type PricingFeature,
+  type PricingTier,
+  pricingTiers,
+} from "../lib/pricing";
 
 // 앱 내 카드결제 가능한 plan(서버 카탈로그와 동일 어휘). enterprise 는 영업 계약.
 const PAYABLE_PLANS = new Set(["starter", "growth", "scale"]);
@@ -34,17 +45,22 @@ const TierCta = ({
   tier,
   webUrl,
   termsHref,
+  contactHref,
+  dict,
 }: {
-  tier: (typeof PRICING_TIERS)[number];
+  tier: PricingTier;
   webUrl: string;
   termsHref: string;
+  contactHref: string;
+  dict: AppDictionary;
 }) => {
+  const t = dict.billing;
   // 여기 오는 Free 카드는 "현재가 아님" = 유료 이용 중이라는 뜻이다. 무료 진단 버튼은
   //   혼란만 준다(2026-10-05 로컬 E2E) → 포함 사실만 알린다.
   if (tier.plan === "free") {
     return (
       <span className="inline-flex items-center justify-center rounded-md border border-[color:var(--findable-hairline,#23252a)] px-4 py-2 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-        현재 플랜에 포함
+        {t.includedInPlan}
       </span>
     );
   }
@@ -73,25 +89,31 @@ const TierCta = ({
       {charged !== undefined && list !== undefined && (
         <SubscribeButton
           chargedPrice={charged}
-          contactHref={`${webUrl}/ko/contact`}
+          contactHref={contactHref}
           featured={tier.featured}
-          label={`${tier.name} 월 자동결제 시작`}
+          label={t.startMonthly.replace("{plan}", tier.name)}
           listPrice={list}
+          notice={dict.purchaseNotice}
           plan={plan}
+          t={dict.subscribe}
           termsHref={termsHref}
         />
       )}
       <UpgradeButton
-        contactHref={`${webUrl}/ko/contact`}
-        label="1회만 결제하기"
+        contactHref={contactHref}
+        label={t.payOnce}
+        notice={dict.purchaseNotice}
         plan={plan}
+        t={dict.upgrade}
         termsHref={termsHref}
       />
       <UpgradeButton
-        contactHref={`${webUrl}/ko/contact`}
-        label="법인카드로 결제하기"
+        contactHref={contactHref}
+        label={t.payCorporate}
+        notice={dict.purchaseNotice}
         paymentMethod="card"
         plan={plan}
+        t={dict.upgrade}
         termsHref={termsHref}
       />
     </div>
@@ -110,7 +132,13 @@ const TierCta = ({
  *   = 돈 내는 화면에서 없는 것을 있다고 표시한 셈(설계 v3 원인②).
  *   → **아이콘·색·문구 세 가지로** 구분한다(색맹·흑백 인쇄에서도 구분되도록).
  */
-const FeatureRow = ({ feature }: { feature: PricingFeature }) => {
+const FeatureRow = ({
+  comingSoon,
+  feature,
+}: {
+  comingSoon: string;
+  feature: PricingFeature;
+}) => {
   const isString = typeof feature === "string";
   const label = isString ? feature : feature.label;
   const hint = isString ? null : feature.hint;
@@ -134,7 +162,7 @@ const FeatureRow = ({ feature }: { feature: PricingFeature }) => {
         {label}
         {isReady ? null : (
           <span className="ml-1 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-            (준비 중)
+            {comingSoon}
           </span>
         )}
         {hint ? (
@@ -148,8 +176,8 @@ const FeatureRow = ({ feature }: { feature: PricingFeature }) => {
 };
 
 /** 정기결제 중일 때 다음 결제 한 줄. */
-const fmtLongDate = (d: Date): string =>
-  new Intl.DateTimeFormat("ko-KR", {
+const fmtLongDate = (d: Date, locale: AppLocale): string =>
+  new Intl.DateTimeFormat(dateLocaleFor(locale), {
     dateStyle: "long",
     timeZone: "Asia/Seoul",
   }).format(d);
@@ -158,25 +186,40 @@ const nextPaymentLabel = (
   org: {
     billingNextPaymentAt: Date | null;
     billingStatus: string;
-  } | null
+  } | null,
+  t: AppDictionary["billing"],
+  locale: AppLocale
 ): string => {
   // 🔴 2026-10-05 E2E: 유예 중(past_due)의 billingNextPaymentAt 은 **이미 실패한** 회차 시각이다.
   //   예전엔 그걸 "다음 결제 예정일"로 보여 줘서 실패한 날짜를 예정일처럼 안내했다.
   if (org?.billingStatus === "past_due" && org.billingNextPaymentAt) {
-    return `자동결제에 실패했어요. ${fmtLongDate(renewalGraceEndsAt(org.billingNextPaymentAt))}까지는 지금처럼 이용할 수 있어요. 결제 카드를 확인해 주시고, 도움이 필요하면 문의해 주세요.`;
+    return t.pastDue.replace(
+      "{date}",
+      fmtLongDate(renewalGraceEndsAt(org.billingNextPaymentAt), locale)
+    );
   }
   if (org?.billingNextPaymentAt) {
-    return `다음 결제 예정일: ${fmtLongDate(org.billingNextPaymentAt)}`;
+    return t.nextPayment.replace(
+      "{date}",
+      fmtLongDate(org.billingNextPaymentAt, locale)
+    );
   }
-  return org?.billingStatus === "past_due"
-    ? "다음 결제 예약을 확인 중이에요."
-    : "매월 자동결제가 켜져 있어요.";
+  return org?.billingStatus === "past_due" ? t.checkingNext : t.autoOn;
 };
 
-export const metadata: Metadata = {
-  title: "요금제·업그레이드 · Findable",
-  description: "현재 플랜과 업그레이드 옵션을 확인하세요.",
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = (await getAppDictionary()).billing;
+  return { title: t.metaTitle, description: t.metaDescription };
 };
+
+const blurbOf = (plan: Plan, t: AppDictionary["billing"]): string =>
+  ({
+    free: t.blurbFree,
+    starter: t.blurbStarter,
+    growth: t.blurbGrowth,
+    scale: t.blurbScale,
+    enterprise: t.blurbEnterprise,
+  })[plan];
 
 const BillingPage = async () => {
   const [plan, dict, locale] = await Promise.all([
@@ -185,9 +228,12 @@ const BillingPage = async () => {
     getAppLocale(),
   ]);
   const webUrl = env.NEXT_PUBLIC_WEB_URL;
-  const meta = PLAN_META[plan];
+  const t = dict.billing;
   // ⚖️ 결제 전 고지·요금제 화면이 같은 약관(환불 규정 포함)을 가리킨다.
-  const termsHref = `${webUrl}/ko/legal/terms`;
+  //   웹 기본 로케일(en)은 접두사가 없다 → ko 만 `/ko`. 영어 화면은 공개 영문 약관으로 간다.
+  const lp = locale === "ko" ? "/ko" : "";
+  const termsHref = `${webUrl}${lp}/legal/terms`;
+  const contactHref = `${webUrl}${lp}/contact`;
 
   // ⚖️ 정기결제 중이면 **해지 수단을 화면에 노출**해야 한다(전자상거래법 제5조 제4항).
   //   빌링키가 저장돼 있고 provider 가 portone 일 때만 = 실제로 해지할 대상이 있을 때만 띄운다.
@@ -214,7 +260,7 @@ const BillingPage = async () => {
 
   return (
     <>
-      <Header page="요금제·업그레이드" pages={["Findable"]} />
+      <Header page={t.headerTitle} pages={["Findable"]} />
       <div className="flex flex-1 flex-col gap-8 p-6 pt-2">
         {/* 🔴 초대 코드 — 결제와 **다른 축**이다(프로그램 참가 기업용).
             요금제 카드보다 **위**에 둔다: 코드를 받은 사람은 결제할 이유가 없는데
@@ -230,19 +276,19 @@ const BillingPage = async () => {
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-                현재 플랜
+                {t.currentPlan}
               </span>
               <PlanBadge plan={plan} />
             </div>
             <p className="max-w-xl text-[color:var(--findable-ink-muted,#d0d6e0)] text-sm">
-              {meta.blurb}
+              {blurbOf(plan, t)}
             </p>
             {hasSubscription && (
               <div className="mt-1 flex flex-col gap-2">
                 <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                  {nextPaymentLabel(org)}
+                  {nextPaymentLabel(org, t, locale)}
                 </p>
-                <CancelSubscription />
+                <CancelSubscription t={dict.cancelSubscription} />
               </div>
             )}
             {/* 🔴 2026-10-05 E2E: 해지 뒤 화면에 플랜 이름만 남아 해지됐는지·언제까지 쓰는지
@@ -253,14 +299,19 @@ const BillingPage = async () => {
               org.billingNextPaymentAt &&
               org.billingNextPaymentAt.getTime() > Date.now() && (
                 <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                  정기결제를 해지했어요. {fmtLongDate(org.billingNextPaymentAt)}
-                  까지 이용할 수 있고, 그 뒤로는 결제되지 않아요.
+                  {t.canceledUntil.replace(
+                    "{date}",
+                    fmtLongDate(org.billingNextPaymentAt, locale)
+                  )}
                 </p>
               )}
             {/* ⚖️ 환불·청약철회는 이메일 외에 앱 안에서도 요청할 수 있다(약관 제4조의3 제5항).
                 유료 이용 중이거나 정기결제가 있는 조직에만 보인다 — 무료 조직엔 환불할 결제가 없다. */}
             {(plan !== "free" || hasSubscription) && (
-              <RefundRequestForm hasPendingRequest={hasPendingRefund} />
+              <RefundRequestForm
+                hasPendingRequest={hasPendingRefund}
+                t={dict.refundRequest}
+              />
             )}
             <a
               className="self-start text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs underline underline-offset-4 hover:text-[color:var(--findable-ink,#f7f8f8)]"
@@ -268,15 +319,15 @@ const BillingPage = async () => {
               rel="noopener"
               target="_blank"
             >
-              이용약관(환불 규정)
+              {t.termsLink}
             </a>
           </div>
           {plan === "free" && (
             <a
               className="findable-btn-primary inline-flex items-center rounded-md px-5 py-2.5 font-medium text-sm"
-              href={`${webUrl}/ko/contact`}
+              href={contactHref}
             >
-              업그레이드 상담
+              {t.upgradeConsult}
             </a>
           )}
         </section>
@@ -285,16 +336,15 @@ const BillingPage = async () => {
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-lg">
-              플랜 비교
+              {t.compareTitle}
             </h2>
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              브랜드 규모에 맞는 플랜을 선택하세요. 카드 결제로 즉시 시작하거나,
-              상담으로 진행할 수 있어요.
+              {t.compareLede}
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {PRICING_TIERS.map((tier) => {
+            {pricingTiers(dict.pricing, locale).map((tier) => {
               const isCurrent = tier.plan === plan;
               return (
                 <div
@@ -316,12 +366,12 @@ const BillingPage = async () => {
                           ⚠️ 배지는 한 칸이다. 둘 다 띄우면 줄이 밀린다. */}
                       {isCurrent && (
                         <span className="rounded-full bg-[color:var(--findable-surface-3,#18191a)] px-2 py-0.5 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                          현재
+                          {t.badgeCurrent}
                         </span>
                       )}
                       {tier.featured && !isCurrent && (
                         <span className="rounded-full bg-[color:var(--findable-primary,#ff7a4d)]/12 px-2 py-0.5 font-medium text-[color:var(--findable-primary,#ff7a4d)] text-xs">
-                          추천
+                          {t.badgeRecommended}
                         </span>
                       )}
                     </div>
@@ -345,13 +395,15 @@ const BillingPage = async () => {
                       //   ⚠️ 무료(₩0)에는 붙이지 않는다 — 낼 돈이 없는데 세금 안내는 잡음이다.
                       tier.plan !== "free" && (
                         <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                          VAT 별도 · 금액은 상담에서 확정해요
+                          {t.vatConsult}
                         </p>
                       )
                     ) : (
                       <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                        VAT 별도 · 결제 금액 ₩
-                        {tier.chargedKrw.toLocaleString("ko-KR")}
+                        {t.vatCharged.replace(
+                          "{amount}",
+                          tier.chargedKrw.toLocaleString("ko-KR")
+                        )}
                       </p>
                     )}
                     <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
@@ -366,6 +418,7 @@ const BillingPage = async () => {
                   <ul className="flex flex-1 flex-col gap-2">
                     {tier.features.map((feature) => (
                       <FeatureRow
+                        comingSoon={t.comingSoon}
                         feature={feature}
                         key={
                           typeof feature === "string" ? feature : feature.label
@@ -376,10 +429,12 @@ const BillingPage = async () => {
 
                   {isCurrent ? (
                     <span className="inline-flex items-center justify-center rounded-md border border-[color:var(--findable-hairline,#23252a)] px-4 py-2 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-                      이용 중
+                      {t.inUse}
                     </span>
                   ) : (
                     <TierCta
+                      contactHref={contactHref}
+                      dict={dict}
                       termsHref={termsHref}
                       tier={tier}
                       webUrl={webUrl}

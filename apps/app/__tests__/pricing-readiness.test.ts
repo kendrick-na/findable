@@ -1,3 +1,5 @@
+import enDict from "@repo/internationalization/dictionaries/en.json";
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * S6-c#2 회귀 테스트 (2026-08-11).
  *
@@ -12,7 +14,13 @@
  *      올바른 상태를 요구하고(①) 틀린 상태의 부활을 막는다(②).
  */
 import { describe, expect, test } from "vitest";
-import { PRICING_TIERS } from "../app/(authenticated)/lib/pricing";
+import { pricingTiers } from "../app/(authenticated)/lib/pricing";
+
+// 🔴 2026-10-06 — 요금제 카드는 사전에서 문구를 받는다. 한국어·영어 **둘 다** 같은 정직성 규칙을 지킨다.
+const PRICING_TIERS = [
+  ...pricingTiers(koDict.app.pricing, "ko"),
+  ...pricingTiers(enDict.app.pricing, "en"),
+];
 
 const allFeatures = PRICING_TIERS.flatMap((tier) =>
   tier.features.map((feature) => ({ feature, tier: tier.name }))
@@ -32,7 +40,7 @@ describe("요금제 기능 — 준비 중 표시 정직성", () => {
     for (const { feature, tier } of allFeatures) {
       const label = typeof feature === "string" ? feature : feature.label;
       expect(
-        label.includes("준비 중"),
+        label.includes("준비 중") || /coming soon/i.test(label),
         `${tier} 의 "${label}" — 라벨 대신 { ready: false } 를 쓸 것. ` +
           "문자열로 적으면 체크(✓)가 그대로 붙어 없는 기능을 파는 표시가 된다."
       ).toBe(false);

@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 요금제 화면 "환불·청약철회 요청" 입력 + 관리자 목록 렌더 (2026-10-05).
  * 고객은 접수 확인과 3영업일 처리 안내를 보고, 관리자는 접수된 요청을 본다.
@@ -36,7 +37,7 @@ afterEach(() => {
 describe("환불·청약철회 요청 폼", () => {
   it("요청을 보내면 접수 확인과 3영업일 처리 안내를 보여 준다", async () => {
     mocks.requestRefund.mockResolvedValue({ ok: true, status: "created" });
-    render(<RefundRequestForm />);
+    render(<RefundRequestForm t={koDict.app.refundRequest} />);
 
     fireEvent.click(screen.getByRole("button", { name: "환불·청약철회 요청" }));
     fireEvent.change(screen.getByLabelText("요청 내용(선택)"), {
@@ -58,7 +59,7 @@ describe("환불·청약철회 요청 폼", () => {
       ok: true,
       status: "already_pending",
     });
-    render(<RefundRequestForm />);
+    render(<RefundRequestForm t={koDict.app.refundRequest} />);
     fireEvent.click(screen.getByRole("button", { name: "환불·청약철회 요청" }));
     fireEvent.click(screen.getByRole("button", { name: "요청 보내기" }));
     await waitFor(() =>
@@ -73,7 +74,7 @@ describe("환불·청약철회 요청 폼", () => {
       ok: false,
       error: "요청을 저장하지 못했어요.",
     });
-    render(<RefundRequestForm />);
+    render(<RefundRequestForm t={koDict.app.refundRequest} />);
     fireEvent.click(screen.getByRole("button", { name: "환불·청약철회 요청" }));
     fireEvent.click(screen.getByRole("button", { name: "요청 보내기" }));
     await waitFor(() =>

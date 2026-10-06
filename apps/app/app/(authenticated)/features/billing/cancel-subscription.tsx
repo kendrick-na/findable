@@ -5,6 +5,7 @@ import { toast } from "@repo/design-system/components/ui/sonner";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { unsubscribe } from "@/app/actions/billing/subscription";
+import type { AppDictionary } from "@/lib/i18n";
 
 /**
  * 정기결제 해지 버튼 — 2026-08-11 세션N-18.
@@ -17,7 +18,12 @@ import { unsubscribe } from "@/app/actions/billing/subscription";
  *   - 확인 문구로 겁주지 않는다("정말요? 혜택이 사라져요!" 같은 만류 카피 금지).
  *   - 다만 **오클릭 방지**를 위한 1회 확인은 둔다(되돌릴 수 없는 동작이므로).
  */
-export const CancelSubscription = () => {
+export const CancelSubscription = ({
+  t,
+}: {
+  /** 사전 `app.cancelSubscription`. */
+  t: AppDictionary["cancelSubscription"];
+}) => {
   const router = useRouter();
   const [isConfirming, setConfirming] = useState(false);
   const [isPending, setPending] = useState(false);
@@ -30,13 +36,11 @@ export const CancelSubscription = () => {
         toast.error(result.error);
         return;
       }
-      toast.success("정기결제가 해지되었어요. 다음 결제부터 청구되지 않아요.");
+      toast.success(t.done);
       setConfirming(false);
       router.refresh();
     } catch {
-      toast.error(
-        "해지 처리 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
-      );
+      toast.error(t.failed);
     } finally {
       setPending(false);
     }
@@ -49,7 +53,7 @@ export const CancelSubscription = () => {
         onClick={() => setConfirming(true)}
         type="button"
       >
-        정기결제 해지
+        {t.open}
       </button>
     );
   }
@@ -57,8 +61,7 @@ export const CancelSubscription = () => {
   return (
     <div className="flex flex-col gap-2 rounded-md border border-[color:var(--findable-hairline,#23252a)] p-3">
       <p className="text-[color:var(--findable-ink-muted,#d0d6e0)] text-xs">
-        해지하면 다음 결제일부터 자동결제가 중단돼요. 이미 결제한 이용 기간은
-        그대로 사용할 수 있어요.
+        {t.body}
       </p>
       <div className="flex gap-2">
         <Button
@@ -67,7 +70,7 @@ export const CancelSubscription = () => {
           size="sm"
           variant="destructive"
         >
-          {isPending ? "처리 중…" : "해지하기"}
+          {isPending ? t.processing : t.confirm}
         </Button>
         <Button
           disabled={isPending}
@@ -75,7 +78,7 @@ export const CancelSubscription = () => {
           size="sm"
           variant="ghost"
         >
-          유지하기
+          {t.keep}
         </Button>
       </div>
     </div>

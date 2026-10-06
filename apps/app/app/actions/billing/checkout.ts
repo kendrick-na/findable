@@ -15,6 +15,10 @@ import {
   parsePaymentId,
   planForAmount,
 } from "@repo/payments";
+import { getAppDictionary } from "@/lib/i18n";
+
+/** 화면에 보이는 오류 문구 — 사전 `app.billingErrors`(요청 밖이면 ko). ⚠️ 결제사로 보내는 상품명은 그대로. */
+const billingErrors = async () => (await getAppDictionary()).billingErrors;
 
 /**
  * 앱 내 결제(로그인 상태) — 결제→plan 자동 부여의 완결 지점 (투두 "payments 자동화", 2026-07-30).
@@ -57,12 +61,12 @@ export const createCheckoutIntent = async (
 ): Promise<CheckoutIntentResult> => {
   const { userId, orgId } = await auth();
   if (!userId) {
-    return { error: "로그인 후 이용해 주세요." };
+    return { error: (await billingErrors()).signIn };
   }
 
   const amount = amountForPlan(plan);
   if (!amount) {
-    return { error: "결제할 수 없는 플랜입니다." };
+    return { error: (await billingErrors()).planNotPayable };
   }
 
   // 🔒 정기결제 중(active·past_due)인 조직은 단건 결제로 같은 기간을 또 결제하지 않는다
@@ -74,15 +78,14 @@ export const createCheckoutIntent = async (
     });
     if (org?.billingStatus === "active" || org?.billingStatus === "past_due") {
       return {
-        error:
-          "이미 정기결제 중인 조직입니다. 플랜 변경은 상담으로 문의해 주세요.",
+        error: (await billingErrors()).alreadySubscribedOneOff,
       };
     }
   }
 
   if (!isPortOneConfigured()) {
     return {
-      error: "결제 모듈이 아직 설정되지 않았습니다. 상담으로 문의해 주세요.",
+      error: (await billingErrors()).checkoutNotConfigured,
     };
   }
 
@@ -120,7 +123,7 @@ export const verifyPaymentAndGrant = async (
 ): Promise<VerifyAndGrantResult> => {
   const { userId } = await auth();
   if (!userId) {
-    return { error: "로그인 후 이용해 주세요." };
+    return { error: (await billingErrors()).signIn };
   }
 
   // 리플레이 가드: 이 결제가 이 세션 사용자용으로 발급된 paymentId 인지.
@@ -128,18 +131,26 @@ export const verifyPaymentAndGrant = async (
   // (`user_ab` 세션이 `user_abc` 의 결제를 쓰지 못하게).
   if (parsePaymentId(paymentId)?.userId !== userId) {
     log.warn("billing.verify.replay_blocked", { userId, paymentId });
-    return { error: "이 계정의 결제가 아닙니다." };
+    return { error: (await billingErrors()).notYourPayment };
   }
 
   try {
     const payment = await getPortOnePayment(paymentId);
 
     if (payment.status !== "PAID") {
-      return { error: `결제가 완료되지 않았습니다. (상태: ${payment.status})` };
+      return {
+        error: (await billingErrors()).notPaid.replace(
+          "{status}",
+          String(payment.status)
+        ),
+      };
     }
     if (payment.currency !== "KRW") {
       return {
-        error: `지원하지 않는 통화입니다. (${payment.currency})`,
+        error: (await billingErrors()).unsupportedCurrency.replace(
+          "{currency}",
+          String(payment.currency)
+        ),
       };
     }
     const plan = planForAmount(payment.amount.total);
@@ -149,7 +160,7 @@ export const verifyPaymentAndGrant = async (
         amount: payment.amount.total,
       });
       return {
-        error: "결제 금액이 요금제와 일치하지 않습니다. 문의해 주세요.",
+        error: (await billingErrors()).amountMismatch,
       };
     }
 
@@ -168,7 +179,7 @@ export const verifyPaymentAndGrant = async (
         reason: integrity.reason,
       });
       return {
-        error: "결제 정보가 주문과 일치하지 않습니다. 상담으로 문의해 주세요.",
+        error: (await billingErrors()).orderMismatch,
       };
     }
 
@@ -187,6 +198,6 @@ export const verifyPaymentAndGrant = async (
       paymentId,
       error: parseError(error),
     });
-    return { error: "결제 검증에 실패했습니다. 잠시 후 다시 시도해 주세요." };
+    return { error: (await billingErrors()).verifyFailed };
   }
 };

@@ -16,6 +16,7 @@ import {
   createCheckoutIntent,
   verifyPaymentAndGrant,
 } from "@/app/actions/billing/checkout";
+import type { AppDictionary } from "@/lib/i18n";
 import { PurchaseNotice } from "./purchase-notice";
 
 /**
@@ -62,6 +63,8 @@ export const UpgradeButton = ({
   contactHref,
   paymentMethod = "easy-pay",
   termsHref,
+  notice,
+  t,
 }: {
   plan: PayablePlan;
   label: string;
@@ -70,6 +73,10 @@ export const UpgradeButton = ({
   paymentMethod?: PaymentMethod;
   /** 이용약관(환불 규정) 주소 — 결제 전 고지에서 연결한다. */
   termsHref: string;
+  /** 사전 `app.purchaseNotice`(⚖️ 공개 영문 약관 문장). */
+  notice: AppDictionary["purchaseNotice"];
+  /** 사전 `app.upgrade`. ⚖️ `consent` 는 영어판 승인 대기(한국어 유지). */
+  t: AppDictionary["upgrade"];
 }) => {
   const router = useRouter();
   const { user } = useUser();
@@ -148,10 +155,10 @@ export const UpgradeButton = ({
         //   "[PAY_PROCESS_CANCELED] 사용자가…" 로 와서 개발용 코드가 화면에 그대로 노출됐다.
         //   고객 취소는 실패가 아니다 → 안내만 한다(정기결제 창 닫기와 같은 결).
         if (isUserCancel(response)) {
-          toast.info("결제를 취소했어요. 결제는 진행되지 않았어요.");
+          toast.info(t.userCancelled);
           return;
         }
-        toast.error(`결제하지 못했어요: ${customerMessage(response)}`);
+        toast.error(t.failed.replace("{reason}", customerMessage(response)));
         return;
       }
 
@@ -173,14 +180,12 @@ export const UpgradeButton = ({
           amountKrw: intent.amount,
           reasonCode: "not_granted",
         });
-        toast.warning(
-          "결제는 완료됐지만 플랜 반영이 지연되고 있어요. 잠시 후 새로고침해 주세요."
-        );
+        toast.warning(t.delayed);
         return;
       }
       // 결제 성공 **그리고** 플랜 부여 성공 — 둘 다 된 경우만 완료로 센다.
       trackCheckoutCompleted({ plan, amountKrw: intent.amount });
-      toast.success(`${verified.plan} 플랜이 활성화됐어요!`);
+      toast.success(t.activated.replace("{plan}", verified.plan));
       setNoticeOpen(false);
       // Clerk publicMetadata는 결제 서버가 갱신한다. 기존 세션 토큰을 그대로
       // 새로고침하면 방금 결제한 고객에게도 Free가 보일 수 있으므로 먼저 갱신한다.
@@ -189,7 +194,10 @@ export const UpgradeButton = ({
     } catch (error) {
       trackCheckoutFailed({ plan, stage: "widget", reasonCode: "exception" });
       toast.error(
-        `결제 처리 중 오류: ${error instanceof Error ? error.message : "알 수 없음"}`
+        t.error.replace(
+          "{reason}",
+          error instanceof Error ? error.message : t.unknown
+        )
       );
     } finally {
       setIsPending(false);
@@ -213,7 +221,7 @@ export const UpgradeButton = ({
       <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
         {label}
       </p>
-      <PurchaseNotice kind="one-off" termsHref={termsHref} />
+      <PurchaseNotice kind="one-off" t={notice} termsHref={termsHref} />
 
       <label className="flex cursor-pointer items-start gap-2 text-[color:var(--findable-ink-muted,#d0d6e0)] text-xs">
         <input
@@ -222,7 +230,7 @@ export const UpgradeButton = ({
           onChange={(e) => setAgreed(e.target.checked)}
           type="checkbox"
         />
-        <span>위 내용을 확인했습니다.</span>
+        <span>{t.consent}</span>
       </label>
 
       <div className="flex gap-2">
@@ -232,7 +240,7 @@ export const UpgradeButton = ({
           onClick={pay}
           size="sm"
         >
-          {isPending ? "결제 진행 중…" : "동의하고 결제하기"}
+          {isPending ? t.processing : t.submit}
         </Button>
         <Button
           disabled={isPending}
@@ -240,7 +248,7 @@ export const UpgradeButton = ({
           size="sm"
           variant="ghost"
         >
-          취소
+          {t.cancel}
         </Button>
       </div>
     </div>

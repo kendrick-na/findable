@@ -20,6 +20,10 @@ import {
   userIdFromPaymentId,
 } from "@repo/payments";
 import { ensureOrgExists } from "@/lib/db/ensure-org";
+import { getAppDictionary } from "@/lib/i18n";
+
+/** 화면에 보이는 오류 문구 — 사전 `app.billingErrors`(요청 밖이면 ko). ⚠️ 결제사로 보내는 상품명은 그대로. */
+const billingErrors = async () => (await getAppDictionary()).billingErrors;
 
 /**
  * 정기결제(월 구독) — 빌링키 발급 → 첫 결제 → 해지. 2026-08-11 세션N-18.
@@ -62,13 +66,6 @@ const SUBSCRIPTION_BLOCKING_STATUSES = new Set<string>(["active", "past_due"]);
 const PENDING_CHARGE_SETTLE_MS = 10 * 60 * 1000;
 /** PortOne 이 "청구되지 않았다"고 확정한 상태 — 이때만 선점 표식을 푼다. */
 const UNCHARGED_PAYMENT_STATUSES = new Set<string>(["FAILED", "CANCELLED"]);
-
-const ALREADY_SUBSCRIBED_ERROR =
-  "이미 정기결제 중인 조직입니다. 플랜 변경은 기존 구독을 해지한 뒤 다시 가입하거나 상담으로 문의해 주세요.";
-const IN_PROGRESS_ERROR =
-  "이전 결제를 처리 중입니다. 잠시 후 결제 내역을 확인해 주세요.";
-const NEEDS_RECOVERY_ERROR =
-  "결제는 완료됐지만 구독 정보를 저장하지 못했습니다. 다시 결제하지 마시고 상담으로 문의해 주시면 복구해 드릴게요.";
 
 type PendingChargeState = "released" | "in_progress" | "paid";
 
@@ -132,22 +129,22 @@ async function checkSubscriptionEntry(orgId: string): Promise<EntryCheck> {
   if (!org) {
     return {
       ok: false,
-      error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      error: (await billingErrors()).orgNotReady,
     };
   }
   if (
     SUBSCRIPTION_BLOCKING_STATUSES.has(org.billingStatus) ||
     org.billingCustomerId
   ) {
-    return { ok: false, error: ALREADY_SUBSCRIBED_ERROR };
+    return { ok: false, error: (await billingErrors()).alreadySubscribed };
   }
   if (org.billingNextPaymentId) {
     const state = await settlePendingCharge(orgId, org.billingNextPaymentId);
     if (state === "paid") {
-      return { ok: false, error: NEEDS_RECOVERY_ERROR };
+      return { ok: false, error: (await billingErrors()).needsRecovery };
     }
     if (state === "in_progress") {
-      return { ok: false, error: IN_PROGRESS_ERROR };
+      return { ok: false, error: (await billingErrors()).inProgress };
     }
   }
   return { ok: true };
@@ -178,17 +175,17 @@ export const createSubscribeIntent = async (
 ): Promise<SubscribeIntentResult> => {
   const { userId } = await auth();
   if (!userId) {
-    return { error: "로그인 후 이용해 주세요." };
+    return { error: (await billingErrors()).signIn };
   }
 
   const amount = amountForPlan(plan);
   if (!amount) {
-    return { error: "결제할 수 없는 플랜입니다." };
+    return { error: (await billingErrors()).planNotPayable };
   }
 
   if (!(isPortOneConfigured() && BILLING_CHANNEL_KEY)) {
     return {
-      error: "정기결제가 아직 설정되지 않았습니다. 상담으로 문의해 주세요.",
+      error: (await billingErrors()).subscriptionNotConfigured,
     };
   }
 
@@ -196,7 +193,7 @@ export const createSubscribeIntent = async (
   const ensuredOrgId = await ensureOrgExists();
   if (!ensuredOrgId) {
     return {
-      error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      error: (await billingErrors()).orgNotReady,
     };
   }
   const entry = await checkSubscriptionEntry(ensuredOrgId);
@@ -243,12 +240,12 @@ export const confirmSubscription = async (
 ): Promise<ConfirmSubscriptionResult> => {
   const { userId } = await auth();
   if (!userId) {
-    return { error: "로그인 후 이용해 주세요." };
+    return { error: (await billingErrors()).signIn };
   }
 
   const amount = amountForPlan(plan);
   if (!amount) {
-    return { error: "결제할 수 없는 플랜입니다." };
+    return { error: (await billingErrors()).planNotPayable };
   }
 
   const user = await currentUser();
@@ -263,7 +260,7 @@ export const confirmSubscription = async (
   const ensuredOrgId = await ensureOrgExists();
   if (!ensuredOrgId) {
     return {
-      error: "조직 정보를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      error: (await billingErrors()).orgNotReady,
     };
   }
 
@@ -285,7 +282,7 @@ export const confirmSubscription = async (
   });
   if (claimed.count !== 1) {
     log.warn("billing.subscribe.claim_lost", { userId, plan });
-    return { error: IN_PROGRESS_ERROR };
+    return { error: (await billingErrors()).inProgress };
   }
 
   try {
@@ -311,11 +308,14 @@ export const confirmSubscription = async (
     });
     if (state === "released") {
       return {
-        error: "정기결제 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        error: (await billingErrors()).subscribeFailed,
       };
     }
     return {
-      error: state === "paid" ? NEEDS_RECOVERY_ERROR : IN_PROGRESS_ERROR,
+      error:
+        state === "paid"
+          ? (await billingErrors()).needsRecovery
+          : (await billingErrors()).inProgress,
     };
   }
 
@@ -397,7 +397,7 @@ export const confirmSubscription = async (
       paymentId,
       error: parseError(error),
     });
-    return { error: NEEDS_RECOVERY_ERROR };
+    return { error: (await billingErrors()).needsRecovery };
   }
 };
 
@@ -412,10 +412,10 @@ export type UnsubscribeResult = { ok: true } | { error: string };
 export const unsubscribe = async (): Promise<UnsubscribeResult> => {
   const { userId, orgId, has } = await auth();
   if (!userId) {
-    return { error: "로그인 후 이용해 주세요." };
+    return { error: (await billingErrors()).signIn };
   }
   if (!orgId) {
-    return { error: "조직 정보를 찾을 수 없습니다." };
+    return { error: (await billingErrors()).orgNotFound };
   }
 
   const org = await database.organization.findUnique({
@@ -429,7 +429,7 @@ export const unsubscribe = async (): Promise<UnsubscribeResult> => {
 
   const billingKey = org?.billingCustomerId;
   if (!(billingKey && org?.billingProvider === "portone")) {
-    return { error: "해지할 정기결제가 없습니다." };
+    return { error: (await billingErrors()).nothingToCancel };
   }
 
   // 🔒 해지 권한(2026-10-05 컨트롤타워 승인): 결제한 멤버 본인 또는 조직 관리자만.
@@ -441,7 +441,7 @@ export const unsubscribe = async (): Promise<UnsubscribeResult> => {
   if (!(payerId === userId || isOrgAdmin)) {
     log.warn("billing.unsubscribe.forbidden", { userId, orgId });
     return {
-      error: "결제한 멤버 또는 조직 관리자만 구독을 해지할 수 있습니다.",
+      error: (await billingErrors()).cancelForbidden,
     };
   }
 
@@ -474,6 +474,6 @@ export const unsubscribe = async (): Promise<UnsubscribeResult> => {
       orgId,
       error: parseError(error),
     });
-    return { error: "해지 처리에 실패했습니다. 잠시 후 다시 시도해 주세요." };
+    return { error: (await billingErrors()).cancelFailed };
   }
 };

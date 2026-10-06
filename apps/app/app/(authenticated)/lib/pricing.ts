@@ -4,6 +4,7 @@ import {
   listPriceForPlan,
   type PayablePlan,
 } from "@repo/payments/catalog";
+import type { AppDictionary, AppLocale } from "@/lib/i18n";
 
 /**
  * in-app 요금제 표(/billing). apps/web pricing/page.tsx 의 TIERS_KO 와 동일 사실을
@@ -62,139 +63,145 @@ export function listFor(plan: PayablePlan): number | undefined {
   return listPriceForPlan(plan) ?? undefined;
 }
 
-export const PRICING_TIERS: PricingTier[] = [
-  {
-    plan: "free",
-    name: "Free Audit",
-    price: "₩0",
-    period: "1회 무료",
-    desc: "도메인 입력 한 번으로 AI 답변 4곳과 네이버·다음 검색 노출을 진단해 보세요.",
-    features: [
-      "AI 답변 4곳 + 네이버·다음 검색 1회 진단",
-      "1페이지 PDF 리포트",
-      "이메일 발송",
-      "카드 등록 불필요",
-    ],
-    cta: "무료로 진단받기",
-    href: "/ko/audit",
-  },
-  {
-    plan: "starter",
-    name: "Starter",
-    price: "₩99,000",
-    period: "월",
-    chargedKrw: chargedFor("starter"),
-    desc: "1인 창업자·개인 브랜드를 위한 입문 플랜.",
-    features: [
-      {
-        label: "월 30개 질문 추적",
-        hint: "고객이 AI에 물어볼 질문 30개를 우리가 대신 물어보고 결과를 쌓아요",
-      },
-      // 🔴 2026-08-15 — `1개` → `3개`. `planCapabilities("starter").brandLimit = 3`
-      //   (`packages/auth/plan.ts:121`)인데 화면은 1개라고 고지했다.
-      //   = **돈 낸 고객에게 권리를 축소 고지**한 것(반대 방향 결함보다 드물지만 같은 부정직).
-      "3개 브랜드 측정",
-      // ⭐ web pricing 과 동일 사실(2026-08-10) — 이미 작동하는데 표에 없던 기능.
-      //   planCapabilities("starter").autoRefreshHours=168(주간)이 단일 진실.
-      //   ⚠️ "리포트"(메일)와 다르다 — 메일은 FINDABLE_ENABLE_DIGEST_EMAIL 꺼짐.
-      "주간 자동 재측정",
-      { label: "주간 자동 리포트", ready: false },
-      { label: "이메일 알림", ready: false },
-      "Free Audit 모든 기능",
-    ],
-    cta: "Starter 시작하기",
-    href: "/ko/contact",
-  },
-  {
-    plan: "growth",
-    name: "Growth",
-    price: "₩390,000",
-    period: "월",
-    chargedKrw: chargedFor("growth"),
-    desc: "성장 중인 D2C·SMB를 위한 추천 플랜.",
-    features: [
-      {
-        label: "월 150개 질문 추적",
-        hint: "고객이 AI에 물어볼 질문 150개를 우리가 대신 물어보고 결과를 쌓아요",
-      },
-      "5개 브랜드 측정",
-      // ⭐ Growth 도 매일(24h) 돈다 — Scale 전용처럼 숨어 있던 차별점(2026-08-10).
-      "매일 자동 재측정",
-      {
-        label: "한국어 표기 통합 추적",
-        // 예시는 **저장소의 실제 사용례**를 쓴다(`packages/ai/lib/engines/index.ts:88`
-        // 의 `brandVariants: ["Medicube", "메디큐브"]`). 지어낸 예시를 쓰지 않는다.
-        hint: "‘메디큐브·Medicube’처럼 흩어진 표기를 한 브랜드로 묶어서 세요",
-      },
-      {
-        label: "먼저 할 일 3가지 추천",
-        hint: "측정 결과를 근거로 지금 무엇부터 고치면 되는지 순서를 정해드려요",
-      },
-      { label: "Notion · Google Docs Export", ready: false },
-      "Starter 모든 기능",
-    ],
-    cta: "Growth 시작하기",
-    href: "/ko/contact",
-    featured: true,
-  },
-  {
-    // 🔴 2026-08-11 추가 — **표에만 없었다**(세션N-18).
-    //   web 요금제(`apps/web/.../pricing/page.tsx`)의 "Scale 시작하기" CTA 가 `/billing` 로
-    //   보내는데 정작 이 표에 Scale 이 없어서 **결제 화면에 도착해도 살 수가 없었다**.
-    //   카탈로그·권한위계엔 처음부터 있었다(`PAYABLE_PLANS` · `PLAN_RANK.scale=3` ·
-    //   `PAYMENT_CATALOG` 990,000/1,089,000) → 배열에 한 칸이 빠진 것뿐이라 로직 변경 0.
-    //   ⚠️ 기능 문구는 web 표와 **같은 사실**을 쓴다(둘이 갈리면 그게 표시광고 문제가 된다).
-    plan: "scale",
-    name: "Scale",
-    price: "₩990,000",
-    period: "월",
-    chargedKrw: chargedFor("scale"),
-    desc: "중견 D2C·미드마켓을 위한 대규모 추적 플랜.",
-    features: [
-      {
-        label: "월 500개 질문 추적",
-        hint: "고객이 AI에 물어볼 질문 500개를 우리가 대신 물어보고 결과를 쌓아요",
-      },
-      "무제한 브랜드 측정",
-      // ⚠️ "일간 자동 재측정"을 넣지 않는다 — Growth 와 주기가 **동일**(24h)해서
-      //   Scale 전용처럼 적으면 오표기다(web 표와 같은 판단). "Growth 모든 기능"에 포함된다.
-      {
-        label: "API 연동",
-        hint: "측정 결과를 우리 회사 시스템으로 바로 가져갈 수 있어요",
-      },
-      "Growth 모든 기능",
-    ],
-    cta: "Scale 시작하기",
-    href: "/ko/contact",
-  },
-  {
-    plan: "enterprise",
-    name: "Enterprise",
-    price: "맞춤",
-    // 🔴 S7-a(2026-08-11) — 예전 표기 `연 ₩30M~`. 이 자리는 다른 카드가 전부 **"월"**
-    //   을 쓰는 슬롯이라 단위가 바뀐 걸 못 보고 **월 3천만원으로 읽힐** 수 있었다.
-    //   게다가 `30M` 은 영어 축약이라 한국어 화면에서 한 번 더 걸린다(NN/g 2).
-    //   → 단위를 앞에 두고 숫자를 한국어로 적는다.
-    period: "연 3,000만원~",
-    desc: "대기업·금융·F500 한국 지사 맞춤 플랜.",
-    features: [
-      {
-        label: "질문·브랜드 무제한",
-        hint: "추적할 질문 수와 브랜드 수에 제한이 없어요",
-      },
-      "전담 GEO 매니저",
-      "SSO · SAML",
-      // 🐛 라이브 스크린샷에서 잡음(2026-08-11): Scale 은 "API 연동"으로 고쳤는데
-      //   Enterprise 만 `API 액세스` 로 남아 **같은 화면에서 같은 기능을 두 이름으로**
-      //   부르고 있었다(NN/g 4 일관성). 문구를 Scale 과 통일한다.
-      {
-        label: "API 연동",
-        hint: "측정 결과를 우리 회사 시스템으로 바로 가져갈 수 있어요",
-      },
-      "맞춤 SLA",
-      "Growth 모든 기능",
-    ],
-    cta: "상담 예약",
-    href: "/ko/contact",
-  },
-];
+/**
+ * 요금제 카드 — 문구는 사전(`app.pricing`), 금액은 카탈로그·고정 표기 그대로(2026-10-06).
+ * 🔴 금액(₩)·플랜 이름은 번역하지 않는다 — 👤 D2: 통화·부가세 정책은 그대로, 표기만 언어를 따른다.
+ * ⚠️ 웹 링크(`href`)는 로케일 접두사를 따른다(ko → `/ko/…`, en → 접두사 없음).
+ */
+export const pricingTiers = (
+  t: AppDictionary["pricing"],
+  locale: AppLocale
+): PricingTier[] => {
+  const lp = locale === "ko" ? "/ko" : "";
+  return [
+    {
+      plan: "free",
+      name: "Free Audit",
+      price: "₩0",
+      period: t.freePeriod,
+      desc: t.freeDesc,
+      features: [t.freeF1, t.freeF2, t.freeF3, t.freeF4],
+      cta: t.freeCta,
+      href: `${lp}/audit`,
+    },
+    {
+      plan: "starter",
+      name: "Starter",
+      price: "₩99,000",
+      period: t.monthly,
+      chargedKrw: chargedFor("starter"),
+      desc: t.starterDesc,
+      features: [
+        {
+          label: t.prompts30,
+          hint: t.prompts30Hint,
+        },
+        // 🔴 2026-08-15 — `1개` → `3개`. `planCapabilities("starter").brandLimit = 3`
+        //   (`packages/auth/plan.ts:121`)인데 화면은 1개라고 고지했다.
+        //   = **돈 낸 고객에게 권리를 축소 고지**한 것(반대 방향 결함보다 드물지만 같은 부정직).
+        t.brands3,
+        // ⭐ web pricing 과 동일 사실(2026-08-10) — 이미 작동하는데 표에 없던 기능.
+        //   planCapabilities("starter").autoRefreshHours=168(주간)이 단일 진실.
+        //   ⚠️ "리포트"(메일)와 다르다 — 메일은 FINDABLE_ENABLE_DIGEST_EMAIL 꺼짐.
+        t.weeklyRefresh,
+        { label: t.weeklyReport, ready: false },
+        { label: t.emailAlerts, ready: false },
+        t.allFree,
+      ],
+      cta: t.starterCta,
+      href: `${lp}/contact`,
+    },
+    {
+      plan: "growth",
+      name: "Growth",
+      price: "₩390,000",
+      period: t.monthly,
+      chargedKrw: chargedFor("growth"),
+      desc: t.growthDesc,
+      features: [
+        {
+          label: t.prompts150,
+          hint: t.prompts150Hint,
+        },
+        t.brands5,
+        // ⭐ Growth 도 매일(24h) 돈다 — Scale 전용처럼 숨어 있던 차별점(2026-08-10).
+        t.dailyRefresh,
+        {
+          label: t.variants,
+          // 예시는 **저장소의 실제 사용례**를 쓴다(`packages/ai/lib/engines/index.ts:88`
+          // 의 `brandVariants: ["Medicube", "메디큐브"]`). 지어낸 예시를 쓰지 않는다.
+          hint: t.variantsHint,
+        },
+        {
+          label: t.top3,
+          hint: t.top3Hint,
+        },
+        { label: t.export, ready: false },
+        t.allStarter,
+      ],
+      cta: t.growthCta,
+      href: `${lp}/contact`,
+      featured: true,
+    },
+    {
+      // 🔴 2026-08-11 추가 — **표에만 없었다**(세션N-18).
+      //   web 요금제(`apps/web/.../pricing/page.tsx`)의 "Scale 시작하기" CTA 가 `/billing` 로
+      //   보내는데 정작 이 표에 Scale 이 없어서 **결제 화면에 도착해도 살 수가 없었다**.
+      //   카탈로그·권한위계엔 처음부터 있었다(`PAYABLE_PLANS` · `PLAN_RANK.scale=3` ·
+      //   `PAYMENT_CATALOG` 990,000/1,089,000) → 배열에 한 칸이 빠진 것뿐이라 로직 변경 0.
+      //   ⚠️ 기능 문구는 web 표와 **같은 사실**을 쓴다(둘이 갈리면 그게 표시광고 문제가 된다).
+      plan: "scale",
+      name: "Scale",
+      price: "₩990,000",
+      period: t.monthly,
+      chargedKrw: chargedFor("scale"),
+      desc: t.scaleDesc,
+      features: [
+        {
+          label: t.prompts500,
+          hint: t.prompts500Hint,
+        },
+        t.brandsUnlimited,
+        // ⚠️ "일간 자동 재측정"을 넣지 않는다 — Growth 와 주기가 **동일**(24h)해서
+        //   Scale 전용처럼 적으면 오표기다(web 표와 같은 판단). "Growth 모든 기능"에 포함된다.
+        {
+          label: t.api,
+          hint: t.apiHint,
+        },
+        t.allGrowth,
+      ],
+      cta: t.scaleCta,
+      href: `${lp}/contact`,
+    },
+    {
+      plan: "enterprise",
+      name: "Enterprise",
+      price: t.enterprisePrice,
+      // 🔴 S7-a(2026-08-11) — 예전 표기 `연 ₩30M~`. 이 자리는 다른 카드가 전부 **"월"**
+      //   을 쓰는 슬롯이라 단위가 바뀐 걸 못 보고 **월 3천만원으로 읽힐** 수 있었다.
+      //   게다가 `30M` 은 영어 축약이라 한국어 화면에서 한 번 더 걸린다(NN/g 2).
+      //   → 단위를 앞에 두고 숫자를 한국어로 적는다.
+      period: t.enterprisePeriod,
+      desc: t.enterpriseDesc,
+      features: [
+        {
+          label: t.unlimited,
+          hint: t.unlimitedHint,
+        },
+        t.manager,
+        t.sso,
+        // 🐛 라이브 스크린샷에서 잡음(2026-08-11): Scale 은 "API 연동"으로 고쳤는데
+        //   Enterprise 만 `API 액세스` 로 남아 **같은 화면에서 같은 기능을 두 이름으로**
+        //   부르고 있었다(NN/g 4 일관성). 문구를 Scale 과 통일한다.
+        {
+          label: t.api,
+          hint: t.apiHint,
+        },
+        t.sla,
+        t.allGrowth,
+      ],
+      cta: t.enterpriseCta,
+      href: `${lp}/contact`,
+    },
+  ];
+};

@@ -8,9 +8,30 @@ import { describe, expect, it } from "vitest";
  *   (`app-i18n-scaffold.test.ts`)는 통과하는데 영어 화면에 한국어가 섞인다.
  * 예외는 **한국어 자체가 내용인 경우**만 — 아래 목록에 이유와 함께 적는다.
  */
+/** ⚖️ 법정 고지·동의 문구: 영어판 승인 대기(`docs/_적용/영어화면_범위_20261006.md` 2-1장). */
+const PENDING_LEGAL_EN = "영어판 승인 대기(법정 고지·동의)";
+
 const ALLOWED_HANGUL: Record<string, string> = {
   // 한국 정보통신망법상 광고 메일 표기 「(광고)」 를 그대로 가리킨다.
   "axMail.errorAdNotice": "법정 표기 문자열",
+  // 공개 영문 약관(Key summary)이 버튼 이름을 한국어 그대로 병기한다 — 문장을 바꾸지 않는다.
+  "purchaseNotice.requestVia": "공개 영문 약관 문장 그대로",
+  // 「한국어 표기 통합 추적」 기능 설명 — 한글 표기 예시 자체가 내용이다.
+  "pricing.variantsHint": "한글 표기 예시",
+  // ⚖️ 전자상거래법 결제 전 고지·동의 문구 — 영어판은 👤 승인 전까지 만들지 않는다(D1).
+  "subscribe.disclosureTitle": PENDING_LEGAL_EN,
+  "subscribe.disclosureProduct": PENDING_LEGAL_EN,
+  "subscribe.disclosureProductValue": PENDING_LEGAL_EN,
+  "subscribe.disclosureAmount": PENDING_LEGAL_EN,
+  "subscribe.disclosureAmountNote": PENDING_LEGAL_EN,
+  "subscribe.disclosureCycle": PENDING_LEGAL_EN,
+  "subscribe.disclosureCycleValue": PENDING_LEGAL_EN,
+  "subscribe.disclosureNext": PENDING_LEGAL_EN,
+  "subscribe.disclosureNextValue": PENDING_LEGAL_EN,
+  "subscribe.disclosureCancel": PENDING_LEGAL_EN,
+  "subscribe.disclosureCancelValue": PENDING_LEGAL_EN,
+  "subscribe.consent": PENDING_LEGAL_EN,
+  "upgrade.consent": PENDING_LEGAL_EN,
 };
 
 const HANGUL_RE = /[가-힣]/;

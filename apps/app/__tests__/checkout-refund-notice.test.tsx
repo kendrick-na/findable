@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 결제 전 청약철회·환불 고지 (전자상거래법 제13조 제2항·제17조 제6항, 2026-10-05).
  *
@@ -89,7 +90,9 @@ describe("정기결제 — 결제 전 환불·해지 고지와 확인 체크", (
         contactHref="https://findable.test/ko/contact"
         label="Starter 월 자동결제 시작"
         listPrice={99_000}
+        notice={koDict.app.purchaseNotice}
         plan="starter"
+        t={koDict.app.subscribe}
         termsHref={TERMS}
       />
     );
@@ -123,8 +126,10 @@ describe("1회 결제 — 결제창 전에 고지와 확인 체크", () => {
       <UpgradeButton
         contactHref="https://findable.test/ko/contact"
         label={paymentMethod ? "법인카드로 결제하기" : "1회만 결제하기"}
+        notice={koDict.app.purchaseNotice}
         paymentMethod={paymentMethod}
         plan="starter"
+        t={koDict.app.upgrade}
         termsHref={TERMS}
       />
     );

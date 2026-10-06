@@ -1,3 +1,4 @@
+import type { AppDictionary } from "@/lib/i18n";
 /**
  * 결제 전 청약철회·환불·해지 고지 — 2026-10-05.
  *
@@ -20,51 +21,44 @@ const ITEM_CLASS =
 export const PurchaseNotice = ({
   kind,
   termsHref,
+  t,
 }: {
   kind: "subscription" | "one-off";
   termsHref: string;
+  /**
+   * 사전 `app.purchaseNotice`.
+   * ⚖️ 영어판은 **공개된 영문 약관**(`apps/web` `/legal/terms` Key summary)의 문장을 그대로 쓴다
+   *   — 새로 번역하지 않는다(👤 D1). 일치는 `purchase-notice-legal-source.test.ts` 가 잠근다.
+   */
+  t: AppDictionary["purchaseNotice"];
 }) => (
   <div className="flex flex-col gap-1.5 border-[color:var(--findable-hairline,#23252a)] border-t pt-3">
     <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-xs">
-      청약철회·환불 안내
+      {t.title}
     </p>
     <ul className="flex list-disc flex-col gap-1 pl-4">
+      <li className={ITEM_CLASS}>{t.withdraw}</li>
+      <li className={ITEM_CLASS}>{t.prorate}</li>
       <li className={ITEM_CLASS}>
-        결제일부터 7일 이내에 청약철회할 수 있어요. 그동안 유료 기능을 쓰지
-        않았다면 전액 환불돼요.
-      </li>
-      <li className={ITEM_CLASS}>
-        유료 기능(자동 재측정·측정 데이터 내보내기)을 이용하면 이용일수만큼
-        공제하고 나머지를 환불해요. 7일이 지난 뒤 이용 중에 해지·환불을 요청해도
-        이용일수만 공제하고, 위약금·수수료는 없어요.
-      </li>
-      <li className={ITEM_CLASS}>
-        {`요금제 화면의 「환불·청약철회 요청」 또는 이메일(${REFUND_CONTACT_EMAIL})로 요청할 수 있어요.`}{" "}
-        요청을 받은 날부터 3영업일 이내에 결제를 취소해 환불하고, 유료 기능
-        이용과 다음 결제는 함께 종료돼요.
+        {t.requestVia.replace("{email}", REFUND_CONTACT_EMAIL)}
       </li>
       {kind === "subscription" ? (
-        <li className={ITEM_CLASS}>
-          언제든 해지할 수 있어요. 해지하면 다음 결제는 청구되지 않고, 이미
-          결제한 기간이 끝날 때까지 이용할 수 있어요.
-        </li>
+        <li className={ITEM_CLASS}>{t.subscriptionCancel}</li>
       ) : (
-        <li className={ITEM_CLASS}>
-          1개월 이용권은 자동으로 갱신되지 않아 따로 해지할 필요가 없어요.
-        </li>
+        <li className={ITEM_CLASS}>{t.oneOff}</li>
       )}
     </ul>
     <p className={ITEM_CLASS}>
-      자세한 내용은{" "}
+      {t.detailsBefore}{" "}
       <a
         className="underline underline-offset-4 hover:text-[color:var(--findable-ink,#f7f8f8)]"
         href={termsHref}
         rel="noopener"
         target="_blank"
       >
-        이용약관(환불 규정)
+        {t.detailsLink}
       </a>
-      에서 확인할 수 있어요.
+      {t.detailsAfter}
     </p>
   </div>
 );

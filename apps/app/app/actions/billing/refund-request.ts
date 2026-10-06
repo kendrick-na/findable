@@ -6,6 +6,10 @@ import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { captureOpsAlert } from "@repo/observability/ops-alert";
 import { isMissingTableErrorFor } from "@/lib/db/missing-table";
+import { getAppDictionary } from "@/lib/i18n";
+
+/** 화면에 보이는 오류 문구 — 사전 `app.billingErrors`(요청 밖이면 ko). ⚠️ 결제사로 보내는 상품명은 그대로. */
+const billingErrors = async () => (await getAppDictionary()).billingErrors;
 
 /**
  * 앱 내 환불·청약철회 요청 접수 — 2026-10-05.
@@ -24,7 +28,6 @@ import { isMissingTableErrorFor } from "@/lib/db/missing-table";
 
 const MESSAGE_MAX = 500;
 const CONTACT_EMAIL = "kendrick@indigochild.kr";
-const SAVE_FAILED_ERROR = `요청을 저장하지 못했어요. 번거로우시겠지만 ${CONTACT_EMAIL} 로 보내 주세요.`;
 
 export type RefundRequestResult =
   | { ok: true; status: "created" | "already_pending" }
@@ -45,7 +48,7 @@ export async function requestRefund(input: {
   if (!(userId && orgId)) {
     return {
       ok: false,
-      error: "로그인한 조직에서만 요청할 수 있어요. 다시 로그인해 주세요.",
+      error: (await billingErrors()).refundOrgOnly,
     };
   }
   const message = normalizeMessage(input?.message);
@@ -102,6 +105,12 @@ export async function requestRefund(input: {
         tableMissing,
       }
     );
-    return { ok: false, error: SAVE_FAILED_ERROR };
+    return {
+      ok: false,
+      error: (await billingErrors()).refundSaveFailed.replace(
+        "{email}",
+        CONTACT_EMAIL
+      ),
+    };
   }
 }
