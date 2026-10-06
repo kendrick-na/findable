@@ -10,6 +10,10 @@ export const AUDIT_JOB_QUEUE_STALE_ERROR =
 
 export type PendingAuditStatus = "queued" | "processing";
 
+// 🔴 2026-10-06: queued 도 leaseUntil 이 있으면 그 시각으로 판정한다.
+//   마감으로 잘린 회차의 「이어가기 대기」(queued + leaseUntil, audit-execution-lease)는
+//   30분 cron 을 기다려야 해서 일반 대기열의 30분 상한으로 죽이면 안 된다.
+//   leaseUntil 이 없는 queued(새 Job·관리자 재개)는 기존 30분 규칙 그대로다.
 export const isStaleAuditJob = (
   job: {
     createdAt: Date;
@@ -18,15 +22,21 @@ export const isStaleAuditJob = (
     status: string;
   },
   now = Date.now()
-): boolean =>
-  job.status === "queued"
-    ? (job.attemptStartedAt ?? job.createdAt).getTime() <
-      now - AUDIT_JOB_QUEUE_STALE_AFTER_MS
-    : job.status === "processing" &&
-      (job.leaseUntil
-        ? job.leaseUntil.getTime() < now
-        : (job.attemptStartedAt ?? job.createdAt).getTime() <
-          now - AUDIT_JOB_STALE_AFTER_MS);
+): boolean => {
+  if (job.status !== "queued" && job.status !== "processing") {
+    return false;
+  }
+  if (job.leaseUntil) {
+    return job.leaseUntil.getTime() < now;
+  }
+  return (
+    (job.attemptStartedAt ?? job.createdAt).getTime() <
+    now -
+      (job.status === "queued"
+        ? AUDIT_JOB_QUEUE_STALE_AFTER_MS
+        : AUDIT_JOB_STALE_AFTER_MS)
+  );
+};
 
 /**
  * Bulk form of `isStaleAuditJob` for the sweep cron: same thresholds and the
@@ -47,9 +57,7 @@ export const staleAuditJobsWhere = (
     { attemptStartedAt: { lt: before } },
     { attemptStartedAt: null, createdAt: { lt: before } },
   ];
-  if (status === "queued") {
-    return { status, OR: aged };
-  }
+  // queued·processing 모두 같은 lease 규칙(위 isStaleAuditJob 주석).
   return {
     status,
     OR: [

@@ -33,6 +33,29 @@ describe("audit question checkpoint", () => {
     expect(readAuditCheckpoint(checkpoint, scope)?.responses).toEqual([]);
   });
 
+  it("accepts a bounded continuation record and rejects anything beyond the cap", () => {
+    const checkpoint = makeAuditCheckpoint(scope, context, [
+      { text: "question 1", lang: "ko" },
+    ]);
+    const requestedAt = "2026-10-06T03:04:00.000Z";
+    expect(
+      readAuditCheckpoint(
+        { ...checkpoint, continuation: { count: 2, requestedAt } },
+        scope
+      )?.continuation
+    ).toEqual({ count: 2, requestedAt });
+    for (const continuation of [
+      { count: 3, requestedAt },
+      { count: 0, requestedAt },
+      { count: 1, requestedAt: "not a date" },
+      "once",
+    ]) {
+      expect(() =>
+        readAuditCheckpoint({ ...checkpoint, continuation }, scope)
+      ).toThrow("invalid audit checkpoint");
+    }
+  });
+
   it("rejects a checkpoint from another brand or a malformed response prefix", () => {
     const checkpoint = makeAuditCheckpoint(scope, context, [
       { text: "question 1", lang: "ko" },

@@ -2,12 +2,17 @@ import { isStaleAuditJob } from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { continueOrgTracking } from "@/app/actions/brand/continue-tracking";
 import { getTrackingStatus } from "@/app/actions/brand/tracking-status";
 import { env } from "@/env";
 import { requireOrg } from "@/lib/db/scoped";
 import { sampleReportUrl } from "@/lib/sample-report";
 import { Header } from "../../components/header";
 import { MeasuringView } from "./measuring-view";
+
+// 이 화면의 폴링이 이어가기 서버액션(continueOrgTracking)을 부른다(2026-10-06).
+//   서버액션 시간 상한은 그 액션을 쓰는 page 의 maxDuration 을 따른다(brand/page.tsx 주석).
+export const maxDuration = 300;
 
 export const metadata: Metadata = {
   title: "측정 중 · Findable",
@@ -36,7 +41,15 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
 
   const job = await database.auditJob.findFirst({
     where: { id: jobId, email: `org:${orgId}` },
-    select: { domain: true, status: true, createdAt: true },
+    // attemptStartedAt·leaseUntil 까지 읽어야 이어가기 대기(queued + leaseUntil)를
+    //   오래된 대기열로 오판하지 않는다(stale-job).
+    select: {
+      domain: true,
+      status: true,
+      createdAt: true,
+      attemptStartedAt: true,
+      leaseUntil: true,
+    },
   });
 
   // 내 org 것이 아니거나 없는 job → 대기할 것이 없다.
@@ -60,6 +73,7 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
     <>
       <Header page="측정 중" pages={["Findable"]} showMetric={false} />
       <MeasuringView
+        continueJob={continueOrgTracking}
         createdAt={job.createdAt.toISOString()}
         domain={job.domain}
         initialStatus={job.status}

@@ -382,6 +382,9 @@ export const startOrgTracking = async (
           industry: brandRecord?.industry ?? undefined,
           // 점수 분모를 정하는 타깃 시장. 없으면 러너가 자동 추정.
           marketScope: brandRecord?.marketScope ?? undefined,
+          // 마감으로 질문이 남으면 「이어가기 대기」로 멈춘다(2026-10-06).
+          //   측정 화면 폴링(continueOrgTracking)·30분 cron 이 남은 질문만 이어서 잰다.
+          continueWhenTruncated: true,
         });
       } catch (jobError) {
         log.error("audit.org.job_uncaught", {

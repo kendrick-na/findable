@@ -48,6 +48,7 @@ const MOOD_ROTATE_MS = 4000;
 type ViewState = "measuring" | "slow" | "failed";
 
 export const MeasuringView = ({
+  continueJob,
   createdAt,
   jobId,
   domain,
@@ -55,6 +56,11 @@ export const MeasuringView = ({
   pollStatus,
   sampleUrl,
 }: {
+  /**
+   * 마감으로 잘린 측정 이어가기(2026-10-06) — pollStatus 와 같은 이유로 **주입받는다**.
+   * 폴링이 `needs_continuation` 을 보면 대기 한 번당 한 번 부른다. 없으면 cron 이 이어받는다.
+   */
+  continueJob?: (jobId: string) => Promise<unknown>;
   createdAt: string;
   jobId: string;
   /** 무엇을 측정 중인지. 지금 화면에서 유일하게 개인화된 정보다. */
@@ -115,6 +121,15 @@ export const MeasuringView = ({
       }
     };
 
+    // 이어가기 요청 여부 — 대기 한 번당 한 번. 실제로 다시 돌기 시작하면(processing) 풀린다.
+    let continuationRequested = false;
+    const requestContinuationOnce = async () => {
+      if (continuationRequested || !continueJob) {
+        return;
+      }
+      continuationRequested = true;
+      await continueJob(jobId);
+    };
     timerRef.current = setInterval(async () => {
       // 4분부터 지연을 알리되 폴링은 계속한다. 서버가 6분 초과 작업을
       // 실패로 정리하면 이 화면도 반드시 최종 상태로 전환해야 한다.
@@ -130,7 +145,12 @@ export const MeasuringView = ({
         } else if (status === "failed") {
           stop();
           setView("failed");
+        } else if (status === "needs_continuation") {
+          // 질문이 남아 남은 질문만 이어서 잰다 — 사용자에게는 계속 「물어보는 중」이다.
+          setStatus("processing");
+          await requestContinuationOnce();
         } else if (status === "queued" || status === "processing") {
+          continuationRequested &&= status !== "processing";
           setStatus(status);
         }
         // queued/processing/not_found → 다음 폴링까지 대기.
@@ -142,7 +162,7 @@ export const MeasuringView = ({
     }, POLL_INTERVAL_MS);
 
     return stop;
-  }, [jobId, router, pollStatus]);
+  }, [jobId, router, pollStatus, continueJob]);
 
   return (
     // 중앙 정렬 + 압도적 여백(Profound). 화면 전체를 쓰되 내용은 가운데 한 덩어리.

@@ -291,6 +291,25 @@ describe("sweep cron and per-job staleness share one criterion", () => {
       { status: "processing", createdAt: minutes(-3) },
     ],
     ["completed", { status: "completed", createdAt: minutes(-600) }],
+    // 2026-10-06 이어가기 대기(queued + leaseUntil): 30분 대기열 상한이 아니라 시간창으로 판정.
+    [
+      "continuation pending past the plain queue limit",
+      {
+        status: "queued",
+        createdAt: minutes(-50),
+        attemptStartedAt: minutes(-45),
+        leaseUntil: minutes(75),
+      },
+    ],
+    [
+      "continuation window expired",
+      {
+        status: "queued",
+        createdAt: minutes(-200),
+        attemptStartedAt: minutes(-121),
+        leaseUntil: minutes(-1),
+      },
+    ],
   ];
 
   it.each(cases)("%s", (_name, partial) => {

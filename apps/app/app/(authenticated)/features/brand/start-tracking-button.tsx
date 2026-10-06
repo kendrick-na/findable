@@ -4,6 +4,7 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { continueOrgTracking } from "@/app/actions/brand/continue-tracking";
 import { startOrgTracking } from "@/app/actions/brand/start-tracking";
 import { getTrackingStatus } from "@/app/actions/brand/tracking-status";
 
@@ -67,6 +68,9 @@ export const StartTrackingButton = ({
   const watchJob = (jobId: string) => {
     const startedAt = Date.now();
     let delayNotified = false;
+    // 이어가기는 대기 한 번당 **한 번만** 부른다(2026-10-06). 호출이 실패해 대기로 남아도
+    //   30분 cron 이 이어받는다. 중복 호출은 서버 claim 이 막지만 불필요한 요청을 아낀다.
+    let continuationRequested = false;
     timerRef.current = setInterval(async () => {
       if (!delayNotified && Date.now() - startedAt > POLL_TIMEOUT_MS) {
         delayNotified = true;
@@ -90,8 +94,15 @@ export const StartTrackingButton = ({
             `${brandName} 측정에 실패했어요. 잠시 후 다시 시도해 주세요.`
           );
           router.refresh();
+        } else if (status === "needs_continuation" && !continuationRequested) {
+          // 마감으로 질문이 남았다 → 남은 질문만 새 함수 호출로 이어서 잰다.
+          continuationRequested = true;
+          await continueOrgTracking(jobId);
+        } else if (status === "processing") {
+          // 이어가기가 실제로 시작됐다 → 다음 대기(최대 2회)에서 다시 한 번 부를 수 있다.
+          continuationRequested = false;
         }
-        // queued/processing → 다음 폴링까지 대기.
+        // queued/processing/needs_continuation → 다음 폴링까지 대기.
       } catch {
         // 일시적 네트워크 오류는 다음 폴링에서 재시도.
       }

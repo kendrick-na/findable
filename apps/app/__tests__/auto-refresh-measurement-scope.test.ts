@@ -65,6 +65,7 @@ const mocks = vi.hoisted(() => ({
   expireLapsedRenewalGrants: vi.fn(),
   expireCancelledSubscriptions: vi.fn(),
   expireOneOffPaymentGrants: vi.fn(),
+  continueOldestPendingAudit: vi.fn(),
 }));
 
 vi.mock("@repo/database", () => ({
@@ -119,6 +120,9 @@ vi.mock("@repo/auth/server", () => ({
 }));
 
 vi.mock("@repo/audit/runner", () => ({ runAuditJob: mocks.runAuditJob }));
+vi.mock("@repo/audit/audit-continuation", () => ({
+  continueOldestPendingAudit: mocks.continueOldestPendingAudit,
+}));
 vi.mock("@repo/email", () => ({ resend: null }));
 vi.mock("@repo/email/templates/tracking-digest", () => ({
   TrackingDigestEmail: vi.fn(),
@@ -234,6 +238,7 @@ beforeEach(() => {
   state.lastMeasured = new Map();
   mocks.auditJobCreate.mockResolvedValue({ id: "job_1" });
   mocks.runAuditJob.mockResolvedValue(undefined);
+  mocks.continueOldestPendingAudit.mockResolvedValue(null);
   mocks.expireLapsedRenewalGrants.mockResolvedValue(ZERO);
   mocks.expireCancelledSubscriptions.mockResolvedValue(ZERO);
   mocks.expireOneOffPaymentGrants.mockResolvedValue(ZERO);
@@ -574,6 +579,63 @@ describe('scope "off"', () => {
     expect(mocks.expireLapsedRenewalGrants).toHaveBeenCalledTimes(1);
     expect(mocks.expireCancelledSubscriptions).toHaveBeenCalledTimes(1);
     expect(mocks.expireOneOffPaymentGrants).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("truncated-round continuation (2026-10-06)", () => {
+  it("new cron measurements opt in to continuation", async () => {
+    state.orgs = [org()];
+    state.clerkUsers = [payingUser("growth")];
+
+    await runCron();
+
+    expect(mocks.runAuditJob).toHaveBeenCalledWith(
+      expect.objectContaining({ continueWhenTruncated: true })
+    );
+  });
+
+  it("a continuation that ran uses this invocation: no new measurement starts", async () => {
+    state.orgs = [org()];
+    state.clerkUsers = [payingUser("growth")];
+    mocks.continueOldestPendingAudit.mockResolvedValue({
+      jobId: "job_pending",
+      ran: true,
+      status: "completed",
+    });
+
+    const result = await runCron();
+
+    expect(result).toMatchObject({
+      dueCount: 1,
+      triggered: 0,
+      continuation: { jobId: "job_pending", ran: true },
+    });
+    expect(mocks.runAuditJob).not.toHaveBeenCalled();
+  });
+
+  it("continues customer-started rounds even when automatic measurement is off", async () => {
+    process.env.FINDABLE_AUTO_MEASUREMENT_SCOPE = "off";
+    mocks.continueOldestPendingAudit.mockResolvedValue({
+      jobId: "job_pending",
+      ran: true,
+      status: "completed",
+    });
+
+    const result = await runCron();
+
+    expect(mocks.continueOldestPendingAudit).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ autoMeasurement: "off", triggered: 0 });
+    expect(mocks.runAuditJob).not.toHaveBeenCalled();
+  });
+
+  it("a failing continuation step does not stop the cron", async () => {
+    state.orgs = [org()];
+    state.clerkUsers = [payingUser("growth")];
+    mocks.continueOldestPendingAudit.mockRejectedValue(new Error("db down"));
+
+    const result = await runCron();
+
+    expect(result.triggered).toBe(1);
   });
 });
 
