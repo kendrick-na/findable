@@ -7,6 +7,7 @@ import {
   startChatgptWebShadow,
 } from "./chatgpt-source";
 import { chatgptWebAdapter } from "./chatgpt-web-adapter";
+import { engineTimeoutMessage } from "./engine-timeout";
 import {
   claudeAdapter,
   geminiAdapter,
@@ -111,10 +112,18 @@ export const ENGINE_CALL_TIMEOUT_MS: Partial<Record<EngineId, number>> = {
   perplexity: 60_000,
 };
 
+// 늦은 칸 다시 묻기 상한·상한 오류 판별은 의존성 없는 작은 파일에 둔다(측정 패키지가
+//   엔진 모듈을 통째로 mock 하는 테스트에서도 같은 판별을 쓰게).
+export {
+  engineTimeoutMessage,
+  isEngineTimeoutMessage,
+  LATE_CELL_REASK_TIMEOUT_MS,
+} from "./engine-timeout";
+
 export class EngineTimeoutError extends Error {
   readonly elapsedMs: number;
   constructor(engineId: EngineId, timeoutMs: number, elapsedMs: number) {
-    super(`Engine ${engineId} timed out after ${timeoutMs}ms`);
+    super(engineTimeoutMessage(engineId, timeoutMs));
     this.name = "TimeoutError";
     this.elapsedMs = elapsedMs;
   }
@@ -180,7 +189,12 @@ export async function queryAllEngines(
     engineId: EngineId;
     phase: "started" | "finished";
     status?: "fulfilled" | "rejected";
-  }) => void
+  }) => void,
+  /**
+   * 상한이 있는 엔진(ENGINE_CALL_TIMEOUT_MS)의 1회 상한을 이 값으로 바꾼다.
+   * 늦은 칸 다시 묻기(LATE_CELL_REASK_TIMEOUT_MS) 전용. 상한이 없는 엔진은 그대로 둔다.
+   */
+  options?: { timeoutMs?: number }
 ): Promise<EngineResponse[]> {
   const observe = (event: {
     engineId: EngineId;
@@ -210,7 +224,9 @@ export async function queryAllEngines(
       try {
         const response = await queryEngineWithTimeout(
           { ...base, engineId },
-          ENGINE_CALL_TIMEOUT_MS[engineId]
+          ENGINE_CALL_TIMEOUT_MS[engineId] && options?.timeoutMs
+            ? options.timeoutMs
+            : ENGINE_CALL_TIMEOUT_MS[engineId]
         );
         observe({ engineId, phase: "finished", status: "fulfilled" });
         return response;

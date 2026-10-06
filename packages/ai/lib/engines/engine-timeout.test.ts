@@ -35,7 +35,12 @@ vi.mock("./global-adapters", () => ({
     Promise.resolve(ok(query.engineId)),
 }));
 
-const { ENGINE_CALL_TIMEOUT_MS, queryAllEngines } = await import("./index");
+const {
+  ENGINE_CALL_TIMEOUT_MS,
+  isEngineTimeoutMessage,
+  LATE_CELL_REASK_TIMEOUT_MS,
+  queryAllEngines,
+} = await import("./index");
 
 afterEach(() => {
   vi.useRealTimers();
@@ -88,5 +93,35 @@ describe("per-engine call timeout", () => {
 
     expect(claude?.errorMessage).toBe("Audit run deadline exceeded");
     expect(claude?.durationMs).toBe(0);
+  });
+
+  it("re-asks with a longer per-call cap when asked to (late cell)", async () => {
+    vi.useFakeTimers();
+    const pending = queryAllEngines(
+      { prompt: "q", language: "ko" },
+      ["claude"],
+      undefined,
+      {
+        timeoutMs: LATE_CELL_REASK_TIMEOUT_MS,
+      }
+    );
+    // 60초에는 아직 끊기지 않는다.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(seenSignals[0]?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(LATE_CELL_REASK_TIMEOUT_MS - 60_000);
+    const [claude] = await pending;
+    expect(claude?.errorMessage).toBe(
+      `Engine claude timed out after ${LATE_CELL_REASK_TIMEOUT_MS}ms`
+    );
+    expect(isEngineTimeoutMessage(claude?.errorMessage)).toBe(true);
+  });
+
+  it("recognises only the engine-cap timeout wording", () => {
+    expect(
+      isEngineTimeoutMessage("Engine gemini timed out after 60000ms")
+    ).toBe(true);
+    expect(isEngineTimeoutMessage("Audit run deadline exceeded")).toBe(false);
+    expect(isEngineTimeoutMessage("429 Too Many Requests")).toBe(false);
+    expect(isEngineTimeoutMessage(null)).toBe(false);
   });
 });

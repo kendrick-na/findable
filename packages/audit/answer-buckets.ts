@@ -381,6 +381,27 @@ export function summarizeAnswerBuckets(
   };
 }
 
+/**
+ * 브랜드 질문에서 **답을 받지 못한 AI 엔진**(측정 실패 칸의 엔진, 처음 나온 순서) — 2026-10-07.
+ * 「측정 실패 n개는 뺐어요」만으로는 어느 AI 가 답하지 않았는지 알 수 없다(늦은 엔진 반영 설계 B).
+ * 4칸의 「측정 실패」와 같은 범위(AI 그룹 · 이름 없는 질문 제외)를 쓴다. 스텁 행은 넣지 않는다.
+ */
+export function noResponseAiEngines(
+  rows: readonly BucketableAnswer[] | null | undefined
+): string[] {
+  const engines = new Set<string>();
+  for (const row of rows ?? []) {
+    if (
+      answerGroup(row.engineId) === "ai" &&
+      !isDiscoveryAnswer(row) &&
+      row.errorMessage
+    ) {
+      engines.add(row.engineId);
+    }
+  }
+  return [...engines];
+}
+
 // ──────────────────────────────────────────────────────────────────
 // 화면 문구 — 라벨과 한 줄 설명. 공개 리포트·대시보드가 같은 말을 쓴다.
 // ──────────────────────────────────────────────────────────────────

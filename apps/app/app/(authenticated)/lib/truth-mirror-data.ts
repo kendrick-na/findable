@@ -53,6 +53,11 @@ export interface TruthMirrorData {
   engines: TruthMirrorEngine[];
   /** 측정은 됐으나 오류로 답을 못 받은 엔진 수. 분모에서 뺀다. */
   erroredCount: number;
+  /**
+   * 그 엔진들의 id(2026-10-07). 「n곳」만으로는 어느 AI 가 답하지 않았는지 알 수 없다
+   * — 늦은 엔진을 다시 물어도 끝내 답이 없던 경우 화면이 이름을 말한다.
+   */
+  erroredEngines?: string[];
   /** 우리를 말한 엔진 수. `known / measuredCount` 가 이 화면의 분모 축이다.
    *  ⚠️ 이 분모에는 **브리핑이 들어가지 않는다**(질의 축이 달라서 — 아래 참조). */
   knownCount: number;
@@ -123,12 +128,14 @@ export function buildTruthMirrorData(
 
   const engines: TruthMirrorEngine[] = [];
   let erroredCount = 0;
+  const erroredEngines: string[] = [];
   for (const [engineId, group] of byEngine) {
     // 🔴 오류는 "모른다"가 아니다 — 그 엔진의 **모든** 행이 실패했을 때만 실패로 센다
     //   (한 프롬프트만 실패하고 다른 건 답했으면 그 엔진은 답한 것이다).
     const answered = group.filter((r) => !r.errorMessage);
     if (answered.length === 0) {
       erroredCount += 1;
+      erroredEngines.push(engineId);
       continue;
     }
     const rep = pickRepresentative(answered);
@@ -171,6 +178,7 @@ export function buildTruthMirrorData(
   return {
     engines,
     erroredCount,
+    erroredEngines,
     knownCount: mainAxis.filter((e) => e.brandMentioned).length,
     measuredCount: mainAxis.length,
   };

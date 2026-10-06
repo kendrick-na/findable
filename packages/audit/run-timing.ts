@@ -12,6 +12,7 @@ type Stage =
   | "verdict_chunk"
   | "aggregate"
   | "continuation_request"
+  | "late_cell_reask"
   | "db_commit";
 interface Detail {
   chunkIndex?: number;

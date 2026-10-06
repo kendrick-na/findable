@@ -21,6 +21,7 @@ import {
   HEADLINE_BUCKETS,
   isDiscoveryAnswer,
   isLegacyNaverSynthesis,
+  noResponseAiEngines,
   officialDomainExposed,
   type PromptKind,
 } from "@repo/audit/answer-buckets";
@@ -123,6 +124,8 @@ export function AnswerBucketBoard({
   discoveryPromptCount,
   discoveryAskedCount,
   discoveryCoverageCopy,
+  noResponseCopy,
+  noResponseRows,
   searchSamplingVersion,
 }: {
   summary: AnswerBucketSummary;
@@ -136,10 +139,20 @@ export function AnswerBucketBoard({
   discoveryAskedCount?: number;
   /** 위 안내 문구(사전). 없으면 안내 없이 기존 표시 그대로. */
   discoveryCoverageCopy?: DiscoveryCoverageCopy;
+  /**
+   * 「답을 받지 못한 AI: {engines}」(사전 `web.audit.noResponseEngines`) — 2026-10-07.
+   * 측정 실패 칸이 있을 때 어느 AI 가 답하지 않았는지 이름으로 말한다. 없으면 표시하지 않는다.
+   */
+  noResponseCopy?: string;
+  /** 엔진 이름을 찾을 원문 행(저장된 engineResponses). */
+  noResponseRows?: readonly MatrixAnswer[];
   /** 이 회차 네이버 검색 표본 방식(`searchSamplingVersionOf`). 라벨로만 쓴다. */
   searchSamplingVersion?: string | null;
 }) {
   const { ai } = summary;
+  const noResponseNames = noResponseAiEngines(noResponseRows).map((engineId) =>
+    engineDisplayName(engineId, isKo)
+  );
   const discoveryNote = discoveryPartialNote(
     discoveryCoverageCopy,
     discoveryPromptCount,
@@ -200,6 +213,11 @@ export function AnswerBucketBoard({
       </div>
 
       <ul className="mt-3 space-y-1.5 text-xs text-zinc-400 leading-relaxed">
+        {noResponseCopy && noResponseNames.length > 0 && (
+          <li className="break-keep" data-testid="no-response-engines">
+            {noResponseCopy.replace("{engines}", noResponseNames.join(", "))}
+          </li>
+        )}
         {ai.unverified > 0 && (
           <li className="break-keep">
             <span className="font-medium text-zinc-300">

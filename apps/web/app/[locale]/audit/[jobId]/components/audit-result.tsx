@@ -109,6 +109,8 @@ import { TruthMirror } from "./truth-mirror";
 /** 서버(page)가 사전에서 골라 내려주는 문구 — 클라이언트는 사전 파일을 직접 읽지 않는다. */
 interface AuditResultCopy {
   discoveryCoverage: DiscoveryCoverageCopy;
+  /** 「답을 받지 못한 AI: {engines}」(2026-10-07). */
+  noResponseEngines?: string;
 }
 
 interface Props {
@@ -1774,6 +1776,7 @@ function CompletedView({
           domain={result.domain}
           isKo={isKo}
           issue={auditPublicationIssue(result)}
+          noResponseCopy={copy?.noResponseEngines}
           rows={coreResponses}
           summary={summary}
         />
@@ -1802,6 +1805,7 @@ function CompletedView({
           discoveryCoverageCopy={copy?.discoveryCoverage}
           isKo={isKo}
           job={job}
+          noResponseCopy={copy?.noResponseEngines}
           provisional={provisional}
           result={result}
         />
@@ -1900,9 +1904,11 @@ function HeroSection({
   job,
   result,
   isKo,
+  noResponseCopy,
   provisional = false,
 }: {
   discoveryCoverageCopy?: DiscoveryCoverageCopy;
+  noResponseCopy?: string;
   job: JobResponse;
   result: JobResult;
   isKo: boolean;
@@ -2137,6 +2143,8 @@ function HeroSection({
         discoveryCoverageCopy={discoveryCoverageCopy}
         discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
         isKo={isKo}
+        noResponseCopy={noResponseCopy}
+        noResponseRows={result.engineResponses}
         searchSamplingVersion={searchSamplingVersionOf(result)}
         summary={buckets}
       />

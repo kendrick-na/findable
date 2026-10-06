@@ -36,11 +36,14 @@ export function ProvisionalEvidenceView({
   domain,
   isKo,
   issue,
+  noResponseCopy,
   rows,
   summary,
 }: {
   brandName: string;
   discoveryCoverageCopy?: DiscoveryCoverageCopy;
+  /** 「답을 받지 못한 AI: {engines}」(사전). */
+  noResponseCopy?: string;
   discoveryPromptCount?: number;
   domain: string;
   isKo: boolean;
@@ -83,6 +86,8 @@ export function ProvisionalEvidenceView({
         discoveryCoverageCopy={discoveryCoverageCopy}
         discoveryPromptCount={discoveryPromptCount}
         isKo={isKo}
+        noResponseCopy={noResponseCopy}
+        noResponseRows={rows}
         searchSamplingVersion={searchSamplingVersionOf({
           engineResponses: rows,
         })}

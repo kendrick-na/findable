@@ -66,7 +66,8 @@
       "discoveryCoverage": {
         "partial": "질문 {planned}개 중 {measured}개만 측정했어요.",
         "none": "이번에는 측정하지 못했어요."
-      }
+      },
+      "noResponseEngines": "답을 받지 못한 AI: {engines}"
     },
     "pricing": {
       "meta": {
@@ -1282,6 +1283,7 @@
       "ledeStrong": "대표 원문",
       "ledeAfter": "이에요. 질문별 전체 원문과 날짜별 변화는 ‘추적 질문’에서 관리합니다. 브랜드명·별칭·공식 도메인 또는 공식 출처로 검산되는 답변만 확인으로 집계합니다.",
       "errored": "{n}곳은 답을 못 받아 위 숫자에서 뺐어요(모른다는 뜻이 아니에요).",
+      "erroredEngines": "답을 받지 못한 곳: {engines}",
       "position": "{n}번째",
       "sentimentSaid": "{tone} 말함",
       "briefingBefore": "이 줄만 네이버 AI 브리핑이 뜨는 정보형 질문(업종에 따라 「효과·후기·장단점」 또는 「서비스·가격·후기」)으로 물었어요. 위 답변들과 ",

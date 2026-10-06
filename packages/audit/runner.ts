@@ -23,6 +23,7 @@ import {
   NAVER_SEARCH_SAMPLING_VERSION,
   partitionCitedSources,
 } from "@repo/ai/lib/engines";
+import { LATE_CELL_REASK_TIMEOUT_MS } from "@repo/ai/lib/engines/engine-timeout";
 import { detectBrandMention } from "@repo/ai/lib/engines/utils";
 import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict";
 import { database } from "@repo/database";
@@ -58,6 +59,7 @@ import {
   type AuditCheckpoint,
   assertCheckpointProvenance,
   MAX_AUDIT_CONTINUATIONS,
+  MAX_LATE_REASK_ROUNDS,
   makeAuditCheckpoint,
   readAuditCheckpoint,
 } from "./checkpoint";
@@ -68,6 +70,18 @@ import {
 } from "./competitor-extract";
 import { geoAxisScores } from "./geo-score";
 import { keys } from "./keys";
+import {
+  checkpointCells,
+  closePendingCells,
+  countByEngine,
+  findCell,
+  lateCellMarker,
+  lateRevisionReason,
+  reaskableCells,
+  reaskedCells,
+  resolvedLateCells,
+  runLateCellReasks,
+} from "./late-cells";
 import {
   filterByLanguageRegion,
   inferMarketScope,
@@ -804,6 +818,23 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       string,
       (status?: "fulfilled" | "rejected") => void
     >();
+    const engineQueryBase = (promptIndex: number) => ({
+      prompt: prompts[promptIndex].text,
+      language: prompts[promptIndex].lang,
+      brandName,
+      brandVariants,
+      // 🔴 N-47 — 자사 도메인을 엔진에 넘겨 **본문 URL 폴백에서 자사를 제외**한다.
+      //   안 넘기면 AI 가 답변에 적은 자기 홈페이지가 「인용 출처」로 잡힌다.
+      brandDomain: input.domain,
+    });
+    // 늦은 칸 다시 묻기 회차(2026-10-07)인가 — 그 회차는 새 질문을 시작하지 않는다
+    //   (질문 이어가기 ×2 와 따로 센다. 질문이 남았다면 이어가기를 이미 다 쓴 회차다).
+    const lateRoundActive = Boolean(
+      checkpoint.lateReask &&
+        !checkpoint.lateReask.finishedAt &&
+        !input.finalizeOnly
+    );
+    let latestCheckpoint: AuditCheckpoint = checkpoint;
     const sevenEngineResponses = await timed(
       "prompt_query",
       () =>
@@ -825,15 +856,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
               "prompt_query",
               () =>
                 ai.queryAllEngines(
-                  {
-                    prompt: prompts[promptIndex].text,
-                    language: prompts[promptIndex].lang,
-                    brandName,
-                    brandVariants,
-                    // 🔴 N-47 — 자사 도메인을 엔진에 넘겨 **본문 URL 폴백에서 자사를 제외**한다.
-                    //   안 넘기면 AI 가 답변에 적은 자기 홈페이지가 「인용 출처」로 잡힌다.
-                    brandDomain: input.domain,
-                  },
+                  engineQueryBase(promptIndex),
                   checkpoint.enginePlan[promptIndex] as unknown as Parameters<
                     typeof ai.queryAllEngines
                   >[1],
@@ -857,6 +880,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             );
           },
           async (updatedCheckpoint) => {
+            latestCheckpoint = updatedCheckpoint;
             const finishedIndex = updatedCheckpoint.responses.length - 1;
             const finishedPromptId = ledgerActive
               ? prompts[finishedIndex]?.promptId
@@ -894,9 +918,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           //   하나도 시작하지 않는다(저장된 답만 쓴다).
           {
             invocationStartedAtMs: budget.invocationStartedAtMs,
-            stopStartingAtMs: input.finalizeOnly
-              ? budget.invocationStartedAtMs
-              : budget.stopStartingAtMs,
+            stopStartingAtMs:
+              input.finalizeOnly || lateRoundActive
+                ? budget.invocationStartedAtMs
+                : budget.stopStartingAtMs,
           }
         ),
       { promptCount: prompts.length }
@@ -909,6 +934,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   다 썼으면 아래로 내려가 기존 계약대로 잠정(provisional) 공개한다.
     const remainingQuestions = prompts.length - sevenEngineResponses.length;
     const continuationsUsed = checkpoint.continuation?.count ?? 0;
+    let cells = checkpointCells({
+      ...latestCheckpoint,
+      responses: sevenEngineResponses,
+    });
     if (
       remainingQuestions > 0 &&
       input.continueWhenTruncated &&
@@ -923,6 +952,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         requestAuditContinuation(input.jobId, leaseToken, {
           ...checkpoint,
           responses: sevenEngineResponses,
+          cells,
           continuation,
         })
       );
@@ -937,6 +967,129 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       });
       finishJob();
       return;
+    }
+
+    // 🔴 늦은 엔진 반영(2026-10-07 · 설계 B) — 60초 상한에 걸린 칸은 오류가 아니라 「반영 예정」.
+    //   ① 질문을 더 이어갈 수 없고(다 물었거나 이어가기 소진) 반영 예정 칸이 있으면
+    //      「다시 묻기 회차」를 1번 요청하고 멈춘다(집계·Tracking·PDF 없음 — 최종 완료 때 한 번만).
+    //   ② 그 회차(새 300초 호출)는 새 질문 없이 반영 예정 칸만 칸당 1번 다시 묻는다(상한 200초).
+    //   ③ 그래도 남은 칸·다시 묻기 경로가 없는 실행은 아래에서 최종 실패로 닫힌다(분모 제외 + 엔진 이름 표시).
+    const lateRoundsUsed = checkpoint.lateReask?.count ?? 0;
+    if (lateRoundActive) {
+      const lateRun = await timed("late_cell_reask", () =>
+        runLateCellReasks({
+          cells,
+          responses: sevenEngineResponses,
+          stopStartingAtMs: budget.stopStartingAtMs,
+          ask: async (promptIndex, engineId) => {
+            const [answer] = await ai.queryAllEngines(
+              engineQueryBase(promptIndex),
+              [engineId] as unknown as Parameters<typeof ai.queryAllEngines>[1],
+              undefined,
+              { timeoutMs: LATE_CELL_REASK_TIMEOUT_MS }
+            );
+            if (!answer) {
+              throw new Error("Late cell re-ask returned no answer");
+            }
+            return answer;
+          },
+          save: (state) =>
+            saveQuestionCheckpoint(input.jobId, leaseToken, {
+              ...checkpoint,
+              responses: state.responses,
+              cells: state.cells,
+            }),
+        })
+      );
+      // 다시 물은 칸만 바뀐 응답으로 제자리 교체한다(질문 순서·폭은 그대로).
+      sevenEngineResponses.splice(
+        0,
+        sevenEngineResponses.length,
+        ...lateRun.responses
+      );
+      cells = lateRun.cells;
+      const resolvedNow = lateRun.reasked.filter((started) =>
+        resolvedLateCells(cells).some(
+          (cell) =>
+            cell.promptIndex === started.promptIndex &&
+            cell.engineId === started.engineId
+        )
+      );
+      log.info("audit.late_cell.reasked", {
+        jobId: input.jobId,
+        cells: lateRun.reasked.length,
+        perEngine: countByEngine(lateRun.reasked),
+        timeoutMs: LATE_CELL_REASK_TIMEOUT_MS,
+      });
+      const reaskCost = auditCost(
+        lateRun.reasked.flatMap((cell) => {
+          const row = sevenEngineResponses[cell.promptIndex]?.find(
+            (response) => response.engineId === cell.engineId
+          );
+          return row ? [row] : [];
+        })
+      );
+      log.info("audit.late_cell.resolved", {
+        jobId: input.jobId,
+        cells: resolvedNow.length,
+        perEngine: countByEngine(resolvedNow),
+        reaskCostKrw: Math.round(reaskCost.totalKrw * 100) / 100,
+        costModelVersion: reaskCost.costModelVersion,
+      });
+    } else if (
+      (remainingQuestions === 0 ||
+        continuationsUsed >= MAX_AUDIT_CONTINUATIONS) &&
+      input.continueWhenTruncated &&
+      !input.finalizeOnly &&
+      lateRoundsUsed < MAX_LATE_REASK_ROUNDS &&
+      reaskableCells(cells).length > 0
+    ) {
+      const pending = reaskableCells(cells);
+      const lateReask = {
+        count: lateRoundsUsed + 1,
+        requestedAt: new Date().toISOString(),
+      };
+      const requeued = await timed("continuation_request", () =>
+        requestAuditContinuation(input.jobId, leaseToken, {
+          ...checkpoint,
+          responses: sevenEngineResponses,
+          cells,
+          lateReask,
+        })
+      );
+      if (!requeued) {
+        throw new Error("Audit late-cell re-ask lost its processing job");
+      }
+      log.info("audit.late_cell.pending", {
+        jobId: input.jobId,
+        cells: pending.length,
+        perEngine: countByEngine(pending),
+        lateReask: lateReask.count,
+      });
+      finishJob();
+      return;
+    }
+    // 마감: 아직 반영 예정인 칸은 최종 실패로 닫는다(시간창 만료 = window_expired, 그 밖 = not_reasked).
+    cells = closePendingCells(
+      cells,
+      input.finalizeOnly ? "window_expired" : "not_reasked",
+      new Date().toISOString()
+    ).cells;
+    const lateFinalFailed = cells.filter(
+      (cell) => lateCellMarker(cell) === "final_failed"
+    );
+    if (lateFinalFailed.length > 0) {
+      const reasons: Record<string, number> = {};
+      for (const cell of lateFinalFailed) {
+        const reason = cell.failureReason ?? "not_reasked";
+        reasons[reason] = (reasons[reason] ?? 0) + 1;
+      }
+      log.info("audit.late_cell.final_failed", {
+        jobId: input.jobId,
+        cells: lateFinalFailed.length,
+        perEngine: countByEngine(lateFinalFailed),
+        reasons,
+      });
     }
 
     // 20번(dual-write): flat() 하면 각 응답이 어느 프롬프트에서 나왔는지 소실된다.
@@ -1050,6 +1203,77 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
 
     // 원가계기(유닛이코노믹스): 진단 1건 실비용을 result 에도 담아 조회 가능하게(운영/대시보드용).
     const cost = auditCost(flat);
+    // 칸 표시는 원본 응답 순서(tagged)의 질문 번호·엔진으로 찾는다.
+    const cellOfRow = (index: number, engineId: string) =>
+      findCell(cells, tagged[index]?.promptIndex, engineId);
+    const reaskedRows = reaskedCells(cells).flatMap((cell) => {
+      const row = sevenEngineResponses[cell.promptIndex]?.find(
+        (response) => response.engineId === cell.engineId
+      );
+      return row ? [{ cell, row }] : [];
+    });
+    const lateReaskCost =
+      reaskedRows.length > 0
+        ? (() => {
+            const reask = auditCost(reaskedRows.map(({ row }) => row));
+            return {
+              cells: reaskedRows.length,
+              resolved: resolvedLateCells(cells).length,
+              krw: Math.round(reask.totalKrw * 100) / 100,
+              perEngine: Object.entries(
+                countByEngine(reaskedRows.map(({ cell }) => cell))
+              ).map(([engineId, count]) => ({
+                engineId,
+                cells: count,
+                krw:
+                  Math.round(
+                    reask.perEngine
+                      .filter((item) => item.engineId === engineId)
+                      .reduce((sum, item) => sum + item.krw, 0) * 100
+                  ) / 100,
+              })),
+            };
+          })()
+        : null;
+    // 🔴 점수 정정 기록(2026-10-07) — 늦은 답을 반영해 점수가 바뀌었으면 「반영 전 → 반영 후」를
+    //   결과 JSON 에 남긴다(스키마 변경 없음). 반영 전 점수 = 늦은 칸을 지금처럼 오류로 뺐을 때의
+    //   점수(잠정). 잠정 점수는 완료 커밋도 Tracking 도 하지 않으므로 추세·지난 회차 비교에 안 들어간다.
+    const lateCellFields = flat.map((row, index) => {
+      const lateCell = lateCellMarker(cellOfRow(index, row.engineId));
+      return lateCell ? { lateCell } : {};
+    });
+    const resolvedLate = resolvedLateCells(cells);
+    const revisions =
+      resolvedLate.length > 0
+        ? [
+            {
+              from: geoAxisScores(
+                aggregateAudit(
+                  flat
+                    .map((row, index) =>
+                      lateCellMarker(cellOfRow(index, row.engineId)) ===
+                      "resolved"
+                        ? {
+                            ...row,
+                            errorMessage: "late_cell_pending",
+                            brandMentioned: false,
+                          }
+                        : row
+                    )
+                    .filter(isBrandRow),
+                  input.domain
+                )
+              ).total,
+              to: geoAxisScores(metrics).total,
+              reason: lateRevisionReason(
+                resolvedLate.map((cell) => cell.engineId)
+              ),
+              at: new Date().toISOString(),
+              engines: [...new Set(resolvedLate.map((cell) => cell.engineId))],
+              cells: resolvedLate.length,
+            },
+          ]
+        : [];
     const costSummary = {
       // 🔴 원가 규칙 버전(2026-10-07 v2 신설). 일일 점검이 v1(과소 기록)·v2 회차를 가르는 키.
       //   과거 회차는 소급하지 않는다 — 이 필드가 없으면 v1 이다.
@@ -1067,6 +1291,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       ...(cost.shadowKrw === undefined
         ? {}
         : { shadowKrw: Math.round(cost.shadowKrw * 100) / 100 }),
+      // 늦은 칸 다시 묻기 원가(2026-10-07). totalKrw 에 이미 포함 — 운영 일일 점검용 내역.
+      //   ⚠️ 60초에서 끊긴 첫 호출의 원가는 usage 가 없어 0으로 잡힌다(제공사 과금 여부 [확인필요]).
+      ...(lateReaskCost ? { lateReask: lateReaskCost } : {}),
     };
     // ChatGPT 측정 방식 세트(CHATGPT_SOURCE=web 일 때만 값이 있다). 어댑터가 행마다 남기지만,
     //   60초 상한으로 끊긴 행처럼 usage 가 없는 chatgpt 행도 같은 설정으로 표시해야
@@ -1170,6 +1397,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           ...(checkpoint.continuation
             ? { continuations: checkpoint.continuation.count }
             : {}),
+          // 늦은 칸 다시 묻기 회차(질문 이어가기와 별도 카운터).
+          ...(checkpoint.lateReask
+            ? { lateReasks: checkpoint.lateReask.count }
+            : {}),
         },
         officialSiteIdentity,
         // A customer-confirmed organisation brand may run when its public site
@@ -1187,6 +1418,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           .length,
       },
       promptsCount: prompts.length,
+      // 늦은 답 반영으로 점수가 정정된 기록(2026-10-07). 없으면 키도 없다(기존 결과와 같은 모양).
+      ...(revisions.length > 0 ? { revisions } : {}),
       briefingStatus: "not_requested" as const,
       cost: costSummary,
       engineResponses: flat.map((r, index) => ({
@@ -1229,6 +1462,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         // ChatGPT 웹 섀도(CHATGPT_WEB_SHADOW=true) — 저장 전용. 점수·버킷·집계에 안 쓴다.
         ...(r.shadowChatgptWeb ? { shadowChatgptWeb: r.shadowChatgptWeb } : {}),
         engineId: r.engineId,
+        // 늦은 칸(2026-10-07): resolved = 다시 물어 받은 답 · final_failed = 끝내 답이 없었다.
+        ...lateCellFields[index],
         brandMentioned: r.brandMentioned,
         mentionPosition: r.mentionPosition,
         // 순위의 분모(세션N-10). "N개 중 M번째"를 화면에서 말하려면 이 값이 있어야 한다.

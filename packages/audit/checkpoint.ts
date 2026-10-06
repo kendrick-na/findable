@@ -23,7 +23,58 @@ export interface AuditCheckpointContinuation {
   requestedAt: string;
 }
 
+/**
+ * 질문×엔진 「칸」 하나의 상태(2026-10-07 · 늦은 엔진 반영 설계 B).
+ *   done              — 답을 받았다(또는 스텁). 다시 묻지 않는다.
+ *   timed_out_pending — 첫 측정의 개별 상한(60초)에 걸렸다. 「반영 예정」 — 오류가 아니다.
+ *   failed            — 최종 실패. 분모에서 빠지고 화면이 엔진 이름을 말한다.
+ */
+export type AuditCellState = "done" | "timed_out_pending" | "failed";
+
+/** 최종 실패 사유(운영 로그·결과 행 표시용). */
+export type AuditCellFailureReason =
+  /** 처음부터 늦음이 아닌 오류(429·미연결 등) — 지금까지와 같다. */
+  | "engine_error"
+  /** 다시 물었는데 또 상한에 걸렸다. */
+  | "reask_timed_out"
+  /** 다시 물었는데 다른 오류가 났다. */
+  | "reask_error"
+  /** 다시 묻기를 시작했지만 결과를 저장하기 전에 호출이 끝났다(1회 상한이라 또 묻지 않는다). */
+  | "reask_interrupted"
+  /** 다시 묻기 전에 이어가기 시간창(2시간)이 지났다. */
+  | "window_expired"
+  /** 다시 묻기 경로가 없는 실행(무료 진단·관리자 1건·이어가기 소진)이거나 시작할 시간이 없었다. */
+  | "not_reasked";
+
+export interface AuditCheckpointCell {
+  engineId: string;
+  failureReason?: AuditCellFailureReason;
+  /** 칸 상태가 처음 정해진 시각(첫 답·첫 상한). */
+  firstSettledAt: string;
+  promptIndex: number;
+  /** 다시 묻기를 시작한 시각. 있으면 이 칸은 다시 묻기 1회를 이미 썼다(결과와 무관). */
+  reaskStartedAt?: string;
+  state: AuditCellState;
+  updatedAt: string;
+}
+
+/**
+ * 늦은 칸 다시 묻기 회차 기록 — 질문 이어가기(continuation, ×2)와 **따로** 센다(×1).
+ */
+export interface AuditCheckpointLateReask {
+  /** 지금까지 허락된 다시 묻기 회차 수. MAX_LATE_REASK_ROUNDS 를 넘지 않는다. */
+  count: number;
+  /** 다시 묻기 회차를 끝낸 시각. 있으면 다음 실행은 바로 마감한다. */
+  finishedAt?: string;
+  requestedAt: string;
+}
+
 export interface AuditCheckpoint {
+  /**
+   * 질문×엔진 칸 상태(2026-10-07). 저장된 질문(responses)의 모든 칸이 들어간다.
+   * 없으면(이 기능 이전 checkpoint) responses 에서 다시 만든다(`checkpointCells`).
+   */
+  cells?: AuditCheckpointCell[];
   context: AuditCheckpointContext;
   /**
    * 마감(질문 시작 상한)으로 잘린 회차의 이어가기 기록(2026-10-06).
@@ -33,6 +84,8 @@ export interface AuditCheckpoint {
   /** Bump when provider selection or adapter semantics change. Old plans fail closed. */
   engineConfigVersion: 1;
   enginePlan: string[][];
+  /** 늦은 칸 다시 묻기 회차(2026-10-07). 없으면 아직 요청하지 않았다. */
+  lateReask?: AuditCheckpointLateReask;
   originCreatedAt: string;
   prompts: RunPrompt[];
   /** Only a contiguous prefix is saved: one whole engine batch per question. */
@@ -59,6 +112,11 @@ export const MAX_CHECKPOINT_AGE_MS = 24 * 60 * 60 * 1000;
  * 원래 실행 1회 + 이어가기 2회 = 최대 3번의 호출. 그래도 남으면 오늘처럼 잠정으로 마감한다.
  */
 export const MAX_AUDIT_CONTINUATIONS = 2;
+/**
+ * 늦은 칸 다시 묻기 회차 상한(2026-10-07 관제탑 설계 B). 질문 이어가기와 별도 카운터다.
+ * 한 회차(새 300초 호출 1번)에서 「반영 예정」 칸을 칸마다 최대 1번씩 다시 묻는다.
+ */
+export const MAX_LATE_REASK_ROUNDS = 1;
 
 /** Bind a checkpoint to its original Job, not merely to a matching brand. */
 export function assertCheckpointProvenance(
@@ -151,6 +209,70 @@ const validContinuation = (value: unknown): boolean =>
     typeof value.requestedAt === "string" &&
     Number.isFinite(Date.parse(value.requestedAt)));
 
+const isoString = (value: unknown): boolean =>
+  typeof value === "string" && Number.isFinite(Date.parse(value));
+const CELL_STATES: readonly unknown[] = ["done", "timed_out_pending", "failed"];
+const CELL_FAILURE_REASONS: readonly unknown[] = [
+  "engine_error",
+  "reask_timed_out",
+  "reask_error",
+  "reask_interrupted",
+  "window_expired",
+  "not_reasked",
+];
+const validLateReask = (value: unknown): boolean =>
+  value === undefined ||
+  (object(value) &&
+    Number.isInteger(value.count) &&
+    (value.count as number) >= 1 &&
+    (value.count as number) <= MAX_LATE_REASK_ROUNDS &&
+    isoString(value.requestedAt) &&
+    (value.finishedAt === undefined || isoString(value.finishedAt)));
+
+/** 칸은 저장된 질문(responses) 안의 칸이어야 하고, 칸마다 정확히 하나다. */
+function validCells(
+  value: unknown,
+  responses: unknown[],
+  enginePlan: unknown[]
+): boolean {
+  if (value === undefined) {
+    return true;
+  }
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  const seen = new Set<string>();
+  for (const cell of value) {
+    if (
+      !(
+        object(cell) &&
+        Number.isInteger(cell.promptIndex) &&
+        (cell.promptIndex as number) >= 0 &&
+        (cell.promptIndex as number) < responses.length &&
+        typeof cell.engineId === "string" &&
+        Array.isArray(enginePlan[cell.promptIndex as number]) &&
+        (enginePlan[cell.promptIndex as number] as unknown[]).includes(
+          cell.engineId
+        ) &&
+        CELL_STATES.includes(cell.state) &&
+        isoString(cell.firstSettledAt) &&
+        isoString(cell.updatedAt) &&
+        (cell.reaskStartedAt === undefined || isoString(cell.reaskStartedAt)) &&
+        (cell.failureReason === undefined ||
+          CELL_FAILURE_REASONS.includes(cell.failureReason))
+      )
+    ) {
+      return false;
+    }
+    const key = `${cell.promptIndex}:${cell.engineId}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+  }
+  return true;
+}
+
 /** Refuse corrupt or cross-brand checkpoints before any paid provider call. */
 export function readAuditCheckpoint(
   value: unknown,
@@ -189,6 +311,7 @@ export function readAuditCheckpoint(
     !Number.isInteger(retry.noProgressFailures) ||
     (retry.noProgressFailures as number) < 0 ||
     !validContinuation(value.continuation) ||
+    !validLateReask(value.lateReask) ||
     !object(context) ||
     typeof context.brandName !== "string" ||
     !Array.isArray(context.brandVariants) ||
@@ -244,7 +367,8 @@ export function readAuditCheckpoint(
             typeof row.isStub === "boolean" &&
             nullableString(row.errorMessage)
         )
-    )
+    ) ||
+    !validCells(value.cells, responses, enginePlan)
   ) {
     throw new Error("invalid audit checkpoint");
   }

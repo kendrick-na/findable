@@ -121,7 +121,10 @@ const AuditResultPage = async ({ params }: AuditResultPageProps) => {
           />
         )}
         <AuditResultView
-          copy={{ discoveryCoverage: dictionary.web.audit.discoveryCoverage }}
+          copy={{
+            discoveryCoverage: dictionary.web.audit.discoveryCoverage,
+            noResponseEngines: dictionary.web.audit.noResponseEngines,
+          }}
           correctionNoticeShown={Boolean(
             summaryJob?.metricBasisChanged || summaryJob?.adviceBasisChanged
           )}

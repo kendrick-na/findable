@@ -96,7 +96,7 @@ export const TruthMirrorSection = ({
       .replace("{brand}", brandName)
       .replace("{particle}", objectParticle(brandName));
   const [expanded, setExpanded] = useState(false);
-  const { engines, erroredCount, knownCount } = data;
+  const { engines, erroredCount, erroredEngines, knownCount } = data;
   const visible = expanded ? engines : engines.slice(0, DEFAULT_VISIBLE);
   const hidden = engines.length - visible.length;
 
@@ -120,6 +120,14 @@ export const TruthMirrorSection = ({
       {erroredCount > 0 ? (
         <p className="mt-2 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
           {t.errored.replace("{n}", String(erroredCount))}
+          {erroredEngines && erroredEngines.length > 0
+            ? ` ${t.erroredEngines.replace(
+                "{engines}",
+                erroredEngines
+                  .map((engineId) => engineDisplayName(engineId, isKo))
+                  .join(", ")
+              )}`
+            : null}
         </p>
       ) : null}
 

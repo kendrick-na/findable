@@ -32,6 +32,8 @@ describe("오류는 「모른다」가 아니다", () => {
     ]);
     expect(data?.measuredCount).toBe(1);
     expect(data?.erroredCount).toBe(1);
+    // 어느 AI 가 답하지 않았는지 이름으로 말할 수 있게 id 를 함께 넘긴다(2026-10-07).
+    expect(data?.erroredEngines).toEqual(["claude"]);
     // 🔴 판정이 갈리는 값: 실패를 분모에 넣으면 1/2=50%, 빼면 1/1=100%.
     expect(data?.knownCount).toBe(1);
   });
@@ -43,6 +45,7 @@ describe("오류는 「모른다」가 아니다", () => {
       row({ brandMentioned: true, engineId: "gemini" }),
     ]);
     expect(data?.erroredCount).toBe(0);
+    expect(data?.erroredEngines).toEqual([]);
     expect(data?.measuredCount).toBe(1);
     expect(data?.engines[0].brandMentioned).toBe(true);
   });

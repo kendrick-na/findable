@@ -66,7 +66,8 @@
       "discoveryCoverage": {
         "partial": "Only {measured} of {planned} questions were measured.",
         "none": "Not measured this time."
-      }
+      },
+      "noResponseEngines": "No response from: {engines}"
     },
     "pricing": {
       "meta": {
@@ -1282,6 +1283,7 @@
       "ledeStrong": "representative original answers",
       "ledeAfter": " behind the ‘Truth mirror’ summary in your public report. Full answers per question and changes over time are in ‘Tracked questions’. Only answers verified by brand name, aliases, official domain or official sources count as confirmed.",
       "errored": "{n} engines didn't respond, so they're excluded from the numbers above (this doesn't mean they don't know you).",
+      "erroredEngines": "No response from: {engines}",
       "position": "#{n}",
       "sentimentSaid": "Talks about you {tone}",
       "briefingBefore": "Only this row used an informational question that triggers Naver AI Briefing (depending on industry, “effects, reviews, pros and cons” or “services, prices, reviews”). It ",
