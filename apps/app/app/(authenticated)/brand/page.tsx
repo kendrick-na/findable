@@ -25,6 +25,11 @@ import { BrandProfileEditorServer } from "../features/brand/brand-profile-editor
 import { PromptWizard } from "../features/brand/prompt-wizard";
 import { StartTrackingButton } from "../features/brand/start-tracking-button";
 
+// 이 화면의 「측정 시작」 서버액션(startOrgTracking)은 after() 로 측정 전체(runAuditJob)를
+//   돌린다. Next.js 문서: 서버액션 시간 상한은 **그 액션을 쓰는 page 의 maxDuration** 을 따른다.
+//   러너 예산(270초)+마무리 여유에 맞춰 명시한다 — 플랫폼 기본값에 기대지 않는다(2026-10-06).
+export const maxDuration = 300;
+
 export const generateMetadata = async (): Promise<Metadata> => {
   const t = (await getAppDictionary()).brandPage;
   return { title: t.metaTitle, description: t.metaDescription };
@@ -100,6 +105,20 @@ function jobView(
 }
 
 // requireOrg 만 통과하면 되는 org 멤버 self 화면(admin 게이트 아님).
+/** 최근 측정이 홈페이지 푸터에서 찾은 사업자등록번호 — 편집기에 "제안"으로만 보여 준다. */
+const footerBusinessNumber = (result: unknown): string | null => {
+  const identity = (
+    result as {
+      measurementContext?: {
+        officialSiteIdentity?: { businessNumber?: unknown } | null;
+      };
+    } | null
+  )?.measurementContext?.officialSiteIdentity;
+  return typeof identity?.businessNumber === "string"
+    ? identity.businessNumber
+    : null;
+};
+
 // scopedBrands 는 내부에서 requireOrg 를 호출하므로 org 미선택 시 throw → 인증 레이아웃이 처리.
 const BrandPage = async () => {
   const [dict, locale] = await Promise.all([
@@ -266,11 +285,16 @@ const BrandPage = async () => {
                         자체를 건너뛴다. 여기가 없으면 별칭·경쟁사를 **영영 못 넣는다**. */}
                     <BrandProfileEditorServer
                       brandId={brand.id}
+                      businessNumber={brand.businessNumber}
                       competitors={brand.competitors}
                       entityVariants={brand.entityVariants}
                       industry={brand.industry}
+                      legalName={brand.legalName}
                       marketScope={brand.marketScope}
                       name={brand.name}
+                      suggestedBusinessNumber={footerBusinessNumber(
+                        latestByDomain.get(brand.domain)?.result
+                      )}
                     />
                   </li>
                 );

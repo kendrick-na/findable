@@ -116,6 +116,17 @@ export async function ensureOrgBrand(
     return null;
   }
   try {
+    // 🔴 2026-10-06 운영 실측: 측정 3개가 동시에 돌 때 이미 등록된 브랜드의 재측정이
+    //   「브랜드 준비 중 문제가 발생했습니다」로 실패했다(DB 오류 로그 0 — 대화형
+    //   트랜잭션이 연결 대기 상한을 넘긴 것으로 추정). 재측정은 거의 항상 기존 브랜드라
+    //   트랜잭션 없이 먼저 찾고, 없을 때만 트랜잭션으로 만든다.
+    const found = await database.brand.findFirst({
+      where: { organizationId, domain },
+      select: { id: true },
+    });
+    if (found) {
+      return found.id;
+    }
     return await database.$transaction(async (tx) => {
       const existing = await tx.brand.findFirst({
         where: { organizationId, domain },

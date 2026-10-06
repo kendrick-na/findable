@@ -97,4 +97,58 @@ describe("runner checkpointed question phase", () => {
     expect(durable.responses).toHaveLength(3);
     expect(readAuditCheckpoint(durable, scope)?.retry.attempt).toBe(2);
   });
+
+  it("does not start a new question right before the deadline and resumes the rest later", async () => {
+    const plan = initial();
+    let durable: AuditCheckpoint = plan;
+    let now = 1_000_000;
+    const realNow = Date.now;
+    Date.now = () => now;
+    const firstQueries: number[] = [];
+    try {
+      const partial = await runCheckpointedQuestions(
+        plan,
+        (index) => {
+          firstQueries.push(index);
+          // Question 0 finishes 34s before the cutoff — less than the 35s
+          // needed to start another paid question.
+          now += 270_000 - 34_000;
+          return Promise.resolve(fakeBatch(plan, index));
+        },
+        (saved) => {
+          durable = saved;
+          return Promise.resolve();
+        },
+        { invocationStartedAtMs: 1_000_000, stopStartingAtMs: 1_270_000 }
+      );
+      expect(firstQueries).toEqual([0]);
+      expect(partial).toHaveLength(1);
+      expect(durable.responses).toHaveLength(1);
+    } finally {
+      Date.now = realNow;
+    }
+
+    const validated = readAuditCheckpoint(durable, scope);
+    const retry = validated ? nextAuditCheckpointAttempt(validated) : null;
+    if (!retry) {
+      throw new Error("budget-cut checkpoint was not resumable");
+    }
+    const resumedQueries: number[] = [];
+    const started = Date.now();
+    const result = await runCheckpointedQuestions(
+      retry,
+      (index) => {
+        resumedQueries.push(index);
+        return Promise.resolve(fakeBatch(retry, index));
+      },
+      (saved) => {
+        durable = saved;
+        return Promise.resolve();
+      },
+      { invocationStartedAtMs: started, stopStartingAtMs: started + 270_000 }
+    );
+    expect(resumedQueries).toEqual([1, 2]);
+    expect(result).toHaveLength(3);
+    expect(durable.responses).toHaveLength(3);
+  });
 });

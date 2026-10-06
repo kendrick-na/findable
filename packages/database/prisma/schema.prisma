@@ -96,6 +96,10 @@ model Brand {
   marketScope    MarketScope?
   competitors    Json          @default("[]") // [{ name, domain }]
   entityVariants Json          @default("[]") // ["아모레", "Amorepacific", "아모레퍼시픽"] — Korean Entity Grounding
+  // 고객이 직접 넣은 공식 회사 정보(2026-10-06). 측정 판정의 공식 근거로만 쓰고 화면·리포트에
+  // 공개하지 않는다. 홈페이지 푸터에서 찾은 값보다 우선한다. null = 입력 안 함.
+  legalName      String?
+  businessNumber String? // "000-00-00000" 으로 정규화해 저장
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

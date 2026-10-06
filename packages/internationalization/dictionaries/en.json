@@ -258,10 +258,10 @@
       "saving": "Saving…",
       "saveFailedHint": "You can change these settings later.",
       "removeItem": "Remove {item}",
-      "editorSummary": "View & edit brand info — name, industry, market, aliases & competitors",
+      "editorSummary": "View & edit brand info — name, industry, market, aliases, competitors & company info",
       "editorCounts": "{aliases} aliases · {competitors} competitors",
       "editorAliasTitle": "Other names we go by",
-      "editorAliasHint": "So AI does not count Korean and English spellings separately. e.g. Amorepacific",
+      "editorAliasHint": "So AI does not count Korean/English or former names separately. Add any other official name too. e.g. Amorepacific",
       "editorAliasAria": "Add another name",
       "editorCompetitorTitle": "Brands to compare",
       "editorCompetitorHint": "Competitors missing from this list are never hidden — we only use it to merge spellings.",
@@ -271,7 +271,17 @@
       "editorSaved": "Saved. It applies from the next measurement.",
       "editorDirtyHint": "Saving applies from the next measurement.",
       "metaTitle": "Get started · Findable",
-      "metaDescription": "Enter just your domain and we'll show you what AI says about you."
+      "metaDescription": "Enter just your domain and we'll show you what AI says about you.",
+      "editorIdentityTitle": "Official company info (optional)",
+      "editorIdentityHint": "Used only to tell whether an AI answer really means your company. Never shown on screens or reports.",
+      "editorLegalNameLabel": "Registered company name",
+      "editorLegalNamePlaceholder": "e.g. Viva Republica",
+      "editorBusinessNumberLabel": "Business registration number",
+      "editorBusinessNumberPlaceholder": "000-00-00000",
+      "editorBusinessNumberInvalid": "Please check the 10-digit business registration number.",
+      "editorLegalNameInvalid": "Please enter a company name of 2–60 characters.",
+      "editorBusinessNumberSuggested": "Found on your homepage: {number}",
+      "editorUseSuggested": "Use this number"
     },
     "content": {
       "navLabel": "My content",
@@ -1079,7 +1089,9 @@
       "suggestFailed": "Something went wrong generating suggestions. Please try again in a moment.",
       "selectAtLeastOne": "Select at least one question to save.",
       "promptLimit": "You've reached your plan's limit of {limit} tracked questions. Upgrade your plan to track more.",
-      "promptSaveFailed": "Something went wrong saving the questions."
+      "promptSaveFailed": "Something went wrong saving the questions.",
+      "legalNameInvalid": "Please enter a company name of 2–60 characters.",
+      "businessNumberInvalid": "Please check the 10-digit business registration number."
     },
     "promptWizard": {
       "categoryBrand": "Brand",

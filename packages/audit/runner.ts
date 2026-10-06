@@ -77,7 +77,11 @@ import {
   isMeasurementFailure,
 } from "./measurement-coverage";
 import { isPublishableAuditResult } from "./normalize-stored-metrics";
-import { registeredBrandIdentityFallback } from "./official-site-identity";
+import {
+  type CustomerIdentityInput,
+  mergeCustomerIdentity,
+  registeredBrandIdentityFallback,
+} from "./official-site-identity";
 import { generateAuditPdf } from "./pdf-generator";
 import type { AuditPdfData } from "./pdf-template";
 import type { AuditPostprocessing } from "./postprocessing";
@@ -114,6 +118,11 @@ export interface AuditRunInput {
   brandId?: string;
   brandName?: string;
   brandVariants?: string[];
+  /**
+   * 고객이 앱에서 입력한 상호·사업자등록번호(Brand.legalName·businessNumber).
+   * 홈페이지 푸터에서 읽은 값보다 우선한다(필드별). 없으면 푸터 값 그대로.
+   */
+  customerIdentity?: CustomerIdentityInput;
   domain: string;
   /**
    * 업종(AuditJob.industry). 언급 품질 검증에서 동명이인 분별 단서로 쓴다
@@ -512,6 +521,44 @@ function buildRegionBreakdown(
 /**
  * 메인 진입점. background에서 호출.
  */
+
+/**
+ * 고객이 브랜드 설정에 직접 넣은 상호·사업자번호(2026-10-06).
+ *
+ * 호출처(고객 측정·자동 측정 cron·관리자 1건 측정)가 각자 넘기면 한 곳이 빠지기 쉽다 →
+ * 넘겨준 값이 없으면 brandId 로 여기서 한 번 읽는다. 읽기 실패는 측정을 막지 않는다
+ * (값이 없을 때와 같은 동작 = 홈페이지 푸터 값만 사용).
+ */
+async function customerIdentityFor(
+  input: AuditRunInput
+): Promise<AuditRunInput["customerIdentity"]> {
+  if (input.customerIdentity) {
+    return input.customerIdentity;
+  }
+  if (!input.brandId) {
+    return undefined;
+  }
+  try {
+    const brand = await database.brand.findUnique({
+      where: { id: input.brandId },
+      select: { legalName: true, businessNumber: true },
+    });
+    if (!(brand?.legalName || brand?.businessNumber)) {
+      return undefined;
+    }
+    return {
+      legalName: brand.legalName ?? undefined,
+      businessNumber: brand.businessNumber ?? undefined,
+    };
+  } catch (error) {
+    log.warn("audit.customer_identity.load_failed", {
+      brandId: input.brandId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
+
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Audit orchestration combines engine, storage, PDF and briefing lifecycle guards.
 export async function runAuditJob(input: AuditRunInput): Promise<void> {
   const leaseToken = randomUUID();
@@ -606,10 +653,14 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       : await timed("official_site", () =>
           ai.resolveOfficialSiteIdentity(input.domain)
         );
-    const officialSiteIdentity =
+    const siteIdentity =
       savedCheckpoint?.context.officialSiteIdentity ??
       resolvedOfficialSiteIdentity ??
       registeredBrandIdentityFallback(input);
+    // 고객 입력 상호·사업자번호 > 푸터 추출값(필드별). 근거 유무(identityGrounded)는 바꾸지 않는다.
+    const officialSiteIdentity = siteIdentity
+      ? mergeCustomerIdentity(siteIdentity, await customerIdentityFor(input))
+      : null;
     if (!officialSiteIdentity) {
       throw new Error(
         "공식 사이트에서 브랜드 식별 근거(title, description, H1)를 확인하지 못했습니다. 사이트 접근 설정을 확인한 뒤 다시 측정해 주세요."
@@ -818,6 +869,11 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
               completedQuestions: updatedCheckpoint.responses.length,
               totalQuestions: prompts.length,
             });
+          },
+          // 마감(270초) 전 35초 미만이면 새 질문을 시작하지 않고 저장된 지점에서 멈춘다.
+          {
+            invocationStartedAtMs: budget.invocationStartedAtMs,
+            stopStartingAtMs: budget.stopStartingAtMs,
           }
         ),
       { promptCount: prompts.length }
@@ -859,6 +915,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             brandDomain: input.domain,
             industry: input.industry ?? undefined,
             officialSite: officialSiteIdentity,
+            // 그림자 v3(점수 미사용)는 이 마감까지 60초 이상 남았을 때만 돈다.
+            shadowDeadlineAtMs: budget.stopStartingAtMs,
           },
           ({ chunkIndex, responseCount, phase }) => {
             if (phase === "started") {
@@ -1118,6 +1176,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         // 판정 v3 그림자(2026-10-05, MENTION_VERDICT_V3_SHADOW=true 일 때만) — 저장만 한다.
         //   점수·버킷은 v2 그대로. 운영 전환 전 v2 와의 차이를 사람이 검토하는 재료다.
         ...(r.verdictV3 ? { verdictV3: r.verdictV3 } : {}),
+        // 공식 홈페이지를 못 읽어 근거 검사 없이 받은 confirmed(데이터 플래그 — 화면 표시는 승인 후).
+        ...(r.officialProfileUnavailable
+          ? { officialProfileUnavailable: true }
+          : {}),
         // 심층 분석의 인용 출처 판정도 원본 측정에 근거해야 한다. 도메인 집계만
         // 남기면 수진 분석기가 실제 출처 URL·제목을 전혀 받지 못해, "출처 분석"이라는
         // 이름과 입력 데이터가 어긋난다.

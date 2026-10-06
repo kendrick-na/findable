@@ -258,10 +258,10 @@
       "saving": "저장 중…",
       "saveFailedHint": "설정은 나중에 바꿀 수 있어요.",
       "removeItem": "{item} 제거",
-      "editorSummary": "브랜드 정보 확인·수정 — 이름·업종·시장·별칭·경쟁사",
+      "editorSummary": "브랜드 정보 확인·수정 — 이름·업종·시장·별칭·경쟁사·회사 정보",
       "editorCounts": "별칭 {aliases} · 경쟁사 {competitors}",
       "editorAliasTitle": "우리를 부르는 다른 이름",
-      "editorAliasHint": "AI가 한글·영문을 따로 세지 않도록 합칩니다. 예: Amorepacific",
+      "editorAliasHint": "AI가 한글·영문이나 예전 이름을 따로 세지 않도록 합칩니다. 공식적으로 쓰는 다른 이름도 넣어 주세요. 예: Amorepacific, 당근 → 당근마켓",
       "editorAliasAria": "다른 이름 추가",
       "editorCompetitorTitle": "비교할 브랜드",
       "editorCompetitorHint": "여기 없는 경쟁사를 가리지는 않아요 — 표기를 합치는 데만 씁니다.",
@@ -271,7 +271,17 @@
       "editorSaved": "저장했어요. 다음 측정부터 반영돼요.",
       "editorDirtyHint": "저장하면 다음 측정부터 반영돼요.",
       "metaTitle": "시작하기 · Findable",
-      "metaDescription": "도메인 하나만 넣으면 AI가 우리를 뭐라고 말하는지 알려드려요."
+      "metaDescription": "도메인 하나만 넣으면 AI가 우리를 뭐라고 말하는지 알려드려요.",
+      "editorIdentityTitle": "공식 회사 정보 (선택)",
+      "editorIdentityHint": "AI 답변이 정말 우리 회사를 말하는지 가려내는 데만 써요. 화면이나 리포트에는 공개되지 않아요.",
+      "editorLegalNameLabel": "회사 정식 상호",
+      "editorLegalNamePlaceholder": "예: 비바리퍼블리카 ((주) 생략 가능)",
+      "editorBusinessNumberLabel": "사업자등록번호",
+      "editorBusinessNumberPlaceholder": "000-00-00000",
+      "editorBusinessNumberInvalid": "사업자등록번호 10자리를 확인해 주세요.",
+      "editorLegalNameInvalid": "회사 정식 상호는 2~60자로 입력해 주세요.",
+      "editorBusinessNumberSuggested": "홈페이지에서 찾은 번호: {number}",
+      "editorUseSuggested": "이 번호 쓰기"
     },
     "content": {
       "navLabel": "내 콘텐츠",
@@ -1079,7 +1089,9 @@
       "suggestFailed": "제안 생성 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
       "selectAtLeastOne": "저장할 프롬프트를 하나 이상 선택해 주세요.",
       "promptLimit": "현재 플랜의 추적 프롬프트 상한({limit}개)에 도달했어요. 더 많은 프롬프트를 추적하려면 요금제를 올려주세요.",
-      "promptSaveFailed": "프롬프트 저장 중 문제가 발생했습니다."
+      "promptSaveFailed": "프롬프트 저장 중 문제가 발생했습니다.",
+      "legalNameInvalid": "회사 정식 상호는 2~60자로 입력해 주세요.",
+      "businessNumberInvalid": "사업자등록번호 10자리를 확인해 주세요."
     },
     "promptWizard": {
       "categoryBrand": "브랜드",

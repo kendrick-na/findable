@@ -37,8 +37,14 @@ export const BrandProfileEditorServer = async ({
   marketScope,
   competitors,
   entityVariants,
+  legalName,
+  businessNumber,
+  suggestedBusinessNumber,
 }: {
   brandId: string;
+  legalName: string | null;
+  businessNumber: string | null;
+  suggestedBusinessNumber: string | null;
   name: string;
   industry: string | null;
   marketScope: string | null;
@@ -50,12 +56,15 @@ export const BrandProfileEditorServer = async ({
   return (
     <BrandProfileEditor
       brandId={brandId}
-      name={name}
-      industry={industry}
-      marketScope={marketScope}
+      businessNumber={businessNumber}
       competitors={toNameList(competitors)}
       entityVariants={toNameList(entityVariants)}
+      industry={industry}
+      legalName={legalName}
+      marketScope={marketScope}
+      name={name}
       onSave={updateBrandProfile}
+      suggestedBusinessNumber={suggestedBusinessNumber}
       t={t}
     />
   );

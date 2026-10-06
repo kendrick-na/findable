@@ -67,4 +67,33 @@ describe("updateBrandProfile — Org 행 보장 (웹훅 지연)", () => {
     expect(mocks.ensureOrgExists).not.toHaveBeenCalled();
     expect(mocks.brandUpdate).toHaveBeenCalledOnce();
   });
+
+  it("공식 회사 정보를 정규화해 저장한다", async () => {
+    await updateBrandProfile({
+      brandId: "brand_1",
+      legalName: "  비바리퍼블리카 ",
+      businessNumber: "1234567890",
+    });
+    expect(mocks.brandUpdate).toHaveBeenCalledWith({
+      where: { id: "brand_1" },
+      data: { legalName: "비바리퍼블리카", businessNumber: "123-45-67890" },
+    });
+  });
+
+  it("사업자등록번호 형식이 틀리면 저장하지 않는다", async () => {
+    const result = await updateBrandProfile({
+      brandId: "brand_1",
+      businessNumber: "12345",
+    });
+    expect(result).toEqual({ error: "사업자등록번호 10자리를 확인해 주세요." });
+    expect(mocks.brandUpdate).not.toHaveBeenCalled();
+  });
+
+  it("빈 값으로 저장하면 지운다(null)", async () => {
+    await updateBrandProfile({ brandId: "brand_1", legalName: "" });
+    expect(mocks.brandUpdate).toHaveBeenCalledWith({
+      where: { id: "brand_1" },
+      data: { legalName: null },
+    });
+  });
 });

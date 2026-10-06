@@ -69,6 +69,11 @@ export type MentionQuality =
 export interface MentionVerdict {
   /** 점수·SoV에 실제로 반영할 최종 판정. confirmed 만 true. */
   counted: boolean;
+  /**
+   * 공식 홈페이지를 못 읽어 근거 검사 없이 판정기를 믿은 confirmed(2026-10-06, 무신사 REDIRECT_FAILED).
+   * 화면 표시는 사용자 승인 전이라 데이터 플래그로만 남긴다.
+   */
+  officialProfileUnavailable?: true;
   quality: MentionQuality;
   /** 비집계 판정의 사유(관측·재검증용). 없으면 quality 자체가 사유다. */
   reason?: MentionVerdictReason;
@@ -288,6 +293,158 @@ export function isOfficialDomain(
   );
 }
 
+/** 「함께해요」「만들어요」 같은 슬로건의 서술어 끝 — 회사를 가르는 사실이 아니다. */
+const PREDICATE_ENDING_RE = /(?:요|다|니다|세요|하자|해요)$/;
+const LEGAL_SUFFIX_RE = /\(주\)|㈜|주식회사|\(유\)|유한회사/g;
+/** 슬로건에 흔한 2글자 군말 — 회사를 가르지 못한다. */
+const SLOGAN_FILLER = new Set([
+  "하나",
+  "모든",
+  "우리",
+  "함께",
+  "가장",
+  "최고",
+  "지금",
+  "마침내",
+  "당신",
+  "누구",
+]);
+
+/** 공식 프로필(title·description·H1)에서 엔티티를 가르는 고유 토큰. */
+function officialProfileTokens(input: VerifyInput): Set<string> {
+  const site = input.officialSite;
+  const brandToken = compactIdentity(input.brandName);
+  return new Set(
+    [site?.title, site?.description, site?.h1]
+      .filter((value): value is string => Boolean(value))
+      // ⚠️ 2글자 명사는 근거로 받지 않는다(2026-10-06 컨트롤타워 검증): 「금융」⊂「금융권」,
+      //   「결제」⊂「결제대행」처럼 업종 일반명사가 동명 타사 답변을 통과시켰다. 슬로건형 브랜드는
+      //   토큰 대신 상호·사업자번호·공식 별칭 앵커(hasRegisteredEntityAnchor)로 푼다.
+      .flatMap((value) => identityTokens(value))
+      .filter((token) => {
+        const compact = compactIdentity(token);
+        // 조사 제거 과정에서 고유명사 끝 글자까지 떨어져 나올 수 있다
+        // (예: `멜트헤일로` → `멜트헤일`). 등록명/별칭의 일부는 독립적인
+        // 공식 사실이 아니므로, 그 자체로는 엔티티 근거가 될 수 없다.
+        return (
+          compact !== brandToken &&
+          !isRegisteredNameFragment(token, input) &&
+          !PREDICATE_ENDING_RE.test(token) &&
+          !SLOGAN_FILLER.has(token)
+        );
+      })
+  );
+}
+
+/**
+ * 근거 없음 강등을 **요구할 수 있는** 프로필인가(2026-10-06 운영 실측).
+ * - 홈페이지를 못 읽어 내용이 비면(무신사 REDIRECT_FAILED) 근거를 만들 재료가 없다.
+ * - 슬로건뿐인 홈페이지(당근 24건 중 17건 강등)는 강등을 끄지 않고 앵커(상호·사업자번호·
+ *   「당근마켓」 같은 공식 별칭)로 근거를 넓혀 푼다.
+ * ⚠️ 「토큰이 적으면 강등 생략」은 쓰지 않는다 — TechDD(「정량 기술 실사」, 4글자 토큰 0)의
+ *   해외 동명사를 거르는 이 강등이 실제로 필요했다(회귀 테스트 mention-entity-regression).
+ */
+export function canDemandOfficialEvidence(input: VerifyInput): boolean {
+  const site = input.officialSite;
+  return Boolean(
+    site &&
+      [site.title, site.description, site.h1, site.siteName].some((value) =>
+        Boolean(value?.trim())
+      )
+  );
+}
+
+/**
+ * 등록 정보로 엔티티를 특정하는 앵커:
+ * ① 푸터 상호(「바이오센서연구소」) ② 사업자등록번호 ③ 등록명을 품은 더 긴 공식 별칭
+ *   (「당근」 → 「당근마켓」). ③은 등록명 자체·짧은 별칭(「Franz」)은 받지 않는다.
+ */
+/**
+ * 상호 앵커로 쓰면 안 되는 일반 단어(2026-10-06 컨트롤타워 검토).
+ * 고객이 직접 넣는 상호가 「코리아」「솔루션」뿐이면 그 단어가 들어간 다른 회사 답변까지
+ * 우리 회사로 확정된다(점수 부풀리기 경로). 회사명 전체가 이 단어들뿐일 때만 막는다.
+ */
+const GENERIC_LEGAL_NAME_TOKENS = new Set([
+  "코리아",
+  "솔루션",
+  "솔루션즈",
+  "테크",
+  "테크놀로지",
+  "컴퍼니",
+  "그룹",
+  "홀딩스",
+  "글로벌",
+  "인터내셔널",
+  "파트너스",
+  "코퍼레이션",
+  "서비스",
+  "플랫폼",
+  "시스템",
+  "시스템즈",
+  "네트웍스",
+  "커머스",
+  "랩스",
+  "스튜디오",
+  "미디어",
+  "korea",
+  "solution",
+  "solutions",
+  "tech",
+  "technology",
+  "company",
+  "group",
+  "holdings",
+  "global",
+  "international",
+  "partners",
+  "corporation",
+  "service",
+  "platform",
+  "systems",
+  "labs",
+  "studio",
+  "media",
+  "commerce",
+]);
+
+/**
+ * 상호가 엔티티를 **따로** 특정하는가. 등록명·별칭과 같거나 그 안에 들어가면 이름 일치와
+ * 다를 게 없어 동명 타사 차단이 무력화된다(예: 브랜드 「무신사」 + 상호 「㈜무신사」).
+ */
+function isDistinctiveLegalName(legal: string, input: VerifyInput): boolean {
+  if (legal.length < 3 || GENERIC_LEGAL_NAME_TOKENS.has(legal)) {
+    return false;
+  }
+  const names = [input.brandName, ...(input.brandVariants ?? [])]
+    .map((name) => compactIdentity(name))
+    .filter((name) => name.length > 0);
+  return !names.some((name) => name === legal || name.includes(legal));
+}
+
+function hasRegisteredEntityAnchor(input: VerifyInput): boolean {
+  const text = compactIdentity(input.text);
+  const legal = compactIdentity(
+    (input.officialSite?.legalName ?? "").replace(LEGAL_SUFFIX_RE, "")
+  );
+  if (isDistinctiveLegalName(legal, input) && text.includes(legal)) {
+    return true;
+  }
+  const bizNo = input.officialSite?.businessNumber;
+  if (bizNo && input.text.includes(bizNo)) {
+    return true;
+  }
+  const brand = compactIdentity(input.brandName);
+  return (input.brandVariants ?? []).some((variant) => {
+    const v = compactIdentity(variant);
+    return (
+      brand.length >= 2 &&
+      v.length > brand.length + 1 &&
+      v.includes(brand) &&
+      text.includes(v)
+    );
+  });
+}
+
 /**
  * LLM이 `confirmed`라고 해도 공식 사이트의 고유 사실이 답변에 실제로 있어야 한다.
  * 도메인 직접 언급/인용은 강한 근거이고, 그 외에는 title·description·H1의 서로 다른
@@ -298,6 +455,9 @@ export function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
     return false;
   }
   if (mentionsOfficialDomain(input.text, input.brandDomain)) {
+    return true;
+  }
+  if (hasRegisteredEntityAnchor(input)) {
     return true;
   }
   // Mixed-source lists may contain an unused official search candidate. Require
@@ -320,25 +480,7 @@ export function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
     return true;
   }
 
-  const brandToken = compactIdentity(input.brandName);
-  const tokens = new Set(
-    [
-      input.officialSite.title,
-      input.officialSite.description,
-      input.officialSite.h1,
-    ]
-      .filter((value): value is string => Boolean(value))
-      .flatMap((value) => identityTokens(value))
-      .filter((token) => {
-        const compact = compactIdentity(token);
-        // 조사 제거 과정에서 고유명사 끝 글자까지 떨어져 나올 수 있다
-        // (예: `멜트헤일로` → `멜트헤일`). 등록명/별칭의 일부는 독립적인
-        // 공식 사실이 아니므로, 그 자체로는 엔티티 근거가 될 수 없다.
-        return (
-          compact !== brandToken && !isRegisteredNameFragment(token, input)
-        );
-      })
-  );
+  const tokens = officialProfileTokens(input);
   const response = input.text.toLowerCase();
   let matches = 0;
   for (const token of tokens) {
@@ -667,7 +809,7 @@ export async function verifyMention(
 
   if (
     quality === "confirmed" &&
-    input.officialSite &&
+    canDemandOfficialEvidence(input) &&
     !hasOfficialIdentityEvidence(input)
   ) {
     // 판정기는 정상 작동했고, 답변이 공식 사이트의 고유 사실을 하나도 말하지
@@ -682,7 +824,14 @@ export async function verifyMention(
     };
   }
 
-  return { counted: quality === "confirmed", quality, via: "llm" };
+  return {
+    counted: quality === "confirmed",
+    quality,
+    via: "llm",
+    ...(quality === "confirmed" && !canDemandOfficialEvidence(input)
+      ? { officialProfileUnavailable: true as const }
+      : {}),
+  };
 }
 
 /** 테스트·오프라인 분석용 — LLM 없이 규칙만으로 모호 여부를 본다. */
@@ -724,6 +873,7 @@ export interface VerdictV3Shadow {
 
 export interface VerifiedResponseFields {
   mentionQuality: MentionQuality;
+  officialProfileUnavailable?: true;
   verdictReason?: MentionVerdictReason;
   verdictV3?: VerdictV3Shadow;
   verdictVia: string;
@@ -766,6 +916,19 @@ function buildVerdictInput(
       brand.brandName,
       brand.brandVariants
     ).mentioned,
+  };
+}
+
+/** 판정 부가 필드(사유·홈페이지 미확인 플래그) — 있는 것만 싣는다. */
+function verdictExtras(verdict: MentionVerdict): {
+  officialProfileUnavailable?: true;
+  verdictReason?: MentionVerdictReason;
+} {
+  return {
+    ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
+    ...(verdict.officialProfileUnavailable
+      ? { officialProfileUnavailable: true as const }
+      : {}),
   };
 }
 
@@ -812,6 +975,113 @@ function logShadowDistribution(
   });
 }
 
+/** 그림자 판정 청크 상한 — 넘으면 그 청크는 기록하지 않는다(v2 판정은 영향 없음). */
+const SHADOW_CHUNK_DEADLINE_MS = 15_000;
+/**
+ * 그림자 판정을 **시작하지 않는** 남은 시간 하한(2026-10-06).
+ * 측정 전체 예산(runner 270초) 중 이만큼도 안 남았으면 그림자는 통째로 건너뛴다 —
+ * 점수에 쓰지 않는 기록 때문에 집계·DB 저장이 함수 시간 상한(300초)에 걸리면 안 된다.
+ */
+export const SHADOW_MIN_REMAINING_MS = 60_000;
+/** 호출자가 마감 시각을 주지 않을 때의 기본 예산(runner 의 AUDIT_RUN_TIME_BUDGET_MS 와 같다). */
+export const SHADOW_DEFAULT_BUDGET_MS = 270_000;
+
+function withShadowDeadline<T>(
+  run: (signal: AbortSignal) => Promise<(T | null)[]>,
+  size: number,
+  deadlineMs: number,
+  parent?: AbortSignal
+): Promise<(T | null)[]> {
+  // 시간이 지나면 실제로 판정기 호출을 취소한다 — 계속 돌면 다음 단계와 호출 한도를
+  //   나눠 가진다(컨트롤타워 검증 2026-10-06).
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort();
+  parent?.addEventListener("abort", onParentAbort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<(T | null)[]>((resolve) => {
+    timer = setTimeout(() => {
+      log.warn("mention.verdict_v3.shadow_deadline", { size });
+      controller.abort();
+      resolve(new Array(size).fill(null));
+    }, deadlineMs);
+  });
+  return Promise.race([run(controller.signal), timeout]).finally(() => {
+    clearTimeout(timer);
+    parent?.removeEventListener("abort", onParentAbort);
+  });
+}
+
+/**
+ * v2 판정이 **모두 끝난 뒤에만** 그림자 v3 를 돌려 `verdictV3` 를 덧붙인다(2026-10-06).
+ * 남은 예산이 SHADOW_MIN_REMAINING_MS 미만이면 시작하지 않고(청크마다 재확인),
+ * 청크 상한도 「남은 시간 − 하한」을 넘지 않는다 → 그림자는 마지막 60초를 절대 쓰지 않는다.
+ * v2 결과(brandMentioned·mentionQuality 등)는 건드리지 않는다.
+ */
+async function attachShadowVerdicts<R extends { verdictV3?: VerdictV3Shadow }>(
+  out: R[],
+  verdictInputs: Array<(VerifyInput & { stringMatched: boolean }) | null>,
+  options: {
+    brandName: string;
+    deadlineAtMs: number;
+    signal?: AbortSignal;
+    verifyMentionV3: (
+      input: VerifyInput & { stringMatched: boolean }
+    ) => Promise<Parameters<typeof shadowField>[0]>;
+  }
+): Promise<void> {
+  const startedAt = Date.now();
+  let attached = 0;
+  for (let start = 0; start < out.length; start += VERDICT_CONCURRENCY) {
+    const remainingMs = options.deadlineAtMs - Date.now();
+    let skipReason: "aborted" | "budget" | null = null;
+    if (options.signal?.aborted) {
+      skipReason = "aborted";
+    } else if (remainingMs < SHADOW_MIN_REMAINING_MS) {
+      skipReason = "budget";
+    }
+    if (skipReason) {
+      log.info("mention.verdict_v3.shadow_skipped", {
+        brandName: options.brandName,
+        reason: skipReason,
+        remainingMs: Math.round(remainingMs),
+        minRemainingMs: SHADOW_MIN_REMAINING_MS,
+        skippedRows: out.length - start,
+      });
+      break;
+    }
+    const inputs = verdictInputs.slice(start, start + VERDICT_CONCURRENCY);
+    const shadows = await withShadowDeadline(
+      (shadowSignal) =>
+        Promise.all(
+          inputs.map((verdictInput) =>
+            verdictInput
+              ? options
+                  .verifyMentionV3({ ...verdictInput, signal: shadowSignal })
+                  .catch(() => null)
+              : Promise.resolve(null)
+          )
+        ),
+      inputs.length,
+      Math.min(SHADOW_CHUNK_DEADLINE_MS, remainingMs - SHADOW_MIN_REMAINING_MS),
+      options.signal
+    );
+    for (const [i, shadow] of shadows.entries()) {
+      const row = out[start + i];
+      const field = shadowField(shadow);
+      if (row && field.verdictV3) {
+        row.verdictV3 = field.verdictV3;
+        attached += 1;
+      }
+    }
+  }
+  log.info("mention.verdict_v3.shadow_finished", {
+    brandName: options.brandName,
+    durationMs: Date.now() - startedAt,
+    rows: out.length,
+    attached,
+  });
+}
+
 /**
  * LLM 판정 동시 실행 상한 — 한 측정에서 모호 응답이 다수면 레이트리밋·지연이 커진다.
  * 프롬프트 8 × 엔진 7 = 최대 56행이지만, 실제로 LLM까지 가는 건 모호한 소수다.
@@ -833,6 +1103,11 @@ export async function verifyMentions<T extends VerifiableResponse>(
     industry?: string;
     officialSite?: VerifyInput["officialSite"];
     signal?: AbortSignal;
+    /**
+     * 측정 전체 마감 시각(epoch ms). 그림자 v3 는 이 시각까지
+     * SHADOW_MIN_REMAINING_MS 이상 남았을 때만 돈다. 없으면 호출 시점 + 270초.
+     */
+    shadowDeadlineAtMs?: number;
   },
   onChunkEvent?: (event: {
     chunkIndex: number;
@@ -846,6 +1121,11 @@ export async function verifyMentions<T extends VerifiableResponse>(
     "./mention-verdict-v3"
   );
   const shadowV3 = isVerdictV3ShadowEnabled();
+  const shadowDeadlineAtMs =
+    brand.shadowDeadlineAtMs ?? Date.now() + SHADOW_DEFAULT_BUDGET_MS;
+  const allVerdictInputs: Array<
+    (VerifyInput & { stringMatched: boolean }) | null
+  > = new Array(responses.length).fill(null);
 
   // 인덱스를 청크로 끊어 동시 실행 상한을 지킨다.
   for (let start = 0; start < responses.length; start += VERDICT_CONCURRENCY) {
@@ -860,15 +1140,9 @@ export async function verifyMentions<T extends VerifiableResponse>(
       /* logging is best-effort */
     }
     const verdictInputs = slice.map((r) => buildVerdictInput(r, brand));
-    const shadowVerdicts = shadowV3
-      ? Promise.all(
-          verdictInputs.map((verdictInput) =>
-            verdictInput
-              ? verifyMentionV3(verdictInput).catch(() => null)
-              : Promise.resolve(null)
-          )
-        )
-      : Promise.resolve(slice.map(() => null));
+    for (const [i, verdictInput] of verdictInputs.entries()) {
+      allVerdictInputs[start + i] = verdictInput;
+    }
     const verdicts = await Promise.all(
       slice.map((r, i): Promise<MentionVerdict> => {
         const verdictInput = verdictInputs[i];
@@ -894,18 +1168,15 @@ export async function verifyMentions<T extends VerifiableResponse>(
       })
     );
 
-    const v3 = await shadowVerdicts;
     for (const [i, verdict] of verdicts.entries()) {
       const original = slice[i] as T;
-      const shadow = v3[i];
       out[start + i] = {
         ...original,
         brandMentioned: verdict.counted,
         mentionPosition: verdict.counted ? original.mentionPosition : null,
         mentionQuality: verdict.quality,
         verdictVia: verdict.via,
-        ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
-        ...shadowField(shadow),
+        ...verdictExtras(verdict),
       };
     }
     try {
@@ -913,6 +1184,18 @@ export async function verifyMentions<T extends VerifiableResponse>(
     } catch {
       /* logging is best-effort */
     }
+  }
+
+  // 그림자 v3 는 v2 가 전부 끝난 뒤에만, 남은 예산이 있을 때만 돈다(2026-10-06).
+  //   이전엔 청크마다 v2 와 나란히 돌고 청크가 그림자를 기다려(최대 15초×청크 수)
+  //   측정 시간을 늘렸다 — 운영 실측: kurly 첫 측정이 판정 단계에서 시간 초과.
+  if (shadowV3) {
+    await attachShadowVerdicts(out, allVerdictInputs, {
+      brandName: brand.brandName,
+      deadlineAtMs: shadowDeadlineAtMs,
+      signal: brand.signal,
+      verifyMentionV3,
+    });
   }
 
   // 판정 분포 관측(2026-08-03 세션N) — 이 판정은 계산·과금까지 하고 **아무 곳에도
