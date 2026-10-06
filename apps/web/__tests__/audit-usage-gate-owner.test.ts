@@ -6,7 +6,7 @@
  */
 
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fx = vi.hoisted(() => ({
   findFirst: vi.fn(),
@@ -64,11 +64,30 @@ async function submit() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // 👤 2026-10-07 — 공개 무료 진단은 기본 꺼짐(`FREE_AUDIT_PUBLIC_ENABLED`).
+  //   이 파일은 「켜져 있을 때」의 사용량 게이트(429)를 검증하므로 켠 상태로 돈다.
+  vi.stubEnv("FREE_AUDIT_PUBLIC_ENABLED", "true");
   // 1st findFirst = domain cache (miss), 2nd = usage gate (recent job).
   fx.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(EXISTING);
   fx.findUnique.mockResolvedValue({
     email: EXISTING.email,
     organizationId: EXISTING.organizationId,
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("public free audit OFF (FREE_AUDIT_PUBLIC_ENABLED unset)", () => {
+  it("returns 404 before the usage gate and never touches the database", async () => {
+    vi.stubEnv("FREE_AUDIT_PUBLIC_ENABLED", "");
+    const response = await submit();
+    expect(response.status).toBe(404);
+    expect(await response.json()).not.toHaveProperty("existingJobId");
+    expect(fx.findFirst).not.toHaveBeenCalled();
+    expect(fx.findUnique).not.toHaveBeenCalled();
+    expect(fx.isOwner).not.toHaveBeenCalled();
   });
 });
 
