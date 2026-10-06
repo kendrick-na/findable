@@ -27,6 +27,8 @@ import { checkBotId } from "botid/server";
 import type { NextRequest } from "next/server";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+// 상대 경로인 이유: `apps/app` 테스트가 이 파일을 직접 import 하면 `@/` 가 app 으로 풀린다.
+import { freeAuditPublicEnabled } from "../../../lib/free-audit";
 import {
   DEFAULT_DAILY_FREE_BUDGET_KRW,
   dailyFreeJobCap,
@@ -369,6 +371,15 @@ function requestIpKey(request: NextRequest): string | null {
 }
 
 export async function POST(request: NextRequest) {
+  // 👤 2026-10-07 CEO 결정 — 공개 무료 진단 숨김(env `FREE_AUDIT_PUBLIC_ENABLED`, 기본 꺼짐).
+  //   꺼져 있으면 BotID·파싱·DB 조회를 포함해 **아무 일도 하지 않고** 404 를 준다
+  //   (원가 0 · 라우트 존재도 드러내지 않는다). 코드는 재활성화 대비로 그대로 둔다.
+  //   🔬 호출처 전수(2026-10-07): 이 POST 를 부르는 건 www `/audit` 폼 하나뿐이다.
+  //     로그인 앱 측정(start-tracking)·admin 단건 측정(`/api/admin/measure-one`)·cron 은
+  //     `runAuditJob` 을 직접 호출하므로 이 게이트의 영향을 받지 않는다.
+  if (!freeAuditPublicEnabled()) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const invocationStartedAtMs = Date.now();
   // ⓪ BotID — 방어 4층의 첫 관문. 파싱·DB 조회보다 **먼저** 둔다(봇에 원가 0).
   //   Basic 은 전 플랜 무료, Deep Analysis 는 $1/1000(건당 원가의 0.5~0.8%).

@@ -3,6 +3,7 @@ import { JsonLd } from "@repo/seo/json-ld";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import { env } from "@/env";
+import { freeAuditPublicEnabled } from "@/lib/free-audit";
 import { Credibility } from "./components/credibility";
 import { Faq } from "./components/faq";
 import { FooterCTA } from "./components/footer-cta";
@@ -61,6 +62,10 @@ const Home = async ({ params }: HomeProps) => {
   // JSON-LD의 대표 URL을 실제 canonical(`/ko` 또는 `/`)과 일치시킨다.
   // 루트 URL만 사용하면 한국어 홈과 브랜드 엔티티 신호가 분리될 수 있다.
   const siteUrl = `${siteOrigin}${locale.startsWith("ko") ? "/ko" : "/en"}`;
+  // 👤 2026-10-07 CEO 결정 — 공개 무료 진단이 꺼져 있으면(`FREE_AUDIT_PUBLIC_ENABLED`,
+  //   기본 꺼짐) 구조화 데이터에서도 「무료 도메인 진단」 제공(Offer)과 기능 줄을 뺀다.
+  //   AI 엔진이 이 JSON-LD 를 그대로 인용하므로, 닫힌 기능을 현재형으로 알리면 안 된다.
+  const freeAuditPublic = freeAuditPublicEnabled();
 
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)]">
@@ -77,16 +82,22 @@ const Home = async ({ params }: HomeProps) => {
           url: siteUrl,
           description: dictionary.web.home.meta.description,
           inLanguage: locale.startsWith("ko") ? "ko-KR" : "en-US",
-          offers: {
-            "@type": "Offer",
-            price: "0",
-            priceCurrency: "KRW",
-            description: "무료 도메인 진단 (3분, 1페이지 PDF 리포트)",
-          },
+          ...(freeAuditPublic
+            ? {
+                offers: {
+                  "@type": "Offer",
+                  price: "0",
+                  priceCurrency: "KRW",
+                  description: "무료 도메인 진단 (3분, 1페이지 PDF 리포트)",
+                },
+              }
+            : {}),
           featureList: [
             "AI 답변 4곳 + 네이버 AI 브리핑 + 네이버·다음 검색 노출 동시 추적 (ChatGPT · Claude · Perplexity · Gemini)",
             "Korean Entity Grounding (한글·영문·혼용 표기 통합 추적)",
-            "무료 도메인 진단 및 Share of Voice 리포트",
+            ...(freeAuditPublic
+              ? ["무료 도메인 진단 및 Share of Voice 리포트"]
+              : []),
             "4명의 자율 에이전트 기반 GEO 측정·최적화",
           ],
           provider: {

@@ -12,6 +12,8 @@ import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
+// 상대 경로인 이유: `apps/app` 테스트가 이 파일을 직접 import 하면 `@/` 가 app 으로 풀린다.
+import { freeAuditPublicEnabled } from "../../../../lib/free-audit";
 import { resolveIsOwner } from "../../../api/audit/_lib/owner";
 import { canExposeAuditResult } from "../../../api/audit/_lib/public-access";
 import { AuditResultView } from "./components/audit-result";
@@ -123,6 +125,7 @@ const AuditResultPage = async ({ params }: AuditResultPageProps) => {
           correctionNoticeShown={Boolean(
             summaryJob?.metricBasisChanged || summaryJob?.adviceBasisChanged
           )}
+          freeAuditPublic={freeAuditPublicEnabled()}
           jobId={jobId}
           locale={locale}
         />

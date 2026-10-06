@@ -81,7 +81,14 @@ import {
   Zap,
 } from "lucide-react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ActionDetails as TeaserActionDetails,
   ActionLead as TeaserActionLead,
@@ -107,9 +114,21 @@ interface AuditResultCopy {
 interface Props {
   copy?: AuditResultCopy;
   correctionNoticeShown?: boolean;
+  /**
+   * 공개 무료 진단(`/audit` 폼)이 열려 있는가 — 서버(`page.tsx`)가 env
+   * `FREE_AUDIT_PUBLIC_ENABLED` 를 읽어 내려준다(기본 꺼짐).
+   * 👤 2026-10-07 CEO 결정: 꺼져 있으면 이 결과 화면에서 `/audit` 로 가는 모든 동선
+   *   (다시 시도·다른 브랜드 진단·카톡 「내 브랜드 측정」·공유뷰 「우리 브랜드 무료 진단」)을 숨긴다.
+   *   결과 화면 자체는 대시보드·admin·발송 메일이 링크하므로 그대로 동작한다.
+   */
+  freeAuditPublic?: boolean;
   jobId: string;
   locale: string;
 }
+
+/** `/audit` 폼으로 보내는 링크를 그려도 되는가(결과 화면 전역). 기본값 = 숨김. */
+const FreeAuditPublicContext = createContext(false);
+const useFreeAuditPublic = (): boolean => useContext(FreeAuditPublicContext);
 
 // ──────────────────────────────────────────────────────────────────
 // 타입 (orchestrator AnalystOutput·StrategistOutput과 일치)
@@ -792,12 +811,20 @@ function totalFiveAxis(view: FiveAxisView): number {
 // 메인 진입점
 // ──────────────────────────────────────────────────────────────────
 
-export function AuditResultView({
+export function AuditResultView({ freeAuditPublic = false, ...props }: Props) {
+  return (
+    <FreeAuditPublicContext.Provider value={freeAuditPublic}>
+      <AuditResultBody {...props} />
+    </FreeAuditPublicContext.Provider>
+  );
+}
+
+function AuditResultBody({
   copy,
   correctionNoticeShown = false,
   jobId,
   locale,
-}: Props) {
+}: Omit<Props, "freeAuditPublic">) {
   const isKo = locale.startsWith("ko");
   const [job, setJob] = useState<JobResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1053,6 +1080,7 @@ export function getLeadResultMessage(
 }
 
 function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
+  const freeAuditPublic = useFreeAuditPublic();
   const isKo = locale.startsWith("ko");
   const [emailOpen, setEmailOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -1220,13 +1248,18 @@ function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
             title: isKo ? "결과 보기" : "View result",
             link: { mobileWebUrl: url, webUrl: url },
           },
-          {
-            title: isKo ? "내 브랜드 측정" : "Audit my brand",
-            link: {
-              mobileWebUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/${locale}/audit`,
-              webUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/${locale}/audit`,
-            },
-          },
+          // 무료 진단이 닫혀 있으면 `/audit` 버튼을 싣지 않는다(받는 사람에게 404).
+          ...(freeAuditPublic
+            ? [
+                {
+                  title: isKo ? "내 브랜드 측정" : "Audit my brand",
+                  link: {
+                    mobileWebUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/${locale}/audit`,
+                    webUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/${locale}/audit`,
+                  },
+                },
+              ]
+            : []),
         ],
       });
     } catch {
@@ -1392,6 +1425,7 @@ function NoDataState({ isKo }: { isKo: boolean }) {
 
 function FailedState({ job, locale }: { job: JobResponse; locale: string }) {
   const isKo = locale.startsWith("ko");
+  const freeAuditPublic = useFreeAuditPublic();
   return (
     <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
       <div className="flex items-center gap-2 font-semibold text-red-300">
@@ -1401,9 +1435,11 @@ function FailedState({ job, locale }: { job: JobResponse; locale: string }) {
       <p className="mt-2 text-red-300 text-sm">
         {job.errorMessage ?? (isKo ? "알 수 없는 오류" : "Unknown error")}
       </p>
-      <Button asChild className="mt-4" variant="outline">
-        <a href={`/${locale}/audit`}>{isKo ? "다시 시도" : "Try again"}</a>
-      </Button>
+      {freeAuditPublic && (
+        <Button asChild className="mt-4" variant="outline">
+          <a href={`/${locale}/audit`}>{isKo ? "다시 시도" : "Try again"}</a>
+        </Button>
+      )}
     </div>
   );
 }
@@ -1434,6 +1470,7 @@ function MeasurementFailedView({
   locale: string;
   result: JobResult;
 }) {
+  const freeAuditPublic = useFreeAuditPublic();
   return (
     <div className="space-y-6 pb-24 lg:pb-12">
       <MeasuredAtNotice isKo={isKo} job={job} />
@@ -1457,11 +1494,13 @@ function MeasurementFailedView({
             : "This isn't a score of zero — it means we don't know yet. We can only tell you how AI describes your brand once a measurement succeeds."}
         </p>
 
-        <Button asChild className="mt-6" variant="outline">
-          <a href={`/${locale}/audit`}>
-            {isKo ? "다시 측정하기" : "Run it again"}
-          </a>
-        </Button>
+        {freeAuditPublic && (
+          <Button asChild className="mt-6" variant="outline">
+            <a href={`/${locale}/audit`}>
+              {isKo ? "다시 측정하기" : "Run it again"}
+            </a>
+          </Button>
+        )}
       </section>
     </div>
   );
@@ -2664,6 +2703,7 @@ function ActionCenterSticky({
   locale: string;
   isKo: boolean;
 }) {
+  const freeAuditPublic = useFreeAuditPublic();
   const ready =
     job.crewStatus === "completed" &&
     job.crewResult?.analysts &&
@@ -2707,15 +2747,17 @@ function ActionCenterSticky({
           방금 진단을 끝낸 사람에게 "또 진단하세요"가 카드의 유일한 실동작 버튼이었다.
           지우지는 않는다 — 다른 도메인을 재는 사람에게는 실제로 필요한 동선이다.
           full-width 버튼 → **작은 텍스트 링크**로 위계만 낮춘다(주 CTA와 경쟁 제거). */}
-      <div className="mt-3 border-white/10 border-t pt-3 text-center">
-        <a
-          className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-300"
-          href={`/${locale}/audit`}
-        >
-          <RotateCw className="h-3 w-3" />
-          {isKo ? "다른 브랜드 진단하기" : "Audit another brand"}
-        </a>
-      </div>
+      {freeAuditPublic && (
+        <div className="mt-3 border-white/10 border-t pt-3 text-center">
+          <a
+            className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-300"
+            href={`/${locale}/audit`}
+          >
+            <RotateCw className="h-3 w-3" />
+            {isKo ? "다른 브랜드 진단하기" : "Audit another brand"}
+          </a>
+        </div>
+      )}
     </SpotlightCard>
   );
 }
@@ -2925,6 +2967,7 @@ function ActionCenterEmpty({ jobId, isKo }: { jobId: string; isKo: boolean }) {
 }
 
 function LegacyCrewNotice({ locale, isKo }: { locale: string; isKo: boolean }) {
+  const freeAuditPublic = useFreeAuditPublic();
   return (
     <SpotlightCard border="brand" className="p-6 md:p-8">
       <div className="flex items-center gap-2 font-medium text-[var(--brand-2)] text-xs">
@@ -2941,12 +2984,14 @@ function LegacyCrewNotice({ locale, isKo }: { locale: string; isKo: boolean }) {
           ? "Findable이 4 에이전트 분석 출력 형식을 JSON 구조화로 업그레이드했어요. 새 형식(Monday Action·Top Actions·Findings 분리)을 보려면 새 진단을 시작해주세요."
           : "Findable upgraded the 4-agent output to structured JSON. Run a new audit to see the new format."}
       </p>
-      <Button asChild className="mt-5 gap-2" size="lg">
-        <a href={`/${locale}/audit`}>
-          <Sparkles className="h-4 w-4" />
-          {isKo ? "새 진단 시작하기" : "Start a new audit"}
-        </a>
-      </Button>
+      {freeAuditPublic && (
+        <Button asChild className="mt-5 gap-2" size="lg">
+          <a href={`/${locale}/audit`}>
+            <Sparkles className="h-4 w-4" />
+            {isKo ? "새 진단 시작하기" : "Start a new audit"}
+          </a>
+        </Button>
+      )}
     </SpotlightCard>
   );
 }
@@ -4689,6 +4734,7 @@ function buildUpsellCopy({
   mentionedCount,
   measuredCount,
   isSharedView,
+  freeAuditPublic = true,
 }: {
   isKo: boolean;
   brandName: string;
@@ -4696,6 +4742,8 @@ function buildUpsellCopy({
   mentionedCount: number;
   measuredCount: number;
   isSharedView: boolean;
+  /** 꺼져 있으면 공유뷰 본문에서 「도메인만 넣으면… 무료」 문장(=`/audit` 권유)을 뺀다. */
+  freeAuditPublic?: boolean;
 }): { headline: string; bodyCopy: string } {
   const isInvisible = mentionedCount === 0;
   const isFullCoverage = !isInvisible && mentionedCount === measuredCount;
@@ -4712,14 +4760,20 @@ function buildUpsellCopy({
   //    리드젠 효과는 이미 퍼지고 있는 이 페이지가 같거나 더 크다).
   if (isSharedView) {
     if (isKo) {
+      const measuredSentence = `이 진단은 ChatGPT·Perplexity 등 AI ${measuredCount}곳에 실제로 물어본 결과예요.`;
       return {
         headline: `${brandName}의 AI 검색 성적표예요 — 우리 브랜드는 어떨까요?`,
-        bodyCopy: `이 진단은 ChatGPT·Perplexity 등 AI ${measuredCount}곳에 실제로 물어본 결과예요. 도메인만 넣으면 3분 만에 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`,
+        bodyCopy: freeAuditPublic
+          ? `${measuredSentence} 도메인만 넣으면 3분 만에 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`
+          : measuredSentence,
       };
     }
+    const measuredSentence = `We asked ${measuredCount} AI engines about this brand and measured what they said.`;
     return {
       headline: `This is ${brandName}'s AI search scorecard — how does yours look?`,
-      bodyCopy: `We asked ${measuredCount} AI engines about this brand and measured what they said. Enter your domain to get the same audit in about 3 minutes — free, no card required.`,
+      bodyCopy: freeAuditPublic
+        ? `${measuredSentence} Enter your domain to get the same audit in about 3 minutes — free, no card required.`
+        : measuredSentence,
     };
   }
 
@@ -4813,6 +4867,7 @@ function UpsellCard({
   const { measured: measuredCount, mentioned: mentionedCount } =
     countBrandAiRecognition(result.engineResponses);
 
+  const freeAuditPublic = useFreeAuditPublic();
   const { headline, bodyCopy } = buildUpsellCopy({
     isKo,
     brandName: result.brandName,
@@ -4820,11 +4875,14 @@ function UpsellCard({
     mentionedCount,
     measuredCount,
     isSharedView,
+    freeAuditPublic,
   });
 
   // 공유받은 사람 ↔ 소유자로 CTA가 갈린다(위 buildUpsellCopy 주석 참조).
   //   중첩 삼항을 JSX 안에 쓰면 lint(noNestedTernary)에 걸리고 읽기도 어렵다 → 여기서 평평하게.
-  const ctaVariant = isSharedView ? "shared" : "owner";
+  // 👤 2026-10-07 — 무료 진단이 닫혀 있으면 공유받은 사람도 「무료 진단」 대신
+  //   기존 가입 CTA(owner 변형: `/sign-up`)를 받는다. 새 문구를 만들지 않는다.
+  const ctaVariant = isSharedView && freeAuditPublic ? "shared" : "owner";
   const primaryCtaLabel = {
     shared: isKo ? "우리 브랜드 무료 진단" : "Audit my brand · Free",
     owner: isKo ? "무료 계정 만들고 추세 보기" : "Create free account",
@@ -4896,7 +4954,11 @@ function UpsellCard({
             남의 결과를 보러 온 사람에게 sign-up 을 첫 버튼으로 주면 이탈한다.
             리서치의 리드젠 사례(Semrush·Ahrefs 무료 체커)가 전부 **가입 없이 바로 측정**이다. */}
         <Button asChild className="gap-2" size="lg">
-          <a href={isSharedView ? `/${locale}/audit` : `${appUrl}/sign-up`}>
+          <a
+            href={
+              ctaVariant === "shared" ? `/${locale}/audit` : `${appUrl}/sign-up`
+            }
+          >
             <Zap className="h-4 w-4" />
             {primaryCtaLabel}
           </a>

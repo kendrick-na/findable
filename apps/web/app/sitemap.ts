@@ -6,6 +6,7 @@ import {
   listAllPublishedContentForDiscovery,
   listPublishedContent,
 } from "@/lib/content";
+import { freeAuditPublicEnabled } from "@/lib/free-audit";
 import { isCanonicalOnSite } from "@/lib/public-url";
 
 /**
@@ -183,9 +184,12 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
   }
   // 🔴 각 경로의 **실제 마지막 수정일**을 쓴다(2026-09-02). `now` 를 쓰면 요청마다 값이
   //   바뀌어 구글이 lastmod 자체를 불신한다(실측으로 그 상태였다 — 위 STATIC_PATHS 주석).
-  const staticEntries = STATIC_PATHS.flatMap((entry) =>
-    entriesFor(entry.path, new Date(entry.lastModified))
-  );
+  // 👤 2026-10-07 CEO 결정 — 공개 무료 진단이 꺼져 있으면(`FREE_AUDIT_PUBLIC_ENABLED`,
+  //   기본 꺼짐) `/audit` 는 404 다. 404 를 사이트맵에 신고하지 않는다.
+  const freeAuditPublic = freeAuditPublicEnabled();
+  const staticEntries = STATIC_PATHS.filter(
+    (entry) => freeAuditPublic || entry.path !== "/audit"
+  ).flatMap((entry) => entriesFor(entry.path, new Date(entry.lastModified)));
   try {
     const posts = await listAllPublishedContentForDiscovery();
     // 🔴 커스텀 도메인으로 **정본을 넘긴 글은 제외**한다(2026-09-02). 그 글의 정규 URL 은
@@ -217,11 +221,7 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
       url: localizedUrl(post.locale, `/p/${post.publisher.slug}/${post.slug}`),
       lastModified: post.updatedAt,
     }));
-    return [
-      ...staticEntries,
-      ...publisherEntries,
-      ...postEntries,
-    ];
+    return [...staticEntries, ...publisherEntries, ...postEntries];
   } catch {
     // 빌드·일시 DB 장애 때 정적 사이트맵 전체를 500으로 만들지 않는다.
     return staticEntries;

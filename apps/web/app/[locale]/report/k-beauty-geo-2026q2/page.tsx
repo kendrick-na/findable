@@ -26,6 +26,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
+import { freeAuditPublicEnabled } from "@/lib/free-audit";
 import { FooterCTA } from "../../(home)/components/footer-cta";
 import { PublicLandingHeader } from "../../components/public-landing-header";
 
@@ -95,10 +96,30 @@ const HEADLINE_INSIGHTS = [
 ];
 
 const EN_HEADLINE_INSIGHTS = [
-  { metric: "93.2", suffix: "/100", label: "Average K-beauty SoV", note: "Five brands measured" },
-  { metric: "100%", suffix: "", label: "Mention rate in four global engines", note: "ChatGPT · Claude · Perplexity · Gemini" },
-  { metric: "55%", suffix: "", label: "Average Daum mention rate", note: "Across the five brands" },
-  { metric: "+41%", suffix: "", label: "Relative lift from quotations", note: "KDD '24 Table 1 experimental mean" },
+  {
+    metric: "93.2",
+    suffix: "/100",
+    label: "Average K-beauty SoV",
+    note: "Five brands measured",
+  },
+  {
+    metric: "100%",
+    suffix: "",
+    label: "Mention rate in four global engines",
+    note: "ChatGPT · Claude · Perplexity · Gemini",
+  },
+  {
+    metric: "55%",
+    suffix: "",
+    label: "Average Daum mention rate",
+    note: "Across the five brands",
+  },
+  {
+    metric: "+41%",
+    suffix: "",
+    label: "Relative lift from quotations",
+    note: "KDD '24 Table 1 experimental mean",
+  },
 ] as const;
 
 const INSIGHTS = [
@@ -137,25 +158,29 @@ const EN_INSIGHTS = [
     n: "01",
     title: "K-beauty brands appeared consistently in global AI answers",
     body: "The five brands averaged 93.2/100 in Share of Voice (SoV), with Anua highest at 96/100. Brand mentions appeared in responses from all four global engines measured. This dataset does not establish whether distribution or reviews caused those mentions.",
-    actionable: "Check whether official English product information and verifiable third-party sources agree on the facts. Compare cited domains in the next measurement.",
+    actionable:
+      "Check whether official English product information and verifiable third-party sources agree on the facts. Compare cited domains in the next measurement.",
   },
   {
     n: "02",
     title: "All five brands appeared in HyperCLOVA X responses",
     body: "Each of the five brands was mentioned by HyperCLOVA X for the four questions measured. This result is limited to those dates and questions; it does not stand in for Naver Search or AI Briefing visibility.",
-    actionable: "Measure Naver Search and HyperCLOVA X separately. Prioritize content according to the sources each answer actually uses.",
+    actionable:
+      "Measure Naver Search and HyperCLOVA X separately. Prioritize content according to the sources each answer actually uses.",
   },
   {
     n: "03",
     title: "Daum mentions were lower, but varied by brand",
     body: "Daum's average brand mention rate was 55% across the five brands. Anua reached 75%, so it would be inaccurate to say every brand scored 50% or lower. This measurement alone cannot identify the cause.",
-    actionable: "Compare the questions with and without a Daum mention and examine their cited sources. Fill gaps in the official pages, then measure again under the same conditions.",
+    actionable:
+      "Compare the questions with and without a Daum mention and examine their cited sources. Fill gaps in the official pages, then measure again under the same conditions.",
   },
   {
     n: "04",
     title: "Search results and AI answers need separate metrics",
     body: "Search impressions and brand mentions in AI answers come from different measurement methods. This dataset did not measure revenue, so a visibility gap should not be presented as a sales gap.",
-    actionable: "Save a baseline using the same question, engine, and region. Make one editorial change at a time and record the difference after remeasurement.",
+    actionable:
+      "Save a baseline using the same question, engine, and region. Make one editorial change at a time and record the difference after remeasurement.",
   },
 ] as const;
 
@@ -193,11 +218,36 @@ const APPLY_STRATEGIES = [
 ];
 
 const EN_APPLY_STRATEGIES = [
-  { code: "S1", name: "Cite Sources", impact: "+27%", body: "Mean relative improvement for citing original sources in the paper's experiments." },
-  { code: "S2", name: "Quotation Inclusion", impact: "+41%", body: "Mean relative improvement for including quotations in the paper's experiments." },
-  { code: "S3", name: "Statistics & Data", impact: "+31%", body: "Mean relative improvement for adding statistics in the paper's experiments." },
-  { code: "S4", name: "Korean Entity Grounding", impact: "To validate", body: "Unify Korean, English, and mixed-script brand names, then measure before and after." },
-  { code: "S5", name: "AI Briefing Visibility", impact: "To validate", body: "Measure Naver AI Briefing appearances in a separate sample." },
+  {
+    code: "S1",
+    name: "Cite Sources",
+    impact: "+27%",
+    body: "Mean relative improvement for citing original sources in the paper's experiments.",
+  },
+  {
+    code: "S2",
+    name: "Quotation Inclusion",
+    impact: "+41%",
+    body: "Mean relative improvement for including quotations in the paper's experiments.",
+  },
+  {
+    code: "S3",
+    name: "Statistics & Data",
+    impact: "+31%",
+    body: "Mean relative improvement for adding statistics in the paper's experiments.",
+  },
+  {
+    code: "S4",
+    name: "Korean Entity Grounding",
+    impact: "To validate",
+    body: "Unify Korean, English, and mixed-script brand names, then measure before and after.",
+  },
+  {
+    code: "S5",
+    name: "AI Briefing Visibility",
+    impact: "To validate",
+    body: "Measure Naver AI Briefing appearances in a separate sample.",
+  },
 ] as const;
 
 export default async function KBeautyReportPage({
@@ -208,6 +258,7 @@ export default async function KBeautyReportPage({
   const { locale } = await params;
   const ko = locale.startsWith("ko");
   const prefix = ko ? "/ko" : "/en";
+  const freeAuditPublic = freeAuditPublicEnabled();
   const CANONICAL = canonicalFor(locale);
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
@@ -221,7 +272,9 @@ export default async function KBeautyReportPage({
         code={{
           "@context": "https://schema.org",
           "@type": "Article",
-          headline: ko ? "K-뷰티 GEO Report 2026 Q2" : "K-Beauty GEO Report | Q2 2026",
+          headline: ko
+            ? "K-뷰티 GEO Report 2026 Q2"
+            : "K-Beauty GEO Report | Q2 2026",
           description: ko ? DESCRIPTION : EN_DESCRIPTION,
           url: CANONICAL,
           mainEntityOfPage: { "@type": "WebPage", "@id": CANONICAL },
@@ -235,7 +288,12 @@ export default async function KBeautyReportPage({
           },
           about: ko
             ? ["생성형엔진최적화", "GEO", "AI 검색 가시성", "K-뷰티"]
-            : ["generative engine optimization", "GEO", "AI search visibility", "K-beauty"],
+            : [
+                "generative engine optimization",
+                "GEO",
+                "AI search visibility",
+                "K-beauty",
+              ],
           isAccessibleForFree: true,
         }}
       />
@@ -254,7 +312,9 @@ export default async function KBeautyReportPage({
               className="text-[12px] text-[var(--findable-ink-muted)]"
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
-              {ko ? "한국 K-뷰티 5사 · 7 AI 엔진" : "Five K-beauty brands · Seven AI engines"}
+              {ko
+                ? "한국 K-뷰티 5사 · 7 AI 엔진"
+                : "Five K-beauty brands · Seven AI engines"}
             </span>
           </div>
           <h1
@@ -264,7 +324,9 @@ export default async function KBeautyReportPage({
             {ko ? "K-뷰티 GEO Report" : "K-Beauty GEO Report"}
             <br />
             <span className="text-[var(--findable-primary)]">
-              {ko ? "2026 Q2, 어디에서 발견되고 있나." : "Where did brands appear in Q2 2026?"}
+              {ko
+                ? "2026 Q2, 어디에서 발견되고 있나."
+                : "Where did brands appear in Q2 2026?"}
             </span>
           </h1>
           <p
@@ -350,7 +412,9 @@ export default async function KBeautyReportPage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            {ko ? "5사 측정에서 보이는 4 패턴." : "Four patterns in the five-brand sample."}
+            {ko
+              ? "5사 측정에서 보이는 4 패턴."
+              : "Four patterns in the five-brand sample."}
           </h2>
           <div className="space-y-6">
             {(ko ? INSIGHTS : EN_INSIGHTS).map((ins) => (
@@ -407,14 +471,18 @@ export default async function KBeautyReportPage({
               3.0 · Apply 5 Strategies
             </span>
             <span className="rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-[10px] text-amber-600 uppercase tracking-[0.12em]">
-              {ko ? "논문 근거 + 검증 과제" : "Published evidence + questions to test"}
+              {ko
+                ? "논문 근거 + 검증 과제"
+                : "Published evidence + questions to test"}
             </span>
           </div>
           <h2
             className="mb-4 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            {ko ? "검증된 편집 전략과 후속 실험 항목." : "Editorial methods tested in research—and what remains to test."}
+            {ko
+              ? "검증된 편집 전략과 후속 실험 항목."
+              : "Editorial methods tested in research—and what remains to test."}
           </h2>
           <div
             className="mb-8 rounded-md border border-amber-500/30 bg-amber-500/5 p-4 text-[13px] text-[var(--findable-ink-muted)] leading-relaxed"
@@ -488,7 +556,9 @@ export default async function KBeautyReportPage({
                   className="mb-1 font-medium text-[15px]"
                   style={{ fontFamily: "var(--findable-font-sans)" }}
                 >
-                  {ko ? "K-GEO-Bench v0.1 (학술 데이터셋)" : "K-GEO-Bench v0.1 (open dataset)"}
+                  {ko
+                    ? "K-GEO-Bench v0.1 (학술 데이터셋)"
+                    : "K-GEO-Bench v0.1 (open dataset)"}
                 </h3>
                 <p
                   className="text-[13px] text-[var(--findable-ink-muted)] leading-relaxed"
@@ -511,7 +581,9 @@ export default async function KBeautyReportPage({
                   className="mb-1 font-medium text-[15px]"
                   style={{ fontFamily: "var(--findable-font-sans)" }}
                 >
-                  {ko ? "Case Study: Before/After 시뮬레이션" : "Case study: Before/after simulation"}
+                  {ko
+                    ? "Case Study: Before/After 시뮬레이션"
+                    : "Case study: Before/after simulation"}
                 </h3>
                 <p
                   className="text-[13px] text-[var(--findable-ink-muted)] leading-relaxed"
@@ -528,29 +600,35 @@ export default async function KBeautyReportPage({
         </div>
       </section>
 
-      {/* CTA */}
-      <section>
-        <div className="mx-auto max-w-5xl px-6 py-20">
-          <div className="flex flex-col items-center gap-6 text-center">
-            <h2
-              className="max-w-2xl font-medium text-[28px] leading-tight tracking-tight md:text-[40px]"
-              style={{ fontFamily: "var(--findable-font-display)" }}
-            >
-              {ko ? "우리 브랜드는 7 AI 답변에서" : "Where does your brand appear"}
-              <br />
-              {ko ? "어디에 있을까요?" : "across seven AI engines?"}
-            </h2>
-            <Link
-              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
-              href={`${prefix}/audit`}
-              style={{ fontFamily: "var(--findable-font-sans)" }}
-            >
-              {ko ? "무료 진단 받기" : "Check your brand"}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+      {/* CTA — 👤 2026-10-07 CEO 결정: 공개 무료 진단(`/audit`)이 꺼져 있으면
+          (`FREE_AUDIT_PUBLIC_ENABLED`, 기본 꺼짐) 이 섹션을 통째로 숨긴다.
+          아래 FooterCTA(가입·상담 예약)가 다음 행동을 대신한다. */}
+      {freeAuditPublic && (
+        <section>
+          <div className="mx-auto max-w-5xl px-6 py-20">
+            <div className="flex flex-col items-center gap-6 text-center">
+              <h2
+                className="max-w-2xl font-medium text-[28px] leading-tight tracking-tight md:text-[40px]"
+                style={{ fontFamily: "var(--findable-font-display)" }}
+              >
+                {ko
+                  ? "우리 브랜드는 7 AI 답변에서"
+                  : "Where does your brand appear"}
+                <br />
+                {ko ? "어디에 있을까요?" : "across seven AI engines?"}
+              </h2>
+              <Link
+                className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
+                href={`${prefix}/audit`}
+                style={{ fontFamily: "var(--findable-font-sans)" }}
+              >
+                {ko ? "무료 진단 받기" : "Check your brand"}
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
       <FooterCTA locale={locale} />
     </div>
   );

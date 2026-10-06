@@ -8,6 +8,11 @@ import { ArrowRight, Check, Clock } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { env } from "@/env";
+import {
+  freeAuditPublicEnabled,
+  visibleFaq,
+  visiblePricingTiers,
+} from "../../../lib/free-audit";
 import { FooterCTA } from "../(home)/components/footer-cta";
 import { PublicLandingHeader } from "../components/public-landing-header";
 
@@ -24,11 +29,16 @@ export const generateMetadata = async ({
 }: PricingPageProps): Promise<Metadata> => {
   const { locale } = await params;
   const isKo = locale.startsWith("ko");
+  const freeAuditDescription = isKo
+    ? "Findable 요금제. 무료 진단부터 엔터프라이즈까지, 우리 브랜드 규모에 맞는 플랜을 제공합니다."
+    : "Findable pricing. From free audit to enterprise, a plan that fits your brand's scale.";
   return createMetadata({
     title: isKo ? "요금제" : "Pricing",
-    description: isKo
-      ? "Findable 요금제. 무료 진단부터 엔터프라이즈까지, 우리 브랜드 규모에 맞는 플랜을 제공합니다."
-      : "Findable pricing. From free audit to enterprise, a plan that fits your brand's scale.",
+    // 👤 2026-10-07 CEO 결정 — 공개 무료 진단이 꺼져 있으면 설명에서도 뺀다.
+    description: freeAuditPublicEnabled()
+      ? freeAuditDescription
+      : (await getDictionary(locale)).web.pricing.meta
+          .descriptionWithoutFreeAudit,
     locale,
     pathname: "/pricing",
   });
@@ -260,8 +270,14 @@ const PricingPage = async ({ params }: PricingPageProps) => {
   const dictionary = await getDictionary(locale);
   const isKo = locale.startsWith("ko");
   const lp = isKo ? "/ko" : "";
-  const tiers = isKo ? TIERS_KO : TIERS_EN;
-  const faq = isKo ? FAQ_KO : FAQ_EN;
+  // 👤 2026-10-07 CEO 결정 — 무료 진단 숨김 시 Free Audit 등급·FAQ 첫 문항·부제를 뺀다.
+  //   (부제는 "무료 진단으로 시작해서…" 라 대체 문구 없이 숨긴다.)
+  const freeAuditPublic = freeAuditPublicEnabled();
+  const tiers = visiblePricingTiers(
+    isKo ? TIERS_KO : TIERS_EN,
+    freeAuditPublic
+  );
+  const faq = visibleFaq(isKo ? FAQ_KO : FAQ_EN, freeAuditPublic);
   const displayFont = isKo
     ? "var(--findable-font-display-kr)"
     : "var(--findable-font-display)";
@@ -323,17 +339,24 @@ const PricingPage = async ({ params }: PricingPageProps) => {
         >
           {copy.h1}
         </h1>
-        <p
-          className="mx-auto mt-5 max-w-[560px] text-[16px] text-[var(--findable-ink-muted)] leading-[1.6]"
-          style={{ fontFamily: "var(--findable-font-sans)" }}
-        >
-          {copy.sub}
-        </p>
+        {freeAuditPublic && (
+          <p
+            className="mx-auto mt-5 max-w-[560px] text-[16px] text-[var(--findable-ink-muted)] leading-[1.6]"
+            style={{ fontFamily: "var(--findable-font-sans)" }}
+          >
+            {copy.sub}
+          </p>
+        )}
       </section>
 
       {/* 4-tier 그리드 */}
       <section className="px-8 pb-16">
-        <div className="mx-auto grid max-w-[1280px] gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div
+          className={cn(
+            "mx-auto grid max-w-[1280px] gap-6 md:grid-cols-2",
+            tiers.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-4"
+          )}
+        >
           {tiers.map((tier) => (
             <article
               className={`relative flex flex-col rounded-xl p-6 ${

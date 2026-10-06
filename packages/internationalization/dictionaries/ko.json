@@ -67,6 +67,11 @@
         "partial": "질문 {planned}개 중 {measured}개만 측정했어요.",
         "none": "이번에는 측정하지 못했어요."
       }
+    },
+    "pricing": {
+      "meta": {
+        "descriptionWithoutFreeAudit": "Findable 요금제. Starter부터 엔터프라이즈까지, 우리 브랜드 규모에 맞는 플랜을 제공합니다."
+      }
     }
   },
   "app": {

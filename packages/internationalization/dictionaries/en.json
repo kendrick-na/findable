@@ -67,6 +67,11 @@
         "partial": "Only {measured} of {planned} questions were measured.",
         "none": "Not measured this time."
       }
+    },
+    "pricing": {
+      "meta": {
+        "descriptionWithoutFreeAudit": "Findable pricing. From Starter to Enterprise, a plan that fits your brand's scale."
+      }
     }
   },
   "app": {

@@ -1,5 +1,6 @@
 import { env } from "@/env";
 import { listAllPublishedContentForDiscovery } from "@/lib/content";
+import { freeAuditPublicEnabled } from "@/lib/free-audit";
 import { isCanonicalOnSite } from "@/lib/public-url";
 
 /**
@@ -38,7 +39,14 @@ const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
 const origin = `${protocol}://${env.VERCEL_PROJECT_PRODUCTION_URL ?? "www.findable.co.kr"}`;
 
 // 실제로 200 을 주는 페이지만 싣는다(현재 EN 은 전량 `/ko` 로 리다이렉트된다).
-const baseBody = `# 파인더블 (Findable)
+// 👤 2026-10-07 CEO 결정 — 공개 무료 진단이 꺼져 있으면(`FREE_AUDIT_PUBLIC_ENABLED`,
+//   기본 꺼짐) 요금제 페이지에서 Free Audit 등급이 빠진다. AI 에게도 같은 목록을 알린다.
+const pricingTiersLine = (freeAuditPublic: boolean): string =>
+  freeAuditPublic
+    ? "Free Audit · Starter · Growth · Scale · Enterprise"
+    : "Starter · Growth · Scale · Enterprise";
+
+const baseBody = (freeAuditPublic: boolean): string => `# 파인더블 (Findable)
 
 > 한국어 브랜드가 ChatGPT·Perplexity·Gemini·네이버 등 AI 답변에 얼마나, 어떻게 인용되는지 측정하고 개선하는 GEO(생성형엔진최적화) 도구입니다. 도메인만 입력하면 AI 답변 4곳과 네이버·다음 검색을 병렬로 확인해 3분 안에 결과를 제공합니다.
 
@@ -55,7 +63,7 @@ AI 답변에서 브랜드가 등장한 방식과 인용 출처를 측정하고 �
 
 - [홈](${origin}/ko): 제품 개요와 4단계(측정·분석·추천·발행) 설명
 - [공식 사실 문서](${origin}/ai-instructions): 운영 주체, 제품 범위, 측정 지표와 공개 자료
-- [요금제](${origin}/ko/pricing): Free Audit · Starter · Growth · Scale · Enterprise
+- [요금제](${origin}/ko/pricing): ${pricingTiersLine(freeAuditPublic)}
 - [문의](${origin}/ko/contact)
 
 ## 공개 데이터·리서치
@@ -93,7 +101,7 @@ export async function GET(): Promise<Response> {
   } catch {
     // 공개 콘텐츠 조회 실패가 사이트 설명 전체의 500으로 번지지 않게 정적 본문으로 폴백.
   }
-  const body = `${baseBody}${published}`;
+  const body = `${baseBody(freeAuditPublicEnabled())}${published}`;
   return new Response(body, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",

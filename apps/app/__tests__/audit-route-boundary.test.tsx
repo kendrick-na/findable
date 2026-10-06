@@ -1,6 +1,6 @@
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -145,6 +145,10 @@ const privateJob = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // 👤 2026-10-07 — 공개 무료 진단은 기본 꺼짐(`FREE_AUDIT_PUBLIC_ENABLED`). 이 파일의
+  //   기존 경계 테스트는 「켜져 있을 때의 옛 동작」을 검증하므로 켠 상태로 돈다.
+  //   꺼짐 동작은 아래 「공개 무료 진단 OFF」 블록이 따로 고정한다.
+  vi.stubEnv("FREE_AUDIT_PUBLIC_ENABLED", "true");
   mocks.auth.mockResolvedValue({ userId: null, orgId: null });
   mocks.currentUser.mockResolvedValue(null);
   mocks.findUnique.mockResolvedValue(privateJob);
@@ -162,6 +166,46 @@ beforeEach(() => {
   mocks.metricBasisChanged.mockReturnValue(false);
   mocks.adviceBasisChanged.mockReturnValue(false);
   mocks.publishable.mockReturnValue(true);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("공개 무료 진단 OFF (FREE_AUDIT_PUBLIC_ENABLED 미설정 = 기본)", () => {
+  test.each([
+    ["unset", undefined],
+    ["false", "false"],
+    ["empty", ""],
+  ])("POST /api/audit → 404 and does no work (%s)", async (_label, value) => {
+    vi.stubEnv("FREE_AUDIT_PUBLIC_ENABLED", value as string);
+    const response = await createAudit(
+      request({
+        email: "free@example.com",
+        domain: "public.example",
+        language: "ko",
+      }) as never
+    );
+    expect(response.status).toBe(404);
+    expect(mocks.findFirst).not.toHaveBeenCalled();
+    expect(mocks.findMany).not.toHaveBeenCalled();
+    expect(mocks.count).not.toHaveBeenCalled();
+    expect(mocks.createJob).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+    expect(mocks.runAudit).not.toHaveBeenCalled();
+  });
+
+  test("기존 결과 조회(GET /api/audit/[jobId])는 OFF 여도 그대로 동작한다", async () => {
+    vi.stubEnv("FREE_AUDIT_PUBLIC_ENABLED", "false");
+    mocks.findUnique.mockResolvedValue({
+      ...privateJob,
+      email: "free@example.com",
+      organizationId: null,
+    });
+    const response = await pollAudit(request() as never, params as never);
+    expect(response.status).not.toBe(404);
+    expect(mocks.findUnique).toHaveBeenCalled();
+  });
 });
 
 describe("audit route tenant boundary", () => {

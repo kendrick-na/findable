@@ -1,3 +1,4 @@
+import { isFreeAuditPublicEnabled } from "@repo/audit/free-audit-public";
 import { env } from "@/env";
 import { getAppDictionary } from "@/lib/i18n";
 import { sampleReportUrl } from "@/lib/sample-report";
@@ -24,6 +25,7 @@ export const DashboardEmptyState = async ({ signedInEmail }: Props = {}) => {
   return (
     <DashboardEmptyStateView
       sampleUrl={sampleReportUrl(env.NEXT_PUBLIC_WEB_URL)}
+      showFreeAuditReclaim={isFreeAuditPublicEnabled()}
       signedInEmail={signedInEmail}
       t={t}
     />

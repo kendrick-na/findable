@@ -28,6 +28,16 @@ export interface Props {
 }
 
 /**
+ * 👤 2026-10-07 CEO 결정 — 공개 무료 진단을 숨긴다(env `FREE_AUDIT_PUBLIC_ENABLED`,
+ *   기본 꺼짐). 「이미 무료 진단을 받아보셨나요?」 회수 안내는 더 이상 생기지 않는
+ *   무료 진단을 전제로 하므로, 꺼져 있으면 숨긴다. 코드·사전 키는 남긴다(재활성화 대비).
+ *   기본값 false = 숨김(안전한 기본값). 서버 껍데기가 env 를 읽어 넘긴다.
+ */
+export interface ViewOptions {
+  showFreeAuditReclaim?: boolean;
+}
+
+/**
  * 사전의 `app.emptyState` 모양. 키를 빼먹으면 tsc 가 잡는다.
  *
  * 🔴 **`getAppDictionary` 의 반환 타입으로 유도하지 않는다.** 그러면 `type` import 라도
@@ -94,7 +104,8 @@ export const DashboardEmptyStateView = ({
   signedInEmail,
   t,
   sampleUrl,
-}: Props & { sampleUrl: string; t: EmptyStateDictionary }) => {
+  showFreeAuditReclaim = false,
+}: Props & ViewOptions & { sampleUrl: string; t: EmptyStateDictionary }) => {
   const steps = buildSteps(t);
 
   return (
@@ -107,37 +118,40 @@ export const DashboardEmptyStateView = ({
       </p>
 
       {/* 이미 진단한 사람을 되찾는 길. 브랜드 등록 CTA보다 위에 둔다 —
-          "없는 걸 새로 만들라"보다 "있는 걸 이어라"가 먼저다. */}
-      <div className="mt-8 flex w-full max-w-3xl items-start gap-3 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-2,#141516)] p-4 text-left">
-        <Mail className="mt-0.5 size-4 shrink-0 text-[color:var(--findable-ink-subtle,#8a8f98)]" />
-        <div>
-          <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-            {t.reclaimTitle}
-          </p>
-          <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            {/* 🔴 문장을 **쪼개지 않는다.** 예전엔 `<strong>그때 입력한 이메일 주소</strong>`
-                로 문장 중간을 강조했는데, 사전에 넣으려면 문장을 3조각으로 잘라야 한다.
-                조각난 문구는 **어순이 다른 언어에서 조립이 불가능**하다(영어는 목적어가 뒤).
-                → 강조를 포기하고 문장을 통째로 든다. 정보는 그대로 남는다. */}
-            {t.reclaimBody}
-            {signedInEmail ? (
-              <>
-                {" "}
-                {t.reclaimSignedInPrefix}{" "}
-                {/* 긴 이메일이 200% 확대(195px)에서 355px 로 삐져나가 가로 스크롤을
-                    만들었다(WCAG 1.4.10). `break-all` 대신 `anywhere` — 짧은 주소는
-                    그대로 두고 넘칠 때만 끊는다. */}
-                <span className="text-[color:var(--findable-ink-muted,#d0d6e0)] [overflow-wrap:anywhere]">
-                  {signedInEmail}
-                </span>
-                {t.reclaimSignedIn}
-              </>
-            ) : (
-              ` ${t.reclaimAnonymous}`
-            )}
-          </p>
+          "없는 걸 새로 만들라"보다 "있는 걸 이어라"가 먼저다.
+          👤 2026-10-07 — 공개 무료 진단이 꺼져 있으면(기본) 숨긴다(위 ViewOptions). */}
+      {showFreeAuditReclaim && (
+        <div className="mt-8 flex w-full max-w-3xl items-start gap-3 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-2,#141516)] p-4 text-left">
+          <Mail className="mt-0.5 size-4 shrink-0 text-[color:var(--findable-ink-subtle,#8a8f98)]" />
+          <div>
+            <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+              {t.reclaimTitle}
+            </p>
+            <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+              {/* 🔴 문장을 **쪼개지 않는다.** 예전엔 `<strong>그때 입력한 이메일 주소</strong>`
+                  로 문장 중간을 강조했는데, 사전에 넣으려면 문장을 3조각으로 잘라야 한다.
+                  조각난 문구는 **어순이 다른 언어에서 조립이 불가능**하다(영어는 목적어가 뒤).
+                  → 강조를 포기하고 문장을 통째로 든다. 정보는 그대로 남는다. */}
+              {t.reclaimBody}
+              {signedInEmail ? (
+                <>
+                  {" "}
+                  {t.reclaimSignedInPrefix}{" "}
+                  {/* 긴 이메일이 200% 확대(195px)에서 355px 로 삐져나가 가로 스크롤을
+                      만들었다(WCAG 1.4.10). `break-all` 대신 `anywhere` — 짧은 주소는
+                      그대로 두고 넘칠 때만 끊는다. */}
+                  <span className="text-[color:var(--findable-ink-muted,#d0d6e0)] [overflow-wrap:anywhere]">
+                    {signedInEmail}
+                  </span>
+                  {t.reclaimSignedIn}
+                </>
+              ) : (
+                ` ${t.reclaimAnonymous}`
+              )}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <ol className="mt-10 grid w-full max-w-3xl grid-cols-1 gap-4 text-left sm:grid-cols-3">
         {steps.map((step, index) => (
