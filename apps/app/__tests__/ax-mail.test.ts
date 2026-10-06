@@ -262,8 +262,13 @@ describe("lead readiness gate", () => {
   });
 
   test("contact basis rules: empty / future → missing, existing customer > 6 months → expired", () => {
-    const ok = (kind: "business_card" | "requested" | "existing_customer") =>
-      ({ kind, detail: "근거", date: "2026-09-01" }) as const;
+    const ok = (
+      kind:
+        | "business_card"
+        | "requested"
+        | "existing_customer"
+        | "public_contact"
+    ) => ({ kind, detail: "근거", date: "2026-09-01" }) as const;
     expect(basisLib.contactBasisProblem(null, NOW)).toBe("missing");
     expect(
       basisLib.contactBasisProblem({ ...ok("requested"), detail: "  " }, NOW)
@@ -281,6 +286,11 @@ describe("lead readiness gate", () => {
       )
     ).toBe("missing");
     expect(basisLib.contactBasisProblem(ok("business_card"), NOW)).toBeNull();
+    // 2026-10-07 KISA 구두 확인 — 공개 문의 메일도 근거로 인정, (광고) 표기 없음
+    expect(basisLib.contactBasisProblem(ok("public_contact"), NOW)).toBeNull();
+    expect(basisLib.subjectForBasis("(광고) 제목", "public_contact")).toBe(
+      "제목"
+    );
     expect(
       basisLib.contactBasisProblem(ok("existing_customer"), NOW)
     ).toBeNull();

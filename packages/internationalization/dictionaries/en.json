@@ -151,6 +151,7 @@
       "basisBusinessCard": "Business card received in person",
       "basisRequested": "Recipient requested information",
       "basisExistingCustomer": "Existing customer (within 6 months of a transaction)",
+      "basisPublicContact": "Company contact e-mail published on its website",
       "basisDetail": "Details (place · how requested · transaction)",
       "basisDate": "Date",
       "basisMissing": "Enter the basis type, details and date (no future dates).",

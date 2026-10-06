@@ -7,6 +7,9 @@
  *  ② requested         — 상대가 정보를 요청했다(요청 방법·날짜 기록)
  *  ③ existing_customer — 거래한 지 6개월 이내 기존 고객(거래 날짜 기록)
  *     ⚠️ ③은 「동의 없이 보내도 되는」 예외일 뿐 광고성 정보다 → 제목 앞 「(광고)」 표기 유지.
+ *  ④ public_contact    — 회사가 홈페이지에 문의·제휴용으로 공개한 회사 메일(공개된 페이지 주소·확인 날짜 기록)
+ *     2026-10-07 대표가 KISA(118) 전화로 「공개 회사 메일 수집·협업 제안 발송 문제 없음」 확인(구두, 서면 회신 없음).
+ *     수신거부 안내·보낸 사람 표기는 그대로 둔다.
  *
  * 리드 스냅샷(200KB)을 끌어오지 않도록 별도 파일로 둔다 — 클라이언트 작성기도 이 파일만 import.
  */
@@ -15,14 +18,15 @@ export const CONTACT_BASIS_KINDS = [
   "business_card",
   "requested",
   "existing_customer",
+  "public_contact",
 ] as const;
 
 export type ContactBasisKind = (typeof CONTACT_BASIS_KINDS)[number];
 
 export interface ContactBasis {
-  /** YYYY-MM-DD — 명함 받은 날 / 요청 받은 날 / 마지막 거래일 */
+  /** YYYY-MM-DD — 명함 받은 날 / 요청 받은 날 / 마지막 거래일 / 공개 메일 확인일 */
   date: string;
-  /** 장소·요청 방법·거래 내용 등 근거 설명 */
+  /** 장소·요청 방법·거래 내용·공개된 페이지 주소 등 근거 설명 */
   detail: string;
   kind: ContactBasisKind;
 }

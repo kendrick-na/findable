@@ -151,6 +151,7 @@
       "basisBusinessCard": "명함을 직접 받음",
       "basisRequested": "상대가 정보를 요청함",
       "basisExistingCustomer": "기존 고객(거래 후 6개월 이내)",
+      "basisPublicContact": "홈페이지에 공개된 회사 문의 메일",
       "basisDetail": "내용 (받은 장소 · 요청 방법 · 거래 내용)",
       "basisDate": "날짜",
       "basisMissing": "수신 근거의 종류·내용·날짜를 모두 입력하세요(미래 날짜 불가).",

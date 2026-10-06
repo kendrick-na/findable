@@ -18,6 +18,7 @@ export interface DraftComposerLabels {
   basisHelp: string;
   basisKind: string;
   basisMissing: string;
+  basisPublicContact: string;
   basisRequested: string;
   basisSelect: string;
   basisTitle: string;
@@ -51,6 +52,7 @@ function basisKindLabel(
     business_card: labels.basisBusinessCard,
     requested: labels.basisRequested,
     existing_customer: labels.basisExistingCustomer,
+    public_contact: labels.basisPublicContact,
   };
   return map[kind];
 }

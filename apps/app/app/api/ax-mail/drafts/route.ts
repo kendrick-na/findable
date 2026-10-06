@@ -35,7 +35,7 @@ const inputSchema = z.object({
   body: z.string().min(1).max(100_000),
   idempotencyKey: z.uuid(),
   leadId: z.string().trim().min(1).max(253).optional(),
-  // 수신 근거 — 명함 수령·정보 요청·6개월 내 기존 고객. 없으면 초안을 만들지 않는다.
+  // 수신 근거 — 명함 수령·정보 요청·6개월 내 기존 고객·공개 문의 메일. 없으면 초안을 만들지 않는다.
   contactBasis: z.object({
     kind: z.enum(CONTACT_BASIS_KINDS),
     detail: z.string().trim().min(1).max(500),
