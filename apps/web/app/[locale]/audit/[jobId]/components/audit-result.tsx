@@ -59,7 +59,7 @@ import { askedDiscoveryQuestionCount } from "@repo/audit/question-coverage";
 import { detailedRankLabel } from "@repo/audit/rank-label";
 import {
   searchSamplingBlockedCopy,
-  searchSamplingLabel,
+  searchSamplingChangeLabel,
   searchSamplingVersionOf,
 } from "@repo/audit/search-sampling-version";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
@@ -572,6 +572,12 @@ function PreviousRunBadge({
 }) {
   if (history?.comparisonBlockedReason) {
     // W1 정책: 검색 표본 방식이 바뀐 직전 회차와는 점수 차이를 내지 않는다.
+    // 이전·이번 라벨이 같으면(예: ChatGPT 수집 방식만 바뀜) 보조 문구를 통째로 생략한다.
+    const changeLabel = searchSamplingChangeLabel(
+      history.previousSearchSamplingVersion,
+      history.currentSearchSamplingVersion,
+      isKo
+    );
     return (
       <div
         className="flex flex-col items-center gap-1 text-center"
@@ -580,14 +586,14 @@ function PreviousRunBadge({
         <span className="font-medium text-xs text-zinc-400">
           {searchSamplingBlockedCopy(isKo)}
         </span>
-        <span className="text-[11px] text-zinc-500">
-          {[
-            searchSamplingLabel(history.previousSearchSamplingVersion, isKo),
-            searchSamplingLabel(history.currentSearchSamplingVersion, isKo),
-          ]
-            .filter(Boolean)
-            .join(" → ")}
-        </span>
+        {changeLabel ? (
+          <span
+            className="text-[11px] text-zinc-500"
+            data-testid="previous-run-blocked-change"
+          >
+            {changeLabel}
+          </span>
+        ) : null}
       </div>
     );
   }

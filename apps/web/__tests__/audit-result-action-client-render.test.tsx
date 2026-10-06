@@ -262,8 +262,48 @@ describe("실제 AuditResultView의 API 응답→액션 카드 렌더", () => {
     );
     expect(badge?.textContent).toContain("검색 표본 v1");
     expect(badge?.textContent).toContain("검색 표본 v2");
+    expect(
+      container.querySelector("[data-testid='previous-run-blocked-change']")
+        ?.textContent
+    ).toBe("검색 표본 v1 · 이전 방식 → 검색 표본 v2 · 블로그·뉴스·웹문서 교차");
     expect(container.textContent).not.toContain("지난번보다");
     expect(container.textContent).not.toContain("지난번과 같아요");
+  });
+
+  it("omits the 비교 불가 sub-text when before/after sampling labels are equal", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ...response,
+          history: {
+            comparisonBlockedReason: "search_sampling_changed",
+            currentSearchSamplingVersion: "interleave-v1+chatgpt-web-v1",
+            deltaPoints: null,
+            previousAt: "2026-10-01T00:00:00.000Z",
+            previousJobId: "older-job",
+            previousScore: null,
+            previousSearchSamplingVersion: "interleave-v1",
+            totalRuns: 2,
+          },
+        })
+      )
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(() => {
+      root?.render(<AuditResultView jobId="fixture-job" locale="ko" />);
+    });
+    await waitForText(container, "비교 불가(측정 방식 변경)");
+    const badge = container.querySelector(
+      "[data-testid='previous-run-blocked']"
+    );
+    expect(badge?.textContent).toBe("비교 불가(측정 방식 변경)");
+    expect(
+      container.querySelector("[data-testid='previous-run-blocked-change']")
+    ).toBeNull();
+    expect(badge?.textContent).not.toContain("→");
   });
 
   it("shows an advice-only correction if SSR lookup missed it", async () => {

@@ -5,6 +5,7 @@ import {
   MIXED_SEARCH_SAMPLING_VERSION,
   SEARCH_SAMPLING_CHANGED,
   sameSearchSamplingSeries,
+  searchSamplingChangeLabel,
   searchSamplingLabel,
   searchSamplingVersionOf,
 } from "./search-sampling-version";
@@ -92,5 +93,27 @@ describe("ChatGPT source switch guard (CHATGPT_SOURCE=web)", () => {
     );
     // No Naver row → still no search label, as before.
     expect(searchSamplingLabel(`none+${WEB}`, true)).toBeNull();
+  });
+});
+
+describe("searchSamplingChangeLabel (비교 불가 보조 문구)", () => {
+  it("omits the line when before/after labels are equal (API → web, same search sample)", () => {
+    expect(searchSamplingChangeLabel(V1, `${V1}+${WEB}`, true)).toBeNull();
+    expect(searchSamplingChangeLabel(V1, `${V1}+${WEB}`, false)).toBeNull();
+  });
+
+  it("keeps the A → B line unchanged when the labels differ", () => {
+    expect(searchSamplingChangeLabel(undefined, V1, true)).toBe(
+      "검색 표본 v1 · 이전 방식 → 검색 표본 v2 · 블로그·뉴스·웹문서 교차"
+    );
+  });
+
+  it("shows the one label when the other side has none, null when both have none", () => {
+    expect(searchSamplingChangeLabel(`none+${WEB}`, V1, true)).toBe(
+      "검색 표본 v2 · 블로그·뉴스·웹문서 교차"
+    );
+    expect(
+      searchSamplingChangeLabel(`none+${WEB}`, `none+${WEB}`, true)
+    ).toBeNull();
   });
 });

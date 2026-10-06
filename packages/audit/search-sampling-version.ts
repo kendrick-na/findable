@@ -243,3 +243,23 @@ export function searchSamplingLabel(
   }
   return base;
 }
+
+/**
+ * "이전 → 이번" 표본 라벨 한 줄(비교 불가 배지 아래 보조 문구).
+ * 두 라벨이 **같으면 null** — "검색 표본 v2 → 검색 표본 v2" 처럼 같은 말이
+ * 반복되면 정보가 없다(엔진셋 꼬리표를 화면에서 뺀 뒤 생길 수 있음, 2026-10-07).
+ * 새 문구는 만들지 않는다(문구 변경은 CEO 승인 사항). 한쪽만 있으면 그 하나만.
+ */
+export function searchSamplingChangeLabel(
+  previousVersion: string | null | undefined,
+  currentVersion: string | null | undefined,
+  isKo: boolean
+): string | null {
+  const previous = searchSamplingLabel(previousVersion, isKo);
+  const current = searchSamplingLabel(currentVersion, isKo);
+  if (previous && current && previous === current) {
+    return null;
+  }
+  const joined = [previous, current].filter(Boolean).join(" → ");
+  return joined || null;
+}
