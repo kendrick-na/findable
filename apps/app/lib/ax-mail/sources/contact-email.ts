@@ -41,6 +41,8 @@ export interface ContactEmailCandidate {
   fetchedAt: string;
   /** 주소 바로 앞(없으면 뒤) 글자 ≤60자 — 역할 판단 근거 */
   label: string;
+  /** 사람 이름처럼 보이는 주소(aiden.jung@, mkchoi@) — 후보로는 보여 주되 자동 1순위로 고르지 않는다(대표 결정 2026-10-07). */
+  personalName: boolean;
   role: ContactRole;
   /** 메일 도메인이 사이트 도메인(또는 브랜드명이 들어간 도메인)과 같다 */
   sameDomain: boolean;
@@ -548,6 +550,24 @@ function bestSighting(list: Sighting[]): Sighting {
   )[0] as Sighting;
 }
 
+// 사람 이름 주소 판별 — 역할 낱말이 하나도 없고, 「이름.성」꼴이거나 영문 이니셜+한국 성씨(mkchoi)꼴이면 개인 주소로 본다.
+const ROLE_WORD_RE =
+  /(sales|global|market|mkt|info|contact|partner|ecomm|commerce|admin|help|support|team|biz|b2b|press|pr|hello|office|export|trade|cs|service|order|shop|store|brand|official|master|manager|webmaster|mail|ask|inquiry|wholesale|privacy|dpo|cpo|hr|recruit|career|ir|media|design|package|sourcing|china|japan|us|eu)/;
+const KOREAN_SURNAMES =
+  "kim|lee|park|choi|jung|jeong|kang|cho|jo|yoon|yun|jang|chang|lim|im|han|oh|seo|shin|kwon|hwang|ahn|an|song|yoo|yu|hong|jeon|ko|go|moon|yang|son|bae|baek|heo|nam|noh|roh|ha|kwak|sung|cha|joo|woo|min|ryu|na|jin|ji|eom|chae|won|cheon|bang|gong|hyun|ham|byun|yeom|yeo|choo|do|seok|sun|so|seol|ma|gil|wi|pyo|myung|ki|ban|ra|wang|geum|ok|yook|in|maeng|je|mo|nam|tak|kook|yeo|jin|eo|eun|pyeon|yong";
+const INITIALS_SURNAME_RE = new RegExp(
+  `^[a-z]{1,3}(?:${KOREAN_SURNAMES})\\d*$`
+);
+const NAME_DOT_RE = /^[a-z]{2,}[._][a-z]{2,}\d*$/;
+
+export function looksPersonalEmail(email: string): boolean {
+  const local = (email.split("@")[0] ?? "").toLowerCase();
+  if (ROLE_WORD_RE.test(local)) {
+    return false;
+  }
+  return NAME_DOT_RE.test(local) || INITIALS_SURNAME_RE.test(local);
+}
+
 export function mergeSightings(
   sightings: Sighting[],
   ctx: DomainContext
@@ -571,6 +591,7 @@ export function mergeSightings(
       email,
       fetchedAt: best.fetchedAt,
       label: best.label,
+      personalName: looksPersonalEmail(email),
       role: best.role,
       sameDomain,
       sourceUrl: best.sourceUrl,
@@ -579,11 +600,17 @@ export function mergeSightings(
   return out.sort(compareCandidates);
 }
 
-/** 영업 발송용 첫 후보 — 개인정보보호책임자 주소는 뺀다. */
+/**
+ * 영업 발송용 첫 후보 — 개인정보보호책임자 주소와 사람 이름 주소는 자동으로 고르지 않는다.
+ * 무료메일(gmail 등)이라도 용도(제휴·해외 문의)가 맞으면 순서대로 앞에 온다(대표 결정 2026-10-07).
+ * 남은 게 사람 이름 주소뿐이면 null — 사람이 후보 목록에서 직접 고른다.
+ */
 export function pickSalesContact(
   candidates: ContactEmailCandidate[]
 ): ContactEmailCandidate | null {
-  return candidates.find((c) => c.role !== "privacy") ?? null;
+  return (
+    candidates.find((c) => c.role !== "privacy" && !c.personalName) ?? null
+  );
 }
 
 /** 후보 → 수신 근거 ④ public_contact(공개 페이지 주소 + 확인 날짜). */

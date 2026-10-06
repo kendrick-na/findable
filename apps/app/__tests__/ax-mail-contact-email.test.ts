@@ -289,3 +289,40 @@ describe("공개 회사 메일 찾기", () => {
     expect(noDomain.contacts).toBeNull();
   });
 });
+
+describe("사람 이름 주소 (대표 결정 2026-10-07)", () => {
+  test("사람 이름처럼 보이는 주소를 표시한다", () => {
+    expect(ce.looksPersonalEmail("aiden.jung@amorepacific.com")).toBe(true);
+    expect(ce.looksPersonalEmail("mkchoi@isntree.com")).toBe(true);
+    expect(ce.looksPersonalEmail("global_ecomm@isntree.com")).toBe(false);
+    expect(ce.looksPersonalEmail("abib.global@gmail.com")).toBe(false);
+    expect(ce.looksPersonalEmail("franz@biosensorlab.com")).toBe(false);
+    expect(ce.looksPersonalEmail("sales1@isntree.com")).toBe(false);
+  });
+
+  test("사람 이름 주소는 자동 1순위로 고르지 않고, 그것뿐이면 사람이 고른다", () => {
+    const base = {
+      confidence: "high" as const,
+      fetchedAt: AT.toISOString(),
+      label: "",
+      sameDomain: true,
+      sourceUrl: "https://example.kr/",
+    };
+    const personal = {
+      ...base,
+      email: "aiden.jung@example.kr",
+      personalName: true,
+      role: "partnership" as const,
+    };
+    const generic = {
+      ...base,
+      email: "info@example.kr",
+      personalName: false,
+      role: "general" as const,
+    };
+    expect(ce.pickSalesContact([personal, generic])?.email).toBe(
+      "info@example.kr"
+    );
+    expect(ce.pickSalesContact([personal])).toBeNull();
+  });
+});
