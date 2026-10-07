@@ -3,7 +3,7 @@ import "server-only";
 import type { Industry, Prisma, PrismaClient } from "@repo/database";
 import { z } from "zod";
 import type { CompanyRecord } from "./ingest";
-import { SUB_INDUSTRIES, subTag } from "./sub-industry";
+import { SUB_INDUSTRIES, subFilterTags } from "./sub-industry";
 import {
   INDUSTRIES,
   REGIONS,
@@ -82,7 +82,9 @@ function tagClauses(filter: SegmentFilter): Prisma.CompanyWhereInput[] {
     out.push({ NOT: { tags: { hasSome: excludeTags } } });
   }
   if (filter.subIndustries?.length) {
-    out.push({ tags: { hasSome: filter.subIndustries.map(subTag) } });
+    out.push({
+      tags: { hasSome: filter.subIndustries.flatMap(subFilterTags) },
+    });
   }
   return out;
 }
@@ -187,7 +189,9 @@ export function matchesSegment(
     !tagsAny?.length || tagsAny.some((t) => tags.has(t)),
     !(excludeTags?.length && excludeTags.some((t) => tags.has(t))),
     !filter.subIndustries?.length ||
-      filter.subIndustries.some((id) => tags.has(subTag(id))),
+      filter.subIndustries.some((id) =>
+        subFilterTags(id).some((t) => tags.has(t))
+      ),
     !filter.regions?.length ||
       (company.region !== null &&
         (filter.regions as readonly string[]).includes(company.region)),

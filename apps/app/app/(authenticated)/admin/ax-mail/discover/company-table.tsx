@@ -65,6 +65,7 @@ function Employees({ row }: { row: CompanyRow }) {
 
 export function CompanyTable({
   filtered,
+  clearHref,
   labels,
   nextHref,
   page,
@@ -76,6 +77,8 @@ export function CompanyTable({
   sort,
   sortLinks,
 }: {
+  /** 결과가 0건일 때 보여 줄 「조건 지우기」 링크(칩이 없으면 null) */
+  clearHref: string | null;
   /** 조건(세그먼트·칩·단계)이 걸려 있나 — 0곳일 때 「적재 전」과 「조건에 맞는 곳 없음」을 가른다 */
   filtered: boolean;
   labels: Labels;
@@ -161,9 +164,18 @@ export function CompanyTable({
         ))}
       </div>
       {rows.length === 0 ? (
-        <p className={`p-5 text-sm ${subtle}`}>
-          {filtered ? labels.empty : labels.emptyNoData}
-        </p>
+        <div className="flex flex-wrap items-center gap-3 p-5">
+          <p className={`text-sm ${subtle}`}>
+            {filtered ? labels.empty : labels.emptyNoData}
+          </p>
+          {clearHref && (
+            <Button asChild size="sm" variant="outline">
+              <Link data-testid="empty-clear" href={clearHref} scroll={false}>
+                {labels.filterClear}
+              </Link>
+            </Button>
+          )}
+        </div>
       ) : (
         <Table>
           <TableHeader>
@@ -206,16 +218,31 @@ export function CompanyTable({
                       onCheckedChange={(on) => toggleRow(row.id, on === true)}
                     />
                   </TableCell>
-                  <TableCell className="max-w-72 whitespace-normal">
-                    <Link
-                      className="font-medium hover:underline"
-                      href={row.href}
-                      onClick={(event) => event.stopPropagation()}
-                      scroll={false}
-                    >
-                      {row.legalName}
-                    </Link>
-                    <span className={`block text-xs ${subtle}`}>
+                  {/* 2줄 고정(목표 행 높이 ~64px): 출처 배지는 카드에만 둔다(2026-10-08 대표 승인). */}
+                  <TableCell className="max-w-72 whitespace-normal py-2.5">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <Link
+                        className="truncate font-medium hover:underline"
+                        href={row.href}
+                        onClick={(event) => event.stopPropagation()}
+                        scroll={false}
+                      >
+                        {row.legalName}
+                      </Link>
+                      {row.tags
+                        .filter((t) => tagSet.has(t))
+                        .slice(0, 2)
+                        .map((t) => (
+                          <Badge
+                            className="py-0"
+                            key={`t-${t}`}
+                            variant="secondary"
+                          >
+                            {lookup(labels.tags, t)}
+                          </Badge>
+                        ))}
+                    </span>
+                    <span className={`block truncate text-xs ${subtle}`}>
                       {row.domain ? (
                         <ExternalLink href={row.domain}>
                           {row.domain}
@@ -225,35 +252,21 @@ export function CompanyTable({
                       )}
                       {row.region ? ` · ${row.region}` : ""}
                     </span>
-                    <span className="mt-1 flex flex-wrap gap-1">
-                      {row.sources.map((s) => (
-                        <Badge key={`s-${s}`} variant="outline">
-                          {lookup(labels.sourceShort, s)}
-                        </Badge>
-                      ))}
-                      {row.tags
-                        .filter((t) => tagSet.has(t))
-                        .map((t) => (
-                          <Badge key={`t-${t}`} variant="secondary">
-                            {lookup(labels.tags, t)}
-                          </Badge>
-                        ))}
-                    </span>
                   </TableCell>
-                  <TableCell className="max-w-56 whitespace-normal">
-                    {lookup(labels.industries, row.industry)}
-                    {row.industrySource && (
-                      <span className={`block text-xs ${subtle}`}>
-                        {lookup(labels.industryBasis, row.industrySource)}
-                      </span>
-                    )}
+                  <TableCell className="max-w-56 whitespace-normal py-2.5">
+                    <span className="block truncate">
+                      {lookup(labels.industries, row.industry)}
+                      {row.industrySource && (
+                        <span className={`ml-1.5 text-xs ${subtle}`}>
+                          {lookup(labels.industryBasis, row.industrySource)}
+                        </span>
+                      )}
+                    </span>
                     {row.subs.length > 0 && (
-                      <span className="mt-1 flex flex-wrap gap-1">
-                        {row.subs.map((sub) => (
-                          <Badge key={sub} variant="outline">
-                            {labels.subIndustries[sub]}
-                          </Badge>
-                        ))}
+                      <span className={`block truncate text-xs ${subtle}`}>
+                        {row.subs
+                          .map((sub) => labels.subIndustries[sub])
+                          .join(" · ")}
                       </span>
                     )}
                   </TableCell>

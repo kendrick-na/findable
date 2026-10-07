@@ -209,10 +209,20 @@ export function classifySubIndustries(input: {
   }));
 }
 
-/** 태그 목록에서 세부 분야만 꺼낸다. */
+/**
+ * 세부 분야 칩 → 실제로 찾을 태그들. 「커머스·온라인 판매」는 통신판매 원천이 붙이는 `commerce` 태그와
+ * 같은 뜻이라 둘 다 찾는다(태그 칩 「커머스」를 세부 분야 칩 하나로 합침 — 2026-10-08 대표 승인).
+ */
+export function subFilterTags(id: SubIndustryId): string[] {
+  return id === "commerce_platform" ? [subTag(id), "commerce"] : [subTag(id)];
+}
+
+/** 태그 목록에서 세부 분야만 꺼낸다(통신판매 `commerce` 태그도 커머스로 본다). */
 export function subIndustriesFromTags(
   tags: readonly string[]
 ): SubIndustryId[] {
   const set = new Set(tags);
-  return SUB_INDUSTRIES.filter((id) => set.has(subTag(id)));
+  return SUB_INDUSTRIES.filter((id) =>
+    subFilterTags(id).some((t) => set.has(t))
+  );
 }

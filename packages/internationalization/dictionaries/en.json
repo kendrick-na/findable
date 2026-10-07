@@ -1879,11 +1879,8 @@
       "segmentNew": "New segment",
       "segmentEdit": "Edit segment",
       "segmentName": "Name",
-      "segmentFilter": "Filter (JSON)",
-      "segmentFilterHelp": "Prefilled with the chips you picked. Supports industries, tags (tagsAll/tagsAny/excludeTags), regions, sizes, founding year, employee growth and website/e-mail presence.",
       "segmentSave": "Save",
       "segmentCancel": "Cancel",
-      "segmentInvalidJson": "The filter JSON is not valid.",
       "segmentSaveFailed": "Could not save.",
       "segmentInvalid": "This segment's saved filter could not be read, so only the chips are applied.",
       "filterIndustry": "Industry",
@@ -1913,7 +1910,6 @@
         "vc_invested": "VC-backed",
         "innobiz": "Inno-Biz",
         "mainbiz": "Main-Biz",
-        "commerce": "Commerce",
         "listed": "Listed",
         "mfds_cosmetics": "Cosmetics"
       },
@@ -2102,7 +2098,23 @@
       "measureConfirmAsk": "Measure now?",
       "measureConfirmRecent": "Measured {days} days ago — measure again?",
       "measureConfirmToday": "Measured today — measure again?",
-      "measureInProgress": "Measuring — this card refreshes itself when it finishes."
+      "filterConditions": "Conditions",
+      "subToggleOpen": "Show {count} sub-sectors",
+      "subToggleClose": "Hide sub-sectors",
+      "segmentNameHelp": "Just give it a name. The conditions are the chips you have picked now.",
+      "segmentSummary": "Conditions to save",
+      "segmentSummaryEmpty": "No chips picked — pick at least one chip before saving.",
+      "pipelineScope": "for the current filters",
+      "nextStep": "Next step",
+      "nextMeasure": "Measure AI visibility first.",
+      "nextMeasuring": "Measuring — this card refreshes itself when it finishes.",
+      "nextMeasureFailed": "The last measurement did not finish — measure again.",
+      "nextReport": "Measurement is done. Issue a report and get send approval.",
+      "nextReportGo": "Go to report issuing",
+      "nextDraft": "An approved report is ready. Write the draft e-mail.",
+      "nextDone": "Draft saved — check it in Gmail drafts and send it yourself.",
+      "sourcesShow": "Show sources",
+      "sourcesHide": "Hide sources"
     }
   }
 }

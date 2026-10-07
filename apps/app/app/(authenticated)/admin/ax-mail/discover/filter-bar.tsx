@@ -6,12 +6,15 @@ import {
   SIZE_BUCKETS,
 } from "@/lib/ax-mail/discovery/taxonomy";
 import {
+  CLEAR_CHIPS,
   DISCOVER_TAGS,
   type DiscoverParams,
   discoverHref,
+  hasChips,
   toggle,
 } from "@/lib/ax-mail/discovery/view";
 import type { AppDictionary } from "@/lib/i18n";
+import { CollapsibleRow } from "./collapsible-row";
 
 type Labels = AppDictionary["salesDiscover"];
 
@@ -41,6 +44,14 @@ export function Chip({
   );
 }
 
+function RowLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="w-16 shrink-0 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+      {children}
+    </span>
+  );
+}
+
 function Row({
   label,
   children,
@@ -50,14 +61,18 @@ function Row({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="w-16 shrink-0 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-        {label}
-      </span>
+      <RowLabel>{label}</RowLabel>
       {children}
     </div>
   );
 }
 
+/**
+ * 칩 줄(2026-10-08 대표 승인 정리): 업종(+세부 분야 펼치기) · 태그 · 지역 · 직원 수 · 조건 = 5줄.
+ *   - 세부 분야 21개는 접어 두고 「세부 분야 21개 펼치기」로 연다(고른 칩이 있으면 펼친 채).
+ *   - 「커머스」는 태그에서 빼고 세부 분야 「커머스·온라인 판매」 하나로 합쳤다.
+ *   - 성장 중·사이트 있음·메일 있음은 「조건」 줄로 따로 뺐다.
+ */
 export function FilterBar({
   labels,
   params,
@@ -67,49 +82,59 @@ export function FilterBar({
   params: DiscoverParams;
   total: number;
 }) {
-  const anyChip =
-    params.industries.length ||
-    params.subs.length ||
-    params.tags.length ||
-    params.regions.length ||
-    params.sizes.length ||
-    params.growing ||
-    params.hasSite ||
-    params.hasMail;
   return (
-    <section className="space-y-2 rounded-xl border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <Row label={labels.filterIndustry}>
-          {INDUSTRIES.map((ind) => (
-            <Chip
-              active={params.industries.includes(ind)}
-              href={discoverHref(params, {
-                industries: toggle(params.industries, ind),
-              })}
-              key={ind}
-            >
-              {labels.industries[ind]}
-            </Chip>
-          ))}
-        </Row>
+    <section
+      className="space-y-2 rounded-xl border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] p-4"
+      data-testid="filter-bar"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-2">
+          <CollapsibleRow
+            closeLabel={labels.subToggleClose}
+            defaultOpen={params.subs.length > 0}
+            header={
+              <>
+                <RowLabel>{labels.filterIndustry}</RowLabel>
+                {INDUSTRIES.map((ind) => (
+                  <Chip
+                    active={params.industries.includes(ind)}
+                    href={discoverHref(params, {
+                      industries: toggle(params.industries, ind),
+                    })}
+                    key={ind}
+                  >
+                    {labels.industries[ind]}
+                  </Chip>
+                ))}
+              </>
+            }
+            openLabel={labels.subToggleOpen.replace(
+              "{count}",
+              String(SUB_INDUSTRIES.length)
+            )}
+          >
+            <Row label={labels.filterSub}>
+              {SUB_INDUSTRIES.map((sub) => (
+                <Chip
+                  active={params.subs.includes(sub)}
+                  href={discoverHref(params, {
+                    subs: toggle(params.subs, sub),
+                  })}
+                  key={sub}
+                >
+                  {labels.subIndustries[sub]}
+                </Chip>
+              ))}
+            </Row>
+          </CollapsibleRow>
+        </div>
         <p
-          className="ml-auto font-semibold text-lg tabular-nums"
+          className="shrink-0 font-semibold text-lg tabular-nums"
           data-testid="result-count"
         >
           {labels.resultCount.replace("{count}", total.toLocaleString())}
         </p>
       </div>
-      <Row label={labels.filterSub}>
-        {SUB_INDUSTRIES.map((sub) => (
-          <Chip
-            active={params.subs.includes(sub)}
-            href={discoverHref(params, { subs: toggle(params.subs, sub) })}
-            key={sub}
-          >
-            {labels.subIndustries[sub]}
-          </Chip>
-        ))}
-      </Row>
       <Row label={labels.filterTag}>
         {DISCOVER_TAGS.map((tag) => (
           <Chip
@@ -144,7 +169,8 @@ export function FilterBar({
             {labels.sizeLabel.replace("{range}", size.replace("-", "~"))}
           </Chip>
         ))}
-        <span className="mx-1 h-5 w-px bg-[color:var(--findable-hairline,#23252a)]" />
+      </Row>
+      <Row label={labels.filterConditions}>
         <Chip
           active={params.growing}
           href={discoverHref(params, { growing: !params.growing })}
@@ -163,19 +189,10 @@ export function FilterBar({
         >
           {labels.filterHasMail}
         </Chip>
-        {anyChip ? (
+        {hasChips(params) ? (
           <Link
             className="ml-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs underline underline-offset-2"
-            href={discoverHref(params, {
-              growing: false,
-              hasMail: false,
-              hasSite: false,
-              industries: [],
-              regions: [],
-              sizes: [],
-              subs: [],
-              tags: [],
-            })}
+            href={discoverHref(params, CLEAR_CHIPS)}
             scroll={false}
           >
             {labels.filterClear}

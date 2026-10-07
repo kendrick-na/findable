@@ -11,13 +11,13 @@ import {
 } from "@repo/design-system/components/ui/dialog";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Label } from "@repo/design-system/components/ui/label";
-import { Textarea } from "@repo/design-system/components/ui/textarea";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { saveSegment } from "@/app/actions/admin/sales-discovery";
 import type { SegmentFilter } from "@/lib/ax-mail/discovery/segment-query";
 import {
+  CLEAR_CHIPS,
   type DiscoverParams,
   discoverHref,
   filterFromParams,
@@ -48,10 +48,15 @@ function asFilter(value: unknown): SegmentFilter | null {
     : null;
 }
 
-/** 위 줄 — 저장한 조건(세그먼트) 칩 + 「새 조건」(이름 + 필터 JSON 저장/수정). */
+/**
+ * 위 줄 — 저장한 조건(세그먼트) 칩 + 「새 조건」/「조건 수정」.
+ * 2026-10-08 대표 승인: 창에서는 **이름만** 받는다. 조건은 지금 고른 칩(+열려 있는 저장 조건)으로 자동 저장.
+ *   JSON 입력·고급 편집은 없다. 저장할 조건은 사람 말 요약(conditionSummary)으로만 보여 준다.
+ */
 export function SegmentBar({
   activeId,
   allHref,
+  conditionSummary,
   currentFilter,
   labels,
   params,
@@ -59,6 +64,8 @@ export function SegmentBar({
 }: {
   activeId: string | null;
   allHref: string;
+  /** 사람이 읽는 조건 요약 줄들(서버가 사전 라벨로 만든다) */
+  conditionSummary: string[];
   currentFilter: unknown;
   labels: Labels;
   params: DiscoverParams;
@@ -68,41 +75,22 @@ export function SegmentBar({
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [json, setJson] = useState("{}");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const active = segments.find((s) => s.id === activeId) ?? null;
+  const filter = filterFromParams(params, asFilter(currentFilter));
+  const empty = isEmptyFilter(filter);
 
-  const openNew = () => {
-    setEditId(null);
-    setName("");
-    setJson(
-      JSON.stringify(filterFromParams(params, asFilter(currentFilter)), null, 2)
-    );
-    setError(null);
-    setOpen(true);
-  };
-  const openEdit = () => {
-    if (!active) {
-      return;
-    }
-    setEditId(active.id);
-    setName(active.name);
-    setJson(JSON.stringify(active.filter ?? {}, null, 2));
+  const openDialog = (segment: SegmentChipView | null) => {
+    setEditId(segment?.id ?? null);
+    setName(segment?.name ?? "");
     setError(null);
     setOpen(true);
   };
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    let filter: unknown;
-    try {
-      filter = JSON.parse(json);
-    } catch {
-      setError(labels.segmentInvalidJson);
-      return;
-    }
-    if (isEmptyFilter(filter as SegmentFilter)) {
+    if (empty) {
       setError(labels.errors.empty_filter);
       return;
     }
@@ -119,32 +107,13 @@ export function SegmentBar({
         return;
       }
       if (!result.ok) {
-        setError(
-          result.error === "invalid"
-            ? labels.segmentInvalidJson
-            : labels.errors[result.error]
-        );
+        setError(labels.errors[result.error]);
         return;
       }
       setOpen(false);
-      // 새로 만든 조건은 바로 연다(칩은 지우고 저장한 조건만).
+      // 저장한 조건을 연다 — 칩은 저장한 조건 안에 들어갔으므로 비운다.
       router.push(
-        editId
-          ? discoverHref(params, {})
-          : discoverHref(
-              {
-                ...params,
-                growing: false,
-                hasMail: false,
-                hasSite: false,
-                industries: [],
-                regions: [],
-                sizes: [],
-                subs: [],
-                tags: [],
-              },
-              { segmentId: result.id }
-            )
+        discoverHref({ ...params, ...CLEAR_CHIPS }, { segmentId: result.id })
       );
       router.refresh();
     });
@@ -179,27 +148,42 @@ export function SegmentBar({
           )}
         </Link>
       ))}
-      <Button onClick={openNew} size="sm" type="button" variant="outline">
+      <Button
+        onClick={() => openDialog(null)}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
         + {labels.segmentNew}
       </Button>
       {active && (
-        <Button onClick={openEdit} size="sm" type="button" variant="ghost">
+        <Button
+          onClick={() => openDialog(active)}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
           {labels.segmentEdit}
         </Button>
       )}
 
       <Dialog onOpenChange={setOpen} open={open}>
-        <DialogContent className="sm:max-w-lg">
-          <form className="space-y-4" onSubmit={submit}>
+        <DialogContent className="sm:max-w-md">
+          <form
+            className="space-y-4"
+            data-testid="segment-dialog"
+            onSubmit={submit}
+          >
             <DialogHeader>
               <DialogTitle>
                 {editId ? labels.segmentEdit : labels.segmentNew}
               </DialogTitle>
-              <DialogDescription>{labels.segmentFilterHelp}</DialogDescription>
+              <DialogDescription>{labels.segmentNameHelp}</DialogDescription>
             </DialogHeader>
             <div className="space-y-1.5">
               <Label htmlFor="segment-name">{labels.segmentName}</Label>
               <Input
+                autoFocus
                 id="segment-name"
                 maxLength={80}
                 onChange={(event) => setName(event.target.value)}
@@ -207,14 +191,22 @@ export function SegmentBar({
                 value={name}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="segment-filter">{labels.segmentFilter}</Label>
-              <Textarea
-                className="min-h-48 font-mono text-xs"
-                id="segment-filter"
-                onChange={(event) => setJson(event.target.value)}
-                value={json}
-              />
+            <div className="space-y-1">
+              <p className="font-medium text-sm">{labels.segmentSummary}</p>
+              {empty ? (
+                <p className="text-amber-300 text-sm">
+                  {labels.segmentSummaryEmpty}
+                </p>
+              ) : (
+                <ul
+                  className="space-y-0.5 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm"
+                  data-testid="segment-summary"
+                >
+                  {conditionSummary.map((line) => (
+                    <li key={line}>· {line}</li>
+                  ))}
+                </ul>
+              )}
             </div>
             {error && (
               <p className="text-amber-300 text-sm" role="alert">
@@ -229,7 +221,7 @@ export function SegmentBar({
               >
                 {labels.segmentCancel}
               </Button>
-              <Button disabled={pending || !name.trim()} type="submit">
+              <Button disabled={pending || !name.trim() || empty} type="submit">
                 {labels.segmentSave}
               </Button>
             </DialogFooter>

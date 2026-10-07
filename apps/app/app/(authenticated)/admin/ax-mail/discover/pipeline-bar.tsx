@@ -7,7 +7,10 @@ import {
 } from "@/lib/ax-mail/discovery/view";
 import type { AppDictionary } from "@/lib/i18n";
 
-/** 화면 아래 영업 파이프라인 — 칸을 누르면 표가 그 단계 회사로 걸러진다(다시 누르면 해제). */
+/**
+ * 영업 파이프라인 — 화면 맨 위 요약 한 줄(2026-10-08 대표 승인).
+ * 숫자는 지금 걸린 조건(저장한 조건 + 칩) 기준이고, 칸을 누르면 표가 그 단계로 걸러진다(다시 누르면 해제).
+ */
 export function PipelineBar({
   allHref,
   counts,
@@ -20,47 +23,58 @@ export function PipelineBar({
   params: DiscoverParams;
 }) {
   return (
-    <section className="rounded-xl border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-sm">{labels.pipelineTitle}</h2>
-        {params.stage && (
-          <Link
-            className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs underline underline-offset-2"
-            href={allHref}
-            scroll={false}
-          >
-            {labels.pipelineAll}
-          </Link>
-        )}
-      </div>
-      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-        {PIPELINE_GROUPS.map((group, index) => {
-          const active = params.stage === group.id;
-          return (
-            <li key={group.id}>
-              <Link
-                aria-current={active ? "true" : undefined}
-                className={`flex h-full flex-col gap-1 rounded-lg border px-3 py-2.5 transition ${
-                  active
-                    ? "border-emerald-400 bg-emerald-400/10"
-                    : "border-[color:var(--findable-hairline,#23252a)] hover:border-emerald-400/60"
-                }`}
-                href={discoverHref(params, {
-                  stage: active ? null : group.id,
-                })}
-                scroll={false}
+    <nav
+      aria-label={labels.pipelineTitle}
+      className="flex flex-wrap items-center gap-x-1 gap-y-1.5 rounded-xl border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] px-4 py-2.5 text-sm"
+      data-testid="pipeline-bar"
+    >
+      <span className="mr-2 font-semibold">{labels.pipelineTitle}</span>
+      <span className="mr-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+        {labels.pipelineScope}
+      </span>
+      {PIPELINE_GROUPS.map((group, index) => {
+        const active = params.stage === group.id;
+        return (
+          <span className="inline-flex items-center gap-1" key={group.id}>
+            {index > 0 && (
+              <span
+                aria-hidden="true"
+                className="text-[color:var(--findable-ink-subtle,#8a8f98)]"
               >
-                <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                  {index + 1}. {labels.pipeline[group.id]}
-                </span>
-                <span className="font-semibold text-xl tabular-nums">
-                  {counts[group.id].toLocaleString()}
-                </span>
-              </Link>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
+                →
+              </span>
+            )}
+            <Link
+              aria-current={active ? "true" : undefined}
+              className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 transition ${
+                active
+                  ? "bg-emerald-400/10 text-emerald-200"
+                  : "hover:bg-white/[0.04]"
+              }`}
+              href={discoverHref(params, {
+                stage: active ? null : group.id,
+              })}
+              scroll={false}
+            >
+              <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+                {labels.pipeline[group.id]}
+              </span>
+              <span className="font-semibold tabular-nums">
+                {counts[group.id].toLocaleString()}
+              </span>
+            </Link>
+          </span>
+        );
+      })}
+      {params.stage && (
+        <Link
+          className="ml-auto text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs underline underline-offset-2"
+          href={allHref}
+          scroll={false}
+        >
+          {labels.pipelineAll}
+        </Link>
+      )}
+    </nav>
   );
 }

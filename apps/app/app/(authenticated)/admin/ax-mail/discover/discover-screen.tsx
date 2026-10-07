@@ -7,8 +7,11 @@ import {
   syncStagesForScreen,
 } from "@/lib/ax-mail/discovery/screen";
 import {
+  CLEAR_CHIPS,
+  conditionSummary,
   discoverHref,
   discoverQuery,
+  hasChips,
   PAGE_SIZE,
   parseDiscoverParams,
   SORTS,
@@ -54,6 +57,12 @@ export async function DiscoverScreen({
       ? await senderState(orgId, userId)
       : null;
 
+  const activeSegmentName =
+    guarded.state === "ready"
+      ? (guarded.value.screen.segments.find((s) => s.id === params.segmentId)
+          ?.name ?? null)
+      : null;
+
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-6 md:px-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -85,9 +94,21 @@ export async function DiscoverScreen({
       )}
       {guarded.state === "ready" && (
         <>
+          {/* 맨 위 요약 한 줄 — 지금 조건 기준 파이프라인(2026-10-08 대표 승인) */}
+          <PipelineBar
+            allHref={discoverHref(params, { stage: null })}
+            counts={guarded.value.screen.pipeline}
+            labels={labels}
+            params={params}
+          />
           <SegmentBar
             activeId={params.segmentId}
             allHref={discoverHref(params, { segmentId: null })}
+            conditionSummary={conditionSummary(
+              params,
+              labels,
+              activeSegmentName
+            )}
             currentFilter={guarded.value.screen.segmentFilter}
             labels={labels}
             params={params}
@@ -109,6 +130,9 @@ export async function DiscoverScreen({
           />
           <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
             <CompanyTable
+              clearHref={
+                hasChips(params) ? discoverHref(params, CLEAR_CHIPS) : null
+              }
               filtered={
                 discoverQuery({
                   ...params,
@@ -162,12 +186,6 @@ export async function DiscoverScreen({
               )}
             </aside>
           </div>
-          <PipelineBar
-            allHref={discoverHref(params, { stage: null })}
-            counts={guarded.value.screen.pipeline}
-            labels={labels}
-            params={params}
-          />
         </>
       )}
     </main>

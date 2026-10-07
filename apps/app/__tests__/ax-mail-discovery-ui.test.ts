@@ -166,7 +166,7 @@ describe("② 필터 연결 — URL 칩 → 세그먼트 필터 → Prisma where
       mail: "1",
       reg: "경기",
       site: "1",
-      tag: "commerce",
+      tag: "listed",
     });
     const filter = view.filterFromParams(p, {
       foundedFrom: 2015,
@@ -180,7 +180,7 @@ describe("② 필터 연결 — URL 칩 → 세그먼트 필터 → Prisma where
       hasWebsite: true,
       industries: ["beauty"],
       regions: ["경기"],
-      tagsAny: ["commerce"],
+      tagsAny: ["listed"],
     });
     expect(segmentQuery.segmentFilterSchema.safeParse(filter).success).toBe(
       true
@@ -189,7 +189,7 @@ describe("② 필터 연결 — URL 칩 → 세그먼트 필터 → Prisma where
     for (const piece of [
       '"industry":{"in":["beauty"]}',
       '"region":{"in":["경기"]}',
-      '"tags":{"hasSome":["commerce"]}',
+      '"tags":{"hasSome":["listed"]}',
       '"domain":{"not":null}',
       '"contacts":{"some":{"personalName":false}}',
       `"employeeGrowth":{"gte":${view.GROWING_MIN}}`,

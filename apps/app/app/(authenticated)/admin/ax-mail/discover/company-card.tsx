@@ -74,55 +74,75 @@ function sourceLine(labels: Labels, f: FactView): string {
 }
 
 /** 기본 정보 — 값이 같은 줄은 하나로, 출처는 여러 개 함께(screen.ts latestFacts). */
+/** 기본 정보 — 출처 줄은 「출처 보기」로 접어 둔다(출처 표시 자체는 그대로 — 2026-10-08 대표 승인). */
 function Facts({ card, labels }: { card: CompanyCardData; labels: Labels }) {
+  const [showSources, setShowSources] = useState(false);
   const facts = [...card.facts].sort((a, b) => {
     const ia = FIELD_ORDER.indexOf(a.field);
     const ib = FIELD_ORDER.indexOf(b.field);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
   return (
-    <dl className="space-y-2.5" data-testid="company-facts">
-      {facts.map((f) => (
-        <div
-          className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2"
-          key={`${f.field}-${f.value}`}
+    <>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="font-semibold text-sm">{labels.basicInfo}</h3>
+        <button
+          aria-expanded={showSources}
+          className={`min-h-8 rounded-md px-2 text-xs underline underline-offset-2 ${subtle} hover:text-[color:var(--findable-ink,#f7f8f8)]`}
+          data-testid="sources-toggle"
+          onClick={() => setShowSources((v) => !v)}
+          type="button"
         >
-          <dt className={`text-xs ${subtle}`}>
-            {lookup(labels.fields, f.field)}
-          </dt>
-          <dd className="min-w-0 text-sm">
-            <span className="break-words">
-              {LINK_FIELDS.has(f.field) ? (
-                <ExternalLink href={f.value}>{f.value}</ExternalLink>
-              ) : (
-                f.value
+          {showSources ? labels.sourcesHide : labels.sourcesShow}
+        </button>
+      </div>
+      <dl className="space-y-2" data-testid="company-facts">
+        {facts.map((f) => (
+          <div
+            className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2"
+            key={`${f.field}-${f.value}`}
+          >
+            <dt className={`text-xs ${subtle}`}>
+              {lookup(labels.fields, f.field)}
+            </dt>
+            <dd className="min-w-0 text-sm">
+              <span className="break-words">
+                {LINK_FIELDS.has(f.field) ? (
+                  <ExternalLink href={f.value}>{f.value}</ExternalLink>
+                ) : (
+                  f.value
+                )}
+              </span>
+              {showSources && (
+                <span className={`block text-xs ${subtle}`}>
+                  {labels.source}: {sourceLine(labels, f)}
+                </span>
               )}
-            </span>
-            <span className={`block text-xs ${subtle}`}>
-              {labels.source}: {sourceLine(labels, f)}
-            </span>
-          </dd>
-        </div>
-      ))}
-      {card.subIndustries.length > 0 && (
-        <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2">
-          <dt className={`text-xs ${subtle}`}>{labels.fields.subIndustry}</dt>
-          <dd className="min-w-0 text-sm">
-            <span className="flex flex-wrap gap-1">
-              {card.subIndustries.map((sub) => (
-                <Badge key={sub.id} variant="outline">
-                  {labels.subIndustries[sub.id]} ·{" "}
-                  {lookup(labels.industryBasis, sub.basis)}
-                </Badge>
-              ))}
-            </span>
-            <span className={`block text-xs ${subtle}`}>
-              {labels.subBasisNote}
-            </span>
-          </dd>
-        </div>
-      )}
-    </dl>
+            </dd>
+          </div>
+        ))}
+        {card.subIndustries.length > 0 && (
+          <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2">
+            <dt className={`text-xs ${subtle}`}>{labels.fields.subIndustry}</dt>
+            <dd className="min-w-0 text-sm">
+              <span className="flex flex-wrap gap-1">
+                {card.subIndustries.map((sub) => (
+                  <Badge key={sub.id} variant="outline">
+                    {labels.subIndustries[sub.id]} ·{" "}
+                    {lookup(labels.industryBasis, sub.basis)}
+                  </Badge>
+                ))}
+              </span>
+              {showSources && (
+                <span className={`block text-xs ${subtle}`}>
+                  {labels.subBasisNote}
+                </span>
+              )}
+            </dd>
+          </div>
+        )}
+      </dl>
+    </>
   );
 }
 
@@ -259,6 +279,94 @@ function CardHeader({
       </div>
       {company.matchConfidence === "name_only" && (
         <p className="mt-3 text-amber-300 text-xs">{labels.matchNameOnly}</p>
+      )}
+    </section>
+  );
+}
+
+type NextStepKind =
+  | "measure"
+  | "measure_failed"
+  | "measuring"
+  | "report"
+  | "draft"
+  | "done";
+
+const DONE_STATUSES = new Set([
+  "drafted",
+  "sent",
+  "replied",
+  "meeting",
+  "won",
+  "lost",
+  "opted_out",
+]);
+
+/** 지금 할 단계 하나 — 측정 → 리포트 승인 → 메일 초안. 영업 내부 조직 회차·리포트만 본다(screen.ts). */
+export function nextStepOf(card: CompanyCardData): NextStepKind {
+  if (card.lead && DONE_STATUSES.has(card.lead.status)) {
+    return "done";
+  }
+  if (card.reportUrl) {
+    return "draft";
+  }
+  const status = card.lastJob?.status;
+  if (status === "queued" || status === "processing") {
+    return "measuring";
+  }
+  if (status === "completed") {
+    return "report";
+  }
+  return status === "failed" ? "measure_failed" : "measure";
+}
+
+function NextStep({
+  card,
+  labels,
+  onDraft,
+  reportIssueHref,
+}: {
+  card: CompanyCardData;
+  labels: Labels;
+  onDraft: () => void;
+  reportIssueHref: string | null;
+}) {
+  const kind = nextStepOf(card);
+  const text: Record<NextStepKind, string> = {
+    done: labels.nextDone,
+    draft: labels.nextDraft,
+    measure: labels.nextMeasure,
+    measure_failed: labels.nextMeasureFailed,
+    measuring: labels.nextMeasuring,
+    report: labels.nextReport,
+  };
+  return (
+    <section
+      className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-900/60 bg-emerald-950/20 px-4 py-3"
+      data-next-step={kind}
+      data-testid="next-step"
+    >
+      <span className="font-semibold text-emerald-200 text-xs">
+        {labels.nextStep}
+      </span>
+      <span className="min-w-0 flex-1 text-sm">{text[kind]}</span>
+      {(kind === "measure" || kind === "measure_failed") && (
+        <MeasureButton
+          companyId={card.company.id}
+          disabled={!card.company.domain}
+          labels={labels}
+          lastMeasuredAt={card.company.lastSalesMeasuredAt}
+        />
+      )}
+      {kind === "report" && reportIssueHref && (
+        <Button asChild size="sm" variant="outline">
+          <Link href={reportIssueHref}>{labels.nextReportGo}</Link>
+        </Button>
+      )}
+      {kind === "draft" && (
+        <Button onClick={onDraft} size="sm" type="button">
+          {labels.draft}
+        </Button>
       )}
     </section>
   );
@@ -452,9 +560,18 @@ export function CompanyCard({
         pending={pending}
         stageError={stageError}
       />
+      <NextStep
+        card={card}
+        labels={labels}
+        onDraft={() => {
+          if (!showDraft) {
+            openDraft();
+          }
+        }}
+        reportIssueHref={reportIssueHref}
+      />
 
       <section className={panel}>
-        <h3 className="mb-3 font-semibold text-sm">{labels.basicInfo}</h3>
         <Facts card={card} labels={labels} />
         <p className={`mt-3 text-xs ${subtle}`}>
           {labels.lastMeasure}:{" "}
@@ -535,14 +652,6 @@ export function CompanyCard({
         </Button>
         {!(card.reportUrl || reportIssueHref) && (
           <p className={`w-full text-xs ${subtle}`}>{labels.reportNoJob}</p>
-        )}
-        {measuring && (
-          <output
-            className="w-full text-emerald-300 text-xs"
-            data-testid="measure-in-progress"
-          >
-            {labels.measureInProgress}
-          </output>
         )}
         {draftError && (
           <p className="w-full text-amber-300 text-xs" role="alert">

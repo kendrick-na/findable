@@ -20,12 +20,12 @@ import {
 } from "./taxonomy";
 
 /** 대표 지정(2026-10-07) 태그 칩 7개 — taxonomy KNOWN_TAGS 중 영업 필터에 쓰는 것만. */
+/** 「커머스」는 세부 분야 칩(커머스·온라인 판매)으로 합쳤다 — 2026-10-08 대표 승인(칩 정리). */
 export const DISCOVER_TAGS = [
   "venture",
   "vc_invested",
   "innobiz",
   "mainbiz",
-  "commerce",
   "listed",
   "mfds_cosmetics",
 ] as const;
@@ -399,4 +399,89 @@ export function daysSince(
   const day = (d: Date) =>
     Date.parse(d.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
   return Math.max(0, Math.round((day(now) - day(then)) / 86_400_000));
+}
+
+/** 「조건 지우기」 — 칩만 비운다(저장한 조건·정렬·단계는 그대로). */
+export const CLEAR_CHIPS: Partial<DiscoverParams> = {
+  growing: false,
+  hasMail: false,
+  hasSite: false,
+  industries: [],
+  regions: [],
+  sizes: [],
+  subs: [],
+  tags: [],
+};
+
+/** 칩이 하나라도 골라져 있나 */
+export function hasChips(params: DiscoverParams): boolean {
+  return Boolean(
+    params.industries.length ||
+      params.subs.length ||
+      params.tags.length ||
+      params.regions.length ||
+      params.sizes.length ||
+      params.growing ||
+      params.hasSite ||
+      params.hasMail
+  );
+}
+
+/** 「새 조건」 창에 보일 사람용 조건 요약(예: 「업종: 뷰티, 식품」). 라벨은 사전에서 받는다. */
+export function conditionSummary(
+  params: DiscoverParams,
+  labels: {
+    filterConditions: string;
+    filterGrowing: string;
+    filterHasMail: string;
+    filterHasSite: string;
+    filterIndustry: string;
+    filterRegion: string;
+    filterSize: string;
+    filterSub: string;
+    filterTag: string;
+    industries: Record<string, string>;
+    sizeLabel: string;
+    subIndustries: Record<string, string>;
+    tags: Record<string, string>;
+  },
+  segmentName: string | null
+): string[] {
+  const lines: string[] = [];
+  if (segmentName) {
+    lines.push(segmentName);
+  }
+  const add = (label: string, values: string[]) => {
+    if (values.length) {
+      lines.push(`${label}: ${values.join(", ")}`);
+    }
+  };
+  add(
+    labels.filterIndustry,
+    params.industries.map((v) => labels.industries[v] ?? v)
+  );
+  add(
+    labels.filterSub,
+    params.subs.map((v) => labels.subIndustries[v] ?? v)
+  );
+  add(
+    labels.filterTag,
+    params.tags.map((v) => labels.tags[v] ?? v)
+  );
+  add(labels.filterRegion, params.regions);
+  add(
+    labels.filterSize,
+    params.sizes.map((v) =>
+      labels.sizeLabel.replace("{range}", v.replace("-", "~"))
+    )
+  );
+  add(
+    labels.filterConditions,
+    [
+      params.growing ? labels.filterGrowing : null,
+      params.hasSite ? labels.filterHasSite : null,
+      params.hasMail ? labels.filterHasMail : null,
+    ].filter((v): v is string => v !== null)
+  );
+  return lines;
 }

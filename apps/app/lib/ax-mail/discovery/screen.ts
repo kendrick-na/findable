@@ -18,7 +18,11 @@ import {
 import { composeCompanyDraft } from "./draft";
 import { isMissingTableError } from "./guard";
 import { syncLeadStages } from "./pipeline";
-import { parseSegmentFilter, querySegment } from "./segment-query";
+import {
+  buildCompanyWhere,
+  parseSegmentFilter,
+  querySegment,
+} from "./segment-query";
 import {
   SUB_INDUSTRIES,
   type SubIndustryBasis,
@@ -123,7 +127,12 @@ export async function loadDiscoverScreen(
       take: PAGE_SIZE,
       where: stageWhere,
     }),
-    database.salesLead.groupBy({ by: ["status"], _count: { _all: true } }),
+    // 파이프라인 숫자는 지금 걸린 조건(세그먼트+칩) 기준 — 단계 칸 자체는 조건에서 뺀다(누르면 그 단계로 거른다).
+    database.salesLead.groupBy({
+      by: ["status"],
+      where: { company: { is: buildCompanyWhere(filter) } },
+      _count: { _all: true },
+    }),
   ]);
   const leads = companies.length
     ? await database.salesLead.findMany({
