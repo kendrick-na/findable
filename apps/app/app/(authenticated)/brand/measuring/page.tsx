@@ -1,4 +1,7 @@
-import { isAuditContinuationPending } from "@repo/audit/audit-execution-lease";
+import {
+  isAuditContinuationPending,
+  isLateReaskInProgress,
+} from "@repo/audit/audit-execution-lease";
 import { isStaleAuditJob } from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
@@ -51,6 +54,8 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
       createdAt: true,
       attemptStartedAt: true,
       leaseUntil: true,
+      // 늦은 AI 답 회차(lateReask)인지 — 안내 문구만 가른다(2026-10-07).
+      checkpoint: true,
     },
   });
 
@@ -88,7 +93,11 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
         createdAt={job.createdAt.toISOString()}
         dateLocale={dateLocaleFor(locale)}
         domain={job.domain}
-        initialContinuing={isAuditContinuationPending(job)}
+        initialContinuing={
+          isAuditContinuationPending(job) ||
+          (job.status === "processing" && isLateReaskInProgress(job.checkpoint))
+        }
+        initialLateAnswers={isLateReaskInProgress(job.checkpoint)}
         initialStatus={job.status}
         jobId={jobId}
         pollStatus={getTrackingStatus}

@@ -65,6 +65,22 @@ describe("polling status", () => {
     );
   });
 
+  it("tells a late-answer round apart from a question continuation (2026-10-07)", async () => {
+    mocks.findFirst.mockResolvedValue({
+      ...pendingJob,
+      checkpoint: {
+        lateReask: { count: 1, requestedAt: new Date(now).toISOString() },
+      },
+    });
+    expect(await getTrackingStatus("job_1")).toBe("needs_late_answers");
+
+    mocks.findFirst.mockResolvedValue({
+      ...pendingJob,
+      checkpoint: { continuation: { count: 1, requestedAt: "x" } },
+    });
+    expect(await getTrackingStatus("job_1")).toBe("needs_continuation");
+  });
+
   it("keeps a plain fresh queued job as queued", async () => {
     mocks.findFirst.mockResolvedValue({
       ...pendingJob,

@@ -56,6 +56,29 @@ export const isAuditContinuationPending = (job: {
 }): boolean => job.status === "queued" && Boolean(job.leaseUntil);
 
 /**
+ * 이어가기 대기·실행이 「늦은 칸 다시 묻기 회차」인가(2026-10-07 · 설계 B).
+ *   checkpoint.lateReask 가 있고 아직 끝나지 않았으면 true — 질문 이어가기와 화면 문구를 가른다.
+ *   checkpoint 는 DB JSON 이라 모양을 런타임으로 확인한다(모르는 모양이면 false = 기존 문구).
+ */
+export const isLateReaskInProgress = (checkpoint: unknown): boolean => {
+  if (
+    !checkpoint ||
+    typeof checkpoint !== "object" ||
+    Array.isArray(checkpoint)
+  ) {
+    return false;
+  }
+  const lateReask = (checkpoint as { lateReask?: unknown }).lateReask;
+  return (
+    Boolean(lateReask) &&
+    typeof lateReask === "object" &&
+    !Array.isArray(lateReask) &&
+    typeof (lateReask as { count?: unknown }).count === "number" &&
+    (lateReask as { finishedAt?: unknown }).finishedAt === undefined
+  );
+};
+
+/**
  * 마감으로 남은 질문이 있는 실행을 「이어가기 대기」로 돌려놓는다.
  * 지금 lease 를 쥔 실행만 바꿀 수 있다(늦은 writer 가 재개된 Job 을 덮지 못하게).
  * checkpoint 에는 이미 받은 답이 그대로 있다 → 다음 실행은 남은 질문만 묻는다.

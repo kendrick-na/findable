@@ -24,6 +24,9 @@ import type { AppDictionary } from "@/lib/i18n";
  */
 
 const POLL_INTERVAL_MS = 8000;
+/** 이어가기 대기 — 질문 이어가기·늦은 AI 답 회차 둘 다 같은 요청으로 이어진다(2026-10-07). */
+const isContinuationWait = (status: string) =>
+  status === "needs_continuation" || status === "needs_late_answers";
 const POLL_TIMEOUT_MS = 4 * 60 * 1000;
 
 type Phase = "idle" | "starting" | "measuring";
@@ -93,8 +96,9 @@ export const StartTrackingButton = ({
           setPhase("idle");
           toast.error(withBrand(t.failed));
           router.refresh();
-        } else if (status === "needs_continuation" && !continuationRequested) {
-          // 마감으로 질문이 남았다 → 남은 질문만 새 함수 호출로 이어서 잰다.
+        } else if (isContinuationWait(status) && !continuationRequested) {
+          // 마감으로 질문이 남았거나(질문 이어가기) 늦은 AI 답이 남았다(다시 묻기 회차)
+          //   → 새 함수 호출로 남은 것만 이어서 잰다.
           continuationRequested = true;
           await continueOrgTracking(jobId);
         } else if (status === "processing") {

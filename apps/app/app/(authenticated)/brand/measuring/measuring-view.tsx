@@ -56,6 +56,7 @@ export const MeasuringView = ({
   jobId,
   domain,
   initialContinuing = false,
+  initialLateAnswers = false,
   initialStatus,
   pollStatus,
   sampleUrl,
@@ -73,6 +74,11 @@ export const MeasuringView = ({
   domain: string | null;
   /** 이 화면에 들어온 시점에 이미 이어가기 대기였는지(queued + leaseUntil). */
   initialContinuing?: boolean;
+  /**
+   * 그 이어가기가 「늦게 온 AI 답 마저 받기」 회차인지(2026-10-07 · checkpoint.lateReask).
+   * 질문 이어가기는 기존 「남은 질문을 이어서」 문구를 그대로 쓴다.
+   */
+  initialLateAnswers?: boolean;
   initialStatus: "queued" | "processing";
   /**
    * 진행 상태 폴링 — **주입받는다**(N-44).
@@ -108,7 +114,12 @@ export const MeasuringView = ({
   const [status, setStatus] = useState<"queued" | "processing">(initialStatus);
   // 한 번 이어가기에 들어가면 완료/실패까지 「남은 질문을 이어서」 안내를 유지한다.
   const [continuing, setContinuing] = useState(initialContinuing);
-  const continuingCopy = continuing ? t.continuing : undefined;
+  // 늦은 AI 답 회차면 문구만 바꾼다(동작은 질문 이어가기와 같다).
+  const [lateAnswers, setLateAnswers] = useState(initialLateAnswers);
+  let continuingCopy: string | undefined;
+  if (continuing) {
+    continuingCopy = lateAnswers ? t.collectingLateAnswers : t.continuing;
+  }
   const [moodIndex, setMoodIndex] = useState(0);
   const [moodVisible, setMoodVisible] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -161,10 +172,14 @@ export const MeasuringView = ({
         } else if (status === "failed") {
           stop();
           setView("failed");
-        } else if (status === "needs_continuation") {
-          // 질문이 남아 남은 질문만 이어서 잰다 — 사용자에게는 계속 「물어보는 중」이다.
+        } else if (
+          status === "needs_continuation" ||
+          status === "needs_late_answers"
+        ) {
+          // 질문이 남았거나(남은 질문만) 늦은 AI 답이 남았다(그 칸만) — 계속 「물어보는 중」이다.
           setStatus("processing");
           setContinuing(true);
+          setLateAnswers(status === "needs_late_answers");
           await requestContinuationOnce();
         } else if (status === "queued" || status === "processing") {
           continuationRequested &&= status !== "processing";

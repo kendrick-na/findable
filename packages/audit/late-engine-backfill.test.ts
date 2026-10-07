@@ -216,6 +216,7 @@ import {
 import {
   AUDIT_CONTINUATION_WINDOW_MS,
   isAuditContinuationPending,
+  isLateReaskInProgress,
 } from "./audit-execution-lease";
 import { readAuditCheckpoint } from "./checkpoint";
 import { runAuditJob } from "./runner";
@@ -399,6 +400,8 @@ describe("late engine backfill (timed-out cells)", () => {
     expect(isAuditContinuationPending(job() as never)).toBe(true);
     const parked = readAuditCheckpoint(job().checkpoint, scope);
     expect(parked?.lateReask?.count).toBe(1);
+    // 측정 화면은 이 회차를 「늦게 온 AI 답변을 마저 받고 있어요」로 안내한다.
+    expect(isLateReaskInProgress(job().checkpoint)).toBe(true);
     // 질문 이어가기 카운터는 건드리지 않는다(따로 센다).
     expect(parked?.continuation).toBeUndefined();
     expect(
@@ -532,6 +535,8 @@ describe("late engine backfill (timed-out cells)", () => {
     let saved = readAuditCheckpoint(job().checkpoint, scope);
     expect(saved?.continuation?.count).toBe(1);
     expect(saved?.lateReask).toBeUndefined();
+    // 질문 이어가기는 기존 「남은 질문을 이어서」 안내 그대로.
+    expect(isLateReaskInProgress(job().checkpoint)).toBe(false);
 
     await continueAuditJob("job-1", freshInvocation());
     saved = readAuditCheckpoint(job().checkpoint, scope);
@@ -544,6 +549,7 @@ describe("late engine backfill (timed-out cells)", () => {
     expect(job().status).toBe("queued");
     expect(saved?.continuation?.count).toBe(2);
     expect(saved?.lateReask?.count).toBe(1);
+    expect(isLateReaskInProgress(job().checkpoint)).toBe(true);
     expect(batchCalls).toHaveLength(6);
     expect(reaskCalls).toHaveLength(0);
     expect(mocks.persistAuditTracking).not.toHaveBeenCalled();

@@ -1061,6 +1061,7 @@
     },
     "measuring": {
       "continuing": "Measuring the remaining questions",
+      "collectingLateAnswers": "Collecting late AI answers",
       "mood1": "Asking several AI engines about your brand",
       "mood2": "Looking for brand mentions in the answers",
       "mood3": "Checking your competitors too",
