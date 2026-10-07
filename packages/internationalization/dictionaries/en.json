@@ -2067,7 +2067,9 @@
         "invalid": "Invalid input.",
         "not_found": "Company not found.",
         "no_domain": "No website domain.",
-        "failed": "Could not complete."
+        "failed": "Could not complete.",
+        "empty_filter": "Pick at least one condition to save (no conditions means every company).",
+        "unexpected": "Could not complete. Check that you are signed in as an admin and try again."
       },
       "close": "Close",
       "filterSub": "Sub-sector",
@@ -2095,7 +2097,12 @@
         "environment": "Environment & recycling"
       },
       "subBasisNote": "Sub-sectors are picked by rules from the industry code, industry name or products (estimate).",
-      "sourcesJoiner": " · "
+      "sourcesJoiner": " · ",
+      "measureConfirm": "This really asks 6 AI engines · about 621 KRW per run on average (measured in operation)",
+      "measureConfirmAsk": "Measure now?",
+      "measureConfirmRecent": "Measured {days} days ago — measure again?",
+      "measureConfirmToday": "Measured today — measure again?",
+      "measureInProgress": "Measuring — this card refreshes itself when it finishes."
     }
   }
 }

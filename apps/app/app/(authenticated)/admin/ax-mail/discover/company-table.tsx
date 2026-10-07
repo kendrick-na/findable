@@ -109,16 +109,20 @@ export function CompanyTable({
 
   const addSelected = () =>
     startTransition(async () => {
-      const result = await addCompaniesToSalesList({
-        companyIds: [...checked],
-        segmentId,
-      });
-      if (result.ok) {
-        setNotice(labels.addedCount.replace("{count}", String(result.added)));
-        setChecked(new Set());
-        router.refresh();
-      } else {
-        setNotice(labels.errors[result.error]);
+      try {
+        const result = await addCompaniesToSalesList({
+          companyIds: [...checked],
+          segmentId,
+        });
+        if (result.ok) {
+          setNotice(labels.addedCount.replace("{count}", String(result.added)));
+          setChecked(new Set());
+          router.refresh();
+        } else {
+          setNotice(labels.errors[result.error]);
+        }
+      } catch {
+        setNotice(labels.errors.unexpected);
       }
     });
 
@@ -144,7 +148,7 @@ export function CompanyTable({
         <span className={`ml-auto text-xs ${subtle}`}>{labels.sort}</span>
         {sortLinks.map((s) => (
           <Link
-            aria-pressed={s.sort === sort}
+            aria-current={s.sort === sort ? "true" : undefined}
             className={`text-xs underline-offset-2 hover:underline ${
               s.sort === sort ? "text-emerald-300" : subtle
             }`}
@@ -270,6 +274,7 @@ export function CompanyTable({
                       companyId={row.id}
                       disabled={!row.domain}
                       labels={labels}
+                      lastMeasuredAt={row.lastSalesMeasuredAt}
                     />
                   </TableCell>
                 </TableRow>

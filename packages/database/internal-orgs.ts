@@ -29,6 +29,25 @@ export const notInternalOrg: { id: { notIn: string[] } } = {
   id: { notIn: [...INTERNAL_ORG_IDS] },
 };
 
+/**
+ * AuditJob where 조각 — 내부 조직 측정 제외. ⚠️ 무료 진단은 organizationId 가 null 이라
+ * `notIn` 만 쓰면 SQL NOT IN 이 null 행까지 빼 버린다 → null 을 명시적으로 살린다.
+ * (OR 를 쓰므로 다른 OR 와 같은 where 에 펼치지 말고 AND 로 묶을 것.)
+ */
+export const auditJobNotInternal: {
+  OR: [{ organizationId: null }, { organizationId: { notIn: string[] } }];
+} = {
+  OR: [
+    { organizationId: null },
+    { organizationId: { notIn: [...INTERNAL_ORG_IDS] } },
+  ],
+};
+
+/** AuditJob where 조각 — 내부 조직(영업) 측정만 */
+export const auditJobInternal: { organizationId: { in: string[] } } = {
+  organizationId: { in: [...INTERNAL_ORG_IDS] },
+};
+
 /** Brand where 조각 — 내부 조직 브랜드 제외 */
 export const brandNotInInternalOrg: {
   organizationId: { notIn: string[] };

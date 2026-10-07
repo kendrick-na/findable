@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const db = {
+  auditJob: { findMany: vi.fn() },
   company: { count: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
   salesLead: { findMany: vi.fn(), groupBy: vi.fn() },
   segment: { findMany: vi.fn() },
@@ -259,6 +260,7 @@ describe("② 필터 연결 — URL 칩 → 세그먼트 필터 → Prisma where
           fn.mockReset();
         }
       }
+      db.auditJob.findMany.mockResolvedValue([]);
       db.segment.findMany.mockResolvedValue([
         {
           companyCount: 3,
@@ -1071,12 +1073,10 @@ describe("C. 단계 자동 이동 · 법률 안내", () => {
   test("측정 완료 → measured, 리포트 발송 승인 → reported, 앞으로만", async () => {
     const fake = {
       auditJob: {
-        findMany: vi
-          .fn()
-          .mockResolvedValue([
-            { domain: "www.measured.example" },
-            { domain: "both.example" },
-          ]),
+        findMany: vi.fn().mockResolvedValue([
+          { domain: "www.measured.example", id: "job-m" },
+          { domain: "both.example", id: "job-b" },
+        ]),
       },
       salesLead: {
         findMany: vi.fn().mockResolvedValue([
@@ -1105,7 +1105,11 @@ describe("C. 단계 자동 이동 · 법률 안내", () => {
     const now = new Date("2026-10-07T05:00:00Z");
     const result = await pipeline.syncLeadStages(
       fake as unknown as Parameters<typeof pipeline.syncLeadStages>[0],
-      new Map([["both.example", REPORT_URL]]),
+      (ids) => {
+        // 영업 회차 id 만 넘어온다 → 그 회차의 리포트만 쓴다
+        expect([...ids].sort()).toEqual(["job-b", "job-m"]);
+        return new Map([["both.example", REPORT_URL]]);
+      },
       now
     );
     expect(result).toEqual({ measured: 1, reported: 2 });
@@ -1113,9 +1117,10 @@ describe("C. 단계 자동 이동 · 법률 안내", () => {
     expect(fake.salesLead.findMany.mock.calls[0][0].where).toEqual({
       status: { in: ["found", "measured"] },
     });
-    expect(fake.auditJob.findMany.mock.calls[0][0].where.status).toBe(
-      "completed"
-    );
+    expect(fake.auditJob.findMany.mock.calls[0][0].where).toMatchObject({
+      organizationId: "f1dab1e0-5a1e-4000-8000-00000000a001",
+      status: "completed",
+    });
     expect(fake.salesLead.update.mock.calls.map((c) => c[0].where.id)).toEqual([
       "l2",
       "l4",

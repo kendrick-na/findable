@@ -18,8 +18,19 @@ vi.mock("server-only", () => ({}));
 const db = {
   brand: { create: vi.fn(), findFirst: vi.fn() },
   organization: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
+  tx: { $executeRaw: vi.fn() },
 };
-vi.mock("@repo/database", () => ({ database: db }));
+const txCalls: string[] = [];
+vi.mock("@repo/database", () => ({
+  database: {
+    ...db,
+    // 트랜잭션 안에서는 같은 가짜 brand + advisory lock 호출 기록
+    $transaction: (fn: (tx: unknown) => Promise<unknown>) => {
+      txCalls.push("begin");
+      return fn({ $executeRaw: db.tx.$executeRaw, brand: db.brand });
+    },
+  },
+}));
 
 const internal = await import("@repo/database/internal-orgs");
 
@@ -188,5 +199,77 @@ describe("영업 내부 조직 find-or-create (Clerk 없음)", () => {
       domain: "example.com",
       organizationId: internal.SALES_INTERNAL_ORG_ID,
     });
+    // 동시 실행 경합: 찾기 전에 (조직, 도메인) advisory lock 을 트랜잭션 안에서 잡는다
+    expect(txCalls).toContain("begin");
+    expect(db.tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(db.tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      db.brand.findFirst.mock.invocationCallOrder[0]
+    );
+  });
+
+  test("동시에 처음 만들 때 고유키 충돌(P2002)은 이미 생긴 것으로 보고 넘어간다", async () => {
+    db.organization.findUnique.mockResolvedValue(null);
+    db.organization.upsert.mockRejectedValue(
+      Object.assign(new Error("unique"), { code: "P2002" })
+    );
+    const { ensureSalesOrg } = await import(
+      "@/lib/ax-mail/discovery/sales-org"
+    );
+    expect(await ensureSalesOrg("user_admin3")).toBe(
+      internal.SALES_INTERNAL_ORG_ID
+    );
+  });
+});
+
+describe("이어가기 순서 — 고객 회차 먼저, 영업 회차는 뒤", () => {
+  test("고객 대기 조회가 먼저, 내부 조직 대기는 그다음", () => {
+    const source = read("../../packages/audit/audit-continuation.ts");
+    const customer = source.indexOf(
+      "organizationId: { not: null, notIn: [...INTERNAL_ORG_IDS] }"
+    );
+    const sales = source.indexOf(
+      "organizationId: { in: [...INTERNAL_ORG_IDS] }"
+    );
+    expect(customer).toBeGreaterThan(0);
+    expect(sales).toBeGreaterThan(customer);
+  });
+});
+
+describe("숫자 섞임 — 공개 카운터·운영 집계", () => {
+  test("홈 공개 카운터는 내부 조직 측정·브랜드를 뺀다", () => {
+    const source = read(
+      "../web/app/[locale]/(home)/components/live-counter.tsx"
+    );
+    expect(source).toContain("...auditJobNotInternal");
+    expect(source).toContain("where: customerCompleted");
+  });
+
+  test("무료 진단(organizationId null)은 고객 숫자에 남는다", () => {
+    expect(internal.auditJobNotInternal).toEqual({
+      OR: [
+        { organizationId: null },
+        { organizationId: { notIn: [internal.SALES_INTERNAL_ORG_ID] } },
+      ],
+    });
+  });
+
+  test("운영 화면·일일 요약: 고객 측정 수는 빼고, 영업 측정 수·원가는 따로", () => {
+    const ops = read("app/(authenticated)/admin/ops/page.tsx");
+    expect(ops).toContain(
+      "database.auditJob.count({ where: auditJobNotInternal })"
+    );
+    expect(ops).toContain(
+      "database.auditJob.count({ where: auditJobInternal })"
+    );
+    expect(ops).toContain('data-testid="ops-sales-audits"');
+    const digest = read("../web/app/api/cron/daily-ops-digest/route.ts");
+    expect(digest).toContain("where: customerSince");
+    expect(digest).toContain("sales: {");
+  });
+
+  test("관리자 측정 목록은 영업 측정을 빼지 않고 「영업」 배지로 구분", () => {
+    const audits = read("app/(authenticated)/admin/audits/page.tsx");
+    expect(audits).toContain("isInternalOrgId(job.organizationId)");
+    expect(audits).toContain("영업");
   });
 });

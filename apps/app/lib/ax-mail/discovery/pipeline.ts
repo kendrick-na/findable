@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { PrismaClient } from "@repo/database";
+import { SALES_INTERNAL_ORG_ID } from "@repo/database/internal-orgs";
 import type { ContactBasis } from "../contact-basis";
 import { isMissingTableError, salesDiscoveryEnabled } from "./guard";
 import { type SalesLeadStatusId, shouldAdvance } from "./view";
@@ -92,15 +93,18 @@ const SYNC_LIMIT = 2000;
 
 /**
  * 영업 단계 자동 이동(앞으로만) — 「회사 찾기」 화면을 열 때마다 맞춘다.
- *  - 그 도메인의 측정(AuditJob)이 completed 이면 found → measured
- *  - 그 도메인의 리포트가 **발송 승인**(approvedReportUrlByDomain)됐으면 found·measured → reported (+ reportUrl)
- * 답장·미팅·종료 같은 뒤 단계는 건드리지 않는다(shouldAdvance). 고객 org·측정 한도와 무관한 읽기 + 영업 테이블 쓰기만.
+ *  - **영업 내부 조직(SALES_INTERNAL_ORG_ID)의** 측정이 completed 이면 found → measured
+ *  - **그 영업 회차로 발행한** 리포트가 발송 승인됐으면 found·measured → reported (+ reportUrl)
+ * 🔴 고객사·무료 진단 회차는 같은 도메인이어도 쓰지 않는다(독립 검수 P0-1 — 고객 측정을 영업 측정처럼 쓰던 문제).
+ * 답장·미팅·종료 같은 뒤 단계는 건드리지 않는다(shouldAdvance).
  *
- * @param approvedReportUrls bareDomain → 발송 승인된 리포트 URL
+ * @param reportUrlsFor 영업 회차 id 묶음 → (bareDomain → 발송 승인된 리포트 URL)
  */
 export async function syncLeadStages(
   db: SyncDb,
-  approvedReportUrls: ReadonlyMap<string, string>,
+  reportUrlsFor: (
+    salesJobIds: ReadonlySet<string>
+  ) => ReadonlyMap<string, string>,
   now: Date = new Date()
 ): Promise<{ measured: number; reported: number }> {
   const leads = await db.salesLead.findMany({
@@ -118,17 +122,18 @@ export async function syncLeadStages(
   if (domains.length === 0) {
     return { measured: 0, reported: 0 };
   }
-  const completed = await db.auditJob.findMany({
+  const salesJobs = await db.auditJob.findMany({
     where: {
       domain: { in: [...domains, ...domains.map((d) => `www.${d}`)] },
+      organizationId: SALES_INTERNAL_ORG_ID,
       status: "completed",
     },
-    select: { domain: true },
-    distinct: ["domain"],
+    select: { domain: true, id: true },
   });
   const measuredDomains = new Set(
-    completed.map((j) => j.domain.toLowerCase().replace(WWW_PREFIX_RE, ""))
+    salesJobs.map((j) => j.domain.toLowerCase().replace(WWW_PREFIX_RE, ""))
   );
+  const approvedReportUrls = reportUrlsFor(new Set(salesJobs.map((j) => j.id)));
   const toMeasured: string[] = [];
   let reported = 0;
   for (const lead of leads) {

@@ -26,6 +26,7 @@
  */
 
 import { database } from "@repo/database";
+import { INTERNAL_ORG_IDS } from "@repo/database/internal-orgs";
 import { log } from "@repo/observability/log";
 import { isAuditContinuationPending } from "./audit-execution-lease";
 import { runAuditJob } from "./runner";
@@ -150,16 +151,27 @@ export async function continueOldestPendingAudit(options: {
   /** 시간창이 지난 대기(잠정 마감)만 처리한다 — 정리 cron 용. */
   expiredOnly?: boolean;
 }): Promise<AuditContinuationOutcome | null> {
-  const pending = await database.auditJob.findFirst({
-    where: {
-      status: "queued",
-      leaseUntil: options.expiredOnly ? { lt: new Date() } : { not: null },
-      organizationId: { not: null },
-      brandId: { not: null },
-    },
-    orderBy: { attemptStartedAt: "asc" },
-    select: { id: true },
-  });
+  const base = {
+    brandId: { not: null },
+    leaseUntil: options.expiredOnly ? { lt: new Date() } : { not: null },
+    status: "queued" as const,
+  };
+  // 고객 회차 먼저, 내부 조직(영업 전용) 회차는 고객 대기가 없을 때만(2026-10-07 검수).
+  //   이미 시작한 영업 측정을 끝내는 일이라 막지는 않고 순서만 뒤로 보낸다.
+  const pending =
+    (await database.auditJob.findFirst({
+      where: {
+        ...base,
+        organizationId: { not: null, notIn: [...INTERNAL_ORG_IDS] },
+      },
+      orderBy: { attemptStartedAt: "asc" },
+      select: { id: true },
+    })) ??
+    (await database.auditJob.findFirst({
+      where: { ...base, organizationId: { in: [...INTERNAL_ORG_IDS] } },
+      orderBy: { attemptStartedAt: "asc" },
+      select: { id: true },
+    }));
   if (!pending) {
     return null;
   }

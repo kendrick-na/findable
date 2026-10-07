@@ -32,41 +32,59 @@ export async function ensureSalesOrg(adminUserId: string): Promise<string> {
   if (existing) {
     return existing.id;
   }
-  await database.organization.upsert({
-    where: { id: SALES_INTERNAL_ORG_ID },
-    create: {
-      id: SALES_INTERNAL_ORG_ID,
-      name: SALES_INTERNAL_ORG_NAME,
-      ownerId: adminUserId,
-    },
-    update: {},
-  });
-  log.warn("ax_mail.sales_org.created", { adminUserId });
+  try {
+    await database.organization.upsert({
+      where: { id: SALES_INTERNAL_ORG_ID },
+      create: {
+        id: SALES_INTERNAL_ORG_ID,
+        name: SALES_INTERNAL_ORG_NAME,
+        ownerId: adminUserId,
+      },
+      update: {},
+    });
+    log.warn("ax_mail.sales_org.created", { adminUserId });
+  } catch (error) {
+    // 두 탭이 동시에 처음 누르면 한쪽 upsert 가 고유키 충돌(P2002)로 진다 — 이미 생긴 것이므로 그대로 쓴다.
+    if ((error as { code?: unknown }).code !== "P2002") {
+      throw error;
+    }
+  }
   return SALES_INTERNAL_ORG_ID;
 }
 
-/** 영업 조직 안에서 도메인으로 브랜드를 찾고, 없으면 만든다(요금제 브랜드 수 한도 없음 — 영업 전용). */
+/**
+ * 영업 조직 안에서 도메인으로 브랜드를 찾고, 없으면 만든다(요금제 브랜드 수 한도 없음 — 영업 전용).
+ *
+ * 🔒 동시 실행: 두 탭에서 같은 회사 [측정]을 동시에 누르면 「찾기 → 없음 → 만들기」가 겹쳐 브랜드가 2개 생길 수 있다.
+ *   Brand 에는 (organizationId, domain) 고유키가 없고 고객 테이블이라 스키마를 바꾸지 않는다 →
+ *   트랜잭션 안에서 (조직, 도메인) 단위 Postgres advisory lock 을 잡고 찾기·만들기를 한다(트랜잭션이 끝나면 자동 해제).
+ */
 export async function ensureSalesBrand(input: {
   domain: string;
   industry: Industry | null;
   name: string;
   orgId: string;
 }): Promise<{ created: boolean; id: string }> {
-  const found = await database.brand.findFirst({
-    where: { domain: input.domain, organizationId: input.orgId },
-    select: { id: true },
+  return await database.$transaction(async (tx) => {
+    const lockKey = `sales-brand:${input.orgId}:${input.domain}`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+    const found = await tx.brand.findFirst({
+      where: { domain: input.domain, organizationId: input.orgId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    if (found) {
+      return { created: false, id: found.id };
+    }
+    const brand = await tx.brand.create({
+      data: {
+        domain: input.domain,
+        industry: input.industry,
+        name: input.name,
+        organizationId: input.orgId,
+      },
+      select: { id: true },
+    });
+    return { created: true, id: brand.id };
   });
-  if (found) {
-    return { created: false, id: found.id };
-  }
-  const brand = await database.brand.create({
-    data: {
-      domain: input.domain,
-      industry: input.industry,
-      name: input.name,
-      organizationId: input.orgId,
-    },
-    select: { id: true },
-  });
-  return { created: true, id: brand.id };
 }

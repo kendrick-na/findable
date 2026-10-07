@@ -21,6 +21,7 @@ import {
   type DiscoverParams,
   discoverHref,
   filterFromParams,
+  isEmptyFilter,
 } from "@/lib/ax-mail/discovery/view";
 import type { AppDictionary } from "@/lib/i18n";
 
@@ -101,12 +102,22 @@ export function SegmentBar({
       setError(labels.segmentInvalidJson);
       return;
     }
+    if (isEmptyFilter(filter as SegmentFilter)) {
+      setError(labels.errors.empty_filter);
+      return;
+    }
     startTransition(async () => {
-      const result = await saveSegment({
-        filter,
-        id: editId ?? undefined,
-        name,
-      });
+      let result: Awaited<ReturnType<typeof saveSegment>>;
+      try {
+        result = await saveSegment({
+          filter,
+          id: editId ?? undefined,
+          name,
+        });
+      } catch {
+        setError(labels.errors.unexpected);
+        return;
+      }
       if (!result.ok) {
         setError(
           result.error === "invalid"
@@ -144,11 +155,17 @@ export function SegmentBar({
       <span className="mr-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
         {labels.segments}
       </span>
-      <Link className={chipClass(!activeId)} href={allHref} scroll={false}>
+      <Link
+        aria-current={activeId ? undefined : "true"}
+        className={chipClass(!activeId)}
+        href={allHref}
+        scroll={false}
+      >
         {labels.segmentAll}
       </Link>
       {segments.map((s) => (
         <Link
+          aria-current={s.id === activeId ? "true" : undefined}
           className={chipClass(s.id === activeId)}
           href={s.href}
           key={s.id}

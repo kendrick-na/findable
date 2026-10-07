@@ -32,13 +32,17 @@ export function IngestButton({ labels }: { labels: Labels }) {
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            const result = await ingestDiscoverySources();
-            setLines(
-              result.ok
-                ? result.results.map((r) => line(labels, r))
-                : [labels.errors[result.error]]
-            );
-            router.refresh();
+            try {
+              const result = await ingestDiscoverySources();
+              setLines(
+                result.ok
+                  ? result.results.map((r) => line(labels, r))
+                  : [labels.errors[result.error]]
+              );
+              router.refresh();
+            } catch {
+              setLines([labels.errors.unexpected]);
+            }
           })
         }
         size="sm"

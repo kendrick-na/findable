@@ -61,9 +61,7 @@ export async function DiscoverScreen({
           <p className="font-medium text-emerald-400 text-xs uppercase tracking-[0.2em]">
             {labels.eyebrow}
           </p>
-          <h1 className="font-semibold text-3xl tracking-tight">
-            {labels.title}
-          </h1>
+          <h1 className="font-semibold text-3xl">{labels.title}</h1>
           <p className="max-w-3xl text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-6">
             {labels.description}
           </p>

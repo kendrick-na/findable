@@ -1,6 +1,7 @@
 import "server-only";
 
 import { database, type Prisma } from "@repo/database";
+import { SALES_INTERNAL_ORG_ID } from "@repo/database/internal-orgs";
 import { log } from "@repo/observability/log";
 import {
   approvedReportUrlByDomain,
@@ -54,6 +55,8 @@ export interface CompanyRow {
   id: string;
   industry: string | null;
   industrySource: string | null;
+  /** 영업 내부 조직의 마지막 완료 측정(ISO) — 없으면 null */
+  lastSalesMeasuredAt: string | null;
   legalName: string;
   region: string | null;
   sources: string[];
@@ -80,7 +83,12 @@ export async function syncStagesForScreen(
 ): Promise<{ measured: number; reported: number }> {
   try {
     const issued = await listIssuedReports(webUrl).catch(() => []);
-    return await syncLeadStages(database, approvedReportUrlByDomain(issued));
+    // 영업 회차로 발행한 리포트만 — 같은 도메인의 고객 리포트는 쓰지 않는다.
+    return await syncLeadStages(database, (salesJobIds) =>
+      approvedReportUrlByDomain(
+        issued.filter((v) => salesJobIds.has(v.auditJobId))
+      )
+    );
   } catch (error) {
     if (isMissingTableError(error)) {
       throw error;
@@ -124,6 +132,28 @@ export async function loadDiscoverScreen(
       })
     : [];
   const statusByCompany = new Map(leads.map((l) => [l.companyId, l.status]));
+  // [측정] 확인 창의 「N일 전 측정 있음」 — 영업 내부 조직의 완료 측정만(고객 회차는 보지 않는다).
+  const pageDomains = companies
+    .map((c) => c.domain)
+    .filter((d): d is string => Boolean(d));
+  const salesDone = pageDomains.length
+    ? await database.auditJob.findMany({
+        where: {
+          domain: { in: pageDomains },
+          organizationId: SALES_INTERNAL_ORG_ID,
+          status: "completed",
+        },
+        select: { completedAt: true, createdAt: true, domain: true },
+      })
+    : [];
+  const lastMeasuredByDomain = new Map<string, string>();
+  for (const job of salesDone) {
+    const at = (job.completedAt ?? job.createdAt).toISOString();
+    const prev = lastMeasuredByDomain.get(job.domain);
+    if (!prev || at > prev) {
+      lastMeasuredByDomain.set(job.domain, at);
+    }
+  }
   return {
     companies: companies.map((c) => ({
       domain: c.domain,
@@ -132,6 +162,9 @@ export async function loadDiscoverScreen(
       id: c.id,
       industry: c.industry,
       industrySource: c.industrySource,
+      lastSalesMeasuredAt: c.domain
+        ? (lastMeasuredByDomain.get(c.domain) ?? null)
+        : null,
       legalName: c.legalName,
       region: c.region,
       sources: c.sources,
@@ -195,6 +228,7 @@ export interface CompanyCardData {
   draft: { body: string; recipient: string; subject: string };
   facts: FactView[];
   lastJob: {
+    completedAt: string | null;
     createdAt: string;
     id: string;
     status: string;
@@ -422,34 +456,45 @@ export async function loadCompanyCard(
     return null;
   }
   const domain = company.domain;
-  const [brand, issued] = await Promise.all([
-    domain
-      ? database.brand.findFirst({
-          where: { domain: { in: [domain, `www.${domain}`] } },
+  // 🔴 브랜드·측정·리포트는 **영업 내부 조직 것만** 본다(독립 검수 P0-1).
+  //   같은 도메인의 고객 브랜드·고객 회차·무료 진단·고객 리포트는 영업 카드에 쓰지 않는다.
+  const domains = domain ? [domain, `www.${domain}`] : [];
+  const salesWhere = {
+    domain: { in: domains },
+    organizationId: SALES_INTERNAL_ORG_ID,
+  };
+  const [brand, issued, lastJob, salesJobs] = domain
+    ? await Promise.all([
+        database.brand.findFirst({
+          where: salesWhere,
           orderBy: { createdAt: "asc" },
           select: { id: true, name: true },
-        })
-      : null,
-    domain ? listIssuedReports(webUrl).catch(() => []) : [],
-  ]);
-  // 측정 이력은 브랜드가 없어도 도메인으로 남는다(무료 진단·과거 측정) → 도메인 기준으로 본다.
-  const lastJob = domain
-    ? await database.auditJob.findFirst({
-        where: {
-          OR: [
-            { domain: { in: [domain, `www.${domain}`] } },
-            ...(brand ? [{ brandId: brand.id }] : []),
-          ],
-        },
-        orderBy: { createdAt: "desc" },
-        select: { createdAt: true, id: true, status: true },
-      })
-    : null;
+        }),
+        listIssuedReports(webUrl).catch(() => []),
+        database.auditJob.findFirst({
+          where: salesWhere,
+          orderBy: { createdAt: "desc" },
+          select: {
+            completedAt: true,
+            createdAt: true,
+            id: true,
+            status: true,
+          },
+        }),
+        database.auditJob.findMany({
+          where: { ...salesWhere, status: "completed" },
+          select: { id: true },
+        }),
+      ])
+    : [null, [], null, []];
+  const salesJobIds = new Set(salesJobs.map((j) => j.id));
   const lead = company.leads[0] ?? null;
   const reportUrl =
     lead?.reportUrl ??
     (domain
-      ? (approvedReportUrlByDomain(issued).get(bareDomain(domain)) ?? null)
+      ? (approvedReportUrlByDomain(
+          issued.filter((v) => salesJobIds.has(v.auditJobId))
+        ).get(bareDomain(domain)) ?? null)
       : null);
   const { contacts, defaultRecipients } = contactViews(
     mergeContacts(company.contacts, [])
@@ -467,6 +512,10 @@ export async function loadCompanyCard(
       industryCode: company.industryCode,
       industryName: company.industryName,
       industrySource: company.industrySource,
+      lastSalesMeasuredAt:
+        lastJob?.status === "completed"
+          ? (lastJob.completedAt ?? lastJob.createdAt).toISOString()
+          : null,
       legalName: company.legalName,
       matchConfidence: company.matchConfidence,
       region: company.region,
@@ -486,6 +535,7 @@ export async function loadCompanyCard(
     subIndustries: subIndustryViews(company.facts),
     lastJob: lastJob
       ? {
+          completedAt: lastJob.completedAt?.toISOString() ?? null,
           createdAt: lastJob.createdAt.toISOString(),
           id: lastJob.id,
           status: lastJob.status,

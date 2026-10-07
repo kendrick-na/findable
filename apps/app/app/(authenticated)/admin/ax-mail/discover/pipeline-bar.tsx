@@ -39,7 +39,7 @@ export function PipelineBar({
           return (
             <li key={group.id}>
               <Link
-                aria-pressed={active}
+                aria-current={active ? "true" : undefined}
                 className={`flex h-full flex-col gap-1 rounded-lg border px-3 py-2.5 transition ${
                   active
                     ? "border-emerald-400 bg-emerald-400/10"

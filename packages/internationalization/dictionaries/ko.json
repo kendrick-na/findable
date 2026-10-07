@@ -2067,7 +2067,9 @@
         "invalid": "입력이 올바르지 않습니다.",
         "not_found": "회사를 찾을 수 없습니다.",
         "no_domain": "사이트 도메인이 없습니다.",
-        "failed": "처리하지 못했습니다."
+        "failed": "처리하지 못했습니다.",
+        "empty_filter": "조건을 하나 이상 골라야 저장할 수 있어요(아무것도 고르지 않으면 회사 전체입니다).",
+        "unexpected": "처리하지 못했어요. 관리자 계정으로 로그인돼 있는지 확인하고 다시 시도해 주세요."
       },
       "close": "닫기",
       "filterSub": "세부 분야",
@@ -2095,7 +2097,12 @@
         "environment": "환경·자원순환"
       },
       "subBasisNote": "업종 코드·업종명·취급품목에서 규칙으로 고른 분야입니다(추정).",
-      "sourcesJoiner": " · "
+      "sourcesJoiner": " · ",
+      "measureConfirm": "AI 6곳에 실제로 질문합니다 · 1회 평균 약 621원(운영 실측)",
+      "measureConfirmAsk": "측정할까요?",
+      "measureConfirmRecent": "{days}일 전 측정 있음 — 다시 측정할까요?",
+      "measureConfirmToday": "오늘 측정 있음 — 다시 측정할까요?",
+      "measureInProgress": "측정 진행 중 — 끝나면 자동으로 새로 가져옵니다."
     }
   }
 }

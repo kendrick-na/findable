@@ -1,6 +1,10 @@
 import { isAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
-import { brandNotInInternalOrg } from "@repo/database/internal-orgs";
+import {
+  auditJobInternal,
+  auditJobNotInternal,
+  brandNotInInternalOrg,
+} from "@repo/database/internal-orgs";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -90,10 +94,17 @@ const AdminOpsPage = async () => {
     recentEngineAttempts,
     recentEngineFailures,
     recentAuditResults,
+    salesAuditTotal,
+    salesCostAgg,
   ] = await Promise.all([
-    database.auditJob.count({ where: { createdAt: { gte: startOfToday } } }),
-    database.auditJob.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
-    database.auditJob.count(),
+    // 고객 측정 수 — 내부 조직(영업 전용) 측정은 뺀다. 원가 합계(아래)에는 그대로 들어간다(실제로 쓴 돈).
+    database.auditJob.count({
+      where: { ...auditJobNotInternal, createdAt: { gte: startOfToday } },
+    }),
+    database.auditJob.count({
+      where: { ...auditJobNotInternal, createdAt: { gte: sevenDaysAgo } },
+    }),
+    database.auditJob.count({ where: auditJobNotInternal }),
     database.auditJob.groupBy({ by: ["status"], _count: true }),
     database.auditJob.groupBy({ by: ["crewStatus"], _count: true }),
     database.auditJob.count({
@@ -139,6 +150,15 @@ const AdminOpsPage = async () => {
     database.auditJob.findMany({
       where: { createdAt: { gte: oneDayAgo } },
       select: { result: true },
+    }),
+    // 영업 측정(내부 조직) — 고객 숫자와 따로 한 줄로 보인다.
+    database.auditJob.count({ where: auditJobInternal }),
+    database.tracking.aggregate({
+      _sum: { costKrw: true },
+      where: {
+        brand: { organizationId: auditJobInternal.organizationId },
+        costKrw: { not: null },
+      },
     }),
   ]);
 
@@ -288,6 +308,15 @@ const AdminOpsPage = async () => {
               value={fmt(stuckCount)}
             />
           </CardGrid>
+          <p
+            className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs"
+            data-testid="ops-sales-audits"
+          >
+            위 숫자는 고객 측정만입니다. 영업 측정(내부 조직): 누적{" "}
+            {fmt(salesAuditTotal)}회 · 원가 ₩
+            {fmt(Math.round(salesCostAgg._sum.costKrw ?? 0))} (원가 합계에는
+            포함)
+          </p>
         </Section>
 
         {/* audit status 분포 */}

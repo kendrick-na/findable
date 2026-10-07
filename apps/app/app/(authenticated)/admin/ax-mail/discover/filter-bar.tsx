@@ -27,7 +27,7 @@ export function Chip({
 }) {
   return (
     <Link
-      aria-pressed={active}
+      aria-current={active ? "true" : undefined}
       className={`inline-flex min-h-8 items-center gap-1 rounded-full border px-3 text-sm transition ${
         active
           ? "border-emerald-400 bg-emerald-400/10 text-emerald-200"

@@ -21,9 +21,13 @@ import {
   contactViews,
   mergeContacts,
 } from "@/lib/ax-mail/discovery/screen";
-import { segmentFilterSchema } from "@/lib/ax-mail/discovery/segment-query";
+import {
+  refreshSegmentCompanies,
+  segmentFilterSchema,
+} from "@/lib/ax-mail/discovery/segment-query";
 import {
   DISCOVER_PATH,
+  isEmptyFilter,
   SALES_LEAD_STATUSES,
 } from "@/lib/ax-mail/discovery/view";
 import { findContactEmails } from "@/lib/ax-mail/sources/contact-email";
@@ -44,6 +48,7 @@ interface Failure {
     | "invalid"
     | "not_found"
     | "no_domain"
+    | "empty_filter"
     | "failed";
   message?: string;
   ok: false;
@@ -72,20 +77,31 @@ export async function saveSegment(
     return { ok: false, error: "invalid" };
   }
   const { id, name, filter } = parsed.data;
+  // 빈 조건({}) = 회사 전체 — 조건으로 저장하지 않는다.
+  if (isEmptyFilter(filter)) {
+    return { ok: false, error: "empty_filter" };
+  }
   const json = filter as Prisma.InputJsonValue;
   const guarded = await withDiscovery(async () => {
+    let segmentId: string | null;
     if (id) {
       const updated = await database.segment.updateMany({
         where: { id },
         data: { filter: json, name },
       });
-      return updated.count ? id : null;
+      segmentId = updated.count ? id : null;
+    } else {
+      const created = await database.segment.create({
+        data: { createdBy: adminId, filter: json, name },
+        select: { id: true },
+      });
+      segmentId = created.id;
     }
-    const created = await database.segment.create({
-      data: { createdBy: adminId, filter: json, name },
-      select: { id: true },
-    });
-    return created.id;
+    if (segmentId) {
+      // 저장·수정 직후 맞는 회사를 채우고 회사 수를 기록한다(칩 옆 숫자).
+      await refreshSegmentCompanies(database, segmentId);
+    }
+    return segmentId;
   });
   if (guarded.state !== "ready") {
     return blocked(guarded.state);
@@ -305,7 +321,13 @@ export async function measureCompany(
   });
   const run = await runMeasureOne(brand.id);
   if (!run.ok) {
-    return { ok: false, error: "failed", message: run.error };
+    // 기술 오류 원문은 로그로만 — 화면에는 쉬운 문구(measureFailed)만 보인다.
+    log.warn("admin.sales_discovery.measure_failed", {
+      adminId,
+      companyId,
+      error: run.error,
+    });
+    return { ok: false, error: "failed" };
   }
   return {
     ok: true,

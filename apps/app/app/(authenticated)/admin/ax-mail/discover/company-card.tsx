@@ -5,7 +5,7 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { Checkbox } from "@repo/design-system/components/ui/checkbox";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   addCompaniesToSalesList,
   findCompanyContacts,
@@ -54,6 +54,9 @@ function lookup(map: Record<string, string>, key: string): string {
 function seoulDate(iso: string): string {
   return new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 }
+
+/** 측정 진행 중 새로 가져오는 간격 */
+const POLL_MS = 10_000;
 
 const LINK_FIELDS = new Set(["homepage", "storeUrl"]);
 
@@ -139,8 +142,10 @@ function ContactRow({
     <li className="flex items-start gap-2.5">
       <Checkbox
         aria-label={contact.email}
-        checked={checked}
+        checked={checked && contact.role !== "privacy"}
         className="mt-0.5"
+        // 개인정보보호책임자 주소는 영업 발송 금지 — 고를 수 없게 막는다.
+        disabled={contact.role === "privacy"}
         id={id}
         onCheckedChange={(on) => onCheck(on === true)}
       />
@@ -354,35 +359,56 @@ export function CompanyCard({
   const [findStatus, setFindStatus] = useState<string | null>(null);
   const [showDraft, setShowDraft] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // 개인정보보호책임자 주소는 영업 발송 대상이 아니다 — 체크돼 있어도 받는 사람에서 뺀다.
   const recipients: RecipientDraft[] = contacts
-    .filter((c) => selected.has(c.email))
+    .filter((c) => selected.has(c.email) && c.role !== "privacy")
     .map((c) => ({ basis: c.basis, email: c.email }));
+  const measuring =
+    card.lastJob?.status === "queued" || card.lastJob?.status === "processing";
+
+  // 측정이 진행 중이면 10초마다 새로 가져온다 — 끝나거나 실패하면(상태가 바뀌면) 멈춘다.
+  useEffect(() => {
+    if (!measuring) {
+      return;
+    }
+    const timer = setInterval(() => router.refresh(), POLL_MS);
+    return () => clearInterval(timer);
+  }, [measuring, router]);
 
   const findContacts = () =>
     startTransition(async () => {
-      const result = await findCompanyContacts(company.id);
-      if (!result.ok) {
-        setFindStatus(labels.errors[result.error]);
-        return;
+      try {
+        const result = await findCompanyContacts(company.id);
+        if (!result.ok) {
+          setFindStatus(labels.errors[result.error]);
+          return;
+        }
+        setContacts(result.contacts);
+        setSelected((prev) =>
+          prev.size > 0 ? prev : new Set(result.defaultRecipients)
+        );
+        setFindStatus(
+          lookup(labels.contactStatus as Record<string, string>, result.status)
+        );
+      } catch {
+        setFindStatus(labels.errors.unexpected);
       }
-      setContacts(result.contacts);
-      setSelected((prev) =>
-        prev.size > 0 ? prev : new Set(result.defaultRecipients)
-      );
-      setFindStatus(
-        lookup(labels.contactStatus as Record<string, string>, result.status)
-      );
     });
 
   const changeStage = (status: SalesLeadStatusId) =>
     startTransition(async () => {
-      const result = await setSalesLeadStatus({
-        companyId: company.id,
-        status,
-      });
-      setStageError(result.ok ? null : labels.stageSaveFailed);
-      router.refresh();
+      try {
+        const result = await setSalesLeadStatus({
+          companyId: company.id,
+          status,
+        });
+        setStageError(result.ok ? null : labels.stageSaveFailed);
+        router.refresh();
+      } catch {
+        setStageError(labels.stageSaveFailed);
+      }
     });
 
   const openDraft = () => {
@@ -391,11 +417,23 @@ export function CompanyCard({
       return;
     }
     setShowDraft(true);
+    setDraftError(null);
     if (!card.lead) {
       // 초안을 만들 회사는 영업 목록에 먼저 올린다 → 저장 시 수신 근거·단계가 리드에 남는다.
+      //   실패해도 페이지 전체를 깨지 않고 카드 안에 문구만 보인다(초안 작성은 계속 가능).
       startTransition(async () => {
-        await addCompaniesToSalesList({ companyIds: [company.id] });
-        router.refresh();
+        try {
+          const result = await addCompaniesToSalesList({
+            companyIds: [company.id],
+          });
+          if (result.ok) {
+            router.refresh();
+          } else {
+            setDraftError(labels.errors[result.error]);
+          }
+        } catch {
+          setDraftError(labels.errors.unexpected);
+        }
       });
     }
   };
@@ -475,8 +513,13 @@ export function CompanyCard({
       <section className={`${panel} flex flex-wrap items-start gap-2`}>
         <MeasureButton
           companyId={company.id}
-          disabled={!company.domain}
+          disabled={!company.domain || measuring}
           labels={labels}
+          lastMeasuredAt={
+            card.lastJob?.status === "completed"
+              ? (card.lastJob.completedAt ?? card.lastJob.createdAt)
+              : null
+          }
           size="default"
         />
         <ReportButton
@@ -492,6 +535,19 @@ export function CompanyCard({
         </Button>
         {!(card.reportUrl || reportIssueHref) && (
           <p className={`w-full text-xs ${subtle}`}>{labels.reportNoJob}</p>
+        )}
+        {measuring && (
+          <output
+            className="w-full text-emerald-300 text-xs"
+            data-testid="measure-in-progress"
+          >
+            {labels.measureInProgress}
+          </output>
+        )}
+        {draftError && (
+          <p className="w-full text-amber-300 text-xs" role="alert">
+            {draftError}
+          </p>
         )}
       </section>
 

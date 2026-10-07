@@ -364,3 +364,39 @@ export function safeExternalUrl(raw: string | null | undefined): string | null {
     return null;
   }
 }
+
+/**
+ * 조건이 비었나 — 칩을 하나도 고르지 않은 `{}` 는 「회사 전체」라 조건으로 저장하지 않는다.
+ * 빈 배열·undefined·빈 글자만 있는 필터도 빈 것으로 본다.
+ */
+export function isEmptyFilter(
+  filter: SegmentFilter | null | undefined
+): boolean {
+  if (!filter) {
+    return true;
+  }
+  return Object.values(filter).every(
+    (v) =>
+      v === undefined ||
+      v === null ||
+      (Array.isArray(v) && v.length === 0) ||
+      (typeof v === "string" && v.trim() === "")
+  );
+}
+
+/** 「N일 전 측정 있음」 — 한국 시간 날짜 차이(0 = 오늘). 날짜가 이상하면 null. */
+export function daysSince(
+  iso: string | null | undefined,
+  now: Date
+): number | null {
+  if (!iso) {
+    return null;
+  }
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) {
+    return null;
+  }
+  const day = (d: Date) =>
+    Date.parse(d.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
+  return Math.max(0, Math.round((day(now) - day(then)) / 86_400_000));
+}

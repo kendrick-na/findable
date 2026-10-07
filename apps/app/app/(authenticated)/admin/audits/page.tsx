@@ -1,6 +1,7 @@
 import { maskEmail } from "@repo/audit/mask";
 import { isAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
+import { isInternalOrgId } from "@repo/database/internal-orgs";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { env } from "@/env";
@@ -47,6 +48,7 @@ const AdminAuditsPage = async () => {
       select: {
         id: true,
         email: true,
+        organizationId: true,
         domain: true,
         status: true,
         language: true,
@@ -102,6 +104,15 @@ const AdminAuditsPage = async () => {
                     </td>
                     <td className="py-2 pr-4 text-[color:var(--findable-ink,#f7f8f8)] [overflow-wrap:anywhere]">
                       {job.domain}
+                      {/* 영업 측정(내부 조직)은 목록에 두되 고객 측정과 구분한다(2026-10-07 검수). */}
+                      {isInternalOrgId(job.organizationId) && (
+                        <span
+                          className="ml-2 rounded-full border border-[color:var(--findable-hairline,#23252a)] px-2 py-0.5 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs"
+                          data-testid="audit-sales-badge"
+                        >
+                          영업
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 pr-4 text-[color:var(--findable-ink-muted,#d0d6e0)] [overflow-wrap:anywhere]">
                       {/* org 트리거 측정은 email 이 `org:{orgId}` 프리픽스라 주소가 아니다.
