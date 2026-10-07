@@ -1,0 +1,16 @@
+{
+  "general": {
+    "search_engine": "google",
+    "query": "fractional CTO service",
+    "language": "en",
+    "mobile": false
+  },
+  "organic": [
+    {
+      "link": "https://www.example.com/cto",
+      "title": "Synthetic organic result",
+      "rank": 1,
+      "global_rank": 1
+    }
+  ]
+}

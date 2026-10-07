@@ -48,8 +48,14 @@ vi.mock("@upstash/qstash", () => ({
 }));
 vi.mock("@/lib/indexnow", () => ({ submitToIndexNow: h.tripwire("indexnow") }));
 
+vi.mock("@repo/ai/lib/engines/google-aio-adapter", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  fetchGoogleAio: h.tripwire("brightdata"),
+}));
+
 import { createResendClient } from "@repo/email";
 import { denyIfNotCron, denyIfVercelPreview } from "@repo/security/cron";
+import { GET as aeoGoogleAioPilot } from "../app/api/cron/aeo-google-aio-pilot/route";
 import { GET as autoRefreshRetired } from "../app/api/cron/auto-refresh-tracking/route";
 import { GET as contentPublishing } from "../app/api/cron/content-publishing/route";
 import { GET as dailyOpsDigest } from "../app/api/cron/daily-ops-digest/route";
@@ -94,6 +100,7 @@ describe("cron routes on Vercel Preview", () => {
     ["daily-ops-digest", dailyOpsDigest],
     ["auto-refresh-tracking (retired)", autoRefreshRetired],
     ["content-publishing", contentPublishing],
+    ["aeo-google-aio-pilot", aeoGoogleAioPilot],
   ] as const)("%s answers 403 without touching DB, mail or runner", async (name, GET) => {
     const response = await GET(cronRequest(`/api/cron/${name}`));
     expect(response.status).toBe(403);

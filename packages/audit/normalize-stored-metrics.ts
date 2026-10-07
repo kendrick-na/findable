@@ -261,8 +261,11 @@ export function publicAuditResult<T>(input: T): T {
   }
   // A revalidated run keeps its pre-revalidation result for audit purposes.
   // That copy carries superseded verdicts and must never leave the server.
+  // AEO 시범(구글 AI 개요 · 제3자 측정 서비스 수집)은 내부 측정 전용 — 본문이 구글 콘텐츠라
+  // 공개 응답으로 내보내지 않는다(aeo-google-aio-pilot.ts).
+  const { aeoPilotRuns: _internalAeoPilot, ...withoutInternal } = input;
   const result: Record<string, unknown> = {
-    ...input,
+    ...withoutInternal,
     ...(isRecord(input.revalidation)
       ? {
           revalidation: Object.fromEntries(
