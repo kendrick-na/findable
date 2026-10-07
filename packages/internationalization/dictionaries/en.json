@@ -1967,7 +1967,7 @@
       "measure": "Measure",
       "measuring": "Starting…",
       "measureStarted": "Measurement started (3–5 min).",
-      "measureRegistered": "Created the brand in the sales organization and started measurement (3–5 min).",
+      "measureRegistered": "Created the brand in the internal sales organization and started measurement (3–5 min).",
       "measureRunning": "Already measuring.",
       "measureFailed": "Could not start measurement.",
       "measureNoDomain": "No website domain to measure.",
@@ -2067,9 +2067,7 @@
         "invalid": "Invalid input.",
         "not_found": "Company not found.",
         "no_domain": "No website domain.",
-        "failed": "Could not complete.",
-        "no_sales_org": "Create the sales organization first (SALES_DISCOVERY_ORG_ID).",
-        "sales_org_missing": "The SALES_DISCOVERY_ORG_ID organization was not found in Clerk. Check the id."
+        "failed": "Could not complete."
       },
       "close": "Close",
       "filterSub": "Sub-sector",
@@ -2097,8 +2095,6 @@
         "environment": "Environment & recycling"
       },
       "subBasisNote": "Sub-sectors are picked by rules from the industry code, industry name or products (estimate).",
-      "salesOrgMissingTitle": "Create the sales organization first",
-      "salesOrgMissingBody": "[Measure] only creates brands in the dedicated sales organization. Create an organization in Clerk and put its id (starts with org_) in the SALES_DISCOVERY_ORG_ID environment variable. Until then, [Measure] is blocked.",
       "sourcesJoiner": " · "
     }
   }

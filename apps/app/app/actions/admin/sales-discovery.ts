@@ -15,7 +15,6 @@ import {
 import {
   ensureSalesBrand,
   ensureSalesOrg,
-  salesOrgId,
 } from "@/lib/ax-mail/discovery/sales-org";
 import {
   type ContactView,
@@ -45,8 +44,6 @@ interface Failure {
     | "invalid"
     | "not_found"
     | "no_domain"
-    | "no_sales_org"
-    | "sales_org_missing"
     | "failed";
   message?: string;
   ok: false;
@@ -259,9 +256,9 @@ export type MeasureCompanyResult =
   | Failure;
 
 /**
- * [측정] — 영업 전용 org(SALES_DISCOVERY_ORG_ID)의 브랜드로만 잰다(대표 승인 2026-10-07).
- *   ① env 없으면 no_sales_org(측정 막음) ② org 행 보장(Clerk 에 없으면 sales_org_missing)
- *   ③ 그 org 안 같은 도메인 브랜드를 찾고 없으면 만든다 ④ 관리자 1건 측정 runMeasureOne(요금제·24시간 한도 없음).
+ * [측정] — 영업 전용 **내부** 조직(우리 DB 에만, Clerk 없음)의 브랜드로만 잰다(대표 결정 2026-10-07).
+ *   ① 내부 조직 find-or-create(ownerId = 누른 관리자) ② 그 조직 안 같은 도메인 브랜드를 찾고 없으면 만든다
+ *   ③ 관리자 1건 측정 runMeasureOne(요금제·24시간 한도 없음). 고객 조직의 한도·과금 경로는 부르지 않는다.
  */
 export async function measureCompany(
   companyId: string
@@ -270,13 +267,12 @@ export async function measureCompany(
   if (!idSchema.safeParse(companyId).success) {
     return { ok: false, error: "invalid" };
   }
-  const orgId = salesOrgId();
   const guarded = await withDiscovery(async () => {
     const company = await database.company.findUnique({
       where: { id: companyId },
       select: { domain: true, industry: true, legalName: true },
     });
-    if (company && orgId) {
+    if (company) {
       // 측정 대상이 된 회사는 영업 목록에 올린다(이미 있으면 그대로).
       await database.salesLead.createMany({
         data: [{ companyId, status: "found" }],
@@ -292,15 +288,10 @@ export async function measureCompany(
   if (!company) {
     return { ok: false, error: "not_found" };
   }
-  if (!orgId) {
-    return { ok: false, error: "no_sales_org" };
-  }
   if (!company.domain) {
     return { ok: false, error: "no_domain" };
   }
-  if (!(await ensureSalesOrg(orgId))) {
-    return { ok: false, error: "sales_org_missing" };
-  }
+  const orgId = await ensureSalesOrg(adminId);
   const brand = await ensureSalesBrand({
     domain: company.domain,
     industry: company.industry,

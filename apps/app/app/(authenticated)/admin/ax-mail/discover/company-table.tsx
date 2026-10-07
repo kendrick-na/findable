@@ -64,7 +64,6 @@ function Employees({ row }: { row: CompanyRow }) {
 }
 
 export function CompanyTable({
-  measureEnabled,
   filtered,
   labels,
   nextHref,
@@ -80,8 +79,6 @@ export function CompanyTable({
   /** 조건(세그먼트·칩·단계)이 걸려 있나 — 0곳일 때 「적재 전」과 「조건에 맞는 곳 없음」을 가른다 */
   filtered: boolean;
   labels: Labels;
-  /** 영업 전용 org(SALES_DISCOVERY_ORG_ID)가 설정됐나 — 없으면 [측정]을 막는다 */
-  measureEnabled: boolean;
   nextHref: string | null;
   page: number;
   pages: number;
@@ -271,7 +268,7 @@ export function CompanyTable({
                   <TableCell className="pr-4 text-right">
                     <MeasureButton
                       companyId={row.id}
-                      disabled={!(row.domain && measureEnabled)}
+                      disabled={!row.domain}
                       labels={labels}
                     />
                   </TableCell>

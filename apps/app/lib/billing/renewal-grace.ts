@@ -19,6 +19,7 @@
 
 import { expirePaymentGrants } from "@repo/auth/plan-grant";
 import { database } from "@repo/database";
+import { notInternalOrg } from "@repo/database/internal-orgs";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { renewalGraceCutoff, userIdFromPaymentId } from "@repo/payments";
@@ -34,6 +35,7 @@ export async function expireLapsedRenewalGrants(
 ): Promise<{ expired: number; scanned: number; failed: number }> {
   const candidates = await database.organization.findMany({
     where: {
+      ...notInternalOrg,
       billingStatus: "past_due",
       billingNextPaymentId: { not: null },
       billingNextPaymentAt: { lte: renewalGraceCutoff(now) },

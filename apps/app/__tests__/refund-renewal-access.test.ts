@@ -40,6 +40,10 @@ const fx = vi.hoisted(() => {
       if ("not" in c) {
         return value !== c.not;
       }
+      // 내부 조직 제외(packages/database/internal-orgs.ts)
+      if ("notIn" in c) {
+        return !(c.notIn as unknown[]).includes(value);
+      }
       if ("lte" in c) {
         return value instanceof Date && value <= (c.lte as Date);
       }

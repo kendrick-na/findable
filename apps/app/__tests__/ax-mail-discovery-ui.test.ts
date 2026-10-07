@@ -1150,33 +1150,19 @@ describe("C. 단계 자동 이동 · 법률 안내", () => {
   });
 });
 
-describe("D. 영업 전용 org", () => {
-  test("SALES_DISCOVERY_ORG_ID 는 org_ 형식일 때만 인정", async () => {
-    const { salesOrgId } = await import("@/lib/ax-mail/discovery/sales-org");
-    expect(salesOrgId({})).toBeNull();
-    expect(salesOrgId({ SALES_DISCOVERY_ORG_ID: "" })).toBeNull();
-    expect(salesOrgId({ SALES_DISCOVERY_ORG_ID: "my-org" })).toBeNull();
-    expect(
-      salesOrgId({ SALES_DISCOVERY_ORG_ID: " org_2abcDEF123456789 " })
-    ).toBe("org_2abcDEF123456789");
-  });
-
-  test("org 가 없으면 화면이 안내를 띄우고 [측정]을 막는다", () => {
+describe("D. 영업 전용 내부 조직(우리 DB 에만)", () => {
+  test("env·Clerk 조회 없이 고정 id 로 만들고, 화면에서 [측정]을 막지 않는다", () => {
     const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+    const salesOrg = read("lib/ax-mail/discovery/sales-org.ts");
+    expect(salesOrg).toContain("SALES_INTERNAL_ORG_ID");
+    expect(salesOrg).not.toMatch(
+      /clerkClient|SALES_DISCOVERY_ORG_ID|process\.env/
+    );
     const screenSrc = read(
       "app/(authenticated)/admin/ax-mail/discover/discover-screen.tsx"
     );
-    expect(screenSrc).toContain(
-      "const measureEnabled = salesOrgId() !== null;"
-    );
-    expect(screenSrc).toContain("labels.salesOrgMissingTitle");
-    const table = read(
-      "app/(authenticated)/admin/ax-mail/discover/company-table.tsx"
-    );
-    const card = read(
-      "app/(authenticated)/admin/ax-mail/discover/company-card.tsx"
-    );
-    expect(table).toContain("disabled={!(row.domain && measureEnabled)}");
-    expect(card).toContain("disabled={!(company.domain && measureEnabled)}");
+    expect(screenSrc).not.toContain("measureEnabled");
+    const action = read("app/actions/admin/sales-discovery.ts");
+    expect(action).toContain("await ensureSalesOrg(adminId)");
   });
 });

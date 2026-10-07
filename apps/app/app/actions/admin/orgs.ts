@@ -5,6 +5,7 @@ import { requireAdmin } from "@repo/auth/admin";
 import { type Plan, planCapabilities } from "@repo/auth/plan";
 import { grantPlan } from "@repo/auth/plan-grant";
 import { database } from "@repo/database";
+import { notInternalOrg } from "@repo/database/internal-orgs";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
 import { resolveAdminOrgPlans } from "@/lib/admin/effective-plan";
@@ -59,6 +60,8 @@ export interface OrgRow {
 export async function listOrgs(): Promise<OrgRow[]> {
   await requireAdmin();
   const orgs = await database.organization.findMany({
+    // 고객 목록 — 내부 조직(영업 전용)은 고객이 아니라 뺀다.
+    where: notInternalOrg,
     orderBy: { createdAt: "desc" },
     select: {
       id: true,

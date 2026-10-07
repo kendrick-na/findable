@@ -27,6 +27,10 @@ const fixture = vi.hoisted(() => {
         if ("not" in condition) {
           return value !== (condition as { not: unknown }).not;
         }
+        // 내부 조직 제외(packages/database/internal-orgs.ts)
+        if ("notIn" in condition) {
+          return !(condition as { notIn: unknown[] }).notIn.includes(value);
+        }
         throw new Error(`unsupported operator: ${key}`);
       }
       return value === condition;

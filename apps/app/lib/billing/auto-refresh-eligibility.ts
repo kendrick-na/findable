@@ -29,6 +29,7 @@ import {
   resolveOrganizationPlanWithSource,
 } from "@repo/auth/plan";
 import { database } from "@repo/database";
+import { notInternalOrg } from "@repo/database/internal-orgs";
 import { loadClerkPlanSignals, memberPlanSignal } from "./clerk-plan-signals";
 import { isPaymentAccessActive } from "./paid-period";
 
@@ -78,7 +79,8 @@ export async function loadAutoRefreshOrganizations(
 ): Promise<AutoRefreshOrganization[]> {
   // 브랜드가 없는 조직은 측정할 것이 없으므로 처음부터 뺀다.
   const orgs = await database.organization.findMany({
-    where: { brands: { some: {} } },
+    // 내부 조직(영업 전용)은 정기 자동 측정 대상이 아니다 — 자동 재측정은 돈이 든다.
+    where: { brands: { some: {} }, ...notInternalOrg },
     select: {
       id: true,
       ownerId: true,

@@ -143,6 +143,7 @@ describe("(a) 해지한 구독", () => {
     await expireCancelledSubscriptions(NOW);
     const [args] = mocks.orgFindMany.mock.calls[0] ?? [];
     expect(args.where).toEqual({
+      id: { notIn: ["f1dab1e0-5a1e-4000-8000-00000000a001"] },
       billingStatus: "canceled",
       billingLastPaymentId: { not: null },
       billingNextPaymentAt: { lte: NOW },
@@ -346,6 +347,7 @@ describe("(b) 1회 결제", () => {
 
     const [protectedArgs] = mocks.orgFindMany.mock.calls[0] ?? [];
     expect(protectedArgs.where).toEqual({
+      id: { notIn: ["f1dab1e0-5a1e-4000-8000-00000000a001"] },
       OR: [
         { billingStatus: "active" },
         { billingStatus: "past_due", billingNextPaymentId: { not: null } },

@@ -20,6 +20,7 @@
  */
 
 import { database } from "@repo/database";
+import { notInternalOrg } from "@repo/database/internal-orgs";
 import { RenewalNoticeEmail } from "@repo/email/templates/renewal-notice";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
@@ -117,6 +118,7 @@ async function loadCandidates(now: Date): Promise<Candidate[]> {
   const until = new Date(now.getTime() + RENEWAL_NOTICE_LEAD_DAYS * DAY_MS);
   const orgs = await database.organization.findMany({
     where: {
+      ...notInternalOrg,
       billingStatus: "active",
       billingProvider: "portone",
       billingCustomerId: { not: null },

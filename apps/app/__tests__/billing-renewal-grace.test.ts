@@ -166,6 +166,7 @@ describe("expireLapsedRenewalGrants (cron)", () => {
     await expireLapsedRenewalGrants(graceOver);
     const [args] = mocks.findMany.mock.calls[0] ?? [];
     expect(args.where).toEqual({
+      id: { notIn: ["f1dab1e0-5a1e-4000-8000-00000000a001"] },
       billingStatus: "past_due",
       billingNextPaymentId: { not: null },
       billingNextPaymentAt: { lte: renewalGraceCutoff(graceOver) },

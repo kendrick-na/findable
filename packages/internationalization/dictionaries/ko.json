@@ -1967,7 +1967,7 @@
       "measure": "측정",
       "measuring": "측정 거는 중…",
       "measureStarted": "측정을 걸었습니다(3~5분).",
-      "measureRegistered": "영업 전용 조직에 브랜드를 만들고 측정을 걸었습니다(3~5분).",
+      "measureRegistered": "영업 전용 내부 조직에 브랜드를 만들고 측정을 걸었습니다(3~5분).",
       "measureRunning": "이미 측정 중입니다.",
       "measureFailed": "측정을 시작하지 못했습니다.",
       "measureNoDomain": "사이트 도메인이 없어 측정할 수 없습니다.",
@@ -2067,9 +2067,7 @@
         "invalid": "입력이 올바르지 않습니다.",
         "not_found": "회사를 찾을 수 없습니다.",
         "no_domain": "사이트 도메인이 없습니다.",
-        "failed": "처리하지 못했습니다.",
-        "no_sales_org": "영업 전용 조직을 먼저 만들어 주세요(SALES_DISCOVERY_ORG_ID).",
-        "sales_org_missing": "SALES_DISCOVERY_ORG_ID 의 조직을 Clerk에서 찾지 못했습니다. id를 확인해 주세요."
+        "failed": "처리하지 못했습니다."
       },
       "close": "닫기",
       "filterSub": "세부 분야",
@@ -2097,8 +2095,6 @@
         "environment": "환경·자원순환"
       },
       "subBasisNote": "업종 코드·업종명·취급품목에서 규칙으로 고른 분야입니다(추정).",
-      "salesOrgMissingTitle": "영업 전용 조직을 먼저 만들어 주세요",
-      "salesOrgMissingBody": "[측정]은 영업 전용 조직에만 브랜드를 만듭니다. Clerk에서 조직을 만들고 그 id(org_로 시작)를 환경변수 SALES_DISCOVERY_ORG_ID 에 넣어 주세요. 그 전까지 [측정]은 막혀 있습니다.",
       "sourcesJoiner": " · "
     }
   }

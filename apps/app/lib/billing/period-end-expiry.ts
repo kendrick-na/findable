@@ -27,6 +27,7 @@ import {
 } from "@repo/auth/plan-grant";
 import { clerkClient } from "@repo/auth/server";
 import { database } from "@repo/database";
+import { notInternalOrg } from "@repo/database/internal-orgs";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { userIdFromPaymentId } from "@repo/payments";
@@ -49,6 +50,7 @@ export async function expireCancelledSubscriptions(
 ): Promise<ExpiryResult> {
   const candidates = await database.organization.findMany({
     where: {
+      ...notInternalOrg,
       billingStatus: "canceled",
       billingLastPaymentId: { not: null },
       billingNextPaymentAt: { lte: now },
@@ -115,6 +117,7 @@ export async function expireCancelledSubscriptions(
 async function loadSubscriptionManagedUsers(now: Date): Promise<Set<string>> {
   const orgs = await database.organization.findMany({
     where: {
+      ...notInternalOrg,
       OR: [
         { billingStatus: "active" },
         { billingStatus: "past_due", billingNextPaymentId: { not: null } },

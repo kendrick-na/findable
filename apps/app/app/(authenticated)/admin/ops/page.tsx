@@ -1,5 +1,6 @@
 import { isAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
+import { brandNotInInternalOrg } from "@repo/database/internal-orgs";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -105,7 +106,8 @@ const AdminOpsPage = async () => {
     database.lead.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
     database.lead.count(),
     database.partnerApplication.groupBy({ by: ["status"], _count: true }),
-    database.brand.count(),
+    // 고객 브랜드 수 — 내부 조직(영업 전용) 브랜드는 뺀다.
+    database.brand.count({ where: brandNotInInternalOrg }),
     database.tracking.count(),
     // 🔴 **원가 계기**(세션N-47). 여기 오기 전엔 측정 1건 원가를 **아무도 몰랐다**
     //   (`cost.ts` 는 있었는데 프로덕션 호출 0곳 · 토큰을 저장조차 안 했다).

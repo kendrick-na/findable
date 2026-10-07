@@ -338,15 +338,12 @@ export function CompanyCard({
   closeHref,
   labels,
   mailLabels,
-  measureEnabled,
 }: {
   canSave: boolean;
   card: CompanyCardData;
   closeHref: string;
   labels: Labels;
   mailLabels: DraftComposerLabels;
-  /** 영업 전용 org(SALES_DISCOVERY_ORG_ID)가 설정됐나 — 없으면 [측정]을 막는다 */
-  measureEnabled: boolean;
 }) {
   const router = useRouter();
   const { company } = card;
@@ -478,7 +475,7 @@ export function CompanyCard({
       <section className={`${panel} flex flex-wrap items-start gap-2`}>
         <MeasureButton
           companyId={company.id}
-          disabled={!(company.domain && measureEnabled)}
+          disabled={!company.domain}
           labels={labels}
           size="default"
         />

@@ -2,6 +2,7 @@
 
 import { requireAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
+import { notInternalOrg } from "@repo/database/internal-orgs";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import {
@@ -73,7 +74,11 @@ export async function listStuckClaims(): Promise<StuckClaimRow[]> {
   await requireAdmin();
   const now = Date.now();
   const orgs = await database.organization.findMany({
-    where: { billingCustomerId: null, billingNextPaymentId: { not: null } },
+    where: {
+      ...notInternalOrg,
+      billingCustomerId: null,
+      billingNextPaymentId: { not: null },
+    },
     select: {
       id: true,
       name: true,

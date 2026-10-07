@@ -26,6 +26,7 @@ import {
   type GoogleAioResult,
 } from "@repo/ai/lib/engines/google-aio-adapter";
 import { database } from "@repo/database";
+import { brandNotInInternalOrg } from "@repo/database/internal-orgs";
 import { log } from "@repo/observability/log";
 import type { PlanV2Type } from "./plan-v2-contract";
 
@@ -535,6 +536,8 @@ export const liveAeoPilotDeps: AeoPilotDeps = {
     const domains = allowlist.map(normalizePilotDomain);
     const rows = await database.brand.findMany({
       where: {
+        // 내부 조직(영업 전용) 브랜드는 정기 파일럿 대상이 아니다(같은 도메인이어도).
+        ...brandNotInInternalOrg,
         OR: [
           { id: { in: [...allowlist] } },
           { domain: { in: domains } },

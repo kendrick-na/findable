@@ -51,6 +51,7 @@ import { runAuditJob } from "@repo/audit/runner";
 import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
 import { planCapabilities } from "@repo/auth/plan";
 import { database } from "@repo/database";
+import { notInternalOrg } from "@repo/database/internal-orgs";
 import { resend } from "@repo/email";
 import { TrackingDigestEmail } from "@repo/email/templates/tracking-digest";
 import { log } from "@repo/observability/log";
@@ -425,6 +426,7 @@ export const GET = async (request: NextRequest) => {
   //     DB 가 권위이고, 게이팅은 org.plan 을 읽으므로 화면은 즉시 정확해진다.
   const expired = await database.organization.updateMany({
     where: {
+      ...notInternalOrg,
       planExpiresAt: { not: null, lt: new Date(now) },
       plan: { not: "free" },
     },
