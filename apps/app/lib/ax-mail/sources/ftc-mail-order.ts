@@ -30,9 +30,9 @@ import {
  *   - 등록상세 https://www.data.go.kr/data/15126315/openapi.do
  *       GET https://apis.data.go.kr/1130000/MllBsDtl_3Service/getMllBsInfoDetail_3  (opnSn | prmmiMnno | brno — 모두 선택)
  *       → 위 + ntslMthdNm(판매방식), trtmntPrdlstNm(취급품목), **domnCn(인터넷도메인)**, corpYnNm(법인여부) …
- *   ⚠️ 2026-10-07 실측: 현재 DATA_GO_KR_SERVICE_KEY 로 두 API 모두 403 SERVICE_KEY_IS_NOT_REGISTERED
- *     → data.go.kr 에서 **활용신청(자동승인)** 이 필요하다. 응답 필드는 페이지 swagger 기준이며 실응답 미확인.
- *     swagger 의 응답은 header/body 껍데기 없이 최상위에 resultCode·items 가 오도록 적혀 있어 두 모양을 모두 받는다.
+ *   2026-10-07 활용신청 후 실측: 200 정상. 서울 강남구·정상영업 목록 totalCount 47,547.
+ *     응답 껍데기 = 최상위 { resultCode, resultMsg, numOfRows, pageNo, totalCount, items: [ ... ] } (items 가 배열 그대로).
+ *     표준 껍데기(response.header)도 계속 받는다. 칸 차이는 ftcItemToDiscovered 주석 참고.
  *
  * ② 파일(공정위 누리집, 로그인 불필요, 매주 일요일 갱신, 이용허락범위 제한 없음)
  *   - https://www.data.go.kr/data/15083251/fileData.do → https://www.ftc.go.kr/www/selectBizCommOpenList.do?key=255
@@ -89,31 +89,59 @@ export function ftcItems(body: unknown): {
 }
 
 /** API item → 발굴 회사(목록·상세 공통, 상세 전용 칸은 있으면 채움) */
+/** 실응답 자리표시자(2026-10-07 실측: "N/A" · "NULL" · "-") → null */
+const FTC_PLACEHOLDERS = new Set(["N/A", "NULL", "null", "-"]);
+const CODE_ONLY_RE = /^[\d\s]+$/;
+
+export function ftcStr(value: unknown): string | null {
+  const s = str(value);
+  return s === null || FTC_PLACEHOLDERS.has(s) ? null : s;
+}
+
+/** 한글 설명 칸을 우선, 없으면 코드 칸 — 단 숫자 코드("02 05")만 있으면 null */
+function labelOrNull(label: unknown, code: unknown): string | null {
+  const text = ftcStr(label);
+  if (text) {
+    return text;
+  }
+  const fallback = ftcStr(code);
+  return fallback && !CODE_ONLY_RE.test(fallback) ? fallback : null;
+}
+
+/**
+ * API item → 발굴 회사(목록·상세 공통, 상세 전용 칸은 있으면 채움).
+ * ⚠️ 실응답(2026-10-07)은 swagger 설명과 다르다:
+ *   - ntslMthdNm·trtmntPrdlstNm 은 **코드**("02 05", "01")이고, 한글은 ntslMthdCn("인터넷 기타")·ntslPrdlstCn("종합몰")
+ *   - 빈 값이 "N/A"/"NULL", domnCn 에 도메인 대신 "테무" 같은 입점몰 이름이 오기도 한다(→ normalizeHomepage 가 도메인 아님 처리)
+ *   - chgCn(변경내용) 등 자유 서술 칸에 개인정보가 섞여 있다 → **읽지 않는다**(대표자명·메일·전화도 마찬가지)
+ */
 export function ftcItemToDiscovered(
   item: Record<string, unknown>
 ): DiscoveredCompany | null {
-  const name = str(item.bzmnNm);
+  const name = ftcStr(item.bzmnNm);
   if (!name) {
     return null;
   }
   const company = emptyDiscovered("ftc_mail_order", name);
-  const roadAddr = str(item.rnAddr) ?? str(item.lctnRnAddr);
+  const roadAddr = ftcStr(item.rnAddr) ?? ftcStr(item.lctnRnAddr);
   company.address =
-    (roadAddr ?? str(item.lctnAddr))?.replaceAll("^", ",") ?? null;
+    (roadAddr ?? ftcStr(item.lctnAddr))?.replaceAll("^", ",") ?? null;
   company.asOf = ymd(item.dclrDate);
-  company.businessNumber = normalizeBizNo(str(item.brno));
-  company.corpRegNo = str(item.crno);
-  company.homepage = str(item.domnCn);
-  company.products = str(item.trtmntPrdlstNm);
+  company.businessNumber = normalizeBizNo(ftcStr(item.brno));
+  company.corpRegNo = ftcStr(item.crno);
+  company.homepage = ftcStr(item.domnCn);
+  company.products = labelOrNull(item.ntslPrdlstCn, item.trtmntPrdlstNm);
   company.region =
-    regionFromText(str(item.ctpvNm)) ?? regionFromText(company.address);
-  company.sourceRef = str(item.prmmiMnno) ?? str(item.opnSn);
+    regionFromText(ftcStr(item.ctpvNm)) ?? regionFromText(company.address);
+  company.sourceRef = ftcStr(item.prmmiMnno) ?? ftcStr(item.opnSn);
   company.tags = ["commerce"];
   company.extra = {
-    corporation: str(item.corpYnNm),
+    corporation: ftcStr(item.corpYnNm),
     registeredOn: ymd(item.dclrDate),
-    salesMethod: str(item.ntslMthdNm),
-    status: str(item.operSttusCdNm),
+    salesMethod: labelOrNull(item.ntslMthdCn, item.ntslMthdNm),
+    status: ftcStr(item.operSttusCdNm),
+    /** 국세청 사업자 상태(계속사업자/폐업자/확인불가) — 상세에만 */
+    taxStatus: ftcStr(item.bzmnRgsSttusSeNm),
   };
   return company;
 }

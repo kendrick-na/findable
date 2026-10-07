@@ -217,6 +217,81 @@ describe("공정위 통신판매사업자", () => {
     expect(ftc.parseFtcList({ resultCode: "30" }, 1)).toBeNull();
     expect(ftc.parseFtcList("<xml/>", 1)).toBeNull();
   });
+  test("API 실응답 모양(2026-10-07) — items 배열·N/A 자리표시자·코드 칸 대신 한글 칸", () => {
+    // 상세(getMllBsInfoDetail_3) 실응답의 모양. 대표자·메일·변경내용 칸 값은 가명/가짜로 바꿨다.
+    const body = {
+      resultCode: "00",
+      resultMsg: "NORMAL SERVICE",
+      numOfRows: "3",
+      pageNo: "1",
+      totalCount: 2,
+      items: [
+        {
+          opnSn: "873677975069794382",
+          prmmiMnno: "2026-서울강남-05617",
+          ctpvNm: "서울특별시",
+          operSttusCdNm: "정상영업",
+          corpYnNm: "개인",
+          bzmnNm: "철이와따",
+          bzmnRgsSttusSeNm: "확인불가",
+          crno: "N/A",
+          brno: "6057100746",
+          lctnRnAddr: "서울특별시 강남구 도곡로19길",
+          rnAddr: "N/A",
+          domnCn: "테무",
+          ntslMthdNm: "02",
+          ntslMthdCn: "인터넷",
+          trtmntPrdlstNm: "01",
+          ntslPrdlstCn: "종합몰",
+          chgCn: "000000-0000000",
+          dclrDate: "20261007",
+          rprsvNm: "홍**",
+          rprsvEmladr: "fake**@example.com",
+        },
+        {
+          bzmnNm: "씨에스유통(주)개포점",
+          brno: "1208529574",
+          operSttusCdNm: "정상영업",
+          rnAddr: "N/A",
+          lctnAddr: "서울특별시 강남구 개포동 ***-* 지하*층",
+          domnCn: "www.gpo.nmart.co.kr",
+          ntslMthdNm: "02 05",
+          ntslMthdCn: "N/A",
+          trtmntPrdlstNm: "N/A",
+          ntslPrdlstCn: "N/A",
+          crno: "N/A",
+          bzmnRgsSttusSeNm: "폐업자",
+          rprsvEmladr: "NULL",
+        },
+      ],
+    };
+    const page = ftc.parseFtcList(body, 1);
+    expect(page?.totalCount).toBe(2);
+    expect(page?.items[0]).toMatchObject({
+      address: "서울특별시 강남구 도곡로19길",
+      businessNumber: "6057100746",
+      corpRegNo: null,
+      homepage: "테무",
+      products: "종합몰",
+      region: "서울",
+    });
+    expect(page?.items[0]?.extra).toMatchObject({
+      corporation: "개인",
+      salesMethod: "인터넷",
+      taxStatus: "확인불가",
+    });
+    expect(page?.items[1]).toMatchObject({
+      address: "서울특별시 강남구 개포동 ***-* 지하*층",
+      homepage: "www.gpo.nmart.co.kr",
+      products: null,
+    });
+    // 숫자 코드만 있으면 판매방식은 비운다
+    expect(page?.items[1]?.extra.salesMethod).toBeNull();
+    const text = JSON.stringify(page);
+    expect(text).not.toContain("000000-0000000");
+    expect(text).not.toContain("@");
+    expect(text).not.toContain("N/A");
+  });
   test("시군구 파일 URL", () => {
     expect(ftc.ftcDistrictFileUrl("서울특별시", "강남구")).toContain(
       encodeURIComponent("통신판매사업자_서울특별시_강남구.csv")
