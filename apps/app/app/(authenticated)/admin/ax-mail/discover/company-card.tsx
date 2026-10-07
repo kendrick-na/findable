@@ -14,15 +14,18 @@ import {
 import type {
   CompanyCardData,
   ContactView,
+  FactView,
 } from "@/lib/ax-mail/discovery/screen";
 import {
   DISCOVER_TAGS,
   SALES_LEAD_STATUSES,
   type SalesLeadStatusId,
+  safeExternalUrl,
 } from "@/lib/ax-mail/discovery/view";
 import type { RecipientDraft } from "@/lib/ax-mail/draft-batch";
 import type { AppDictionary } from "@/lib/i18n";
 import { DraftComposer, type DraftComposerLabels } from "../draft-composer";
+import { ExternalLink } from "./external-link";
 import { MeasureButton } from "./measure-button";
 
 type Labels = AppDictionary["salesDiscover"];
@@ -52,6 +55,22 @@ function seoulDate(iso: string): string {
   return new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 }
 
+const LINK_FIELDS = new Set(["homepage", "storeUrl"]);
+
+function sourceLine(labels: Labels, f: FactView): string {
+  return f.sources
+    .map(
+      (src) =>
+        `${lookup(labels.sources, src.source)} (${
+          src.asOf
+            ? `${labels.asOf} ${src.asOf}`
+            : `${labels.fetchedOn} ${seoulDate(src.fetchedAt)}`
+        })`
+    )
+    .join(labels.sourcesJoiner);
+}
+
+/** 기본 정보 — 값이 같은 줄은 하나로, 출처는 여러 개 함께(screen.ts latestFacts). */
 function Facts({ card, labels }: { card: CompanyCardData; labels: Labels }) {
   const facts = [...card.facts].sort((a, b) => {
     const ia = FIELD_ORDER.indexOf(a.field);
@@ -63,22 +82,43 @@ function Facts({ card, labels }: { card: CompanyCardData; labels: Labels }) {
       {facts.map((f) => (
         <div
           className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2"
-          key={`${f.field}-${f.source}`}
+          key={`${f.field}-${f.value}`}
         >
           <dt className={`text-xs ${subtle}`}>
             {lookup(labels.fields, f.field)}
           </dt>
           <dd className="min-w-0 text-sm">
-            <span className="break-words">{f.value}</span>
+            <span className="break-words">
+              {LINK_FIELDS.has(f.field) ? (
+                <ExternalLink href={f.value}>{f.value}</ExternalLink>
+              ) : (
+                f.value
+              )}
+            </span>
             <span className={`block text-xs ${subtle}`}>
-              {labels.source}: {lookup(labels.sources, f.source)} ·{" "}
-              {f.asOf
-                ? `${labels.asOf} ${f.asOf}`
-                : `${labels.fetchedOn} ${seoulDate(f.fetchedAt)}`}
+              {labels.source}: {sourceLine(labels, f)}
             </span>
           </dd>
         </div>
       ))}
+      {card.subIndustries.length > 0 && (
+        <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2">
+          <dt className={`text-xs ${subtle}`}>{labels.fields.subIndustry}</dt>
+          <dd className="min-w-0 text-sm">
+            <span className="flex flex-wrap gap-1">
+              {card.subIndustries.map((sub) => (
+                <Badge key={sub.id} variant="outline">
+                  {labels.subIndustries[sub.id]} ·{" "}
+                  {lookup(labels.industryBasis, sub.basis)}
+                </Badge>
+              ))}
+            </span>
+            <span className={`block text-xs ${subtle}`}>
+              {labels.subBasisNote}
+            </span>
+          </dd>
+        </div>
+      )}
     </dl>
   );
 }
@@ -111,15 +151,12 @@ function ContactRow({
         </span>
         <span className={`block text-xs ${subtle}`}>
           {contact.label ? `“${contact.label}” · ` : ""}
-          <a
+          <ExternalLink
             className="underline underline-offset-2"
             href={contact.sourceUrl}
-            onClick={(event) => event.stopPropagation()}
-            rel="noopener noreferrer"
-            target="_blank"
           >
             {labels.sourcePage}
-          </a>{" "}
+          </ExternalLink>{" "}
           · {seoulDate(contact.fetchedAt)}
         </span>
         {contact.personalName && (
@@ -161,14 +198,9 @@ function CardHeader({
           <h2 className="font-semibold text-lg">{company.legalName}</h2>
           <p className={`text-xs ${subtle}`}>
             {company.domain ? (
-              <a
-                className="underline-offset-2 hover:underline"
-                href={`https://${company.domain}`}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
+              <ExternalLink href={company.domain}>
                 {company.domain}
-              </a>
+              </ExternalLink>
             ) : (
               "—"
             )}
@@ -236,10 +268,11 @@ function ReportButton({
   reportIssueHref: string | null;
   reportUrl: string | null;
 }) {
-  if (reportUrl) {
+  const safeReport = safeExternalUrl(reportUrl);
+  if (safeReport) {
     return (
       <Button asChild variant="outline">
-        <a href={reportUrl} rel="noopener noreferrer" target="_blank">
+        <a href={safeReport} rel="noopener noreferrer" target="_blank">
           {labels.report} · {labels.reportOpen}
         </a>
       </Button>
@@ -305,12 +338,15 @@ export function CompanyCard({
   closeHref,
   labels,
   mailLabels,
+  measureEnabled,
 }: {
   canSave: boolean;
   card: CompanyCardData;
   closeHref: string;
   labels: Labels;
   mailLabels: DraftComposerLabels;
+  /** 영업 전용 org(SALES_DISCOVERY_ORG_ID)가 설정됐나 — 없으면 [측정]을 막는다 */
+  measureEnabled: boolean;
 }) {
   const router = useRouter();
   const { company } = card;
@@ -442,7 +478,7 @@ export function CompanyCard({
       <section className={`${panel} flex flex-wrap items-start gap-2`}>
         <MeasureButton
           companyId={company.id}
-          disabled={!company.domain}
+          disabled={!(company.domain && measureEnabled)}
           labels={labels}
           size="default"
         />

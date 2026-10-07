@@ -148,7 +148,7 @@ const NAME_RULES: [RegExp, IndustryId][] = [
   [/금융|보험|투자|증권|은행|자산운용|신탁|대부/, "finance"],
   [/교육|학원|강의|훈련|교습|도서|영어|어학|코딩/, "education"],
   [
-    /소매|도매|도소매|전자상거래|통신판매|쇼핑몰|종합몰|유통|상품\s*중개/,
+    /소매|도매|도소매|전자상거래|통신\s*판매|쇼핑몰|종합몰|유통|상품\s*중개/,
     "retail",
   ],
   [
@@ -254,7 +254,7 @@ export const KNOWN_TAGS = [
 
 const RETAIL_NAME_RE = /소매/;
 const WHOLESALE_NAME_RE = /도매/;
-const COMMERCE_NAME_RE = /전자상거래|통신판매|온라인\s*쇼핑|쇼핑몰|무점포/;
+const COMMERCE_NAME_RE = /전자상거래|통신\s*판매|온라인\s*쇼핑|쇼핑몰|무점포/;
 const B2C_INDUSTRIES = new Set<IndustryId>([
   "beauty",
   "fashion",

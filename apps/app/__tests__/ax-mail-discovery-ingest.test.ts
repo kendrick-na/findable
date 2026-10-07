@@ -287,7 +287,8 @@ describe("적재 — 멱등·병합·출처", () => {
       industry: "other",
       industrySource: "manual",
     });
-    expect(c?.tags).toEqual(["b2c", "commerce"]);
+    // 세부 분야 태그(취급품목 「건강/식품」→ foodtech)는 붙지만 사람이 정한 업종은 그대로다.
+    expect(c?.tags).toEqual(["b2c", "commerce", "sub:foodtech"]);
     expect([...facts.values()].some((f) => f.field === "storeUrl")).toBe(true);
   });
 

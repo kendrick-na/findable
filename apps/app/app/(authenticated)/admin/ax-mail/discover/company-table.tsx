@@ -18,6 +18,7 @@ import { addCompaniesToSalesList } from "@/app/actions/admin/sales-discovery";
 import type { CompanyRow } from "@/lib/ax-mail/discovery/screen";
 import { DISCOVER_TAGS, type DiscoverSort } from "@/lib/ax-mail/discovery/view";
 import type { AppDictionary } from "@/lib/i18n";
+import { ExternalLink } from "./external-link";
 import { MeasureButton } from "./measure-button";
 
 type Labels = AppDictionary["salesDiscover"];
@@ -63,6 +64,7 @@ function Employees({ row }: { row: CompanyRow }) {
 }
 
 export function CompanyTable({
+  measureEnabled,
   filtered,
   labels,
   nextHref,
@@ -78,6 +80,8 @@ export function CompanyTable({
   /** 조건(세그먼트·칩·단계)이 걸려 있나 — 0곳일 때 「적재 전」과 「조건에 맞는 곳 없음」을 가른다 */
   filtered: boolean;
   labels: Labels;
+  /** 영업 전용 org(SALES_DISCOVERY_ORG_ID)가 설정됐나 — 없으면 [측정]을 막는다 */
+  measureEnabled: boolean;
   nextHref: string | null;
   page: number;
   pages: number;
@@ -211,7 +215,13 @@ export function CompanyTable({
                       {row.legalName}
                     </Link>
                     <span className={`block text-xs ${subtle}`}>
-                      {row.domain ?? "—"}
+                      {row.domain ? (
+                        <ExternalLink href={row.domain}>
+                          {row.domain}
+                        </ExternalLink>
+                      ) : (
+                        "—"
+                      )}
                       {row.region ? ` · ${row.region}` : ""}
                     </span>
                     <span className="mt-1 flex flex-wrap gap-1">
@@ -229,11 +239,20 @@ export function CompanyTable({
                         ))}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="max-w-56 whitespace-normal">
                     {lookup(labels.industries, row.industry)}
                     {row.industrySource && (
                       <span className={`block text-xs ${subtle}`}>
                         {lookup(labels.industryBasis, row.industrySource)}
+                      </span>
+                    )}
+                    {row.subs.length > 0 && (
+                      <span className="mt-1 flex flex-wrap gap-1">
+                        {row.subs.map((sub) => (
+                          <Badge key={sub} variant="outline">
+                            {labels.subIndustries[sub]}
+                          </Badge>
+                        ))}
                       </span>
                     )}
                   </TableCell>
@@ -252,7 +271,7 @@ export function CompanyTable({
                   <TableCell className="pr-4 text-right">
                     <MeasureButton
                       companyId={row.id}
-                      disabled={!row.domain}
+                      disabled={!(row.domain && measureEnabled)}
                       labels={labels}
                     />
                   </TableCell>

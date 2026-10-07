@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SUB_INDUSTRIES } from "@/lib/ax-mail/discovery/sub-industry";
 import {
   INDUSTRIES,
   REGIONS,
@@ -68,6 +69,7 @@ export function FilterBar({
 }) {
   const anyChip =
     params.industries.length ||
+    params.subs.length ||
     params.tags.length ||
     params.regions.length ||
     params.sizes.length ||
@@ -97,6 +99,17 @@ export function FilterBar({
           {labels.resultCount.replace("{count}", total.toLocaleString())}
         </p>
       </div>
+      <Row label={labels.filterSub}>
+        {SUB_INDUSTRIES.map((sub) => (
+          <Chip
+            active={params.subs.includes(sub)}
+            href={discoverHref(params, { subs: toggle(params.subs, sub) })}
+            key={sub}
+          >
+            {labels.subIndustries[sub]}
+          </Chip>
+        ))}
+      </Row>
       <Row label={labels.filterTag}>
         {DISCOVER_TAGS.map((tag) => (
           <Chip
@@ -160,6 +173,7 @@ export function FilterBar({
               industries: [],
               regions: [],
               sizes: [],
+              subs: [],
               tags: [],
             })}
             scroll={false}

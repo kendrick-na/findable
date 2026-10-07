@@ -13,6 +13,11 @@ import {
   runDiscoveryIngest,
 } from "@/lib/ax-mail/discovery/ingest-runner";
 import {
+  ensureSalesBrand,
+  ensureSalesOrg,
+  salesOrgId,
+} from "@/lib/ax-mail/discovery/sales-org";
+import {
   type ContactView,
   contactViews,
   mergeContacts,
@@ -23,7 +28,6 @@ import {
   SALES_LEAD_STATUSES,
 } from "@/lib/ax-mail/discovery/view";
 import { findContactEmails } from "@/lib/ax-mail/sources/contact-email";
-import { assignBrandOwner } from "../brand/assign";
 import { runMeasureOne } from "./measure";
 
 /**
@@ -31,8 +35,7 @@ import { runMeasureOne } from "./measure";
  *
  * 🔒 모든 함수 첫 줄이 `requireAdmin()` 이다(측정 콘솔과 같은 규칙).
  * 🔒 모든 DB 접근은 `withDiscovery` 안에서 — 플래그 꺼짐 → disabled, 테이블 없음 → db_not_ready(500 아님).
- * 측정은 새로 만들지 않는다: 같은 도메인 브랜드가 있으면 관리자 1건 측정(runMeasureOne),
- *   없으면 기존 브랜드 등록 흐름(assignBrandOwner → startOrgTracking)이 등록과 측정을 같이 건다.
+ * 측정은 새로 만들지 않는다: 영업 전용 org 의 브랜드로 관리자 1건 측정(runMeasureOne)을 건다(sales-org.ts).
  */
 
 interface Failure {
@@ -42,6 +45,8 @@ interface Failure {
     | "invalid"
     | "not_found"
     | "no_domain"
+    | "no_sales_org"
+    | "sales_org_missing"
     | "failed";
   message?: string;
   ok: false;
@@ -246,13 +251,18 @@ export async function findCompanyContacts(companyId: string): Promise<
 export type MeasureCompanyResult =
   | {
       ok: true;
-      path: "admin_measure" | "brand_register";
+      /** 영업 org 에 브랜드를 이번에 새로 만들었나 */
+      brandCreated: boolean;
       jobId: string | null;
-      outcome: "started" | "already_running" | "rate_limited" | "failed";
-      message?: string;
+      outcome: "started" | "already_running";
     }
   | Failure;
 
+/**
+ * [측정] — 영업 전용 org(SALES_DISCOVERY_ORG_ID)의 브랜드로만 잰다(대표 승인 2026-10-07).
+ *   ① env 없으면 no_sales_org(측정 막음) ② org 행 보장(Clerk 에 없으면 sales_org_missing)
+ *   ③ 그 org 안 같은 도메인 브랜드를 찾고 없으면 만든다 ④ 관리자 1건 측정 runMeasureOne(요금제·24시간 한도 없음).
+ */
 export async function measureCompany(
   companyId: string
 ): Promise<MeasureCompanyResult> {
@@ -260,12 +270,13 @@ export async function measureCompany(
   if (!idSchema.safeParse(companyId).success) {
     return { ok: false, error: "invalid" };
   }
+  const orgId = salesOrgId();
   const guarded = await withDiscovery(async () => {
     const company = await database.company.findUnique({
       where: { id: companyId },
       select: { domain: true, industry: true, legalName: true },
     });
-    if (company) {
+    if (company && orgId) {
       // 측정 대상이 된 회사는 영업 목록에 올린다(이미 있으면 그대로).
       await database.salesLead.createMany({
         data: [{ companyId, status: "found" }],
@@ -281,43 +292,35 @@ export async function measureCompany(
   if (!company) {
     return { ok: false, error: "not_found" };
   }
+  if (!orgId) {
+    return { ok: false, error: "no_sales_org" };
+  }
   if (!company.domain) {
     return { ok: false, error: "no_domain" };
   }
-  const domain = company.domain;
-  log.info("admin.sales_discovery.measure", { adminId, companyId });
-  const brand = await database.brand.findFirst({
-    where: { domain: { in: [domain, `www.${domain}`] } },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (brand) {
-    const run = await runMeasureOne(brand.id);
-    if (!run.ok) {
-      return { ok: false, error: "failed", message: run.error };
-    }
-    return {
-      ok: true,
-      jobId: run.started.jobId,
-      outcome: run.started.skipped ? "already_running" : "started",
-      path: "admin_measure",
-    };
+  if (!(await ensureSalesOrg(orgId))) {
+    return { ok: false, error: "sales_org_missing" };
   }
-  const registered = await assignBrandOwner({
-    domain,
-    industry: company.industry ?? undefined,
+  const brand = await ensureSalesBrand({
+    domain: company.domain,
+    industry: company.industry,
     name: company.legalName,
-    source: "brand_create",
+    orgId,
   });
-  if ("error" in registered) {
-    return { ok: false, error: "failed", message: registered.error };
+  log.info("admin.sales_discovery.measure", {
+    adminId,
+    brandCreated: brand.created,
+    companyId,
+  });
+  const run = await runMeasureOne(brand.id);
+  if (!run.ok) {
+    return { ok: false, error: "failed", message: run.error };
   }
   return {
     ok: true,
-    jobId: registered.jobId ?? null,
-    message: registered.message,
-    outcome: registered.measurement,
-    path: "brand_register",
+    brandCreated: brand.created,
+    jobId: run.started.jobId,
+    outcome: run.started.skipped ? "already_running" : "started",
   };
 }
 

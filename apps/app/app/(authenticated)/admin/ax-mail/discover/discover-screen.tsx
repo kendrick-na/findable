@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { env } from "@/env";
 import { withDiscovery } from "@/lib/ax-mail/discovery/guard";
+import { salesOrgId } from "@/lib/ax-mail/discovery/sales-org";
 import {
   loadCompanyCard,
   loadDiscoverScreen,
+  syncStagesForScreen,
 } from "@/lib/ax-mail/discovery/screen";
 import {
   discoverHref,
@@ -39,7 +41,10 @@ export async function DiscoverScreen({
   const labels = t.salesDiscover;
   const params = parseDiscoverParams(raw);
   const webUrl = reportWebUrl(env.NEXT_PUBLIC_WEB_URL);
+  const measureEnabled = salesOrgId() !== null;
   const guarded = await withDiscovery(async () => {
+    // 단계 자동 이동(앞으로만)을 먼저 맞춘 뒤 읽는다.
+    await syncStagesForScreen(webUrl);
     const [screen, card] = await Promise.all([
       loadDiscoverScreen(params),
       params.companyId ? loadCompanyCard(params.companyId, webUrl) : null,
@@ -98,6 +103,19 @@ export async function DiscoverScreen({
               name: s.name,
             }))}
           />
+          {measureEnabled ? null : (
+            <section
+              className="rounded-xl border border-amber-900/60 bg-amber-950/20 p-4 text-sm"
+              data-testid="sales-org-notice"
+            >
+              <p className="font-semibold text-amber-200">
+                {labels.salesOrgMissingTitle}
+              </p>
+              <p className="mt-1 text-amber-100/80 leading-6">
+                {labels.salesOrgMissingBody}
+              </p>
+            </section>
+          )}
           {guarded.value.screen.segmentInvalid && (
             <p className="text-amber-300 text-sm">{labels.segmentInvalid}</p>
           )}
@@ -117,6 +135,7 @@ export async function DiscoverScreen({
                 }) !== ""
               }
               labels={labels}
+              measureEnabled={measureEnabled}
               nextHref={
                 params.page * PAGE_SIZE < guarded.value.screen.total
                   ? discoverHref(params, { page: params.page + 1 })
@@ -153,6 +172,7 @@ export async function DiscoverScreen({
                   key={guarded.value.card.company.id}
                   labels={labels}
                   mailLabels={t.axMail}
+                  measureEnabled={measureEnabled}
                 />
               ) : (
                 <p className="rounded-xl border border-[color:var(--findable-hairline,#23252a)] border-dashed p-6 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">

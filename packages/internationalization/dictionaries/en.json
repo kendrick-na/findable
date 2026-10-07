@@ -124,7 +124,7 @@
       "reconnect": "Reconnect",
       "connectFailed": "Connecting the account failed. Check OAuth settings and permissions.",
       "legalTitle": "Check before sending",
-      "legalBody": "Korean Network Act Art. 50(1): a first sales email to a company counts as advertising. Drafts are allowed only with a recorded basis — a business card received in person, a request from the recipient, or an existing customer within 6 months of a transaction (existing-customer mail keeps \"(광고)\" in the subject). Drafts include the sender and opt-out notice required by Art. 50(4). Sending is your call.",
+      "legalBody": "Korean Network Act Art. 50(1): a first sales email to a company counts as advertising. Drafts are allowed only with one of four recorded bases: (1) a business card received in person, (2) a request from the recipient, (3) an existing customer within 6 months of a transaction (subject keeps \"(광고)\"), or (4) a company e-mail the company published on its own website for inquiries or partnerships (record the page address and the date checked — confirmed by phone with KISA 118 on 2026-10-07, no written reply). Drafts include the sender and opt-out notice required by Art. 50(4). Sending is your call.",
       "recipient": "Recipient email",
       "subject": "Subject",
       "body": "Body",
@@ -1867,7 +1867,7 @@
       "title": "Find companies",
       "crumb": "Admin",
       "eyebrow": "AX / DISCOVERY",
-      "description": "Filter companies loaded from public sources, check each fact's source on the company card, then move on to measurement, report and draft. This screen cannot send mail.",
+      "description": "Pick companies from lists published by government and public agencies, check where each fact came from on the company card, then move on to measurement, report and draft. This screen cannot send mail.",
       "openLink": "Find companies →",
       "backToOutreach": "← Outreach",
       "disabledTitle": "Company discovery is off",
@@ -1940,7 +1940,7 @@
       "next": "Next",
       "pageOf": "Page {page} / {pages}",
       "empty": "No companies match.",
-      "emptyNoData": "No companies loaded yet. Use \"Load data\" to fetch one page per API source, or load the file sources.",
+      "emptyNoData": "No companies loaded yet. Press \"Load data\" or add a downloaded list file.",
       "stages": {
         "found": "Found",
         "measured": "Measured",
@@ -1967,9 +1967,8 @@
       "measure": "Measure",
       "measuring": "Starting…",
       "measureStarted": "Measurement started (3–5 min).",
-      "measureRegistered": "Registered as a brand and started measurement (3–5 min).",
+      "measureRegistered": "Created the brand in the sales organization and started measurement (3–5 min).",
       "measureRunning": "Already measuring.",
-      "measureRateLimited": "Not started: measurement limit reached.",
       "measureFailed": "Could not start measurement.",
       "measureNoDomain": "No website domain to measure.",
       "cardEmpty": "Pick a company in the table.",
@@ -1989,7 +1988,8 @@
         "storeUrl": "Marketplace store",
         "employeeCount": "Employees (pension enrolees)",
         "foundedOn": "Founded",
-        "products": "Products"
+        "products": "Products",
+        "subIndustry": "Sub-sector"
       },
       "sources": {
         "venture": "Ministry of SMEs and Startups venture company list",
@@ -2055,7 +2055,7 @@
       "draftNoReport": "No approved report link — saving will be blocked. Issue and approve a report first.",
       "ingest": "Load data",
       "ingesting": "Loading…",
-      "ingestHelp": "Fetches one page from each API source (FSC, NPS, MFDS, FTC, DART listed) and loads it. File sources (venture, Inno-Biz, Main-Biz lists) remain a manual download step.",
+      "ingestHelp": "Fetches one page each from FSC, NPS, MFDS, FTC and DART (listed) public data and saves it. Venture, Inno-Biz and Main-Biz lists are still added as downloaded files.",
       "ingestStatus": {
         "ok": "{fetched} rows → {created} new · {updated} updated · {ambiguous} held",
         "unavailable": "no key or no response",
@@ -2067,9 +2067,39 @@
         "invalid": "Invalid input.",
         "not_found": "Company not found.",
         "no_domain": "No website domain.",
-        "failed": "Could not complete."
+        "failed": "Could not complete.",
+        "no_sales_org": "Create the sales organization first (SALES_DISCOVERY_ORG_ID).",
+        "sales_org_missing": "The SALES_DISCOVERY_ORG_ID organization was not found in Clerk. Check the id."
       },
-      "close": "Close"
+      "close": "Close",
+      "filterSub": "Sub-sector",
+      "subIndustries": {
+        "ai_data": "AI & data",
+        "saas": "SaaS & software",
+        "fintech": "Fintech & finance",
+        "commerce_platform": "Commerce & online sales",
+        "mobility": "Mobility & auto",
+        "logistics": "Logistics & delivery",
+        "proptech": "Proptech, real estate & construction",
+        "edtech": "Edtech & education",
+        "foodtech": "Foodtech & F&B",
+        "agritech": "Agriculture, livestock & fisheries",
+        "biohealth": "Bio & healthcare",
+        "game": "Games",
+        "media_content": "Media & content",
+        "travel_leisure": "Travel & leisure",
+        "energy_climate": "Energy & climate",
+        "semiconductor": "Semiconductors & components",
+        "robotics": "Robotics & automation",
+        "pet": "Pets",
+        "hr": "HR & staffing",
+        "adtech": "Advertising & marketing",
+        "environment": "Environment & recycling"
+      },
+      "subBasisNote": "Sub-sectors are picked by rules from the industry code, industry name or products (estimate).",
+      "salesOrgMissingTitle": "Create the sales organization first",
+      "salesOrgMissingBody": "[Measure] only creates brands in the dedicated sales organization. Create an organization in Clerk and put its id (starts with org_) in the SALES_DISCOVERY_ORG_ID environment variable. Until then, [Measure] is blocked.",
+      "sourcesJoiner": " · "
     }
   }
 }

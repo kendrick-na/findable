@@ -22,23 +22,15 @@ export function measureMessage(
       ? (result.message ?? labels.measureFailed)
       : labels.errors[result.error];
   }
-  switch (result.outcome) {
-    case "started":
-      return result.path === "brand_register"
-        ? labels.measureRegistered
-        : labels.measureStarted;
-    case "already_running":
-      return labels.measureRunning;
-    case "rate_limited":
-      return result.message ?? labels.measureRateLimited;
-    default:
-      return result.message ?? labels.measureFailed;
+  if (result.outcome === "already_running") {
+    return labels.measureRunning;
   }
+  return result.brandCreated ? labels.measureRegistered : labels.measureStarted;
 }
 
 /**
  * [측정] — 새 측정 경로를 만들지 않는다. 서버액션 measureCompany 가
- * 같은 도메인 브랜드면 관리자 1건 측정(runMeasureOne), 없으면 브랜드 등록 흐름(assignBrandOwner)을 부른다.
+ * 영업 전용 org 의 브랜드(없으면 만든다)로 관리자 1건 측정(runMeasureOne)을 건다.
  */
 export function MeasureButton({
   companyId,

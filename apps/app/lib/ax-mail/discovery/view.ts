@@ -2,13 +2,14 @@
  * 「회사 찾기」 화면 상태 ↔ URL ↔ 세그먼트 필터 — 순수 함수만(DB·서버 모듈 import 없음).
  *
  * 화면 상태는 전부 URL 쿼리에 둔다(서버 컴포넌트가 그대로 읽고, 칩은 링크로 토글):
- *   seg=<세그먼트 id> · ind=beauty,food · tag=venture · reg=서울,경기 · size=10-49
+ *   seg=<세그먼트 id> · ind=beauty,food · sub=fintech,proptech · tag=venture · reg=서울,경기 · size=10-49
  *   grow=1 · site=1 · mail=1 · stage=<파이프라인 묶음> · sort=employees|growth|recent · page=2 · co=<회사 id>
  *
  * 칩 = 저장된 세그먼트 필터 위에 **덧붙이는** 조건이다(세그먼트를 고친 게 아니다 — 저장은 「새 조건」으로).
  */
 
 import type { SegmentFilter } from "./segment-query";
+import { SUB_INDUSTRIES, type SubIndustryId } from "./sub-industry";
 import {
   INDUSTRIES,
   type IndustryId,
@@ -83,6 +84,7 @@ export interface DiscoverParams {
   sizes: SizeBucket[];
   sort: DiscoverSort;
   stage: PipelineGroupId | null;
+  subs: SubIndustryId[];
   tags: DiscoverTag[];
 }
 
@@ -133,6 +135,7 @@ export function parseDiscoverParams(raw: RawParams): DiscoverParams {
     stage: PIPELINE_GROUPS.some((g) => g.id === stage)
       ? (stage as PipelineGroupId)
       : null,
+    subs: listOf(raw.sub, SUB_INDUSTRIES),
     tags: listOf(raw.tag, DISCOVER_TAGS),
   };
 }
@@ -145,6 +148,9 @@ export function discoverQuery(params: DiscoverParams): string {
   }
   if (params.industries.length) {
     q.set("ind", params.industries.join(","));
+  }
+  if (params.subs.length) {
+    q.set("sub", params.subs.join(","));
   }
   if (params.tags.length) {
     q.set("tag", params.tags.join(","));
@@ -224,6 +230,9 @@ export function filterFromParams(
   }
   if (params.sizes.length) {
     filter.sizes = params.sizes;
+  }
+  if (params.subs.length) {
+    filter.subIndustries = params.subs;
   }
   if (params.tags.length) {
     filter.tagsAny = params.tags;
@@ -314,5 +323,44 @@ export function contactRoleLabel(
       return role;
     default:
       return "other";
+  }
+}
+
+// ── 바깥 링크 ─────────────────────────────────────────────────────────────
+
+const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
+const WHITESPACE_RE = /\s/;
+const BARE_HOST_RE = /^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i;
+
+/**
+ * 홈페이지·도메인·출처 페이지 → 새 탭으로 열 주소. http/https 만 허용한다.
+ *  - "sample.co.kr" · "www.sample.co.kr/about" 처럼 스킴이 없으면 https:// 를 붙인다.
+ *  - javascript: · data: · mailto: · ftp: 등 다른 스킴과 형식이 이상한 값은 null(링크를 만들지 않는다).
+ */
+export function safeExternalUrl(raw: string | null | undefined): string | null {
+  const value = (raw ?? "").trim();
+  if (!value || WHITESPACE_RE.test(value)) {
+    return null;
+  }
+  let candidate = value;
+  if (value.startsWith("//")) {
+    candidate = `https:${value}`;
+  } else if (!SCHEME_RE.test(value)) {
+    if (!BARE_HOST_RE.test(value)) {
+      return null;
+    }
+    candidate = `https://${value}`;
+  }
+  try {
+    const url = new URL(candidate);
+    if (!(url.protocol === "https:" || url.protocol === "http:")) {
+      return null;
+    }
+    if (!url.hostname.includes(".") || url.username || url.password) {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
   }
 }

@@ -3,6 +3,7 @@ import "server-only";
 import type { Industry, Prisma, PrismaClient } from "@repo/database";
 import { z } from "zod";
 import type { CompanyRecord } from "./ingest";
+import { SUB_INDUSTRIES, subTag } from "./sub-industry";
 import {
   INDUSTRIES,
   REGIONS,
@@ -42,6 +43,11 @@ export const segmentFilterSchema = z
     scoreMin: z.number().min(0).max(100).optional(),
     sizes: z.array(z.enum(SIZE_BUCKETS)).max(SIZE_BUCKETS.length).optional(),
     sources: z.array(z.enum(DISCOVERY_SOURCES)).optional(),
+    /** 세부 분야 하나라도(sub-industry.ts — 태그 `sub:<id>`) */
+    subIndustries: z
+      .array(z.enum(SUB_INDUSTRIES))
+      .max(SUB_INDUSTRIES.length)
+      .optional(),
     /** 모두 가진 회사 */
     tagsAll: tagList.optional(),
     /** 하나라도 가진 회사 */
@@ -74,6 +80,9 @@ function tagClauses(filter: SegmentFilter): Prisma.CompanyWhereInput[] {
   const excludeTags = lowerTags(filter.excludeTags);
   if (excludeTags?.length) {
     out.push({ NOT: { tags: { hasSome: excludeTags } } });
+  }
+  if (filter.subIndustries?.length) {
+    out.push({ tags: { hasSome: filter.subIndustries.map(subTag) } });
   }
   return out;
 }
@@ -177,6 +186,8 @@ export function matchesSegment(
     !tagsAll?.length || tagsAll.every((t) => tags.has(t)),
     !tagsAny?.length || tagsAny.some((t) => tags.has(t)),
     !(excludeTags?.length && excludeTags.some((t) => tags.has(t))),
+    !filter.subIndustries?.length ||
+      filter.subIndustries.some((id) => tags.has(subTag(id))),
     !filter.regions?.length ||
       (company.region !== null &&
         (filter.regions as readonly string[]).includes(company.region)),

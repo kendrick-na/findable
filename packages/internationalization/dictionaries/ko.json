@@ -124,7 +124,7 @@
       "reconnect": "다시 연결",
       "connectFailed": "계정 연결에 실패했습니다. OAuth 설정과 권한을 확인하세요.",
       "legalTitle": "보내기 전에 꼭 확인",
-      "legalBody": "정보통신망법 제50조 제1항: 회사에 처음 보내는 영업 메일은 광고성 정보로 봅니다. 명함을 직접 받았거나, 상대가 정보를 요청했거나, 거래 후 6개월 이내 기존 고객일 때만 초안을 만들 수 있고 그 근거를 기록해야 합니다(기존 고객 메일은 제목에 (광고) 표기). 초안에는 같은 조 제4항의 전송자·수신거부 안내가 자동으로 들어갑니다. 보낼지는 대표님이 판단하세요.",
+      "legalBody": "정보통신망법 제50조 제1항: 회사에 처음 보내는 영업 메일은 광고성 정보로 봅니다. 다음 4가지 근거 중 하나가 있을 때만 초안을 만들 수 있고, 그 근거를 기록해야 합니다. ① 명함을 직접 받음 ② 상대가 정보를 요청함 ③ 거래 후 6개월 이내 기존 고객(제목에 (광고) 표기) ④ 회사가 홈페이지에 문의·제휴용으로 공개한 회사 메일(찾은 페이지 주소와 확인 날짜 기록 — 2026-10-07 대표가 KISA 118에 전화로 확인, 서면 회신 없음). 초안에는 같은 조 제4항의 전송자·수신거부 안내가 자동으로 들어갑니다. 보낼지는 대표님이 판단하세요.",
       "recipient": "받는 사람 이메일",
       "subject": "제목",
       "body": "본문",
@@ -1867,7 +1867,7 @@
       "title": "회사 찾기",
       "crumb": "관리자",
       "eyebrow": "AX / DISCOVERY",
-      "description": "공공 원천에 적재된 회사를 조건으로 거르고, 회사 카드에서 출처를 확인한 뒤 측정·리포트·메일 초안으로 넘깁니다. 이 화면에는 보내기 기능이 없습니다.",
+      "description": "정부·공공기관이 공개한 회사 명단에서 조건에 맞는 회사를 고르고, 회사 카드에서 정보의 출처를 확인한 뒤 측정·리포트·메일 초안으로 넘깁니다. 이 화면에서는 메일을 보낼 수 없습니다.",
       "openLink": "회사 찾기 →",
       "backToOutreach": "← 영업 실행",
       "disabledTitle": "회사 찾기가 꺼져 있습니다",
@@ -1940,7 +1940,7 @@
       "next": "다음",
       "pageOf": "{page} / {pages}쪽",
       "empty": "조건에 맞는 회사가 없습니다.",
-      "emptyNoData": "아직 적재된 회사가 없습니다. 「데이터 불러오기」로 API 원천에서 1페이지씩 받거나, 파일 원천을 적재하세요.",
+      "emptyNoData": "아직 불러온 회사가 없습니다. 「데이터 불러오기」를 누르거나, 내려받은 명단 파일을 넣어 주세요.",
       "stages": {
         "found": "발견",
         "measured": "측정",
@@ -1967,9 +1967,8 @@
       "measure": "측정",
       "measuring": "측정 거는 중…",
       "measureStarted": "측정을 걸었습니다(3~5분).",
-      "measureRegistered": "브랜드로 등록하고 측정을 걸었습니다(3~5분).",
+      "measureRegistered": "영업 전용 조직에 브랜드를 만들고 측정을 걸었습니다(3~5분).",
       "measureRunning": "이미 측정 중입니다.",
-      "measureRateLimited": "측정 한도에 걸려 시작하지 않았습니다.",
       "measureFailed": "측정을 시작하지 못했습니다.",
       "measureNoDomain": "사이트 도메인이 없어 측정할 수 없습니다.",
       "cardEmpty": "왼쪽 표에서 회사를 고르세요.",
@@ -1989,7 +1988,8 @@
         "storeUrl": "입점몰 주소",
         "employeeCount": "직원 수(국민연금 가입자)",
         "foundedOn": "설립일",
-        "products": "주생산품·취급품목"
+        "products": "주생산품·취급품목",
+        "subIndustry": "세부 분야"
       },
       "sources": {
         "venture": "중소벤처기업부 벤처기업명단",
@@ -2055,7 +2055,7 @@
       "draftNoReport": "발송 승인된 리포트 링크가 없어 저장하면 막힙니다 — 리포트를 먼저 발행·승인하세요.",
       "ingest": "데이터 불러오기",
       "ingesting": "불러오는 중…",
-      "ingestHelp": "API 원천(금융위·국민연금·식약처·공정위·DART 상장사)에서 1페이지씩 받아 적재합니다. 파일 원천(벤처·이노비즈·메인비즈 명단)은 내려받아 적재하는 수동 단계 그대로입니다.",
+      "ingestHelp": "금융위·국민연금·식약처·공정위·전자공시(상장사) 공개 자료에서 1쪽씩 가져와 저장합니다. 벤처·이노비즈·메인비즈 명단은 파일을 내려받아 넣는 방식 그대로입니다.",
       "ingestStatus": {
         "ok": "{fetched}행 → 새 회사 {created} · 갱신 {updated} · 보류 {ambiguous}",
         "unavailable": "키 없음 또는 응답 없음",
@@ -2067,9 +2067,39 @@
         "invalid": "입력이 올바르지 않습니다.",
         "not_found": "회사를 찾을 수 없습니다.",
         "no_domain": "사이트 도메인이 없습니다.",
-        "failed": "처리하지 못했습니다."
+        "failed": "처리하지 못했습니다.",
+        "no_sales_org": "영업 전용 조직을 먼저 만들어 주세요(SALES_DISCOVERY_ORG_ID).",
+        "sales_org_missing": "SALES_DISCOVERY_ORG_ID 의 조직을 Clerk에서 찾지 못했습니다. id를 확인해 주세요."
       },
-      "close": "닫기"
+      "close": "닫기",
+      "filterSub": "세부 분야",
+      "subIndustries": {
+        "ai_data": "AI·데이터",
+        "saas": "SaaS·소프트웨어",
+        "fintech": "핀테크·금융",
+        "commerce_platform": "커머스·온라인 판매",
+        "mobility": "모빌리티·자동차",
+        "logistics": "물류·배송",
+        "proptech": "프롭테크·부동산·건설",
+        "edtech": "에듀테크·교육",
+        "foodtech": "푸드테크·식음료",
+        "agritech": "농업·축산·수산",
+        "biohealth": "바이오·헬스케어",
+        "game": "게임",
+        "media_content": "미디어·콘텐츠",
+        "travel_leisure": "여행·레저",
+        "energy_climate": "에너지·탄소중립",
+        "semiconductor": "반도체·전자부품",
+        "robotics": "로봇·자동화",
+        "pet": "펫",
+        "hr": "HR·인력",
+        "adtech": "광고·마케팅",
+        "environment": "환경·자원순환"
+      },
+      "subBasisNote": "업종 코드·업종명·취급품목에서 규칙으로 고른 분야입니다(추정).",
+      "salesOrgMissingTitle": "영업 전용 조직을 먼저 만들어 주세요",
+      "salesOrgMissingBody": "[측정]은 영업 전용 조직에만 브랜드를 만듭니다. Clerk에서 조직을 만들고 그 id(org_로 시작)를 환경변수 SALES_DISCOVERY_ORG_ID 에 넣어 주세요. 그 전까지 [측정]은 막혀 있습니다.",
+      "sourcesJoiner": " · "
     }
   }
 }

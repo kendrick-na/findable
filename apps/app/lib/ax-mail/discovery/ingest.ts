@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Industry, Prisma, PrismaClient } from "@repo/database";
 import { normalizeCorpName } from "../sources/http";
+import { classifySubIndustries, subTag } from "./sub-industry";
 import {
   audienceTags,
   classifyIndustry,
@@ -142,6 +143,8 @@ export function tagsFor(
 ): string[] {
   return normalizeTags([
     ...item.tags,
+    // 세부 분야(sub:fintech …) — Industry enum 은 그대로, 태그로만 더 나눈다.
+    ...classifySubIndustries(item).map((v) => subTag(v.id)),
     ...audienceTags({
       industry,
       industryCode: item.industryCode,
@@ -293,6 +296,14 @@ export function factsFor(
         industry: verdict.industry,
         name: item.industryName,
       },
+    });
+  }
+  const subs = classifySubIndustries(item);
+  if (subs.length) {
+    facts.push({
+      ...base,
+      field: "subIndustry",
+      value: subs.map((v) => ({ basis: v.basis, id: v.id })),
     });
   }
   if (item.address) {

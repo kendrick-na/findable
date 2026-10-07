@@ -651,7 +651,7 @@ describe("연락처 역할 라벨 · 사실 표시", () => {
     expect(partner?.basis.detail).toContain("https://example.com/contact");
   });
 
-  test("기본 정보 — (field, 원천)별 최신 1개, 내부 기록 제외, 값은 원문 그대로", () => {
+  test("기본 정보 — (field, 원천)별 최신 1개, 같은 값은 한 줄 + 출처 여러 개", () => {
     const at = new Date("2026-10-07T00:00:00Z");
     const facts = screen.latestFacts([
       {
@@ -676,21 +676,58 @@ describe("연락처 역할 라벨 · 사실 표시", () => {
         value: { code: null, name: "화장품 제조업" },
       },
       {
+        asOf: "2026-09-30",
+        field: "industry",
+        fetchedAt: at,
+        source: "ftc_mail_order",
+        value: { code: null, name: "화장품 제조업" },
+      },
+      {
+        asOf: "2026-09-30",
+        field: "legalName",
+        fetchedAt: at,
+        source: "ftc_mail_order",
+        value: "(주)예시",
+      },
+      {
+        asOf: "2026-05-21",
+        field: "legalName",
+        fetchedAt: at,
+        source: "venture",
+        value: "㈜예시상사",
+      },
+      {
         asOf: "",
         field: "sourceRecord",
         fetchedAt: at,
         source: "venture",
         value: {},
       },
+      {
+        asOf: "",
+        field: "subIndustry",
+        fetchedAt: at,
+        source: "venture",
+        value: [{ basis: "name", id: "foodtech" }],
+      },
     ]);
-    expect(facts).toHaveLength(2);
+    // 업종은 원천 2곳이 같은 값 → 한 줄, 회사명은 값이 달라 두 줄(어느 쪽이 맞는지 정하지 않는다)
+    expect(facts.map((f) => f.field).sort()).toEqual([
+      "employeeCount",
+      "industry",
+      "legalName",
+      "legalName",
+    ]);
     expect(facts.find((f) => f.field === "employeeCount")).toMatchObject({
-      asOf: "2026-08",
+      sources: [{ asOf: "2026-08", source: "nps" }],
       value: "14",
     });
-    expect(facts.find((f) => f.field === "industry")?.value).toBe(
-      "화장품 제조업"
-    );
+    const industry = facts.find((f) => f.field === "industry");
+    expect(industry?.value).toBe("화장품 제조업");
+    expect(industry?.sources.map((x) => x.source).sort()).toEqual([
+      "ftc_mail_order",
+      "venture",
+    ]);
     const ko = JSON.parse(
       readFileSync(
         join(
@@ -789,7 +826,7 @@ describe("④ 게이트 — 관리자 · 플래그 (소스 검사)", () => {
     for (const f of fns) {
       expect(f.first, f.name).toMatch(/await requireAdmin\(\);$/);
     }
-    // withDiscovery 밖의 DB 접근은 brand 조회(기존 테이블) 하나뿐
+    // withDiscovery 밖에서 database 를 직접 부르지 않는다(영업 org 브랜드는 sales-org.ts)
     let outside = source;
     for (;;) {
       const start = outside.indexOf("withDiscovery(");
@@ -813,14 +850,29 @@ describe("④ 게이트 — 관리자 · 플래그 (소스 검사)", () => {
     const dbCalls = [...outside.matchAll(/database\.(\w+)\./g)].map(
       (m) => m[1]
     );
-    expect(dbCalls).toEqual(["brand"]);
+    expect(dbCalls).toEqual([]);
   });
 
-  test("측정은 기존 경로만 쓴다 — runMeasureOne / assignBrandOwner", () => {
+  test("측정은 영업 전용 org 브랜드 + 기존 관리자 1건 측정만 쓴다", () => {
     const source = read("app/actions/admin/sales-discovery.ts");
     expect(source).toContain("await runMeasureOne(brand.id)");
-    expect(source).toContain("await assignBrandOwner(");
-    expect(source).not.toMatch(/runAuditJob|startMeasureOne/);
+    expect(source).toContain("ensureSalesBrand(");
+    // org 없으면 측정 전에 막는다
+    expect(source.indexOf('error: "no_sales_org"')).toBeLessThan(
+      source.indexOf("ensureSalesBrand(")
+    );
+    // 고객 org 의 등록·요금제 한도 경로를 부르지 않는다
+    expect(source).not.toMatch(
+      /assignBrandOwner|startOrgTracking|planCapabilities|runAuditJob|startMeasureOne/
+    );
+    const salesOrg = read("lib/ax-mail/discovery/sales-org.ts");
+    const salesOrgCode = salesOrg
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("*"))
+      .join("\n");
+    expect(salesOrgCode).not.toMatch(
+      /planCapabilities|getCurrentPlan|brandLimit/
+    );
   });
 
   test("화면은 관리자 아니면 notFound, 데이터는 withDiscovery 로만 읽는다", () => {
@@ -846,5 +898,285 @@ describe("④ 게이트 — 관리자 · 플래그 (소스 검사)", () => {
     expect(recorded).toBeGreaterThan(created);
     expect(route).toContain("salesLeadId: z.uuid().optional()");
     expect(route).not.toMatch(/messages\/send|drafts\/send|gmail\.send/);
+  });
+});
+
+describe("A. 세부 분야(sub-industry) — 규칙 · 필터 · 미분류 비율", () => {
+  test("KSIC 코드 → 업종명 → 취급품목, 근거는 더 강한 쪽 하나", async () => {
+    const sub = await import("@/lib/ax-mail/discovery/sub-industry");
+    expect(sub.classifySubIndustries({ industryCode: "64191" })).toEqual([
+      { basis: "ksic", id: "fintech" },
+    ]);
+    expect(
+      sub.classifySubIndustries({
+        industryCode: "68112",
+        industryName: "비주거용 건물 임대업",
+      })
+    ).toEqual([{ basis: "ksic", id: "proptech" }]);
+    expect(
+      sub.classifySubIndustries({ industryName: "일반 화물 자동차 운송업" })
+    ).toEqual([
+      { basis: "name", id: "mobility" },
+      { basis: "name", id: "logistics" },
+    ]);
+    expect(sub.classifySubIndustries({ products: "반려동물 간식" })).toEqual([
+      { basis: "products", id: "pet" },
+    ]);
+    // 오탐 방지: 자동차 임대는 부동산이 아니고, 텔레마케팅은 광고가 아니다
+    expect(
+      sub
+        .classifySubIndustries({ industryName: "자동차 임대업" })
+        .map((v) => v.id)
+    ).toEqual(["mobility"]);
+    expect(
+      sub.classifySubIndustries({
+        industryName: "콜센터 및 텔레마케팅 서비스업",
+      })
+    ).toEqual([]);
+    expect(sub.subIndustriesFromTags(["b2b", "sub:fintech", "sub:x"])).toEqual([
+      "fintech",
+    ]);
+  });
+
+  test("세부 분야 칩 → where 에 sub: 태그(하나라도), 메모리 판정도 같은 규칙", () => {
+    const p = view.parseDiscoverParams({
+      sub: "proptech,fintech,bogus",
+      tag: "venture",
+    });
+    expect(p.subs).toEqual(["fintech", "proptech"]);
+    expect(view.discoverHref(p, {})).toContain("sub=fintech%2Cproptech");
+    const filter = view.filterFromParams(p, null);
+    expect(filter.subIndustries).toEqual(["fintech", "proptech"]);
+    expect(segmentQuery.segmentFilterSchema.safeParse(filter).success).toBe(
+      true
+    );
+    const where = JSON.stringify(segmentQuery.buildCompanyWhere(filter));
+    expect(where).toContain(
+      '"tags":{"hasSome":["sub:fintech","sub:proptech"]}'
+    );
+    expect(where).toContain('"tags":{"hasSome":["venture"]}');
+    const base = {
+      businessNumber: null,
+      corpRegNo: null,
+      dartCorpCode: null,
+      domain: null,
+      employeeAsOf: null,
+      employeeCount: null,
+      employeeGrowth: null,
+      foundedYear: null,
+      hasPublicEmail: false,
+      id: "c",
+      industry: null,
+      industryCode: null,
+      industryName: null,
+      industrySource: null,
+      lastMeasuredScore: null,
+      legalName: "예시",
+      matchConfidence: "exact",
+      normalizedName: "예시",
+      region: null,
+      sources: [],
+    };
+    expect(
+      segmentQuery.matchesSegment(
+        { ...base, tags: ["venture", "sub:proptech"] },
+        filter
+      )
+    ).toBe(true);
+    expect(
+      segmentQuery.matchesSegment(
+        { ...base, tags: ["venture", "sub:game"] },
+        filter
+      )
+    ).toBe(false);
+  });
+
+  test("미분류 비율(업종명 표본 100개) — 63% → 20%", async () => {
+    const { INDUSTRY_NAME_SAMPLE } = await import(
+      "./fixtures/industry-name-sample"
+    );
+    const { classifyIndustry } = await import(
+      "@/lib/ax-mail/discovery/taxonomy"
+    );
+    const sub = await import("@/lib/ax-mail/discovery/sub-industry");
+    let before = 0;
+    let after = 0;
+    for (const name of INDUSTRY_NAME_SAMPLE) {
+      const { industry } = classifyIndustry({ industryName: name });
+      const unclassified = industry === null || industry === "other";
+      if (unclassified) {
+        before++;
+        if (sub.classifySubIndustries({ industryName: name }).length === 0) {
+          after++;
+        }
+      }
+    }
+    expect(INDUSTRY_NAME_SAMPLE).toHaveLength(100);
+    expect(before).toBe(63);
+    expect(after).toBe(20);
+  });
+});
+
+describe("B. 바깥 링크 — http/https 만, 새 탭", () => {
+  test("도메인·주소 정규화와 위험한 스킴 차단", () => {
+    expect(view.safeExternalUrl("sample.co.kr")).toBe("https://sample.co.kr/");
+    expect(view.safeExternalUrl("www.sample.co.kr/about?x=1")).toBe(
+      "https://www.sample.co.kr/about?x=1"
+    );
+    expect(view.safeExternalUrl("http://sample.co.kr/contact")).toBe(
+      "http://sample.co.kr/contact"
+    );
+    expect(view.safeExternalUrl("//sample.co.kr")).toBe(
+      "https://sample.co.kr/"
+    );
+    for (const bad of [
+      "javascript:alert(1)",
+      "JavaScript:alert(1)",
+      "data:text/html,x",
+      "mailto:a@b.com",
+      "ftp://sample.co.kr",
+      "https://user:pw@sample.co.kr",
+      "not a url",
+      "localhost",
+      "",
+      null,
+    ]) {
+      expect(view.safeExternalUrl(bad), String(bad)).toBeNull();
+    }
+  });
+
+  test("링크 부품은 새 탭 + noopener noreferrer, 카드·표가 그것을 쓴다", () => {
+    const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+    const link = read(
+      "app/(authenticated)/admin/ax-mail/discover/external-link.tsx"
+    );
+    expect(link).toContain('target="_blank"');
+    expect(link).toContain('rel="noopener noreferrer"');
+    expect(link).toContain("safeExternalUrl(href)");
+    const card = read(
+      "app/(authenticated)/admin/ax-mail/discover/company-card.tsx"
+    );
+    const table = read(
+      "app/(authenticated)/admin/ax-mail/discover/company-table.tsx"
+    );
+    expect(card).toContain("<ExternalLink href={company.domain}>");
+    expect(card).toContain("href={contact.sourceUrl}");
+    expect(table).toContain("<ExternalLink href={row.domain}>");
+    // 날 URL 을 그대로 href 에 끼워 넣는 곳이 없다
+    expect(card).not.toContain("href={`https://");
+  });
+});
+
+describe("C. 단계 자동 이동 · 법률 안내", () => {
+  test("측정 완료 → measured, 리포트 발송 승인 → reported, 앞으로만", async () => {
+    const fake = {
+      auditJob: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            { domain: "www.measured.example" },
+            { domain: "both.example" },
+          ]),
+      },
+      salesLead: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            company: { domain: "measured.example" },
+            id: "l1",
+            status: "found",
+          },
+          { company: { domain: "both.example" }, id: "l2", status: "found" },
+          {
+            company: { domain: "nothing.example" },
+            id: "l3",
+            status: "found",
+          },
+          {
+            company: { domain: "both.example" },
+            id: "l4",
+            status: "measured",
+          },
+          { company: { domain: null }, id: "l5", status: "found" },
+        ]),
+        update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const now = new Date("2026-10-07T05:00:00Z");
+    const result = await pipeline.syncLeadStages(
+      fake as unknown as Parameters<typeof pipeline.syncLeadStages>[0],
+      new Map([["both.example", REPORT_URL]]),
+      now
+    );
+    expect(result).toEqual({ measured: 1, reported: 2 });
+    // 조회는 found·measured 리드만(답장·미팅·종료는 대상 아님)
+    expect(fake.salesLead.findMany.mock.calls[0][0].where).toEqual({
+      status: { in: ["found", "measured"] },
+    });
+    expect(fake.auditJob.findMany.mock.calls[0][0].where.status).toBe(
+      "completed"
+    );
+    expect(fake.salesLead.update.mock.calls.map((c) => c[0].where.id)).toEqual([
+      "l2",
+      "l4",
+    ]);
+    expect(fake.salesLead.update.mock.calls[0][0].data).toMatchObject({
+      reportUrl: REPORT_URL,
+      status: "reported",
+    });
+    expect(fake.salesLead.updateMany.mock.calls[0][0]).toEqual({
+      data: { status: "measured", statusChangedAt: now },
+      where: { id: { in: ["l1"] }, status: "found" },
+    });
+  });
+
+  test("「영업 실행」 법률 안내에 4번째 근거(공개 회사 메일·KISA 전화 확인)가 ko·en 모두 있다", () => {
+    const dict = (lang: string) =>
+      JSON.parse(
+        readFileSync(
+          join(
+            process.cwd(),
+            `../../packages/internationalization/dictionaries/${lang}.json`
+          ),
+          "utf8"
+        )
+      ).app.axMail.legalBody as string;
+    expect(dict("ko")).toContain("④");
+    expect(dict("ko")).toContain("KISA");
+    expect(dict("ko")).toContain("2026-10-07");
+    expect(dict("en")).toContain("(4)");
+    expect(dict("en")).toContain("KISA");
+    expect(dict("en")).toContain("2026-10-07");
+  });
+});
+
+describe("D. 영업 전용 org", () => {
+  test("SALES_DISCOVERY_ORG_ID 는 org_ 형식일 때만 인정", async () => {
+    const { salesOrgId } = await import("@/lib/ax-mail/discovery/sales-org");
+    expect(salesOrgId({})).toBeNull();
+    expect(salesOrgId({ SALES_DISCOVERY_ORG_ID: "" })).toBeNull();
+    expect(salesOrgId({ SALES_DISCOVERY_ORG_ID: "my-org" })).toBeNull();
+    expect(
+      salesOrgId({ SALES_DISCOVERY_ORG_ID: " org_2abcDEF123456789 " })
+    ).toBe("org_2abcDEF123456789");
+  });
+
+  test("org 가 없으면 화면이 안내를 띄우고 [측정]을 막는다", () => {
+    const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+    const screenSrc = read(
+      "app/(authenticated)/admin/ax-mail/discover/discover-screen.tsx"
+    );
+    expect(screenSrc).toContain(
+      "const measureEnabled = salesOrgId() !== null;"
+    );
+    expect(screenSrc).toContain("labels.salesOrgMissingTitle");
+    const table = read(
+      "app/(authenticated)/admin/ax-mail/discover/company-table.tsx"
+    );
+    const card = read(
+      "app/(authenticated)/admin/ax-mail/discover/company-card.tsx"
+    );
+    expect(table).toContain("disabled={!(row.domain && measureEnabled)}");
+    expect(card).toContain("disabled={!(company.domain && measureEnabled)}");
   });
 });

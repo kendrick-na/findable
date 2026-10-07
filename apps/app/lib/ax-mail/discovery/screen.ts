@@ -1,6 +1,7 @@
 import "server-only";
 
 import { database, type Prisma } from "@repo/database";
+import { log } from "@repo/observability/log";
 import {
   approvedReportUrlByDomain,
   bareDomain,
@@ -14,7 +15,15 @@ import {
   publicContactBasis,
 } from "../sources/contact-email";
 import { composeCompanyDraft } from "./draft";
+import { isMissingTableError } from "./guard";
+import { syncLeadStages } from "./pipeline";
 import { parseSegmentFilter, querySegment } from "./segment-query";
+import {
+  SUB_INDUSTRIES,
+  type SubIndustryBasis,
+  type SubIndustryId,
+  subIndustriesFromTags,
+} from "./sub-industry";
 import {
   type ContactRoleLabel,
   contactRoleLabel,
@@ -49,6 +58,7 @@ export interface CompanyRow {
   region: string | null;
   sources: string[];
   status: SalesLeadStatusId | null;
+  subs: SubIndustryId[];
   tags: string[];
 }
 
@@ -59,6 +69,27 @@ export interface DiscoverScreen {
   segmentInvalid: boolean;
   segments: SegmentChip[];
   total: number;
+}
+
+/**
+ * 화면 열 때 영업 단계 자동 이동(측정 완료 → measured, 리포트 발송 승인 → reported, 앞으로만).
+ * 테이블 없음은 위로(「DB 준비 전」), 그 밖의 실패는 화면을 막지 않고 0건으로 본다.
+ */
+export async function syncStagesForScreen(
+  webUrl: string
+): Promise<{ measured: number; reported: number }> {
+  try {
+    const issued = await listIssuedReports(webUrl).catch(() => []);
+    return await syncLeadStages(database, approvedReportUrlByDomain(issued));
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      throw error;
+    }
+    log.warn("ax_mail.discovery.sync_failed", {
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return { measured: 0, reported: 0 };
+  }
 }
 
 export async function loadDiscoverScreen(
@@ -105,6 +136,7 @@ export async function loadDiscoverScreen(
       region: c.region,
       sources: c.sources,
       status: statusByCompany.get(c.id) ?? null,
+      subs: subIndustriesFromTags(c.tags),
       tags: c.tags,
     })),
     pipeline: pipelineCounts(
@@ -124,11 +156,16 @@ export async function loadDiscoverScreen(
 
 // ── 회사 카드 ───────────────────────────────────────────────────────────────
 
-export interface FactView {
+export interface FactSourceView {
   asOf: string;
   fetchedAt: string;
-  field: string;
   source: string;
+}
+
+/** 값 1개 = 1줄. 같은 값을 준 원천이 여럿이면 sources 에 함께 담는다. */
+export interface FactView {
+  field: string;
+  sources: FactSourceView[];
   value: string;
 }
 
@@ -164,6 +201,11 @@ export interface CompanyCardData {
   } | null;
   lead: { id: string; status: SalesLeadStatusId } | null;
   reportUrl: string | null;
+  subIndustries: {
+    basis: SubIndustryBasis;
+    id: SubIndustryId;
+    source: string;
+  }[];
 }
 
 function objectFactText(
@@ -205,38 +247,86 @@ export function factText(field: string, value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** 화면에 보일 사실 — 같은 (field, 원천)은 기준일 가장 최근 것 1개. 내부용 sourceRecord 는 뺀다. */
-export function latestFacts(
-  facts: {
-    asOf: string;
-    fetchedAt: Date;
-    field: string;
-    source: string;
-    value: unknown;
-  }[]
-): FactView[] {
+interface RawFact {
+  asOf: string;
+  fetchedAt: Date;
+  field: string;
+  source: string;
+  value: unknown;
+}
+
+/** 표에 따로 보여 주는 내부 기록 — 기본 정보 목록에서는 뺀다. */
+const HIDDEN_FIELDS = new Set(["sourceRecord", "subIndustry"]);
+
+/**
+ * 화면에 보일 사실 — (field, 원천)마다 기준일 가장 최근 것 1개를 고른 뒤,
+ * **값이 같은 줄은 하나로 합치고 출처를 여러 개 함께** 단다(회사명·업종이 원천마다 반복되던 문제).
+ * 값이 다르면 줄을 나눠 그대로 둔다(어느 쪽이 맞는지 정하지 않는다).
+ */
+export function latestFacts(facts: RawFact[]): FactView[] {
   const sorted = [...facts].sort(
     (a, b) =>
       b.asOf.localeCompare(a.asOf) ||
       b.fetchedAt.getTime() - a.fetchedAt.getTime()
   );
   const seen = new Set<string>();
-  const out: FactView[] = [];
+  const byValue = new Map<string, FactView>();
   for (const f of sorted) {
     const key = `${f.field}|${f.source}`;
-    if (f.field === "sourceRecord" || seen.has(key)) {
+    if (HIDDEN_FIELDS.has(f.field) || seen.has(key)) {
       continue;
     }
     seen.add(key);
-    out.push({
+    const value = factText(f.field, f.value);
+    const lineKey = `${f.field}|${value.trim().toLowerCase()}`;
+    const line = byValue.get(lineKey) ?? { field: f.field, sources: [], value };
+    line.sources.push({
       asOf: f.asOf,
-      field: f.field,
       fetchedAt: f.fetchedAt.toISOString(),
       source: f.source,
-      value: factText(f.field, f.value),
     });
+    byValue.set(lineKey, line);
   }
-  return out;
+  return [...byValue.values()];
+}
+
+/** 세부 분야 사실들 → 분야별 가장 강한 근거 1개(KSIC > 업종명 > 취급품목). */
+export function subIndustryViews(
+  facts: RawFact[]
+): { basis: SubIndustryBasis; id: SubIndustryId; source: string }[] {
+  const rank: Record<SubIndustryBasis, number> = {
+    ksic: 3,
+    name: 2,
+    products: 1,
+  };
+  const best = new Map<
+    SubIndustryId,
+    { basis: SubIndustryBasis; id: SubIndustryId; source: string }
+  >();
+  for (const f of facts) {
+    if (f.field !== "subIndustry" || !Array.isArray(f.value)) {
+      continue;
+    }
+    for (const entry of f.value as { basis?: unknown; id?: unknown }[]) {
+      const id = entry?.id as SubIndustryId;
+      const basis = entry?.basis as SubIndustryBasis;
+      if (!(SUB_INDUSTRIES.includes(id) && basis in rank)) {
+        continue;
+      }
+      const prev = best.get(id);
+      if (!prev || rank[basis] > rank[prev.basis]) {
+        best.set(id, { basis, id, source: f.source });
+      }
+    }
+  }
+  return SUB_INDUSTRIES.filter((id) => best.has(id)).map(
+    (id) =>
+      best.get(id) as {
+        basis: SubIndustryBasis;
+        id: SubIndustryId;
+        source: string;
+      }
+  );
 }
 
 const CONFIDENCES = new Set(["high", "medium", "low"]);
@@ -382,6 +472,7 @@ export async function loadCompanyCard(
       region: company.region,
       sources: company.sources,
       status: lead?.status ?? null,
+      subs: subIndustriesFromTags(company.tags),
       tags: company.tags,
     },
     contacts,
@@ -392,6 +483,7 @@ export async function loadCompanyCard(
       reportUrl,
     }),
     facts: latestFacts(company.facts),
+    subIndustries: subIndustryViews(company.facts),
     lastJob: lastJob
       ? {
           createdAt: lastJob.createdAt.toISOString(),

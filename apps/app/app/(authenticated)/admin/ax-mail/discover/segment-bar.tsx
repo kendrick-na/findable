@@ -129,6 +129,7 @@ export function SegmentBar({
                 industries: [],
                 regions: [],
                 sizes: [],
+                subs: [],
                 tags: [],
               },
               { segmentId: result.id }
