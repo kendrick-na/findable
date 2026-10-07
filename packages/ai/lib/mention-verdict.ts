@@ -80,15 +80,23 @@ export interface MentionVerdict {
   quality: MentionQuality;
   /** 비집계 판정의 사유(관측·재검증용). 없으면 quality 자체가 사유다. */
   reason?: MentionVerdictReason;
-  /** 판정 경로(관측용). rule=규칙만으로 확정, llm=모호해서 LLM 판정, skipped=검증 미실행. */
-  via: "rule" | "llm" | "skipped";
+  /**
+   * 판정 경로(관측용). rule=규칙만으로 확정, llm=모호해서 LLM 판정, skipped=검증 미실행,
+   * rules_search_terms=검색 API 결과(네이버·다음)라 약관상 LLM 없이 규칙만으로 판정.
+   */
+  via: "rule" | "llm" | "skipped" | "rules_search_terms";
 }
 
 export type MentionVerdictReason =
   /** LLM이 confirmed라 했지만 공식 사이트 고유 사실·도메인 근거가 답변에 없음. */
   | "official_evidence_missing"
   /** 판정기(LLM) 호출이 재시도·폴백까지 모두 실패함. */
-  | "judge_failed";
+  | "judge_failed"
+  /**
+   * 검색 결과(네이버·다음)에 이름은 있으나 결정적 근거(공식 도메인·상호·사업자번호)가 없어
+   * 같은 회사인지 판정하지 않았다. 약관상 LLM 판정기를 쓸 수 없는 행이다(2026-10-07).
+   */
+  | "search_rule_inconclusive";
 
 // ─────────────────────────────────────────────────────────
 // 1단계: 규칙 — 명확한 것은 LLM 없이 끝낸다(원가·지연 보호)
@@ -837,6 +845,80 @@ export async function verifyMention(
   };
 }
 
+// ─────────────────────────────────────────────────────────
+// 검색 API 결과(네이버·다음) — 규칙 전용 판정 (2026-10-07 👤 대표 결정)
+// ─────────────────────────────────────────────────────────
+
+/**
+ * 검색 API 결과 원문을 담는 엔진. 이 행의 텍스트는 **어떤 AI 에도 넣지 않는다.**
+ *
+ * 근거: 네이버 검색 API 이용약관(2026-09-07 시행)은 검색 결과를 「AI 에 입력하거나 학습,
+ * 개선, 평가 및 노출 등에 활용」하는 것을 금지한다. 카카오(다음) 검색 약관 제5조 제30호도
+ * 범위가 넓다. → LLM 판정기·판정 v3 그림자·LETSUR/Gateway 호출을 모두 건너뛴다.
+ * (`@repo/audit/answer-buckets` 의 SEARCH_EXPOSURE_ENGINES 와 같은 집합 — ai 가 audit 를
+ *  역의존할 수 없어 여기 따로 둔다.)
+ */
+export const SEARCH_RESULT_ENGINE_IDS: ReadonlySet<string> = new Set([
+  "naver",
+  "daum",
+]);
+
+export function isSearchResultEngine(engineId: string | undefined): boolean {
+  return engineId !== undefined && SEARCH_RESULT_ENGINE_IDS.has(engineId);
+}
+
+/**
+ * 검색 결과 행의 규칙 전용 판정. LLM·네트워크 호출이 없다(동기 함수).
+ *
+ * 순서(앞이 우선):
+ *   1. 이름 표기가 없으면 absent — 기존 규칙과 같다.
+ *   2. 검색 결과 링크·본문에 **공식 도메인(하위 도메인 포함, isOfficialDomain)** 이 있으면
+ *      confirmed — 「공식 사이트가 이 검색 결과에 나왔다」는 그 자체가 검색 노출의 정의다
+ *      (과거 네이버 합성 행도 같은 기준: answer-buckets `legacyNaverBucket`).
+ *   3. 되물음형 다의성 문구 → unknown_brand, 같은 이름의 다른 도메인 → different_entity
+ *      (verifyMention 의 기존 규칙 그대로).
+ *   4. 고객이 등록한 상호(일반 단어 아님)·사업자등록번호·등록명을 품은 더 긴 공식 별칭이
+ *      본문에 있으면 confirmed (hasRegisteredEntityAnchor — 기존 앵커 그대로).
+ *   5. 그 밖(이름만 있음) → unverified + reason `search_rule_inconclusive`.
+ *      예전엔 이 경우가 LLM 으로 갔다. LLM 없이 「같은 회사다/아니다」를 지어내지 않고
+ *      「판정 보류」로 둔다 — 등장률 분모·Tracking 시계열에서 빠지고(못 잰 것을 「모름」으로
+ *      세지 않는다), 공개 여부(publication)는 AI 그룹만 보므로 잠정 처리를 늘리지 않는다.
+ *   ⚠️ 공식 페이지 제목·설명 토큰 일치(hasOfficialIdentityEvidence 의 토큰 경로)는 쓰지 않는다.
+ *      그 경로는 LLM 판정 **뒤의 보조 확인**용이라, 단독으로 confirmed 를 만들면 업종 일반어
+ *      겹침으로 동명 타사가 통과한다.
+ */
+export function verifySearchRowByRules(
+  input: VerifyInput & { stringMatched: boolean }
+): MentionVerdict {
+  const via = "rules_search_terms" as const;
+  if (!input.stringMatched) {
+    return { counted: false, quality: "absent", via };
+  }
+  const officialDomainExposed =
+    mentionsOfficialDomain(input.text, input.brandDomain) ||
+    (input.citedDomains ?? []).some((domain) =>
+      isOfficialDomain(domain, input.brandDomain)
+    );
+  if (officialDomainExposed) {
+    return { counted: true, quality: "confirmed", via };
+  }
+  if (UNRESOLVED_IDENTITY_RE.test(input.text)) {
+    return { counted: false, quality: "unknown_brand", via };
+  }
+  if (hasConflictingBrandDomain(input)) {
+    return { counted: false, quality: "different_entity", via };
+  }
+  if (hasRegisteredEntityAnchor(input)) {
+    return { counted: true, quality: "confirmed", via };
+  }
+  return {
+    counted: false,
+    quality: "unverified",
+    via,
+    reason: "search_rule_inconclusive",
+  };
+}
+
 /** 테스트·오프라인 분석용 — LLM 없이 규칙만으로 모호 여부를 본다. */
 export const __internal = {
   needsVerification,
@@ -860,6 +942,8 @@ export const __internal = {
 export interface VerifiableResponse {
   brandMentioned: boolean;
   citedSources?: Array<{ domain?: string; url?: string }>;
+  /** naver·daum(검색 API 결과)이면 LLM 없이 규칙만으로 판정한다(verifySearchRowByRules). */
+  engineId?: string;
   errorMessage: string | null;
   isStub?: boolean;
   mentionPosition?: number | null;
@@ -1144,7 +1228,10 @@ export async function verifyMentions<T extends VerifiableResponse>(
     }
     const verdictInputs = slice.map((r) => buildVerdictInput(r, brand));
     for (const [i, verdictInput] of verdictInputs.entries()) {
-      allVerdictInputs[start + i] = verdictInput;
+      // 검색 결과 행은 그림자 v3(LLM)에도 넣지 않는다 — 입력 null = 그림자 호출 0.
+      allVerdictInputs[start + i] = isSearchResultEngine(slice[i]?.engineId)
+        ? null
+        : verdictInput;
     }
     const verdicts = await Promise.all(
       slice.map((r, i): Promise<MentionVerdict> => {
@@ -1156,6 +1243,10 @@ export async function verifyMentions<T extends VerifiableResponse>(
             quality: "absent" as MentionQuality,
             via: "skipped" as const,
           });
+        }
+        // 🔴 네이버·다음 검색 결과는 약관상 AI 입력 금지 → 규칙 전용(LLM 호출 0).
+        if (isSearchResultEngine(r.engineId)) {
+          return Promise.resolve(verifySearchRowByRules(verdictInput));
         }
         return verifyMention(verdictInput).catch((error) => {
           if (isAbortError(error) || brand.signal?.aborted) {
@@ -1215,7 +1306,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
     absent: 0,
     unverified: 0,
   };
-  const viaDist = { rule: 0, llm: 0, skipped: 0 };
+  const viaDist = { rule: 0, llm: 0, skipped: 0, rules_search_terms: 0 };
   for (const r of out) {
     dist[r.mentionQuality] += 1;
     viaDist[r.verdictVia as keyof typeof viaDist] += 1;
@@ -1231,6 +1322,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
     viaRule: viaDist.rule,
     viaLlm: viaDist.llm,
     viaSkipped: viaDist.skipped,
+    viaRulesSearchTerms: viaDist.rules_search_terms,
   });
 
   return out;
