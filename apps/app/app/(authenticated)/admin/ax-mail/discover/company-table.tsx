@@ -63,6 +63,7 @@ function Employees({ row }: { row: CompanyRow }) {
 }
 
 export function CompanyTable({
+  filtered,
   labels,
   nextHref,
   page,
@@ -73,8 +74,9 @@ export function CompanyTable({
   selectedId,
   sort,
   sortLinks,
-  total,
 }: {
+  /** 조건(세그먼트·칩·단계)이 걸려 있나 — 0곳일 때 「적재 전」과 「조건에 맞는 곳 없음」을 가른다 */
+  filtered: boolean;
   labels: Labels;
   nextHref: string | null;
   page: number;
@@ -85,7 +87,6 @@ export function CompanyTable({
   selectedId: string | null;
   sort: DiscoverSort;
   sortLinks: { href: string; sort: DiscoverSort }[];
-  total: number;
 }) {
   const router = useRouter();
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -156,7 +157,7 @@ export function CompanyTable({
       </div>
       {rows.length === 0 ? (
         <p className={`p-5 text-sm ${subtle}`}>
-          {total === 0 ? labels.emptyNoData : labels.empty}
+          {filtered ? labels.empty : labels.emptyNoData}
         </p>
       ) : (
         <Table>

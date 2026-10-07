@@ -7,6 +7,7 @@ import {
 } from "@/lib/ax-mail/discovery/screen";
 import {
   discoverHref,
+  discoverQuery,
   PAGE_SIZE,
   parseDiscoverParams,
   SORTS,
@@ -107,6 +108,14 @@ export async function DiscoverScreen({
           />
           <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
             <CompanyTable
+              filtered={
+                discoverQuery({
+                  ...params,
+                  companyId: null,
+                  page: 1,
+                  sort: "employees",
+                }) !== ""
+              }
               labels={labels}
               nextHref={
                 params.page * PAGE_SIZE < guarded.value.screen.total
@@ -134,7 +143,6 @@ export async function DiscoverScreen({
                 href: discoverHref(params, { sort }),
                 sort,
               }))}
-              total={guarded.value.screen.total}
             />
             <aside className="xl:sticky xl:top-4">
               {guarded.value.card ? (
