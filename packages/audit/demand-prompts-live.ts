@@ -92,8 +92,7 @@ export async function resolveDemandQuestionSet(
     ko: input.brandNames.ko,
     en: input.brandNames.en ?? null,
   });
-  const hasVocabulary =
-    vocabulary.ingredients.length > 0 || vocabulary.types.length > 0;
+  const hasVocabulary = vocabulary.heads.size > 0;
   const wants = (m: DemandMarket) => hasVocabulary && input.markets.includes(m);
 
   const [kr, us, anchors] = await Promise.all([

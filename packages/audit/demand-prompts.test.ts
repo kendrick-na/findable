@@ -72,52 +72,62 @@ function franzSet(anchors: string[] | null = null) {
 }
 
 describe("demand prompts — catalog vocabulary & seeds", () => {
-  it("reads ingredients/types from product names, ignoring brand and promo words", () => {
+  it("reads heads/modifiers from product names, ignoring brand and promo words (no dictionary)", () => {
     const v = catalogVocabulary(PRODUCTS, BRAND_NAMES);
-    expect(v.ingredients.map((c) => c.id)).toEqual(["acr:PDRN", "stemcell"]);
-    expect(v.types.map((c) => c.id).sort()).toEqual([
-      "ampoule",
-      "patch",
-      "sheetmask",
-    ]);
+    expect([...v.heads.keys()]).toEqual(["앰플", "썬패치", "마스크팩"]);
+    expect([...v.modifiers.keys()]).toEqual(["pdrn", "줄기세포배양액", "투명"]);
     const seeds = demandSeedKeywords(v, { ko: "프란츠", en: "Franz" });
-    expect(seeds.KR.slice(0, 3)).toEqual([
+    expect(seeds.KR.slice(0, 4)).toEqual([
       "PDRN앰플",
+      "줄기세포배양액앰플",
+      "투명썬패치",
       "PDRN마스크팩",
-      "줄기세포앰플",
     ]);
     expect(seeds.KR.at(-1)).toBe("프란츠");
-    expect(seeds.US).toContain("pdrn serum");
-    expect(seeds.US).toContain("stem cell ampoule");
-    expect(seeds.US.at(-1)).toBe("franz");
+    expect(seeds.US).toEqual(["pdrn", "franz"]);
   });
 
-  it("returns nothing when the catalog has no known ingredient or type", () => {
+  it("works for a non-cosmetics catalog too (no K-beauty dictionary)", () => {
     const set = generateDemandQuestions({
       brandNames: ["노우버스"],
-      products: [{ name: "AI 전략 구독" }],
-      keywords: { KR: [naver("AI컨설팅", 5000)] },
+      products: [{ name: "AI 컨설팅" }, { name: "CTO 구독" }],
+      keywords: {
+        KR: [
+          naver("AI컨설팅", 5000),
+          naver("부동산컨설팅", 9000), // head 만 같고 프로필 낱말 없음 → 제외
+          naver("CTO구독", 40),
+        ],
+      },
     });
-    expect(set.questions.KR).toEqual([]);
+    expect(set.questions.KR.map((q) => [q.text, q.keyword])).toEqual(
+      expect.arrayContaining([
+        ["AI 컨설팅 추천해줘", "AI컨설팅"],
+        ["CTO 구독 추천해줘", "CTO구독"],
+      ])
+    );
+    expect(set.questions.KR.map((q) => q.keyword)).not.toContain(
+      "부동산컨설팅"
+    );
   });
 });
 
 describe("demand prompts — Franz fixture (KR)", () => {
   const set = franzSet();
 
-  it("keeps only category keywords: no brand, other brand, unsold ingredient, procedure or bare type", () => {
+  it("keeps only keywords that share the brand's own product terms", () => {
     const keywords = set.questions.KR.map((q) => q.keyword);
     for (const banned of [
-      "PDRN",
+      "PDRN", // head 없음(의료·연구 검색 섞임)
       "PDRN효과",
       "프란츠",
       "프란츠앰플",
       "아누아세럼",
       "메디큐브PDRN",
-      "히알루론산앰플",
-      "줄기세포주사",
+      "히알루론산앰플", // 이 브랜드 낱말 없음 + 조각 5글자
+      "줄기세포주사", // 다른 뜻(시술)
       "쇼핑몰",
-      "앰플",
+      "앰플", // head 단독
+      "주름앰플", // 대표 head 가 아님(상품 3개 미만) + 프로필 낱말 없음
       "PDRN패치",
     ]) {
       expect(keywords).not.toContain(banned);
@@ -125,8 +135,8 @@ describe("demand prompts — Franz fixture (KR)", () => {
     expect(set.excluded.KR).toEqual({
       brand: 2,
       otherBrand: 1,
-      lowVolume: 1,
-      unmatched: 8,
+      lowVolume: 0,
+      unmatched: 10,
     });
     expect(set.brandVolume.KR?.keyword).toBe("프란츠");
     expect(set.brandVolume.KR?.volume).toBe(4340);
@@ -134,24 +144,43 @@ describe("demand prompts — Franz fixture (KR)", () => {
 
   it("turns them into natural Korean questions with keyword + volume provenance", () => {
     expect(
-      set.questions.KR.map((q) => [q.text, q.topic, q.keyword, q.volume])
+      set.questions.KR.map((q) => [
+        q.text,
+        q.topic,
+        q.keyword,
+        q.volume,
+        q.expanded,
+      ])
     ).toEqual([
-      ["PDRN 앰플 추천해줘", "제품 추천", "PDRN앰플", 19_330],
-      ["주름 관리에 좋은 앰플 추천해줘", "피부고민", "주름앰플", 2000],
-      ["PDRN 앰플 효과 진짜 있어?", "효능·성분", "PDRN앰플효과", 600],
-      ["가성비 좋은 PDRN 앰플 추천해줘", "가격·가성비", "PDRN앰플가격", 400],
+      ["PDRN 앰플 추천해줘", "제품 추천", "PDRN앰플", 19_330, false],
+      ["PDRN 앰플 효과 진짜 있어?", "효능·성분", "PDRN앰플효과", 600, false],
       [
-        "PDRN 앰플 바르는 순서랑 사용법 알려줘",
+        "가성비 좋은 PDRN 앰플 추천해줘",
+        "가격·가성비",
+        "PDRN앰플가격",
+        400,
+        false,
+      ],
+      [
+        "PDRN 앰플 사용법이랑 순서 알려줘",
         "사용법",
         "PDRN앰플사용법",
         150,
+        false,
       ],
-      ["줄기세포 앰플 추천해줘", "제품 추천", "줄기세포앰플", 1510],
+      // 「줄기세포」 = 상품명 「줄기세포배양액」의 줄임말(프로필 낱말)
+      ["줄기세포 앰플 추천해줘", "제품 추천", "줄기세포앰플", 1510, false],
+      [
+        "줄기세포 앰플 효과 진짜 있어?",
+        "효능·성분",
+        "줄기세포앰플",
+        1510,
+        true,
+      ],
     ]);
     for (const q of set.questions.KR) {
       expect(q.lang).toBe("ko");
       expect(q.source).toBe("naver");
-      expect(q.expanded).toBe(false);
       expect(q.text).not.toMatch(/프란츠|franz/i);
     }
   });
@@ -175,7 +204,7 @@ describe("demand prompts — Franz fixture (KR)", () => {
       "PDRN 앰플 추천해 주세요"
     );
     expect(polite.questions.KR.map((q) => q.text)).toContain(
-      "주름 관리에 좋은 앰플 있을까요?"
+      "PDRN 앰플 효과 정말 있나요?"
     );
   });
 });
@@ -194,31 +223,20 @@ describe("demand prompts — Franz fixture (US)", () => {
     expect(set.brandVolume.US?.keyword).toBe("franz");
   });
 
-  it("writes natural English questions; expansion is marked", () => {
+  it("finds the English head (serum) from search data, not a translation table", () => {
     expect(
       set.questions.US.map((q) => [q.text, q.keyword, q.volume, q.expanded])
     ).toEqual([
       ["What's the best PDRN serum?", "pdrn serum", 22_200, false],
-      [
-        "Does PDRN serum actually work for skin?",
-        "pdrn serum benefits",
-        1300,
-        false,
-      ],
+      ["Does PDRN serum actually work?", "pdrn serum benefits", 1300, false],
       [
         "What's the best PDRN serum for wrinkles?",
         "pdrn serum for wrinkles",
         320,
         false,
       ],
-      ["What's the best stem cell serum?", "stem cell serum", 2400, false],
       ["What's a good affordable PDRN serum?", "pdrn serum", 22_200, true],
-      [
-        "How should I use PDRN serum in my skincare routine?",
-        "pdrn serum",
-        22_200,
-        true,
-      ],
+      ["How should I use PDRN serum?", "pdrn serum", 22_200, true],
     ]);
   });
 
@@ -231,10 +249,10 @@ describe("demand prompts — Franz fixture (US)", () => {
       ],
       keywords: {
         US: [
-          google("stem cell serum", 880),
-          google("serum stem cell", 880),
-          google("egf ampoule serum", 70),
           google("egf serum", 1900),
+          google("best egf serum", 880),
+          google("serum egf", 880),
+          google("egf ampoule serum", 70),
           google("cj serum", 5000),
         ],
       },
@@ -242,17 +260,14 @@ describe("demand prompts — Franz fixture (US)", () => {
     expect(
       set2.questions.US.map((q) => [q.text, q.keyword, q.expanded])
     ).toEqual([
+      // 「serum egf」「best egf serum」은 「egf serum」과 한 질문(검색량 큰 쪽)
       ["What's the best EGF serum?", "egf serum", false],
-      // 「serum stem cell」과 「stem cell serum」은 한 질문(동률이면 키워드 사전순)
-      ["What's the best stem cell serum?", "serum stem cell", false],
-      // 질문이 6개 미만이면 검색량 1위 핵심어를 빠진 주제로 넓힌다(expanded)
-      ["Does EGF serum actually work for skin?", "egf serum", true],
+      // 질문이 6개 미만이면 프로필 낱말 핵심어를 빠진 주제로 넓힌다(expanded)
+      ["Does EGF serum actually work?", "egf serum", true],
       ["What's a good affordable EGF serum?", "egf serum", true],
-      ["How should I use EGF serum in my skincare routine?", "egf serum", true],
-      ["Does stem cell serum actually work for skin?", "serum stem cell", true],
+      ["How should I use EGF serum?", "egf serum", true],
     ]);
     expect(set2.questions.US.map((q) => q.keyword)).not.toContain("cj serum");
-    expect(set2.questions.US.filter((q) => !q.expanded)).toHaveLength(2);
   });
 
   it("caps per market", () => {
@@ -330,7 +345,7 @@ describe("demand prompts — live orchestration with fake sources", () => {
         },
       }
     );
-    expect(calls).toEqual(["naver:6"]);
+    expect(calls).toEqual(["naver:8"]);
     expect(out.set.questions.KR.length).toBeGreaterThan(0);
     expect(out.set.questions.US).toEqual([]);
   });
@@ -365,7 +380,7 @@ describe("demand prompts — live orchestration with fake sources", () => {
           expanded: false,
         },
       },
-      expect.objectContaining({ text: "주름 관리에 좋은 앰플 추천해줘" }),
+      expect.objectContaining({ text: "PDRN 앰플 효과 진짜 있어?" }),
     ]);
     // 수요 기반 질문이 자리보다 적으면 기존 사이트 기반 질문으로 채운다
     const topped = await resolveDemandDiscovery({

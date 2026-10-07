@@ -178,7 +178,7 @@ export function medianPrice(
     : ((prices[mid - 1] as number) + (prices[mid] as number)) / 2;
 }
 
-async function fetchText(
+export async function fetchPublicText(
   url: URL,
   accept: string,
   signal?: AbortSignal
@@ -212,7 +212,7 @@ export async function resolveBrandCatalog(
   const origin = normalizePublicUrl(domain).origin;
   const host = new URL(origin).host;
   try {
-    const robots = await fetchText(
+    const robots = await fetchPublicText(
       new URL("/robots.txt", origin),
       "text/plain",
       signal
@@ -220,7 +220,7 @@ export async function resolveBrandCatalog(
     const disallow = robots ? parseRobotsDisallow(robots) : [];
 
     if (isAllowedByRobots("/products.json", disallow)) {
-      const raw = await fetchText(
+      const raw = await fetchPublicText(
         new URL("/products.json?limit=50", origin),
         "application/json",
         signal
@@ -240,7 +240,7 @@ export async function resolveBrandCatalog(
       }
     }
 
-    const sitemap = await fetchText(
+    const sitemap = await fetchPublicText(
       new URL("/sitemap.xml", origin),
       "application/xml,text/xml",
       signal
@@ -256,7 +256,7 @@ export async function resolveBrandCatalog(
     for (let i = 0; i < urls.length; i += PAGE_CONCURRENCY) {
       const pages = await Promise.all(
         urls.slice(i, i + PAGE_CONCURRENCY).map(async (url) => {
-          const html = await fetchText(new URL(url), "text/html", signal);
+          const html = await fetchPublicText(new URL(url), "text/html", signal);
           return html ? productFromPage(html, url) : null;
         })
       );
