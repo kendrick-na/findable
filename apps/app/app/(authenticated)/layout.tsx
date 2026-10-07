@@ -66,6 +66,7 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
             adminAudits: t.sidebar.adminAudits,
             partnerBadge: t.sidebar.partnerBadge,
             adminContent: t.sidebar.adminContent,
+            adminDiscover: t.sidebar.adminDiscover,
             adminEvidence: t.sidebar.adminEvidence,
             adminMeasure: t.sidebar.adminMeasure,
             adminMail: t.sidebar.adminMail,

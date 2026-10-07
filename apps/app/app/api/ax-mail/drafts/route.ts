@@ -9,6 +9,7 @@ import {
   contactBasisProblem,
   hasAdLabel,
 } from "@/lib/ax-mail/contact-basis";
+import { recordSalesDraft } from "@/lib/ax-mail/discovery/pipeline";
 import {
   createGoogleDraft,
   findSenderAlias,
@@ -35,6 +36,8 @@ const inputSchema = z.object({
   body: z.string().min(1).max(100_000),
   idempotencyKey: z.uuid(),
   leadId: z.string().trim().min(1).max(253).optional(),
+  // 「회사 찾기」 화면의 영업 리드(SalesLead) — 있으면 초안 저장 뒤 수신 근거·단계(drafted)를 남긴다.
+  salesLeadId: z.uuid().optional(),
   // 수신 근거 — 명함 수령·정보 요청·6개월 내 기존 고객·공개 문의 메일. 없으면 초안을 만들지 않는다.
   contactBasis: z.object({
     kind: z.enum(CONTACT_BASIS_KINDS),
@@ -74,6 +77,32 @@ function draftContentError(
   return null;
 }
 
+/**
+ * 영업 리드 기록 — 초안은 이미 Gmail 에 만들어졌으므로 여기서 실패해도 응답을 바꾸지 않는다.
+ * (플래그 꺼짐·테이블 없음이면 recordSalesDraft 가 조용히 건너뛴다.)
+ */
+async function recordSalesDraftSafely(
+  salesLeadId: string,
+  recipient: string,
+  contactBasis: DraftInput["contactBasis"],
+  userId: string
+): Promise<void> {
+  try {
+    const outcome = await recordSalesDraft(database, {
+      basis: contactBasis,
+      recipient,
+      salesLeadId,
+      userId,
+    });
+    log.info("ax_mail.draft.sales_lead", { outcome, salesLeadId });
+  } catch (error) {
+    log.warn("ax_mail.draft.sales_lead_failed", {
+      error: error instanceof Error ? error.message : "unknown",
+      salesLeadId,
+    });
+  }
+}
+
 export async function POST(request: Request) {
   const { orgId, userId } = await auth();
   if (!(orgId && userId && (await isAdmin()))) {
@@ -83,8 +112,15 @@ export async function POST(request: Request) {
   if (!input.success) {
     return Response.json({ error: "invalid_input" }, { status: 400 });
   }
-  const { recipient, subject, body, idempotencyKey, leadId, contactBasis } =
-    input.data;
+  const {
+    recipient,
+    subject,
+    body,
+    idempotencyKey,
+    leadId,
+    salesLeadId,
+    contactBasis,
+  } = input.data;
   const contentError = draftContentError(subject, body, contactBasis);
   if (contentError) {
     return Response.json(contentError, { status: 422 });
@@ -199,6 +235,14 @@ export async function POST(request: Request) {
       basisKind: contactBasis.kind,
       basisDate: contactBasis.date,
     });
+    if (salesLeadId) {
+      await recordSalesDraftSafely(
+        salesLeadId,
+        recipient,
+        contactBasis,
+        userId
+      );
+    }
     return Response.json(
       { draftId: remoteDraftId, sender: sender.email, status: "created" },
       { status: 201 }

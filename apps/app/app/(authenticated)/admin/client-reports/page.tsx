@@ -139,10 +139,18 @@ function ReportsBody({
     </table>
   );
 }
-export default async function ClientReportsAdminPage() {
+const AUDIT_JOB_ID_RE = /^[0-9a-f-]{36}$/i;
+
+export default async function ClientReportsAdminPage({
+  searchParams,
+}: {
+  // 「회사 찾기」 카드의 [리포트] 버튼이 측정 회차를 채워 보낸다(?auditJobId=).
+  searchParams: Promise<{ auditJobId?: string }>;
+}) {
   if (!(await isAdmin())) {
     notFound();
   }
+  const { auditJobId } = await searchParams;
   const webUrl = reportWebUrl(env.NEXT_PUBLIC_WEB_URL);
   const reports = await listIssuedReports(webUrl).catch(() => null);
 
@@ -170,7 +178,11 @@ export default async function ClientReportsAdminPage() {
           </p>
         </div>
 
-        <IssueForm />
+        <IssueForm
+          initialAuditJobId={
+            auditJobId && AUDIT_JOB_ID_RE.test(auditJobId) ? auditJobId : ""
+          }
+        />
 
         <section className="overflow-hidden rounded-xl border border-[color:var(--findable-hairline,#23252a)]">
           <h2 className="border-[color:var(--findable-hairline,#23252a)] border-b px-4 py-3 font-semibold text-sm">

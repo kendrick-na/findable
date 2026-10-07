@@ -13,8 +13,12 @@ const field =
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
-export function IssueForm() {
-  const [auditJobId, setAuditJobId] = useState("");
+export function IssueForm({
+  initialAuditJobId = "",
+}: {
+  initialAuditJobId?: string;
+}) {
+  const [auditJobId, setAuditJobId] = useState(initialAuditJobId);
   const [slug, setSlug] = useState("");
   const [version, setVersion] = useState(1);
   const [expiresInDays, setExpiresInDays] = useState(30);

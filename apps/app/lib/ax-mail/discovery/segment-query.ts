@@ -208,6 +208,8 @@ export interface SegmentQueryOptions {
   orderBy?: "employees" | "growth" | "recent";
   skip?: number;
   take?: number;
+  /** 필터 밖 조건(예: 화면의 영업 단계 칸) — 필터와 AND 로 묶는다 */
+  where?: Prisma.CompanyWhereInput;
 }
 
 const ORDER: Record<
@@ -231,7 +233,8 @@ export async function querySegment(
   filter: SegmentFilter,
   options: SegmentQueryOptions = {}
 ) {
-  const where = buildCompanyWhere(filter);
+  const base = buildCompanyWhere(filter);
+  const where = options.where ? { AND: [base, options.where] } : base;
   const [total, companies] = await Promise.all([
     db.company.count({ where }),
     db.company.findMany({

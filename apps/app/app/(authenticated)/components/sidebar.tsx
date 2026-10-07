@@ -120,6 +120,7 @@ interface NavGroup {
 export interface SidebarLabels {
   adminAudits: string;
   adminContent: string;
+  adminDiscover: string;
   adminEvidence: string;
   adminMail: string;
   adminMeasure: string;
@@ -270,6 +271,12 @@ const accountNav = (t: SidebarLabels): NavItem[] => [
 const adminNav = (t: SidebarLabels): NavItem[] => [
   { title: t.adminOps, url: "/admin/ops", icon: ActivityIcon },
   { title: t.adminMail, url: "/admin/ax-mail", icon: MailIcon },
+  // 🆕 2026-10-07: 공공 원천 회사 발굴(세그먼트·회사 카드). 플래그 꺼짐이면 화면이 안내만 띄운다.
+  {
+    title: t.adminDiscover,
+    url: "/admin/ax-mail/discover",
+    icon: ScanSearchIcon,
+  },
   {
     title: t.adminReports,
     url: "/admin/client-reports",
