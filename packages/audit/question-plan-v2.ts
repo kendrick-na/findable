@@ -84,8 +84,6 @@ export interface BuildPlanV2Input {
   /** 질문에 넣는 표기 — 한국어 질문은 ko, 영어 질문은 en. */
   displayNames: { en: string; ko: string };
   keywords: Partial<Record<DemandMarket, readonly DemandKeyword[] | null>>;
-  /** 지식iN 질문 유형 개수 — B 확장 순서에만 쓴다. */
-  kinStyle?: { cost: number; effect: number; howTo: number } | null;
   markets: readonly DemandMarket[];
   minVolume?: number;
   /** 등록 경쟁사 + 지난 회차 AI 답변에서 나온 다른 브랜드 이름(키워드 제외용). */
@@ -202,6 +200,73 @@ function collectCandidates(
   return { candidates, excluded };
 }
 
+/** LLM 후보 생성에 넘기는 키워드 한 줄(질문 개선 2026-10-07). */
+export interface PlanV2KeywordRow {
+  keyword: string;
+  /** true = 규칙 관련성 판정을 통과(프로필 낱말과 맞음). false = 판정 불가(unmatched) — LLM·심사가 거른다. */
+  matched: boolean;
+  source: DemandKeyword["source"];
+  volume: number;
+}
+
+/**
+ * 시장별 키워드 재료 — 우리 이름·다른 브랜드·다른 뜻(unrelated)·저검색량은 뺀다.
+ * 규칙 판정을 통과한 키워드 먼저, 그다음 판정 불가(unmatched) 키워드를 검색량 순으로(상한 limit).
+ */
+export function planV2KeywordPool(
+  market: DemandMarket,
+  input: BuildPlanV2Input,
+  limit: number
+): PlanV2KeywordRow[] {
+  if (input.profile.level === "none") {
+    return [];
+  }
+  const lang = LANG[market];
+  const rows = input.keywords[market] ?? [];
+  let terms = profileTermsFor(input.profile, lang, input.brandNames);
+  if (lang === "en") {
+    terms = discoverEnglishHeads(
+      terms,
+      rows.map((r) => r.keyword)
+    );
+  }
+  const ctx = relevanceContext(
+    terms,
+    input.brandNames,
+    input.otherBrandNames ?? [],
+    { allowHeadOnly: input.profile.businessType === "commerce" }
+  );
+  const minVolume = input.minVolume ?? DEFAULT_MIN_VOLUME;
+  const matched: PlanV2KeywordRow[] = [];
+  const unmatched: PlanV2KeywordRow[] = [];
+  const seen = new Set<string>();
+  for (const k of rows) {
+    const key = compactTerm(k.keyword);
+    if (k.lowVolume || k.volume < minVolume || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const rel = classifyKeywordRelevance(k.keyword, ctx);
+    const row = {
+      keyword: k.keyword,
+      volume: k.volume,
+      source: k.source,
+      matched: rel.ok,
+    };
+    if (rel.ok) {
+      matched.push(row);
+    } else if (rel.reason === "unmatched") {
+      unmatched.push(row);
+    }
+  }
+  const byVolume = (a: PlanV2KeywordRow, b: PlanV2KeywordRow) =>
+    b.volume - a.volume;
+  return [...matched.sort(byVolume), ...unmatched.sort(byVolume)].slice(
+    0,
+    limit
+  );
+}
+
 // ── 문장 틀(반말 대화체 / 캐주얼 영어) ────────────────────────────────
 function aText(
   market: DemandMarket,
@@ -296,24 +361,13 @@ function bKindOf(rel: RelevantKeyword): BKind {
   return "cost";
 }
 
-/** B 확장 순서 — 지식iN 에서 많이 묻는 유형 먼저(없으면 업종 말투 기본). */
-function bExpansionOrder(
-  commerce: boolean,
-  kin: BuildPlanV2Input["kinStyle"]
-): BKind[] {
-  const base: BKind[] = commerce
-    ? ["eff", "use", "cost"]
-    : ["use", "cost", "eff"];
-  if (!kin) {
-    return base;
-  }
-  const score: Record<BKind, number> = {
-    use: kin.howTo,
-    eff: kin.effect,
-    cost: kin.cost,
-    purpose: 0,
-  };
-  return [...base].sort((a, b) => score[b] - score[a]);
+/**
+ * B 확장 순서 — 업종 말투 기본.
+ * ⛔ 2026-10-07: 지식iN 질문 유형 개수로 순서를 바꾸던 입력을 지웠다(네이버 Open API 약관 —
+ *   AI 입력·검색 표시 외 용도 금지, 법무 검토 대기). brand-profile-live.ts 머리말 참조.
+ */
+function bExpansionOrder(commerce: boolean): BKind[] {
+  return commerce ? ["eff", "use", "cost"] : ["use", "cost", "eff"];
 }
 
 const provenanceOf = (c: Candidate, expanded: boolean): PlanV2Provenance => ({
@@ -444,7 +498,6 @@ function pickB(
   target: number,
   pool: Candidate[],
   commerce: boolean,
-  kin: BuildPlanV2Input["kinStyle"],
   picker: Picker
 ): number {
   let added = 0;
@@ -469,7 +522,7 @@ function pickB(
       added += 1;
     }
   }
-  const order = bExpansionOrder(commerce, kin);
+  const order = bExpansionOrder(commerce);
   const anchors = pool.filter((x) => x.bucket === "A" && x.rel.hasModifier);
   const fallbackAnchors = anchors.length > 0 ? anchors : pool;
   for (const [kindIndex, kind] of order.entries()) {
@@ -755,7 +808,7 @@ function pickD(
   return added;
 }
 
-function eTexts(
+export function eTexts(
   market: DemandMarket,
   name: string,
   commerce: boolean,
@@ -884,7 +937,7 @@ export function buildQuestionPlanV2(input: BuildPlanV2Input): QuestionPlanV2 {
       case "A":
         return pickA(m, target, pool, commerce, flagshipList, picker);
       case "B":
-        return pickB(m, target, pool, commerce, input.kinStyle, picker);
+        return pickB(m, target, pool, commerce, picker);
       case "C":
         return pickC(m, target, flagshipList, commerce, picker);
       case "D":

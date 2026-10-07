@@ -15,13 +15,20 @@ export interface PlanV2Provenance {
   keyword: string | null;
   leftover?: string[];
   offering?: string;
+  /**
+   * 질문 문장이 나온 곳(2026-10-07 질문 개선): template = 규칙 문장 틀, llm = LLM 이 프로필·키워드에
+   * 근거해 다시 쓴 문장. 없으면 template(이전 회차).
+   */
+  origin?: "template" | "llm";
   source:
     | "naver"
     | "google"
     | "catalog"
     | "site"
     | "competitor"
-    | "registration";
+    | "registration"
+    /** 검색량 키워드 없이 LLM 구조화 프로필(공식 사이트 근거)에만 기댄 질문. */
+    | "profile";
   volume: number | null;
 }
 

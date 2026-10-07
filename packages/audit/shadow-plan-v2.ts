@@ -11,6 +11,11 @@
 //     그 밖(최소 간격을 7일보다 줄였을 때)은 「daily-noclaude-v1」(Claude 제외 — 원가의 약 86%).
 //
 // 표기: [확인사실] 원가 근거 = docs/_적용/측정질문체계_설계안_20261007.md §5.
+//
+// ➕ 질문 개선(2026-10-07 대표 승인): 규칙 계획 위에 LLM 프로필 구조화 → 후보 과생성 → LLM 심사 →
+//   중복 제거 → 검색량 가중 선발(question-plan-v2-refine.ts). 보조 LLM 원가는 result.cost.shadowPlanV2Krw 에만
+//   더한다(totalKrw 아님). 지표는 result.shadowPlanV2.metrics.
+//   ⛔ 네이버 지식iN 은 이 경로에서 쓰지 않는다(네이버 Open API 약관 · 법무 검토 대기 — brand-profile-live.ts).
 
 import type { EngineResponse } from "@repo/ai/lib/engines";
 import { database } from "@repo/database";
@@ -37,11 +42,17 @@ import {
   SHADOW_MAX_CONTINUATIONS,
 } from "./plan-v2-contract";
 import {
-  buildQuestionPlanV2,
   PLAN_V2_TYPES,
   planV2NoteText,
   type QuestionPlanV2,
 } from "./question-plan-v2";
+import {
+  type LlmBrandProfile,
+  type PlanLlm,
+  type RefineMetrics,
+  type RejectedCandidate,
+  refineQuestionPlanV2,
+} from "./question-plan-v2-refine";
 
 export {
   ENGINE_SET_DAILY_NOCLAUDE,
@@ -190,8 +201,9 @@ export interface ShadowMeasurementContext {
   counts: Record<PlanV2Type, number>;
   engineSetKey: PlanV2EngineSetKey;
   excluded: QuestionPlanV2["excluded"];
+  /** LLM 심사·결정적 검사에서 떨어진 후보 예시(최대 30, 사유 포함). */
+  judgeRejected: RejectedCandidate[];
   keywordRows: CollectedProfile["diagnostics"]["keywordRows"];
-  kinTitles: number | null;
   markets: Record<DemandMarket, number>;
   nameLessCount: number;
   note: QuestionPlanV2["note"];
@@ -206,6 +218,8 @@ export interface ShadowMeasurementContext {
     offerings: string[];
     sitePagesRead: number;
     sources: CollectedProfile["profile"]["sources"];
+    /** LLM 구조화 프로필(공식 사이트 근거만). 실패하면 null(= 규칙 기반). */
+    structured: LlmBrandProfile | null;
   };
   questionPlanVersion: typeof QUESTION_PLAN_V2;
   seeds: CollectedProfile["seeds"];
@@ -218,6 +232,8 @@ export interface ShadowPlanV2Checkpoint {
   engineSetKey: PlanV2EngineSetKey;
   maxContinuations: number;
   measurementContext: ShadowMeasurementContext;
+  /** 질문 개선 지표(2026-10-07). 이전 checkpoint 에는 없다. */
+  metrics?: RefineMetrics;
   questionCount: number;
   questionPlanVersion: typeof QUESTION_PLAN_V2;
   /** checkpoint.prompts 에서 그림자 질문이 시작되는 위치(앞은 기존 세트). */
@@ -226,6 +242,8 @@ export interface ShadowPlanV2Checkpoint {
 
 export interface ShadowPlanDeps {
   collect: (input: CollectProfileInput) => Promise<CollectedProfile>;
+  /** 질문 개선 보조 LLM(프로필·후보·심사). null 이면 규칙 계획 그대로. */
+  llm: PlanLlm | null;
   previousAnswerBrands: (args: {
     brandId: string;
     brandName: string;
@@ -305,8 +323,17 @@ async function queryPreviousAnswerBrands(args: {
     .slice(0, MAX_ANSWER_BRANDS);
 }
 
+/** 보조 LLM 실호출 — 필요할 때만 불러온다(규칙 경로·테스트가 `ai` 를 싣지 않게). */
+const liveQuestionPlanLlm: PlanLlm = async (request) => {
+  const { questionPlanLlmCall } = await import(
+    "@repo/ai/lib/question-plan-llm"
+  );
+  return questionPlanLlmCall(request);
+};
+
 export const liveShadowPlanDeps: ShadowPlanDeps = {
   collect: (input) => collectBrandProfile(input),
+  llm: liveQuestionPlanLlm,
   recentShadowRuns: queryRecentShadowRuns,
   previousAnswerBrands: queryPreviousAnswerBrands,
 };
@@ -338,7 +365,12 @@ export interface ResolvedShadowPlan {
 
 const OFFERINGS_IN_CONTEXT = 12;
 /** 프로필·검색량 수집 상한 — 질문 시작 마감(run-budget)을 먹지 않게. */
-export const SHADOW_PLAN_TIMEOUT_MS = 25_000;
+export const SHADOW_COLLECT_TIMEOUT_MS = 25_000;
+/** 질문 개선 LLM 3회(프로필·후보·심사) 상한. 넘기면 그 단계부터 규칙 기반으로 돌아간다. */
+export const SHADOW_REFINE_TIMEOUT_MS = 45_000;
+/** 그림자 계획 전체 상한(runner 가 남은 시간을 볼 때 쓴다). */
+export const SHADOW_PLAN_TIMEOUT_MS =
+  SHADOW_COLLECT_TIMEOUT_MS + SHADOW_REFINE_TIMEOUT_MS;
 
 /**
  * 기존 세트 checkpoint 에 그림자 기록을 붙인다. startIndex 는 실제 기존 세트 질문 수,
@@ -389,9 +421,14 @@ export async function resolveShadowPlanV2(
   }
   const now = args.now ?? new Date();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SHADOW_PLAN_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), SHADOW_COLLECT_TIMEOUT_MS);
   timer.unref?.();
-  const onAbort = () => controller.abort();
+  const refineController = new AbortController();
+  let refineTimer: ReturnType<typeof setTimeout> | null = null;
+  const onAbort = () => {
+    controller.abort();
+    refineController.abort();
+  };
   args.signal?.addEventListener("abort", onAbort, { once: true });
   try {
     const minIntervalDays = shadowMinIntervalDays(env);
@@ -437,20 +474,32 @@ export async function resolveShadowPlanV2(
       c.name,
       ...(c.aliases ?? []),
     ]);
-    const plan = buildQuestionPlanV2({
-      profile: collected.profile,
-      keywords: collected.keywords,
-      kinStyle: collected.kinStyle,
-      markets,
-      brandNames: [
-        args.brandNames.ko,
-        args.brandNames.en,
-        ...args.brandNames.variants,
-      ],
-      displayNames: { ko: args.brandNames.ko, en: args.brandNames.en },
-      competitors: args.competitors.map((c) => c.name),
-      otherBrandNames: [...competitorNames, ...answerBrands],
-    });
+    clearTimeout(timer);
+    refineTimer = setTimeout(
+      () => refineController.abort(),
+      SHADOW_REFINE_TIMEOUT_MS
+    );
+    refineTimer.unref?.();
+    const refined = await refineQuestionPlanV2(
+      {
+        profile: collected.profile,
+        keywords: collected.keywords,
+        industry: args.industry ?? null,
+        siteTextTerms: args.siteTextTerms ?? [],
+        markets,
+        brandNames: [
+          args.brandNames.ko,
+          args.brandNames.en,
+          ...args.brandNames.variants,
+        ],
+        displayNames: { ko: args.brandNames.ko, en: args.brandNames.en },
+        competitors: args.competitors.map((c) => c.name),
+        otherBrandNames: [...competitorNames, ...answerBrands],
+      },
+      deps.llm,
+      refineController.signal
+    );
+    const plan = refined.plan;
     const engineSetKey = cadence.engineSetKey;
     const prompts = planV2RunPrompts(plan, engineSetKey);
     if (prompts.length === 0) {
@@ -468,7 +517,7 @@ export async function resolveShadowPlanV2(
       excluded: plan.excluded,
       seeds: collected.seeds,
       keywordRows: collected.diagnostics.keywordRows,
-      kinTitles: collected.kinStyle?.total ?? null,
+      judgeRejected: refined.rejected,
       cadence: { minIntervalDays },
       profile: {
         level: collected.profile.level,
@@ -481,6 +530,7 @@ export async function resolveShadowPlanV2(
         offerings: collected.profile.offerings
           .slice(0, OFFERINGS_IN_CONTEXT)
           .map((o) => o.name),
+        structured: refined.llmProfile,
       },
     };
     const total = args.mainPromptCount + prompts.length;
@@ -495,6 +545,7 @@ export async function resolveShadowPlanV2(
       ),
       createdAt: now.toISOString(),
       measurementContext,
+      metrics: refined.metrics,
     };
     log.info("audit.shadow_plan_v2.planned", {
       brandId: args.brandId,
@@ -503,6 +554,13 @@ export async function resolveShadowPlanV2(
       nameLess: plan.nameLessCount,
       profileLevel: collected.profile.level,
       maxContinuations: checkpoint.maxContinuations,
+      profileSource: refined.metrics.profileSource,
+      judge: refined.metrics.judge,
+      candidatesGenerated: refined.metrics.candidatesGenerated,
+      judgePassRate: refined.metrics.judgePassRate,
+      dedupRemoved: refined.metrics.dedupRemoved,
+      demandLinkRate: refined.metrics.demandLinkRate,
+      llmCostKrw: refined.metrics.llmCostKrw,
     });
     return { prompts, checkpoint };
   } catch (error) {
@@ -513,6 +571,9 @@ export async function resolveShadowPlanV2(
     return null;
   } finally {
     clearTimeout(timer);
+    if (refineTimer) {
+      clearTimeout(refineTimer);
+    }
     args.signal?.removeEventListener("abort", onAbort);
   }
 }
@@ -546,6 +607,8 @@ export interface ShadowPlanV2Result {
   cost: {
     costModelVersion: number;
     perEngine: Array<{ engineId: string; krw: number }>;
+    /** 질문 개선 보조 LLM(프로필·후보·심사) 원가. 엔진 원가(totalKrw)와 따로 둔다. */
+    planningLlmKrw: number;
     totalKrw: number;
   };
   engineResponses: ShadowAnswerRow[];
@@ -555,6 +618,8 @@ export interface ShadowPlanV2Result {
     questionsPlanned: number;
     verification: "verified" | "unverified";
   };
+  /** 질문 개선 지표(이전 checkpoint 로 끝난 회차는 null). */
+  metrics: RefineMetrics | null;
   questionPlanVersion: typeof QUESTION_PLAN_V2;
   questions: Array<{
     index: number;
@@ -584,7 +649,7 @@ const usable = (row: { errorMessage: string | null; isStub?: boolean }) =>
 export function buildShadowPlanV2Result(args: {
   batches: readonly (readonly EngineResponse[])[];
   checkpoint: ShadowPlanV2Checkpoint;
-  cost: ShadowPlanV2Result["cost"];
+  cost: Omit<ShadowPlanV2Result["cost"], "planningLlmKrw">;
   lateCellOf?: (
     questionIndex: number,
     engineId: string
@@ -667,6 +732,10 @@ export function buildShadowPlanV2Result(args: {
     questions,
     engineResponses: rows,
     summary: { byType, nameLess },
-    cost: args.cost,
+    metrics: args.checkpoint.metrics ?? null,
+    cost: {
+      ...args.cost,
+      planningLlmKrw: args.checkpoint.metrics?.llmCostKrw ?? 0,
+    },
   };
 }

@@ -167,7 +167,6 @@ const collected = (): CollectedProfile => ({
     ],
     US: [{ keyword: "egf serum", volume: 1900, source: "google" }],
   },
-  kinStyle: null,
   seeds: { KR: ["PDRN앰플"], US: ["egf"] },
   diagnostics: {
     catalogSource: "sitemap",
@@ -208,6 +207,7 @@ function fakeDeps(over: Partial<ShadowPlanDeps> = {}): ShadowPlanDeps & {
       return Promise.resolve([]);
     },
     previousAnswerBrands: () => Promise.resolve(["아누아"]),
+    llm: null,
     ...over,
   };
 }
@@ -266,6 +266,53 @@ describe("shadow plan v2 — resolve (fail-open, cost-capped)", () => {
         cadence: { minIntervalDays: 7 },
       },
     });
+  });
+
+  it("records question-improvement metrics and keeps planning LLM cost out of totalKrw", async () => {
+    const llm = (request: { callSite: string }) =>
+      Promise.resolve({
+        costKrw: 2,
+        text:
+          request.callSite === "question-plan.profile"
+            ? JSON.stringify({
+                products: [
+                  { name: "앰플", type: "product" },
+                  { name: "PDRN", type: "ingredient" },
+                ],
+                useCases: [],
+                targetCustomers: [],
+                problemsSolved: [],
+                categories: ["스킨케어 앰플"],
+                differentiators: [],
+              })
+            : "{}",
+      });
+    const out = await resolveShadowPlanV2(
+      { ...ARGS, env: ENV },
+      fakeDeps({ llm })
+    );
+    if (!out) {
+      throw new Error("expected a plan");
+    }
+    expect(out.checkpoint.metrics).toMatchObject({
+      profileSource: "llm",
+      judge: "unavailable",
+      llmCostKrw: 6,
+      llmCalls: { profile: "ok", generate: "invalid", judge: "invalid" },
+    });
+    expect(
+      out.checkpoint.measurementContext.profile.structured?.categories
+    ).toEqual(["스킨케어 앰플"]);
+    expect(out.checkpoint.measurementContext).not.toHaveProperty("kinTitles");
+    const result = buildShadowPlanV2Result({
+      checkpoint: out.checkpoint,
+      prompts: out.prompts,
+      batches: [],
+      verification: "unverified",
+      cost: { costModelVersion: 2, totalKrw: 10, perEngine: [] },
+    });
+    expect(result.metrics?.llmCostKrw).toBe(6);
+    expect(result.cost).toMatchObject({ totalKrw: 10, planningLlmKrw: 6 });
   });
 
   it("never throws: a collector failure means no shadow", async () => {

@@ -495,10 +495,6 @@ describe("brand profile collection — live orchestration with fake sources", ()
     }),
     naverVolumes: async () => KV_KR,
     googleIdeas: async () => null,
-    kinTitles: async () => [
-      "AI 교육 어떻게 시작하나요?",
-      "AI 컨설팅 비용 얼마인가요?",
-    ],
     ...over,
   });
   const input: CollectProfileInput = {
@@ -508,15 +504,16 @@ describe("brand profile collection — live orchestration with fake sources", ()
     markets: ["KR"],
   };
 
-  it("collects a service profile, seeds from service names, counts kin styles only", async () => {
+  it("collects a service profile and seeds from service names (no Naver 지식iN)", async () => {
     const out = await collectBrandProfile(input, deps());
     expect(out.profile.businessType).toBe("service");
     expect(out.seeds.KR).toEqual(
       expect.arrayContaining(["AI전략", "CTO구독", "AI교육"])
     );
     expect(out.seeds.KR.at(-1)).toBe("노우버스");
-    expect(out.kinStyle).toMatchObject({ total: 2, howTo: 1, cost: 1 });
-    expect(JSON.stringify(out)).not.toContain("어떻게 시작하나요");
+    // ⛔ 지식iN 은 네이버 Open API 약관(AI 입력·검색 표시 외 용도 금지)으로 끔(2026-10-07).
+    expect(Object.keys(deps())).not.toContain("kinTitles");
+    expect(out).not.toHaveProperty("kinStyle");
   });
 
   it("does not call keyword APIs when there is no profile", async () => {

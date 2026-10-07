@@ -1591,6 +1591,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         questionsAnswered: shadowBatches.length,
         verification: verified ? "verified" : "unverified",
         costKrw: shadowPlanV2.cost.totalKrw,
+        planningLlmKrw: shadowPlanV2.cost.planningLlmKrw,
       });
     }
 
@@ -1643,7 +1644,16 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       briefingStatus: "not_requested" as const,
       // 그림자 v2 원가는 totalKrw 에 **넣지 않고** 따로 적는다(기존 회차 원가 시계열 유지 · 운영 합산용).
       cost: shadowPlanV2
-        ? { ...costSummary, shadowPlanV2Krw: shadowPlanV2.cost.totalKrw }
+        ? {
+            ...costSummary,
+            // 그림자 엔진 원가 + 질문 개선 보조 LLM 원가(totalKrw 에는 넣지 않는다).
+            shadowPlanV2Krw:
+              Math.round(
+                (shadowPlanV2.cost.totalKrw +
+                  shadowPlanV2.cost.planningLlmKrw) *
+                  100
+              ) / 100,
+          }
         : costSummary,
       engineResponses: flat.map((r, index) => ({
         // Excerpts remain a display convenience; revalidation must retain the

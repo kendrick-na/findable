@@ -1,8 +1,10 @@
-// 브랜드 프로필 수집 — 외부 데이터(공식 사이트·네이버 키워드도구·구글 키워드 플래너·지식iN)
+// 브랜드 프로필 수집 — 외부 데이터(공식 사이트·네이버 키워드도구·구글 키워드 플래너)
 // (2026-10-07, 질문 체계 v2 A1). 계산은 brand-profile.ts·question-plan-v2.ts(순수)가 한다.
 //
 // ⛔ 실패해도 측정을 막지 않는다: 출처마다 실패 = 빈 값. 키가 없는 출처는 「꺼짐」이다.
-// ⚠️ 지식iN 질문 제목 원문은 저장하지 않는다(네이버 약관) — 말투·질문 유형 개수만 센다.
+// ⛔ 네이버 지식iN 은 이 경로에서 **쓰지 않는다**(2026-10-07 대표 결정 · 법무 검토 대기):
+//   네이버 Open API 이용약관이 검색 결과를 AI 입력·검색 결과 표시 외 용도로 쓰는 것을 금한다.
+//   질문 유형 개수만 세던 kinTitles 호출을 지웠다 — 법무 검토 전에는 되살리지 않는다.
 // ⚠️ 네이버 쇼핑 검색 API 는 쓰지 않는다: 2026-10-07 실호출에서 `/v1/search/shop.json` 이
 //   「존재하지 않는 검색 api」(SE05, 404)였다. 쇼핑 카테고리 대체 경로는 키워드도구 검색량이다.
 
@@ -23,7 +25,6 @@ export interface ProfileSourceDeps {
     seeds: string[],
     signal?: AbortSignal
   ) => Promise<DemandKeyword[] | null>;
-  kinTitles: (query: string, signal?: AbortSignal) => Promise<string[] | null>;
   naverVolumes: (
     seeds: string[],
     signal?: AbortSignal
@@ -40,41 +41,7 @@ export const liveProfileSourceDeps: ProfileSourceDeps = {
   siteStructure: resolveSiteStructure,
   naverVolumes: liveDemandSourceDeps.naverVolumes,
   googleIdeas: liveDemandSourceDeps.googleIdeas,
-  kinTitles: liveDemandSourceDeps.kinTitles,
 };
-
-/** 지식iN 질문 제목에서 센 질문 유형 개수(원문 미보관). */
-export interface KinStyleCounts {
-  cost: number;
-  effect: number;
-  howTo: number;
-  polite: number;
-  recommend: number;
-  total: number;
-}
-
-const HOW_TO_RE = /어떻게|방법|순서|사용법|시작/;
-const EFFECT_RE = /효과|있나요|괜찮|도움/;
-const COST_RE = /비용|가격|얼마|견적/;
-const RECOMMEND_RE = /추천|어디|뭐가|어떤/;
-const POLITE_RE = /(요|까요|나요|세요|니다)\s*[?？!.]*$/;
-
-export function kinStyleCounts(
-  titles: readonly string[] | null
-): KinStyleCounts | null {
-  if (!titles) {
-    return null;
-  }
-  const count = (re: RegExp) => titles.filter((t) => re.test(t)).length;
-  return {
-    total: titles.length,
-    howTo: count(HOW_TO_RE),
-    effect: count(EFFECT_RE),
-    cost: count(COST_RE),
-    recommend: count(RECOMMEND_RE),
-    polite: count(POLITE_RE),
-  };
-}
 
 export interface CollectProfileInput {
   brandNames: { en?: string | null; ko: string; variants?: readonly string[] };
@@ -97,7 +64,6 @@ export interface CollectedProfile {
     sitePagesRead: number;
   };
   keywords: Partial<Record<DemandMarket, DemandKeyword[] | null>>;
-  kinStyle: KinStyleCounts | null;
   profile: BrandProfile;
   seeds: Record<DemandMarket, string[]>;
 }
@@ -134,22 +100,18 @@ export async function collectBrandProfile(
   const wants = (m: DemandMarket) =>
     profile.level !== "none" && input.markets.includes(m);
   const safe = <T>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
-  const [kr, us, kin] = await Promise.all([
+  const [kr, us] = await Promise.all([
     wants("KR") && seeds.KR.length > 0
       ? safe(deps.naverVolumes(seeds.KR, input.signal))
       : null,
     wants("US") && seeds.US.length > 0
       ? safe(deps.googleIdeas(seeds.US, input.signal))
       : null,
-    wants("KR") && seeds.KR[0]
-      ? safe(deps.kinTitles(seeds.KR[0], input.signal))
-      : null,
   ]);
   return {
     profile,
     seeds,
     keywords: { KR: kr, US: us },
-    kinStyle: kinStyleCounts(kin),
     diagnostics: {
       catalogSource: catalog.source,
       catalogProducts: catalog.products.length,
