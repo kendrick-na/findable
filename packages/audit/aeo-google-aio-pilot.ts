@@ -39,8 +39,10 @@ export const AEO_PILOT_MAX_QUESTIONS = 20;
 export const AEO_PILOT_MIN_DAYS = 7;
 /** 무료 5,000건/월보다 낮게 멈춘다(다른 사용·재시도 여유). */
 export const AEO_PILOT_MONTHLY_CAP = 4500;
-/** 동시 요청 수(무료 범위 · 응답 10초 안팎). */
-export const AEO_PILOT_CONCURRENCY = 4;
+/**
+ * 동시 요청 수. 실측(2026-10-07) 응답 18~36초 · 상한 60초 → 20문항 ÷ 5 = 4바퀴 ≈ 최악 240초.
+ */
+export const AEO_PILOT_CONCURRENCY = 5;
 const TOP_DOMAINS = 10;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** 결과를 덧붙일 원본 회차는 완료 후 이 시간이 지난 것만(늦은 답 반영 등 다른 쓰기와 겹치지 않게). */
@@ -418,6 +420,8 @@ const stringList = (v: unknown): string[] =>
 export async function runAeoGoogleAioPilot(args: {
   deadlineMs?: number;
   deps?: AeoPilotDeps;
+  /** 함수 마감 직전에 남은 요청을 끊는다(끊긴 질문은 failed·aborted — 분모에서 빠진다). */
+  signal?: AbortSignal;
   env?: Env;
   now?: Date;
 }): Promise<AeoPilotRunSummary> {
@@ -486,6 +490,7 @@ export async function runAeoGoogleAioPilot(args: {
           fetchAio: deps.fetchAio,
           env,
           now,
+          signal: args.signal,
         });
         used += run.cost.requestsAttempted;
         await deps.appendRun(source.auditJobId, run);

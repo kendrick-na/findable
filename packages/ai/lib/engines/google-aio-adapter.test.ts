@@ -172,6 +172,50 @@ describe("fetchGoogleAio", () => {
     });
     expect(limited.failure?.kind).toBe("http_rate_limit");
 
+    // 실측: HTTP 200 + 빈 본문 + x-brd-status-code: 502 = 구글 수집 실패(비과금).
+    const upstream = await fetchGoogleAio({
+      query: "q",
+      market: "US",
+      env: ENV,
+      fetchImpl: vi.fn(() =>
+        Promise.resolve(
+          new Response("", {
+            status: 200,
+            headers: { "x-brd-status-code": "502" },
+          })
+        )
+      ) as unknown as typeof fetch,
+    });
+    expect(upstream).toMatchObject({
+      status: "failed",
+      failure: { kind: "upstream", httpStatus: 502 },
+      cost: { credits: 0 },
+    });
+    const empty = await fetchGoogleAio({
+      query: "q",
+      market: "US",
+      env: ENV,
+      fetchImpl: okFetch(""),
+    });
+    expect(empty).toMatchObject({
+      failure: { kind: "upstream" },
+      cost: { credits: 0 },
+    });
+    const brdOk = await fetchGoogleAio({
+      query: "q",
+      market: "KR",
+      env: ENV,
+      fetchImpl: vi.fn(() =>
+        Promise.resolve(
+          new Response(SHOWN, {
+            status: 200,
+            headers: { "x-brd-status-code": "200" },
+          })
+        )
+      ) as unknown as typeof fetch,
+    });
+    expect(brdOk.status).toBe("shown");
+
     const bad = await fetchGoogleAio({
       query: "q",
       market: "KR",

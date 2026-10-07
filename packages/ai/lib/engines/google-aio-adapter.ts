@@ -43,13 +43,18 @@ export type AioFailureKind =
   | "http_rate_limit"
   | "http_client"
   | "http_server"
-  | "parse";
+  | "parse"
+  /** HTTP 200 이지만 x-brd-status-code 가 2xx 가 아니거나 본문이 빔(구글 쪽 수집 실패 · 비과금). */
+  | "upstream";
 
 export const BRIGHTDATA_REQUEST_ENDPOINT = "https://api.brightdata.com/request";
 /** 공식가 $1.5 / 1,000건(무료 범위를 넘은 뒤). */
 export const BRIGHTDATA_SERP_USD_PER_1K = 1.5;
-/** AI 개요 렌더는 +5~10초. 넉넉히 45초. */
-export const GOOGLE_AIO_TIMEOUT_MS = 45_000;
+/**
+ * AI 개요 렌더는 공식 문서상 +5~10초지만, 실측(2026-10-07 스모크)은 응답 18~36초,
+ * 45초 상한에서 끊긴 사례가 있었다 → 60초.
+ */
+export const GOOGLE_AIO_TIMEOUT_MS = 60_000;
 /** 저장 본문 상한(전문 보관 아님 — 길이·언급 판정 근거만). */
 export const AIO_TEXT_MAX_CHARS = 4000;
 const MAX_CITATIONS = 30;
@@ -354,7 +359,21 @@ export async function fetchGoogleAio(
       // 본문은 읽지 않는다(키·내부 메시지가 섞일 수 있음). 상태 코드만.
       return fail(httpFailureKind(response.status), false, response.status);
     }
+    // 🔴 실측(2026-10-07): Bright Data 는 구글 수집이 실패해도 HTTP 200 + 빈 본문을 주고,
+    //   실제 결과는 `x-brd-status-code` 헤더(예: 502)에 싣는다. 이걸 파싱 실패로 세면 안 된다.
+    //   「성공 건만 과금」이므로 크레딧 0 으로 기록한다.
+    const upstream = Number(response.headers.get("x-brd-status-code"));
+    if (
+      Number.isFinite(upstream) &&
+      upstream > 0 &&
+      !(upstream >= 200 && upstream < 300)
+    ) {
+      return fail("upstream", false, upstream);
+    }
     const raw = await response.text();
+    if (!raw.trim()) {
+      return fail("upstream", false, response.status);
+    }
     let body: unknown;
     try {
       body = decodeBody(raw);
