@@ -30,6 +30,7 @@ import {
   HELPER_GATEWAY_MODEL_ID,
   letsurModelWithFallback,
 } from "./letsur-fallback";
+import { isSearchResultEngine } from "./search-api-rows";
 
 export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
 
@@ -849,23 +850,12 @@ export async function verifyMention(
 // 검색 API 결과(네이버·다음) — 규칙 전용 판정 (2026-10-07 👤 대표 결정)
 // ─────────────────────────────────────────────────────────
 
-/**
- * 검색 API 결과 원문을 담는 엔진. 이 행의 텍스트는 **어떤 AI 에도 넣지 않는다.**
- *
- * 근거: 네이버 검색 API 이용약관(2026-09-07 시행)은 검색 결과를 「AI 에 입력하거나 학습,
- * 개선, 평가 및 노출 등에 활용」하는 것을 금지한다. 카카오(다음) 검색 약관 제5조 제30호도
- * 범위가 넓다. → LLM 판정기·판정 v3 그림자·LETSUR/Gateway 호출을 모두 건너뛴다.
- * (`@repo/audit/answer-buckets` 의 SEARCH_EXPOSURE_ENGINES 와 같은 집합 — ai 가 audit 를
- *  역의존할 수 없어 여기 따로 둔다.)
- */
-export const SEARCH_RESULT_ENGINE_IDS: ReadonlySet<string> = new Set([
-  "naver",
-  "daum",
-]);
-
-export function isSearchResultEngine(engineId: string | undefined): boolean {
-  return engineId !== undefined && SEARCH_RESULT_ENGINE_IDS.has(engineId);
-}
+// 검색 API 결과 엔진 집합·판별은 공용 가드(`./search-api-rows`)가 단일 출처다.
+//   이 파일의 기존 export 는 호환을 위해 그대로 다시 내보낸다.
+export {
+  isSearchResultEngine,
+  SEARCH_RESULT_ENGINE_IDS,
+} from "./search-api-rows";
 
 /**
  * 검색 결과 행의 규칙 전용 판정. LLM·네트워크 호출이 없다(동기 함수).

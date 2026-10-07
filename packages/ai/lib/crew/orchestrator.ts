@@ -29,6 +29,12 @@ import {
   unknownIndustryProfile,
 } from "../industry-profile";
 import {
+  formatSearchApiRowSummary,
+  summarizeSearchApiRows,
+  topCitedDomainsWithoutSearchRows,
+  withoutSearchApiRows,
+} from "../search-api-rows";
+import {
   type AnalystOutput,
   analystOutputSchema,
   CREW_AGENTS,
@@ -136,11 +142,20 @@ function isGatewayConfigured(): boolean {
   );
 }
 
-function filterKoreanEngineResponses(
+/**
+ * 민지에게 줄 **원문 허용** 한국 행 — HyperCLOVA(과거 회차 LLM 답변)만.
+ *
+ * 🔴 2026-10-07 👤 대표 결정: 네이버·다음 **검색 API 결과 원문은 어떤 LLM 에도 넣지 않는다**
+ *   (네이버 검색 API 약관 2026-09-07 시행 — 검색 결과의 AI 입력 금지, 카카오 약관 제5조 제30호).
+ *   예전엔 이 함수가 naver·daum 행을 통째로(본문 600자 + 인용 도메인) 민지 프롬프트에 넣었다.
+ *   검색 행은 이제 `summarizeSearchApiRows` 의 **건수만** 들어간다.
+ */
+function filterKoreanLlmEngineResponses(
   responses: EngineResponse[]
 ): EngineResponse[] {
-  const korean = new Set<string>(["hyperclova", "naver", "daum"]);
-  return responses.filter((r) => korean.has(r.engineId));
+  return withoutSearchApiRows(responses).filter(
+    (r) => r.engineId === "hyperclova"
+  );
 }
 
 function filterEnglishEngineResponses(
@@ -174,10 +189,12 @@ function engineStatusLabel(r: EngineResponse): string {
 }
 
 function buildEngineContext(responses: EngineResponse[]): string {
-  if (responses.length === 0) {
+  // 이중 방어 — 호출부가 걸렀더라도 검색 API 행 원문은 여기서도 통과시키지 않는다.
+  const llmSafe = withoutSearchApiRows(responses);
+  if (llmSafe.length === 0) {
     return "(엔진 응답 데이터 없음)";
   }
-  return responses
+  return llmSafe
     .map((r, i) => {
       const status = engineStatusLabel(r);
       const mention = r.brandMentioned
@@ -196,6 +213,13 @@ function buildEngineContext(responses: EngineResponse[]): string {
     })
     .join("\n");
 }
+
+/**
+ * 프롬프트에 싣는 상위 인용 도메인 수.
+ * ⚠️ `metrics.topCitedDomains` 를 그대로 쓰지 않는다 — 그건 네이버·다음 검색 결과 링크의
+ *   도메인까지 섞어 센 값이라, 검색 결과의 일부가 LLM 에 들어간다(2026-10-07 약관 대응).
+ */
+const TOP_DOMAINS_LIMIT = 10;
 
 const LANGUAGE_LABEL: Record<"ko" | "en" | "both", string> = {
   ko: "한국어만 측정",
@@ -223,7 +247,11 @@ function buildMetricsSummary(input: CrewInput): string {
 - Share of Voice: ${m.sov}/100
 - 평균 인용 순위: ${m.averageMentionPosition !== null ? `${m.averageMentionPosition}위` : "N/A"}
 - Sentiment 분포: 긍정 ${m.sentimentDistribution.positive} / 중립 ${m.sentimentDistribution.neutral} / 부정 ${m.sentimentDistribution.negative}
-- Top 인용 도메인: ${m.topCitedDomains.map((d) => `${d.domain}(${d.count})`).join(", ") || "없음"}
+- Top 인용 도메인(AI 엔진 답변 기준 · 네이버·다음 검색 결과 제외): ${
+    topCitedDomainsWithoutSearchRows(input.engineResponses, TOP_DOMAINS_LIMIT)
+      .map((d) => `${d.domain}(${d.count})`)
+      .join(", ") || "없음"
+  }
 - Stub 엔진 수: ${m.stubCount}
 - 에러 엔진 수: ${m.errors.length}
 
@@ -347,58 +375,53 @@ async function generateStrategist(prompt: string): Promise<{
 // 4 에이전트 실행 함수
 // ──────────────────────────────────────────────────────────────────
 
-async function runMinji(input: CrewInput): Promise<AnalystReport> {
-  const start = Date.now();
-  const koreanResponses = filterKoreanEngineResponses(input.engineResponses);
-  const prompt = `${buildMetricsSummary(input)}
+// ──────────────────────────────────────────────────────────────────
+// 프롬프트 조립 (순수 함수 — 테스트가 「검색 API 원문이 없는지」 직접 검사한다)
+// ──────────────────────────────────────────────────────────────────
 
-## 한국 채널 결과 (네이버·다음 검색 노출 · 과거 회차는 HyperCLOVA 포함)
-${buildEngineContext(koreanResponses)}
+/**
+ * 민지(한국 채널) 프롬프트.
+ *
+ * 🔴 네이버·다음은 **엔진별 건수만** 준다(측정·노출·확정 노출·실패). 제목·스니펫·URL·
+ *   도메인·본문 발췌는 넣지 않는다 — 2026-10-07 👤 대표 결정(검색 API 약관).
+ *   건수만으로도 「한국 검색 노출 vs AI 엔진 언급」 격차·「이름은 나오나 같은 회사 확정이 적다」
+ *   같은 판단은 가능하다. 원문이 필요한 분석(표기 변형·출처 패턴·감성 뉘앙스)은
+ *   dataGaps 로 남기도록 에이전트 지시문(agents.ts minji)도 바꿨다.
+ */
+export function buildMinjiPrompt(input: CrewInput): string {
+  const searchSummary = summarizeSearchApiRows(input.engineResponses);
+  const llmKorean = filterKoreanLlmEngineResponses(input.engineResponses);
+  const legacyBlock =
+    llmKorean.length > 0
+      ? `\n\n## HyperCLOVA X 답변 (과거 회차만)\n${buildEngineContext(llmKorean)}`
+      : "";
+  return `${buildMetricsSummary(input)}
 
-위 데이터를 분석해 한국 마케팅팀(또는 외국 브랜드 한국 마케팅팀)이 즉시 사용 가능한 인사이트를 JSON 스키마에 맞춰 반환하세요. 마크다운·이모지·테이블 금지.`;
+## 한국 검색 노출 집계 (네이버·다음 — 건수만, 검색 결과 원문 미제공)
+${formatSearchApiRowSummary(searchSummary)}${legacyBlock}
 
-  const { output, rawText, errorMessage } = await generateAnalyst(
-    "minji",
-    prompt
-  );
-  return {
-    agentId: "minji",
-    ...CREW_META.minji,
-    output,
-    rawText,
-    durationMs: Date.now() - start,
-    errorMessage,
-  };
+위 집계를 분석해 한국 마케팅팀(또는 외국 브랜드 한국 마케팅팀)이 즉시 사용 가능한 인사이트를 JSON 스키마에 맞춰 반환하세요. 검색 결과의 제목·출처·문구는 제공되지 않았으므로 지어내지 말고, 원문이 있어야 할 판단은 dataGaps 에 적으세요. 마크다운·이모지·테이블 금지.`;
 }
 
-async function runAlex(input: CrewInput): Promise<AnalystReport> {
-  const start = Date.now();
-  const englishResponses = filterEnglishEngineResponses(input.engineResponses);
-  const prompt = `${buildMetricsSummary(input)}
+/** Alex(글로벌 AI 엔진) 프롬프트. */
+export function buildAlexPrompt(input: CrewInput): string {
+  const englishResponses = filterEnglishEngineResponses(
+    withoutSearchApiRows(input.engineResponses)
+  );
+  return `${buildMetricsSummary(input)}
 
 ## English-language AI engine responses (ChatGPT·Claude·Perplexity·Gemini)
 ${buildEngineContext(englishResponses)}
 
 Analyze the above and return a benchmark report comparing the brand to global competitors. **All user-facing strings must be in Korean** (마케팅 팀이 읽음). JSON schema strictly. No markdown/emoji/tables.`;
-
-  const { output, rawText, errorMessage } = await generateAnalyst(
-    "alex",
-    prompt
-  );
-  return {
-    agentId: "alex",
-    ...CREW_META.alex,
-    output,
-    rawText,
-    durationMs: Date.now() - start,
-    errorMessage,
-  };
 }
 
-async function runSujin(input: CrewInput): Promise<AnalystReport> {
-  const start = Date.now();
-
-  const allSources = input.engineResponses.flatMap((r) =>
+/**
+ * 수진(인용 출처) 프롬프트.
+ * 🔴 네이버·다음 행의 인용(검색 결과 링크·제목)은 검색 결과 원문이라 넣지 않는다.
+ */
+export function buildSujinPrompt(input: CrewInput): string {
+  const allSources = withoutSearchApiRows(input.engineResponses).flatMap((r) =>
     r.citedSources.map((s) => ({
       ...s,
       engineId: r.engineId,
@@ -415,9 +438,9 @@ async function runSujin(input: CrewInput): Promise<AnalystReport> {
     .map(([d, c]) => `- ${d}: ${c}회 인용`)
     .join("\n");
 
-  const prompt = `${buildMetricsSummary(input)}
+  return `${buildMetricsSummary(input)}
 
-## 모든 엔진의 인용 출처 통합 (Top 20 도메인)
+## AI 엔진 답변의 인용 출처 통합 (Top 20 도메인 · 네이버·다음 검색 결과 제외)
 ${sourcesSummary || "(인용 출처 없음)"}
 
 ## 인용 출처 raw 데이터
@@ -430,10 +453,45 @@ ${allSources
   .join("\n")}
 
 위 데이터로 도메인 권위·신호 분석을 JSON 스키마에 맞춰 반환하세요. 위 데이터에 실제로 나온 도메인·건수만 근거로 쓰고, 외부 업계 통계(특정 플랫폼의 인용 비중 등)를 이 브랜드의 수치처럼 쓰지 마세요. 마크다운·이모지 금지.`;
+}
 
+async function runMinji(input: CrewInput): Promise<AnalystReport> {
+  const start = Date.now();
+  const { output, rawText, errorMessage } = await generateAnalyst(
+    "minji",
+    buildMinjiPrompt(input)
+  );
+  return {
+    agentId: "minji",
+    ...CREW_META.minji,
+    output,
+    rawText,
+    durationMs: Date.now() - start,
+    errorMessage,
+  };
+}
+
+async function runAlex(input: CrewInput): Promise<AnalystReport> {
+  const start = Date.now();
+  const { output, rawText, errorMessage } = await generateAnalyst(
+    "alex",
+    buildAlexPrompt(input)
+  );
+  return {
+    agentId: "alex",
+    ...CREW_META.alex,
+    output,
+    rawText,
+    durationMs: Date.now() - start,
+    errorMessage,
+  };
+}
+
+async function runSujin(input: CrewInput): Promise<AnalystReport> {
+  const start = Date.now();
   const { output, rawText, errorMessage } = await generateAnalyst(
     "sujin",
-    prompt
+    buildSujinPrompt(input)
   );
   return {
     agentId: "sujin",

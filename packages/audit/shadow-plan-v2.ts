@@ -18,6 +18,7 @@
 //   ⛔ 네이버 지식iN 은 이 경로에서 쓰지 않는다(네이버 Open API 약관 · 법무 검토 대기 — brand-profile-live.ts).
 
 import type { EngineResponse } from "@repo/ai/lib/engines";
+import { withoutSearchApiRows } from "@repo/ai/lib/search-api-rows";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import type { RunPrompt } from "./audit-prompts";
@@ -304,7 +305,13 @@ async function queryPreviousAnswerBrands(args: {
   if (!Array.isArray(rows)) {
     return [];
   }
-  const excerpts = rows.flatMap((row) => {
+  // 🔴 2026-10-07 👤 대표 결정 — 여기서 뽑은 브랜드 이름은 질문 설계 LLM 프롬프트
+  //   (`forbiddenNames`)로 들어간다. 네이버·다음 검색 API 결과는 AI 입력 금지(검색 API 약관)라
+  //   검색 행의 발췌에서 뽑은 이름은 쓰지 않는다.
+  const llmSafeRows = withoutSearchApiRows(
+    rows as Array<{ engineId?: string | null }>
+  );
+  const excerpts = llmSafeRows.flatMap((row) => {
     const excerpt = (row as { excerpt?: unknown } | null)?.excerpt;
     return typeof excerpt === "string" ? [excerpt] : [];
   });

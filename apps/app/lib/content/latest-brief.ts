@@ -1,5 +1,6 @@
 import "server-only";
 
+import { withoutSearchApiRows } from "@repo/ai/lib/search-api-rows";
 import { buildGeoActions } from "@repo/audit/actions";
 import { database } from "@repo/database";
 import { buildSourcesAnalysis } from "@/app/(authenticated)/lib/analysis-data";
@@ -30,7 +31,10 @@ export async function latestContentBrief(brandId: string) {
     hit: byPrompt.get(prompt.id)?.hit ?? 0,
     total: byPrompt.get(prompt.id)?.total ?? 0,
   }));
-  const sources = buildSourcesAnalysis(rows);
+  // 🔴 2026-10-07 👤 대표 결정 — 이 브리프는 콘텐츠 초안 LLM(generateContentDraft) 프롬프트로
+  //   들어간다. 네이버·다음 검색 API 결과의 링크·도메인은 AI 입력 금지(검색 API 약관)라
+  //   출처 분석은 검색 행을 뺀 뒤 만든다. 아래 노출 건수(hit/total·엔진 수)는 숫자뿐이라 그대로 둔다.
+  const sources = buildSourcesAnalysis(withoutSearchApiRows(rows));
   const mix = (sources?.kinds ?? []).reduce(
     (acc, item) => {
       acc[item.kind] = item.citations;
