@@ -12,6 +12,7 @@ import {
   dedupeCandidates,
   extractJson,
   ingredientAsProduct,
+  keywordAtBoundary,
   keywordFits,
   keywordInText,
   keywordTooBroad,
@@ -365,6 +366,33 @@ describe("question plan v2 refine — grounding", () => {
     );
     expect(keywordInText("세럼 추천해줘", "KR", ids)).toBeUndefined();
     expect(keywordInText("pdrn 앰플", "US", ids)?.row.keyword).toBe("pdrn");
+    // 낱말 경계: 「기미 개선 패치」 속 「선패치」는 같은 키워드가 아니다.
+    expect(keywordFits("기미 개선 패치 뭐가 좋아?", "선패치")).toBe(false);
+    expect(keywordAtBoundary("기미 개선 패치 뭐가 좋아?", "선패치")).toBe(
+      false
+    );
+    expect(keywordAtBoundary("선 패치 추천해줘", "선패치")).toBe(true);
+    expect(keywordAtBoundary("PDRN 앰플은 효과 있어?", "PDRN앰플")).toBe(true);
+    expect(keywordAtBoundary("EGF 앰플 추천해줘", "앰플추천")).toBe(true);
+    expect(keywordAtBoundary("Where can I find a CTO?", "cto")).toBe(true);
+    expect(keywordAtBoundary("Who is the director?", "cto")).toBe(false);
+    const sun = new Map([
+      [
+        "k1",
+        {
+          market: "KR" as const,
+          row: {
+            keyword: "선패치",
+            volume: 1840,
+            source: "naver" as const,
+            matched: true,
+          },
+        },
+      ],
+    ]);
+    expect(
+      keywordInText("기미 개선 패치 뭐가 좋아?", "KR", sun)
+    ).toBeUndefined();
     expect(keywordFits("CTO 구독 서비스가 뭐고 어디서 하는데?", "AX교육")).toBe(
       false
     );

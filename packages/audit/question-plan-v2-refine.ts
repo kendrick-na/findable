@@ -240,36 +240,86 @@ function keywordLines(
   return lines.length > 0 ? lines.join("\n") : "(없음)";
 }
 
-/** 키워드 글자 2-gram 의 절반 넘게 질문에 있어야 「그 키워드에 근거한 질문」으로 본다. */
+const TOKEN_SPLIT_RE = /[\s?？!.,~·/()「」"']+/;
+const LATIN_CHAR_RE = /[a-z0-9]/;
+
+/** 질문을 낱말 단위 정규형으로 자른다(낱말 경계 판정용). */
+function compactTokens(text: string): string[] {
+  return text.split(TOKEN_SPLIT_RE).map(compactTerm).filter(Boolean);
+}
+
+/**
+ * 키워드 글자 2-gram 의 절반 넘게 질문에 있어야 「그 키워드에 근거한 질문」으로 본다.
+ * 질문 쪽 2-gram 은 **낱말 안에서만** 만든다 — 「개선 패치」의 낱말 경계를 넘는 「선패」로
+ * 「선패치」에 묶이는 일을 막는다(2026-10-07 실측 오연결).
+ */
 export function keywordFits(text: string, keyword: string): boolean {
-  const t = compactTerm(text);
   const k = compactTerm(keyword);
+  const tokens = compactTokens(text);
   if (k.length < 2) {
-    return t.includes(k);
+    return tokens.includes(k);
+  }
+  const grams = new Set<string>();
+  for (const token of tokens) {
+    for (let i = 0; i < token.length - 1; i += 1) {
+      grams.add(token.slice(i, i + 2));
+    }
   }
   let hit = 0;
   for (let i = 0; i < k.length - 1; i += 1) {
-    if (t.includes(k.slice(i, i + 2))) {
+    if (grams.has(k.slice(i, i + 2))) {
       hit += 1;
     }
   }
   return hit / (k.length - 1) > 0.5;
 }
 
-/** 질문 문장에 그대로 들어 있는 같은 시장 키워드 중 가장 구체적인(긴) 것, 같으면 검색량이 큰 것. */
+/**
+ * 키워드가 질문 안에 **낱말 경계에서 시작해** 들어 있는가(띄어쓰기는 무시).
+ * 끝은 낱말 끝이거나 한글 조사·어미(「앰플은」 「추천해줘」)로 이어지면 된다. 영문 키워드는
+ * 영문 글자로 이어지면 안 된다(「serum」 ≠ 「serums…」가 아니라 「cto」 ≠ 「ctor」).
+ */
+export function keywordAtBoundary(text: string, keyword: string): boolean {
+  const key = compactTerm(keyword);
+  const tokens = compactTokens(text);
+  const joined = tokens.join("");
+  const starts = new Set<number>();
+  let pos = 0;
+  for (const token of tokens) {
+    starts.add(pos);
+    pos += token.length;
+  }
+  const ends = new Set([...starts].filter((x) => x > 0).concat(pos));
+  for (const start of starts) {
+    if (!joined.startsWith(key, start)) {
+      continue;
+    }
+    const end = start + key.length;
+    const next = joined[end] ?? "";
+    const lastIsLatin = LATIN_CHAR_RE.test(key.at(-1) ?? "");
+    if (ends.has(end) || (!lastIsLatin && HANGUL_RE.test(next))) {
+      return true;
+    }
+    if (lastIsLatin && !LATIN_CHAR_RE.test(next)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** 질문 문장에 낱말 경계로 들어 있는 같은 시장 키워드 중 가장 구체적인(긴) 것, 같으면 검색량이 큰 것. */
 export function keywordInText(
   text: string,
   market: DemandMarket,
   ids: ReadonlyMap<string, { market: DemandMarket; row: PlanV2KeywordRow }>
 ): { market: DemandMarket; row: PlanV2KeywordRow } | undefined {
-  const compact = compactTerm(text);
   let best: { market: DemandMarket; row: PlanV2KeywordRow } | undefined;
   for (const ref of ids.values()) {
     const key = compactTerm(ref.row.keyword);
     if (
       ref.market === market &&
       key.length >= 2 &&
-      compact.includes(key) &&
+      keywordAtBoundary(text, ref.row.keyword) &&
       (!best ||
         key.length > compactTerm(best.row.keyword).length ||
         (key.length === compactTerm(best.row.keyword).length &&

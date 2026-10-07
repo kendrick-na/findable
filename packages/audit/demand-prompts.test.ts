@@ -9,7 +9,10 @@ import {
   selectDemandRunQuestions,
   styleFromAnchors,
 } from "./demand-prompts";
-import { resolveDemandQuestionSet } from "./demand-prompts-live";
+import {
+  liveDemandSourceDeps,
+  resolveDemandQuestionSet,
+} from "./demand-prompts-live";
 import { resolveDemandDiscovery } from "./demand-run-prompts";
 import { googleAdsCredentials, parseKeywordIdeas } from "./google-keywords";
 
@@ -322,7 +325,6 @@ describe("demand prompts — live orchestration with fake sources", () => {
     }),
     naverVolumes: async () => KR,
     googleIdeas: async () => US,
-    kinTitles: async () => null,
   };
 
   it("collects sources only for requested markets", async () => {
@@ -348,6 +350,11 @@ describe("demand prompts — live orchestration with fake sources", () => {
     expect(calls).toEqual(["naver:8"]);
     expect(out.set.questions.KR.length).toBeGreaterThan(0);
     expect(out.set.questions.US).toEqual([]);
+  });
+
+  it("never calls Naver 지식iN (Open API terms — legal review pending, 2026-10-07)", () => {
+    expect(Object.keys(liveDemandSourceDeps)).not.toContain("kinTitles");
+    expect(Object.keys(deps)).not.toContain("kinTitles");
   });
 
   it("fills the discovery slot, tags provenance, and tops up with site questions", async () => {

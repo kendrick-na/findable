@@ -1,9 +1,12 @@
-// 실제 수요 기반 질문 — 외부 데이터 수집(공식몰·네이버 키워드도구·지식iN·구글 키워드 플래너)
+// 실제 수요 기반 질문 — 외부 데이터 수집(공식몰·네이버 키워드도구·구글 키워드 플래너)
 // (2026-10-06, 측정 알고리즘 v3 §2-③). 계산은 `demand-prompts.ts`(순수)가 한다.
 //
 // ⛔ 실패해도 측정을 막지 않는다: 어느 출처든 실패하면 그 시장은 빈 목록 → 러너는 기존
 //   사이트 기반 질문으로 돌아간다. 키가 없는 출처는 「꺼짐」이지 오류가 아니다.
-// ⚠️ 검색 결과·지식iN 제목 원문은 저장하지 않는다(말투 판정에만 메모리에서 쓴다).
+// ⛔ 네이버 지식iN 은 **쓰지 않는다**(2026-10-07 대표 결정 · 법무 검토 대기): 네이버 Open API
+//   이용약관이 검색 결과를 AI 입력·검색 결과 표시 외 용도로 쓰는 것을 금한다. 말투 기준(styleAnchors)
+//   으로 쓰던 kinTitles 호출을 지웠다 — 말투는 지식iN 이 없을 때의 기본값(반말 대화체)으로 고정된다.
+//   법무 검토 전에는 되살리지 않는다.
 
 import { log } from "@repo/observability/log";
 import { type BrandCatalog, resolveBrandCatalog } from "./brand-catalog";
@@ -17,7 +20,6 @@ import {
 } from "./demand-prompts";
 import { fetchGoogleKeywordIdeas } from "./google-keywords";
 import { fetchNaverKeywordVolumes } from "./naver-keywords";
-import { fetchNaverQuestions } from "./naver-openapi";
 
 export interface DemandSourceDeps {
   catalog: (domain: string, signal?: AbortSignal) => Promise<BrandCatalog>;
@@ -25,7 +27,6 @@ export interface DemandSourceDeps {
     seeds: string[],
     signal?: AbortSignal
   ) => Promise<DemandKeyword[] | null>;
-  kinTitles: (query: string, signal?: AbortSignal) => Promise<string[] | null>;
   naverVolumes: (
     seeds: string[],
     signal?: AbortSignal
@@ -55,7 +56,6 @@ export const liveDemandSourceDeps: DemandSourceDeps = {
         }))
       : null;
   },
-  kinTitles: (query, signal) => fetchNaverQuestions(query, { signal }),
 };
 
 export interface ResolveDemandInput {
@@ -95,12 +95,9 @@ export async function resolveDemandQuestionSet(
   const hasVocabulary = vocabulary.heads.size > 0;
   const wants = (m: DemandMarket) => hasVocabulary && input.markets.includes(m);
 
-  const [kr, us, anchors] = await Promise.all([
+  const [kr, us] = await Promise.all([
     wants("KR") ? deps.naverVolumes(seeds.KR, input.signal) : null,
     wants("US") ? deps.googleIdeas(seeds.US, input.signal) : null,
-    wants("KR") && seeds.KR[0]
-      ? deps.kinTitles(seeds.KR[0], input.signal)
-      : null,
   ]);
 
   const set = generateDemandQuestions({
@@ -108,7 +105,8 @@ export async function resolveDemandQuestionSet(
     otherBrandNames: input.otherBrandNames,
     products: catalog.products,
     keywords: { KR: kr, US: us },
-    styleAnchors: { KR: anchors },
+    // 지식iN 말투 기준 없음(위 머리말) — 기존 「지식iN 실패」 때와 같은 기본 말투.
+    styleAnchors: { KR: null },
     maxPerMarket: input.maxPerMarket,
   });
   const diagnostics = {
