@@ -3,6 +3,7 @@ import { parseKeywordTool, signNaverSearchAd } from "./naver-keywords";
 import {
   aiRoutedRevenue,
   estimateRevenueOpportunity,
+  missRatio,
 } from "./revenue-opportunity";
 
 describe("revenue opportunity v2", () => {
@@ -122,6 +123,36 @@ describe("aiRoutedRevenue — 헤드라인(연매출 × 7% ÷ 12)", () => {
     expect(r?.monthly).toBe(42_365_867);
     expect(r?.ai_share_pct).toBe(7);
     expect(r?.revenue_source).toBe("NICE평가정보(사람인 기업정보), 2025년");
+  });
+
+  it("놓치는 매출 = 연매출 × 7% × (1 − 정확 노출률) — 프란츠 4/16 정확 → 연 약 3.8억 원", () => {
+    const r = aiRoutedRevenue(
+      {
+        annual: 7_262_720_000,
+        source: "NICE평가정보(사람인 기업정보)",
+        year: 2025,
+      },
+      { accurate: 4, total: 16 }
+    );
+    expect(r?.ai_routed_annual).toBe(508_390_400);
+    expect(r?.miss_pct).toBe(75);
+    expect(r?.missed_annual).toBe(381_292_800);
+    expect(r?.missed_monthly).toBe(31_774_400);
+    // 호환: 기존 출력은 그대로
+    expect(r?.monthly).toBe(42_365_867);
+    expect(r?.basis.some((b) => b.includes("16건 중 4건"))).toBe(true);
+  });
+
+  it("측정값이 없거나 이상하면 놓치는 매출 칸만 비운다", () => {
+    const rev = { annual: 1_000_000_000, source: "x", year: 2025 };
+    expect(aiRoutedRevenue(rev)?.missed_annual).toBeUndefined();
+    expect(
+      aiRoutedRevenue(rev, { accurate: 0, total: 0 })?.missed_annual
+    ).toBeUndefined();
+    expect(
+      aiRoutedRevenue(rev, { accurate: 5, total: 4 })?.missed_annual
+    ).toBeUndefined();
+    expect(missRatio({ accurate: 4, total: 16 })).toBe(0.75);
   });
 
   it("확인된 매출이 없으면 숫자를 만들지 않는다", () => {

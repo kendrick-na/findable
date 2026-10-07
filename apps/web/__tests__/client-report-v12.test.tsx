@@ -46,7 +46,47 @@ describe("v12 웹 템플릿", () => {
     expect(html).toContain("11 / 12");
     expect(html).toContain("이름 없이 물으면 누가 추천될까");
     expect(html).toContain("주제별로 누가 1위일까");
-    expect(html).toContain("583만\u00a0원");
+    // 놓치는 매출(2026-10-07 확정): 큰 숫자 = 연, 월은 보조
+    expect(html).toContain("AI 추천에서 빠져서 놓치는 매출");
+    expect(html).toContain("연 약 4,813만\u00a0원");
+    expect(html).toContain("월 약 401만\u00a0원");
+    expect(html).toContain("연 7,000만\u00a0원");
+    expect(html).toContain("69%");
+    expect(html).toContain(
+      "대신 다른 브랜드가 추천되거나 노우버스가 잘못 소개된 만큼입니다. (추정)"
+    );
+    expect(html).not.toContain("AI 추천을 거쳐 결정되는");
+    expect(html).not.toContain("매달 약");
+  });
+
+  it("놓치는 매출 저장값이 없으면 화면에서 연매출 × 7% × (bad_n / n)으로 계산한다", () => {
+    const stored = new Set([
+      "ai_routed_annual",
+      "miss_pct",
+      "missed_annual",
+      "missed_monthly",
+    ]);
+    const old = Object.fromEntries(
+      Object.entries(sample.config.revenue_opportunity).filter(
+        ([k]) => !stored.has(k)
+      )
+    );
+    const html = render(false, {
+      ...sample,
+      config: { ...sample.config, revenue_opportunity: old },
+    }).replaceAll("<!-- -->", "");
+    // 1,000,000,000 × 7% = 70,000,000 × 11/16 = 48,125,000 → 연 약 4,813만 원
+    expect(html).toContain("연 약 4,813만\u00a0원");
+    expect(html).toContain("AI 답변 16건 중 5건만 노우버스를 정확히");
+  });
+
+  it("확인된 연매출이 없으면 돈 문장·매출 쪽이 통째로 빠진다", () => {
+    const cfg = Object.fromEntries(
+      Object.entries(sample.config).filter(([k]) => k !== "revenue_opportunity")
+    );
+    const html = render(false, { ...sample, config: cfg });
+    expect(html).not.toContain("놓치는 매출");
+    expect(html.match(/<section class="page/g)).toHaveLength(11);
   });
 
   it("행동은 「15분 통화」 하나, 내부 용어(측정 ID·P0·엔진)는 고객 화면에 없다", () => {

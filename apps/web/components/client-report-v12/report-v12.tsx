@@ -76,6 +76,48 @@ export function krw(won: number): string {
   return `${Math.round(won / 10_000).toLocaleString("ko-KR")}만\u00a0원`;
 }
 
+export const REVENUE_LABEL = "AI 추천에서 빠져서 놓치는 매출";
+
+/**
+ * 놓치는 매출 = 연매출 × 7% × (1 − 정확 노출률). 저장값 우선, 없으면 측정(bad_n / n)으로 계산.
+ * 확인된 연매출(출처 포함)이 없거나 놓치는 매출이 0 이하이면 null — 돈 문장을 통째로 뺀다.
+ */
+export function missedRevenue(
+  r: RevenueOpportunity | undefined,
+  s: { bad_n: number; n: number }
+) {
+  if (!(r && r.annual_revenue > 0 && r.monthly > 0 && r.revenue_source)) {
+    return null;
+  }
+  const aiRoutedAnnual =
+    r.ai_routed_annual ?? Math.round((r.annual_revenue * r.ai_share_pct) / 100);
+  const stored = typeof r.missed_annual === "number";
+  let ratio: number | null = null;
+  if (typeof r.miss_pct === "number") {
+    ratio = r.miss_pct / 100;
+  } else if (s.n > 0) {
+    ratio = s.bad_n / s.n;
+  }
+  let missedAnnual = 0;
+  if (stored) {
+    missedAnnual = r.missed_annual as number;
+  } else if (ratio !== null) {
+    missedAnnual = Math.round(aiRoutedAnnual * ratio);
+  }
+  if (!(missedAnnual > 0)) {
+    return null;
+  }
+  return {
+    ...r,
+    aiRoutedAnnual,
+    /** 근거 목록에 측정 문장을 화면에서 덧붙일지(저장된 근거에 없을 때만). */
+    measured: !stored,
+    missPct: r.miss_pct ?? Math.round((ratio ?? 0) * 100),
+    missedAnnual,
+    missedMonthly: r.missed_monthly ?? Math.round(missedAnnual / 12),
+  };
+}
+
 /** 신규 쪽 ① — 브랜드 이름 없이 묻는 구매 질문에서 누가 추천되나. */
 interface CategoryShare {
   answers: number;
@@ -93,13 +135,25 @@ interface TopicWinner {
   top: string[];
   topic: string;
 }
-/** 신규 쪽 ③ — 매출 기회(승인 공식: 연매출 × AI 개입 구매 비중). 저장값만 쓴다. */
+/**
+ * 신규 쪽 ③ — 놓치는 매출(2026-10-07 대표 확정 공식).
+ *   놓치는 매출 = 확인된 연매출 × 7% × (1 − 정확 노출률)
+ * 저장값(missed_annual 등)이 있으면 그 값을 쓰고, 없을 때만 화면에서 측정값(bad_n / n)으로 계산한다.
+ */
 interface RevenueOpportunity {
+  /** 연매출 × 7% (원/연). 없으면 annual_revenue × ai_share_pct 로 계산. */
+  ai_routed_annual?: number;
   ai_share_pct: number;
   annual_revenue: number;
   /** 근거 목록(출처 문장). */
   basis: string[];
   future?: string;
+  /** AI가 정확히 소개하지 못한 비율(%). */
+  miss_pct?: number;
+  /** 놓치는 매출(원/연). */
+  missed_annual?: number;
+  /** 놓치는 매출(원/월). */
+  missed_monthly?: number;
   monthly: number;
   revenue_source: string;
   /** 보조 시산(검색 경로) — 없으면 안 보인다. */
@@ -234,10 +288,7 @@ export function ClientReportV12({
 
   const share = c.category_share?.brands?.length ? c.category_share : null;
   const topics = c.topic_winners?.length ? c.topic_winners : null;
-  const revenue =
-    c.revenue_opportunity && c.revenue_opportunity.monthly > 0
-      ? c.revenue_opportunity
-      : null;
+  const revenue = missedRevenue(c.revenue_opportunity, s);
 
   const order: PageId[] = [
     "cover",
@@ -272,7 +323,7 @@ export function ClientReportV12({
     topics: "주제별로 누가 1위일까",
     faces: `AI가 그리는 ${c.brand}의 모습`,
     sources: "AI가 참고하는 출처",
-    revenue: "AI 추천이 움직이는 매출",
+    revenue: REVENUE_LABEL,
     causes: "왜 이런 결과가 나왔을까",
     plan: "무엇부터 고치면 될까",
   };
@@ -421,17 +472,17 @@ export function ClientReportV12({
           </div>
           {revenue ? (
             <div className="money">
-              이 AI 추천을 거쳐 결정되는 {c.brand} 매출,{" "}
-              <b>매달 약 {krw(revenue.monthly)}</b>
+              {REVENUE_LABEL} <b>연 약 {krw(revenue.missedAnnual)}</b>{" "}
+              <small>월 약 {krw(revenue.missedMonthly)}</small>
             </div>
           ) : null}
           <div className="nums">
             {revenue ? (
               <div>
                 <b className="hot">
-                  월 {krw(revenue.monthly).replace("\u00a0원", "")}
+                  연 {krw(revenue.missedAnnual).replace("\u00a0원", "")}
                 </b>
-                AI 추천을 거치는 매출(추정)
+                {REVENUE_LABEL}(추정)
               </div>
             ) : null}
             <div>
@@ -1054,37 +1105,61 @@ export function ClientReportV12({
             <span
               {...rich(
                 H.revenue ??
-                  `${c.brand} 매출 중 매달 약 ${krw(revenue.monthly)}이 AI 추천을 거쳐 결정됩니다`
+                  `${c.brand}가 AI 추천에서 빠져서 놓치는 매출, 연 약 ${krw(revenue.missedAnnual)}`
               )}
             />
             <Dot />
           </h1>
-          <div className="hero">
+          <div className="hero rev">
             <div className="big">
               <div className="v">
-                {krw(revenue.monthly).replace("\u00a0원", "")}
-                <small>원 / 월</small>
+                {krw(revenue.missedAnnual).replace("\u00a0원", "")}
+                <small>원 / 연</small>
               </div>
-              <div className="t">AI 추천을 거치는 매출(추정)</div>
+              <div className="t">{REVENUE_LABEL}(추정)</div>
+              <div className="m">월 약 {krw(revenue.missedMonthly)}</div>
             </div>
-            <div className="formula">
-              <div>
-                <span>연매출</span>
-                <b>{krw(revenue.annual_revenue)}</b>
-                <em>{revenue.revenue_source}</em>
+            <div className="formula-rows">
+              <div className="formula">
+                <div>
+                  <span>연매출</span>
+                  <b>{krw(revenue.annual_revenue)}</b>
+                  <em>{revenue.revenue_source}</em>
+                </div>
+                <i>×</i>
+                <div>
+                  <span>AI가 관여하는 구매 비중</span>
+                  <b>{revenue.ai_share_pct}%</b>
+                </div>
+                <i>=</i>
+                <div>
+                  <span>AI 추천을 거치는 매출</span>
+                  <b>연 {krw(revenue.aiRoutedAnnual)}</b>
+                </div>
               </div>
-              <i>×</i>
-              <div>
-                <span>AI가 관여하는 구매 비중</span>
-                <b>{revenue.ai_share_pct}%</b>
-              </div>
-              <i>÷</i>
-              <div>
-                <span>12개월</span>
-                <b>{krw(revenue.monthly)}</b>
+              <div className="formula">
+                <i>×</i>
+                <div>
+                  <span>AI가 정확히 소개하지 못한 비율</span>
+                  <b>{revenue.missPct}%</b>
+                  <em>
+                    {revenue.measured
+                      ? `AI 답변 ${s.n}건 중 정확 ${s.ok_n}건`
+                      : "Findable 측정"}
+                  </em>
+                </div>
+                <i>=</i>
+                <div className="res">
+                  <span>{REVENUE_LABEL}</span>
+                  <b>연 {krw(revenue.missedAnnual)}</b>
+                </div>
               </div>
             </div>
           </div>
+          <p className="rsub">
+            고객이 AI에게 물었을 때, {c.brand} 대신 다른 브랜드가 추천되거나{" "}
+            {c.brand}가 잘못 소개된 만큼입니다. (추정)
+          </p>
           {revenue.support ? (
             <div className="support">
               <div className="t">{revenue.support.label}</div>
@@ -1097,6 +1172,12 @@ export function ClientReportV12({
             {revenue.basis.map((b) => (
               <li key={b} {...rich(b)} />
             ))}
+            {revenue.measured ? (
+              <li>
+                AI가 정확히 소개하지 못한 비율 {revenue.missPct}%: Findable 측정
+                — AI 답변 {s.n}건 중 {s.ok_n}건만 {c.brand}를 정확히 설명·추천
+              </li>
+            ) : null}
           </ul>
           {revenue.future ? (
             <div className="ins one">

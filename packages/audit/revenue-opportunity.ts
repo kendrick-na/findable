@@ -143,11 +143,14 @@ export function estimateRevenueOpportunity(
   };
 }
 
-// ── 헤드라인 v3 (2026-10-05 대표 승인) ──────────────────────────────────────
-// 「매달 약 ○○원어치 매출이 AI 추천을 거친다」 = 고객사 실제 연매출 × AI 관여 구매 비중 7% ÷ 12.
+// ── 헤드라인 v3 (2026-10-05 대표 승인) → v4 (2026-10-07 대표 확정 공식) ─────────────
+// v3: 「AI 추천을 거치는 매출」 = 고객사 실제 연매출 × AI 관여 구매 비중 7%.
+// v4(지금부터 모든 곳에서 이 공식): 「AI 추천에서 빠져서 놓치는 매출」
+//   놓치는 매출 = 확인된 연매출 × 7% × (1 − 정확 노출률)
+//   정확 노출률 = AI 답변 중 브랜드를 정확히 설명·추천한 비율(Findable 측정 ok_n / n).
 // 위 D×A×ΔS×CTR×CVR×AOV 는 가정이 여섯 개라 「근거가 뭐냐」에 답하기 어려워, 고객사 자기 매출에서 출발한다.
 // 🔴 연매출은 출처·연도가 붙은 확인값만 받는다(추정 금지). 없으면 null — 표지·메일의 돈 문장이 통째로 빠진다.
-// 표현 원칙: 「AI가 관여하는 매출」이지 「놓친 매출」이 아니다.
+// 화면 단위: 큰 숫자는 연 단위(「연 약 3.8억 원」), 월은 작은 보조 글씨.
 
 /** 한국 소비자 중 AI 쇼핑 도우미를 주로 쓰는 비율 — 크리테오 2026 뷰티 쇼퍼 조사. */
 export const AI_INVOLVED_PURCHASE_SHARE = 0.07;
@@ -163,18 +166,53 @@ export interface ConfirmedRevenue {
   year: number;
 }
 
+/** Findable 측정 — AI 답변 중 브랜드를 정확히 설명·추천한 건수 / 전체 답변 수. */
+export interface MeasuredAccuracy {
+  accurate: number;
+  total: number;
+}
+
 /** 리포트 config.revenue_opportunity 와 같은 모양(저장값만 화면에 쓴다). */
 export interface AiRoutedRevenue {
+  /** 연매출 × 7% — AI 추천을 거치는 연 매출(원). */
+  ai_routed_annual: number;
   ai_share_pct: number;
   annual_revenue: number;
   basis: string[];
   future: string;
+  /** AI가 정확히 소개하지 못한 비율(%, 반올림). 측정값이 없으면 없음. */
+  miss_pct?: number;
+  /** 놓치는 매출(연, 원) = ai_routed_annual × (1 − 정확 노출률). */
+  missed_annual?: number;
+  /** 놓치는 매출(월, 원) = missed_annual ÷ 12. */
+  missed_monthly?: number;
+  /** AI 추천을 거치는 월 매출(원) — v3 호환. */
   monthly: number;
   revenue_source: string;
 }
 
+/** 1 − 정확 노출률. 측정이 없거나 이상하면 null. */
+export function missRatio(
+  accuracy: MeasuredAccuracy | null | undefined
+): number | null {
+  if (
+    !(
+      accuracy &&
+      Number.isFinite(accuracy.total) &&
+      Number.isFinite(accuracy.accurate)
+    ) ||
+    accuracy.total <= 0 ||
+    accuracy.accurate < 0 ||
+    accuracy.accurate > accuracy.total
+  ) {
+    return null;
+  }
+  return 1 - accuracy.accurate / accuracy.total;
+}
+
 export function aiRoutedRevenue(
-  revenue: ConfirmedRevenue | null | undefined
+  revenue: ConfirmedRevenue | null | undefined,
+  accuracy?: MeasuredAccuracy | null
 ): AiRoutedRevenue | null {
   if (
     !(revenue && Number.isFinite(revenue.annual)) ||
@@ -183,14 +221,36 @@ export function aiRoutedRevenue(
   ) {
     return null;
   }
+  const aiRoutedAnnual = Math.round(
+    revenue.annual * AI_INVOLVED_PURCHASE_SHARE
+  );
+  const miss = missRatio(accuracy);
+  const missed =
+    miss === null || !accuracy
+      ? null
+      : {
+          miss_pct: Math.round(miss * 100),
+          missed_annual: Math.round(aiRoutedAnnual * miss),
+          missed_monthly: Math.round((aiRoutedAnnual * miss) / 12),
+          basis: `AI가 정확히 소개하지 못한 비율 ${Math.round(miss * 100)}%: Findable 측정 — AI 답변 ${accuracy.total}건 중 ${accuracy.accurate}건만 브랜드를 정확히 설명·추천`,
+        };
   return {
     annual_revenue: revenue.annual,
     revenue_source: `${revenue.source}, ${revenue.year}년`,
     ai_share_pct: Math.round(AI_INVOLVED_PURCHASE_SHARE * 100),
+    ai_routed_annual: aiRoutedAnnual,
     monthly: Math.round((revenue.annual * AI_INVOLVED_PURCHASE_SHARE) / 12),
+    ...(missed
+      ? {
+          miss_pct: missed.miss_pct,
+          missed_annual: missed.missed_annual,
+          missed_monthly: missed.missed_monthly,
+        }
+      : {}),
     basis: [
       `연매출: ${revenue.source} 공개 기업정보 ${revenue.year}년 값`,
       `AI가 관여하는 구매 비중 7%: ${AI_INVOLVED_PURCHASE_SOURCE}`,
+      ...(missed ? [missed.basis] : []),
       "AI 답변에 출처로 인용된 브랜드는 클릭이 약 35% 더 많습니다 — Seer Interactive 2025-09 https://www.seerinteractive.com/insights/aio-impact-on-google-ctr-september-2025-update",
     ],
     future:

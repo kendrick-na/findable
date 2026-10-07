@@ -403,10 +403,15 @@
    "annual_revenue": 1000000000,
    "revenue_source": "[예시] 실제 아님",
    "ai_share_pct": 7,
+   "ai_routed_annual": 70000000,
    "monthly": 5833333,
+   "miss_pct": 69,
+   "missed_annual": 48125000,
+   "missed_monthly": 4010417,
    "basis": [
     "[예시] 근거 1 — 실제 리포트에는 출처 문장과 링크가 들어갑니다.",
-    "[예시] 근거 2 — AI 관여 구매 비중 7%의 출처."
+    "[예시] 근거 2 — AI 관여 구매 비중 7%의 출처.",
+    "[예시] 근거 3 — AI가 정확히 소개하지 못한 비율 69%: Findable 측정(AI 답변 16건 중 5건만 정확)."
    ],
    "support": {
     "label": "[예시] 검색 경로로 본 보조 시산",

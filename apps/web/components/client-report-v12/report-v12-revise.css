@@ -338,3 +338,40 @@
 .fr12 .verdict.hook .money b {
   color: var(--ink);
 }
+
+/* 놓치는 매출(2026-10-07): 큰 숫자 = 연, 월은 보조 · 계산식 두 줄 */
+.fr12 .verdict.hook .money small {
+  margin-left: 1mm;
+  font-size: 9pt;
+  font-weight: 600;
+  color: var(--mut);
+}
+.fr12 .hero .big .m {
+  margin-top: 1mm;
+  font-size: 9pt;
+  font-weight: 600;
+  color: var(--mut);
+}
+.fr12 .formula-rows {
+  display: grid;
+  gap: 2.4mm;
+}
+.fr12 .formula > div.res {
+  background: var(--or-s);
+}
+.fr12 .formula > div.res b {
+  color: var(--or-t);
+}
+.fr12 .rsub {
+  margin-top: 4mm;
+  font-size: 10pt;
+  line-height: 1.6;
+  color: var(--ink2);
+}
+.fr12 .hero.rev {
+  grid-template-columns: 1fr;
+  gap: 5mm;
+}
+.fr12 .hero.rev .big .v {
+  white-space: nowrap;
+}
