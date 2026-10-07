@@ -20,6 +20,14 @@
  * is never compared with an API-collected one through the same guard. Runs
  * without the marker (every run before the switch) keep their exact old
  * version string, so nothing already stored changes.
+ *
+ * ➕ Engine set + question plan (2026-10-07, question plan v2). A run that
+ * records `measurementContext.engineSetKey` (e.g. `daily-noclaude-v1` — Claude
+ * excluded — or `weekly-full-v1`) or a `measurementContext.questionPlanVersion`
+ * other than 1 gets those appended (`+engines:<key>`, `+plan:<n>`), so a
+ * Claude-less daily run is never compared with a run that asked Claude, and a
+ * v2 question set never with the v1 set. Runs without either marker (every
+ * run stored so far) keep their exact old version string.
  */
 
 /** Naver rows without a sampling marker (pre-W1 blog-first sample or synthesis). */
@@ -50,16 +58,56 @@ interface NaverRowLike {
 export function searchSamplingVersionOf(result: unknown): string {
   const base = naverSamplingVersionOf(result);
   const chatgpt = chatgptEngineSetOf(result);
-  if (chatgpt === null) {
-    return base;
-  }
   if (
     chatgpt === MIXED_SEARCH_SAMPLING_VERSION ||
     base === MIXED_SEARCH_SAMPLING_VERSION
   ) {
     return MIXED_SEARCH_SAMPLING_VERSION;
   }
-  return `${base}${ENGINE_SET_SEPARATOR}${chatgpt}`;
+  const parts = [base];
+  if (chatgpt !== null) {
+    parts.push(chatgpt);
+  }
+  const engineSet = engineSetKeyOf(result);
+  if (engineSet !== null) {
+    parts.push(`${ENGINE_SET_KEY_PREFIX}${engineSet}`);
+  }
+  const plan = questionPlanVersionOf(result);
+  if (plan !== null && plan !== 1) {
+    parts.push(`${QUESTION_PLAN_PREFIX}${plan}`);
+  }
+  return parts.join(ENGINE_SET_SEPARATOR);
+}
+
+/** Suffix markers inside the comparison key (never shown to the user). */
+export const ENGINE_SET_KEY_PREFIX = "engines:";
+export const QUESTION_PLAN_PREFIX = "plan:";
+
+function measurementContextOf(result: unknown): Record<string, unknown> | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return null;
+  }
+  const context = (result as { measurementContext?: unknown })
+    .measurementContext;
+  return context && typeof context === "object" && !Array.isArray(context)
+    ? (context as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * The engine set a run was measured with (`daily-noclaude-v1`,
+ * `weekly-full-v1`). null = not recorded (every run before question plan v2:
+ * the full engine set of that time).
+ */
+export function engineSetKeyOf(result: unknown): string | null {
+  const value = measurementContextOf(result)?.engineSetKey;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/** The question plan version a run's score was built on. null = v1 (not recorded). */
+export function questionPlanVersionOf(result: unknown): number | null {
+  const value = measurementContextOf(result)?.questionPlanVersion;
+  return typeof value === "number" && Number.isInteger(value) ? value : null;
 }
 
 function rowChatgptEngineSet(row: NaverRowLike): string {

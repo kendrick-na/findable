@@ -14,6 +14,7 @@ type Stage =
   | "aggregate"
   | "continuation_request"
   | "late_cell_reask"
+  | "shadow_plan_v2"
   | "db_commit";
 interface Detail {
   chunkIndex?: number;

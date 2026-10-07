@@ -20,6 +20,7 @@ const transaction = vi.fn();
 const ledgerTableAccess = vi.fn();
 const realContracts = vi.hoisted(() => ({ enabled: false }));
 const resolveDemandDiscovery = vi.fn();
+const resolveShadowPlanV2 = vi.fn();
 let briefingEnabled = false;
 const log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
 
@@ -89,6 +90,13 @@ vi.mock("./audit-prompts", () => ({
   englishPromptName: vi.fn(() => "Test Brand"),
   generateAuditPrompts,
   generateDiscoveryPrompts: vi.fn(() => []),
+  siteCategoryTerms: vi.fn(() => []),
+}));
+vi.mock("./shadow-plan-v2", async () => ({
+  ...(await vi.importActual<typeof import("./shadow-plan-v2")>(
+    "./shadow-plan-v2"
+  )),
+  resolveShadowPlanV2,
 }));
 vi.mock("./prompt-query-scheduler", async () =>
   realContracts.enabled
@@ -341,6 +349,127 @@ describe("runAuditJob offline lifecycle contracts", () => {
         sql.filter((text) => text.includes('"finishedAt" ='))
       ).toHaveLength(2);
       expect(terminalCalls().length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("QUESTION_PLAN_V2_SHADOW (question plan v2, shadow only)", () => {
+    const shadowPrompt = (text: string, type: "A" | "E") => ({
+      kind: type === "E" ? "brand" : "discovery",
+      lang: "en",
+      text,
+      planV2: {
+        type,
+        market: "US",
+        engineSetKey: "daily-noclaude-v1",
+        provenance: {
+          keyword: type === "A" ? "pdrn serum" : null,
+          volume: type === "A" ? 22_200 : null,
+          source: type === "A" ? "google" : "registration",
+          expanded: false,
+        },
+      },
+    });
+    const shadowPlan = {
+      prompts: [
+        shadowPrompt("What's the best PDRN serum?", "A"),
+        shadowPrompt("What is Test Brand, and what do they sell?", "E"),
+      ],
+      checkpoint: {
+        questionPlanVersion: 2,
+        engineSetKey: "daily-noclaude-v1",
+        startIndex: 8,
+        questionCount: 2,
+        maxContinuations: 3,
+        createdAt: "2026-10-07T00:00:00.000Z",
+        measurementContext: {
+          questionPlanVersion: 2,
+          engineSetKey: "daily-noclaude-v1",
+          usedInScores: false,
+        },
+      },
+    };
+    const shadowInput = { ...input, continueWhenTruncated: true };
+
+    it("flag off (default): never plans or runs v2 questions", async () => {
+      vi.stubEnv("QUESTION_PLAN_V2_SHADOW", "");
+      vi.stubEnv("QUESTION_PLAN_V2_SHADOW_BRANDS", "brand-1");
+      await (await loadRunner())(shadowInput);
+      expect(resolveShadowPlanV2).not.toHaveBeenCalled();
+      expect(queryAllEngines).toHaveBeenCalledTimes(4);
+      expect(JSON.stringify(terminalCalls())).not.toContain("shadowPlanV2");
+      vi.unstubAllEnvs();
+    });
+
+    it("needs the brand on the allowlist (empty list = nobody)", async () => {
+      vi.stubEnv("QUESTION_PLAN_V2_SHADOW", "true");
+      vi.stubEnv("QUESTION_PLAN_V2_SHADOW_BRANDS", "");
+      await (await loadRunner())(shadowInput);
+      expect(resolveShadowPlanV2).not.toHaveBeenCalled();
+      vi.unstubAllEnvs();
+    });
+
+    it("runs v2 after the current set, stores it separately, and never touches scores or Tracking", async () => {
+      vi.stubEnv("QUESTION_PLAN_V2_SHADOW", "true");
+      vi.stubEnv("QUESTION_PLAN_V2_SHADOW_BRANDS", "brand-1");
+      resolveShadowPlanV2.mockResolvedValue(shadowPlan);
+      await (await loadRunner())(shadowInput);
+
+      // 4 current questions + 2 shadow questions, in that order.
+      expect(queryAllEngines).toHaveBeenCalledTimes(6);
+      expect(queryAllEngines.mock.calls[3]?.[1]).toEqual([
+        "chatgpt",
+        "claude",
+        "perplexity",
+        "gemini",
+      ]);
+      // daily-noclaude-v1: the shadow questions skip Claude.
+      expect(queryAllEngines.mock.calls[4]?.[1]).toEqual([
+        "chatgpt",
+        "perplexity",
+        "gemini",
+      ]);
+      // Scores are aggregated from the current set only.
+      expect(aggregateAudit.mock.calls[0]?.[0]).toHaveLength(4);
+      // Tracking gets the current set only.
+      const tracked = persistAuditTracking.mock.calls[0]?.[0]?.tagged ?? [];
+      expect(tracked).toHaveLength(4);
+      expect(JSON.stringify(tracked)).not.toContain("PDRN");
+
+      const result = terminalCalls().at(-1)?.data?.result;
+      expect(result.promptsCount).toBe(4);
+      expect(result.engineResponses).toHaveLength(4);
+      expect(JSON.stringify(result.engineResponses)).not.toContain("PDRN");
+      expect(result.shadowPlanV2).toMatchObject({
+        questionPlanVersion: 2,
+        engineSetKey: "daily-noclaude-v1",
+        usedInScores: false,
+        measurementContext: {
+          questionPlanVersion: 2,
+          questionsPlanned: 2,
+          questionsAnswered: 2,
+          verification: "verified",
+        },
+      });
+      expect(
+        result.shadowPlanV2.questions.map((q: { text: string }) => q.text)
+      ).toEqual([
+        "What's the best PDRN serum?",
+        "What is Test Brand, and what do they sell?",
+      ]);
+      expect(result.cost).toHaveProperty("shadowPlanV2Krw");
+      // The main measurement context does not claim plan v2 / a new engine set.
+      expect(result.measurementContext.questionPlanVersion).toBeUndefined();
+      expect(result.measurementContext.engineSetKey).toBeUndefined();
+      // The saved plan carries the real split point and plan-sized continuation cap.
+      const saved = auditJobUpdate.mock.calls
+        .map(([call]) => call?.data?.checkpoint)
+        .find((cp) => cp?.shadowPlanV2);
+      expect(saved?.shadowPlanV2).toMatchObject({
+        startIndex: 4,
+        questionCount: 2,
+        maxContinuations: 2,
+      });
+      vi.unstubAllEnvs();
     });
   });
 

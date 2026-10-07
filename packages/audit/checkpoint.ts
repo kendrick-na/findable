@@ -2,6 +2,11 @@ import type { EngineResponse } from "@repo/ai/lib/engines";
 import type { RunPrompt } from "./audit-prompts";
 import type { DemandQuestionSet } from "./demand-prompts";
 import type { OfficialSiteIdentity } from "./official-site-identity";
+import {
+  enginesForEngineSet,
+  isValidShadowCheckpoint,
+} from "./plan-v2-contract";
+import type { ShadowPlanV2Checkpoint } from "./shadow-plan-v2";
 
 export interface AuditCheckpointScope {
   brandId?: string;
@@ -104,6 +109,11 @@ export interface AuditCheckpoint {
     language: "ko" | "en" | "both";
     organizationId: string | null;
   };
+  /**
+   * 질문 계획 v2 그림자(2026-10-07 · QUESTION_PLAN_V2_SHADOW). 있으면 prompts[startIndex..] 가
+   * 그림자 질문이고, 이어가기 상한은 maxContinuations(계획 크기 기반)다. 점수·Tracking 에는 안 쓴다.
+   */
+  shadowPlanV2?: ShadowPlanV2Checkpoint;
   version: 2;
 }
 
@@ -149,6 +159,31 @@ const GLOBAL_ENGINES = ["chatgpt", "claude", "perplexity", "gemini"] as const;
 export const enginesForAuditPrompt = (lang: "ko" | "en"): readonly string[] =>
   lang === "ko" ? KOREAN_ENGINES : GLOBAL_ENGINES;
 
+/** 질문 하나의 엔진 계획 — 그림자 v2 질문은 엔진 구성 키(daily = Claude 제외)를 따른다. */
+export const enginesForRunPrompt = (
+  prompt: Pick<RunPrompt, "lang" | "planV2">
+): string[] =>
+  enginesForEngineSet(
+    enginesForAuditPrompt(prompt.lang),
+    prompt.planV2?.engineSetKey
+  );
+
+/** 이 회차의 이어가기 상한 — 그림자 회차는 계획 크기로 계산한 값, 아니면 기본 2회. */
+export const continuationLimitOf = (
+  checkpoint: Pick<AuditCheckpoint, "shadowPlanV2">
+): number =>
+  checkpoint.shadowPlanV2
+    ? Math.max(
+        MAX_AUDIT_CONTINUATIONS,
+        checkpoint.shadowPlanV2.maxContinuations
+      )
+    : MAX_AUDIT_CONTINUATIONS;
+
+/** 기존 세트 질문 수(그림자 질문은 그 뒤). 그림자가 없으면 전체. */
+export const mainPromptCountOf = (
+  checkpoint: Pick<AuditCheckpoint, "prompts" | "shadowPlanV2">
+): number => checkpoint.shadowPlanV2?.startIndex ?? checkpoint.prompts.length;
+
 export function makeAuditCheckpoint(
   scope: AuditCheckpointScope,
   context: AuditCheckpointContext,
@@ -167,9 +202,7 @@ export function makeAuditCheckpoint(
     prompts,
     responses: [],
     engineConfigVersion: 1,
-    enginePlan: prompts.map((prompt) => [
-      ...enginesForAuditPrompt(prompt.lang),
-    ]),
+    enginePlan: prompts.map((prompt) => enginesForRunPrompt(prompt)),
     originCreatedAt,
     retry: { attempt: 1, attemptStartResponses: 0, noProgressFailures: 0 },
   };
@@ -203,12 +236,12 @@ const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const nullableString = (value: unknown): boolean =>
   value === null || typeof value === "string";
-const validContinuation = (value: unknown): boolean =>
+const validContinuation = (value: unknown, limit: number): boolean =>
   value === undefined ||
   (object(value) &&
     Number.isInteger(value.count) &&
     (value.count as number) >= 1 &&
-    (value.count as number) <= MAX_AUDIT_CONTINUATIONS &&
+    (value.count as number) <= limit &&
     typeof value.requestedAt === "string" &&
     Number.isFinite(Date.parse(value.requestedAt)));
 
@@ -231,6 +264,33 @@ const validLateReask = (value: unknown): boolean =>
     (value.count as number) <= MAX_LATE_REASK_ROUNDS &&
     isoString(value.requestedAt) &&
     (value.finishedAt === undefined || isoString(value.finishedAt)));
+
+/**
+ * 그림자 기록 — 없으면 어떤 질문에도 planV2 표시가 없어야 하고, 있으면 startIndex 뒤의 질문만
+ * 표시가 있어야 한다(앞쪽 기존 세트가 그림자로 새거나, 그림자가 점수 쪽으로 새지 않게).
+ */
+function validShadow(value: unknown, prompts: unknown): boolean {
+  if (!Array.isArray(prompts)) {
+    return false;
+  }
+  const marked = (p: unknown) => object(p) && p.planV2 !== undefined;
+  if (value === undefined) {
+    return !prompts.some(marked);
+  }
+  if (
+    !isValidShadowCheckpoint(value, prompts.length, MAX_AUDIT_CONTINUATIONS)
+  ) {
+    return false;
+  }
+  return prompts.every(
+    (p, index) =>
+      marked(p) === index >= value.startIndex &&
+      (!marked(p) ||
+        (object((p as { planV2: unknown }).planV2) &&
+          (p as { planV2: { engineSetKey?: unknown } }).planV2.engineSetKey ===
+            value.engineSetKey))
+  );
+}
 
 /** 칸은 저장된 질문(responses) 안의 칸이어야 하고, 칸마다 정확히 하나다. */
 function validCells(
@@ -313,7 +373,14 @@ export function readAuditCheckpoint(
     (retry.attemptStartResponses as number) < 0 ||
     !Number.isInteger(retry.noProgressFailures) ||
     (retry.noProgressFailures as number) < 0 ||
-    !validContinuation(value.continuation) ||
+    !validShadow(value.shadowPlanV2, prompts) ||
+    !validContinuation(
+      value.continuation,
+      object(value.shadowPlanV2) &&
+        typeof value.shadowPlanV2.maxContinuations === "number"
+        ? Math.max(MAX_AUDIT_CONTINUATIONS, value.shadowPlanV2.maxContinuations)
+        : MAX_AUDIT_CONTINUATIONS
+    ) ||
     !validLateReask(value.lateReask) ||
     !object(context) ||
     typeof context.brandName !== "string" ||
@@ -345,10 +412,9 @@ export function readAuditCheckpoint(
     !enginePlan.every(
       (plan, index) =>
         Array.isArray(plan) &&
-        plan.length === enginesForAuditPrompt(prompts[index].lang).length &&
+        plan.length === enginesForRunPrompt(prompts[index]).length &&
         plan.every(
-          (id, position) =>
-            id === enginesForAuditPrompt(prompts[index].lang)[position]
+          (id, position) => id === enginesForRunPrompt(prompts[index])[position]
         )
     ) ||
     !Array.isArray(responses) ||

@@ -1,6 +1,7 @@
 import { conjunctionParticle, objectParticle, topicParticle } from "./actions";
 import type { PromptKind } from "./answer-buckets";
 import type { DemandProvenance } from "./demand-prompts";
+import type { PlanV2PromptMeta } from "./plan-v2-contract";
 import { MAX_DISCOVERY_PROMPTS } from "./prompt-limits";
 
 /** 질문 언어별로 넣을 브랜드 표기. en 은 공식 로마자 표기가 없으면 ko 와 같다. */
@@ -88,6 +89,11 @@ export interface RunPrompt {
   /** 없으면 브랜드 이름 질문(폴백 4개). 저장 질문은 실행 전 분류한다. */
   kind?: PromptKind;
   lang: "ko" | "en";
+  /**
+   * 질문 계획 v2 그림자 질문(QUESTION_PLAN_V2_SHADOW) — 있으면 점수·추세·Tracking 에 쓰지 않는다.
+   * 그림자가 꺼진 회차는 항상 undefined 라 checkpoint JSON 이 기존과 같다.
+   */
+  planV2?: PlanV2PromptMeta;
   /**
    * 저장 Prompt.id — PROMPT_ATTEMPT_LEDGER_ENABLED 일 때만 채운다(원장 행과 연결).
    * 플래그 off 면 항상 undefined 라 checkpoint JSON 이 기존과 같다.

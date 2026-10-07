@@ -51,14 +51,17 @@ import {
   generateDiscoveryPrompts,
   type PromptBrandNames,
   type RunPrompt,
+  siteCategoryTerms,
 } from "./audit-prompts";
 import { assertCheckpointMode, selectAuditAi } from "./audit-stub";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
 import {
   type AuditCheckpoint,
   assertCheckpointProvenance,
+  continuationLimitOf,
   MAX_AUDIT_CONTINUATIONS,
   MAX_LATE_REASK_ROUNDS,
+  mainPromptCountOf,
   makeAuditCheckpoint,
   readAuditCheckpoint,
 } from "./checkpoint";
@@ -126,10 +129,24 @@ import {
 import { runCheckpointedQuestions } from "./run-checkpointed-questions";
 import { createRunTiming } from "./run-timing";
 import {
+  attachShadowPlan,
+  buildShadowPlanV2Result,
+  isShadowBrandAllowed,
+  isShadowPlanV2Enabled,
+  resolveShadowPlanV2,
+  SHADOW_PLAN_TIMEOUT_MS,
+  type ShadowPlanV2Result,
+} from "./shadow-plan-v2";
+import {
   persistAuditTracking,
   type TaggedEngineResponse,
   tagCoreResponses,
 } from "./tracking";
+
+// 그림자 v2 판정: 마감까지 이만큼 남았을 때만 시작하고, 이 상한 안에서 끝낸다(기존 완료 커밋 보호).
+const SHADOW_VERIFY_MIN_MS = 60_000;
+const SHADOW_VERIFY_MAX_MS = 90_000;
+const SHADOW_VERIFY_RESERVE_MS = 30_000;
 
 // A derived-stage write must not consume the remaining invocation deadline.
 // The database operation may still settle later; callers treat that outcome as
@@ -238,6 +255,21 @@ export { RUNNER_PROMPT_LIMIT } from "./prompt-limits";
  *   없으면 병합이 덜 될 뿐 측정 자체는 성립한다. 여기서 throw 하면
  *   경쟁사 조회 실패가 **측정 전체를 죽인다**(원가만 쓰고 결과 0).
  */
+/**
+ * 이름 없는 질문의 **질문 시장**(국내·해외 질문 비율). 엔진 선택과 무관하다 —
+ * 엔진은 checkpoint 의 enginePlan(질문 언어·엔진 구성 키)만으로 정한다(분모 불변 계약).
+ */
+function questionMarketScope(input: AuditRunInput): MarketScope {
+  return (
+    input.marketScope ??
+    inferMarketScope({
+      domain: input.domain,
+      industry: input.industry,
+      language: input.language,
+    }).scope
+  );
+}
+
 async function resolveRegisteredCompetitors(
   brandId: string | undefined
 ): Promise<KnownCompetitor[]> {
@@ -774,32 +806,77 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
               fallback: siteDiscovery,
               language: input.language,
               limit: MAX_DISCOVERY_PROMPTS,
-              scope:
-                input.marketScope ??
-                inferMarketScope({
-                  domain: input.domain,
-                  industry: input.industry,
-                  language: input.language,
-                }).scope,
+              scope: questionMarketScope(input),
               signal: budget.signal,
             })
           )
         : null;
     const discovery = demandDiscovery?.prompts ?? siteDiscovery;
+    // 🔴 질문 계획 v2 그림자(2026-10-07 · QUESTION_PLAN_V2_SHADOW, 기본 꺼짐).
+    //   허용 목록 브랜드·주 1회·이어가기를 집어 갈 주체가 있는 호출(continueWhenTruncated)만.
+    //   기존 세트 **뒤에** 붙여 같은 회차로 재고, 결과는 result.shadowPlanV2 에만 둔다(점수·Tracking 무관).
+    //   재개(savedCheckpoint)면 checkpoint 에 저장된 그림자 질문을 그대로 쓴다.
+    const shadowPlan =
+      !(savedCheckpoint || ai.stubMode) &&
+      input.brandId &&
+      input.continueWhenTruncated &&
+      !input.finalizeOnly &&
+      isShadowPlanV2Enabled() &&
+      isShadowBrandAllowed({ brandId: input.brandId, domain: input.domain }) &&
+      budget.hasBudgetFor(
+        SHADOW_PLAN_TIMEOUT_MS + AUDIT_MIN_NEXT_PROMPT_BUDGET_MS
+      )
+        ? await timed("shadow_plan_v2", async () => {
+            const customer = await customerIdentityFor(input);
+            return resolveShadowPlanV2({
+              brandId: input.brandId,
+              domain: input.domain,
+              language: input.language,
+              scope: questionMarketScope(input),
+              industry: input.industry ?? null,
+              brandNames: {
+                ko: brandName,
+                en: promptNames.en,
+                variants: brandVariants,
+              },
+              competitors: registeredCompetitors,
+              customerIdentity: customer ?? null,
+              footerIdentity: siteIdentity
+                ? {
+                    legalName: siteIdentity.legalName ?? null,
+                    businessNumber: siteIdentity.businessNumber ?? null,
+                  }
+                : null,
+              siteTextTerms: siteCategoryTerms(officialSiteIdentity, [
+                brandName,
+                promptNames.en,
+                ...brandVariants,
+              ]),
+              mainPromptCount: RUNNER_PROMPT_LIMIT,
+              baseContinuationLimit: MAX_AUDIT_CONTINUATIONS,
+              signal: budget.signal,
+            });
+          })
+        : null;
     const buildCheckpoint = (runPrompts: RunPrompt[]) =>
-      makeAuditCheckpoint(
-        input,
-        {
-          brandName,
-          brandVariants,
-          identityGrounded,
-          officialSiteIdentity,
-          ...(demandDiscovery
-            ? { demandQuestionSet: demandDiscovery.set }
-            : {}),
-        },
-        runPrompts,
-        savedJob.createdAt.toISOString()
+      attachShadowPlan(
+        makeAuditCheckpoint(
+          input,
+          {
+            brandName,
+            brandVariants,
+            identityGrounded,
+            officialSiteIdentity,
+            ...(demandDiscovery
+              ? { demandQuestionSet: demandDiscovery.set }
+              : {}),
+          },
+          shadowPlan ? [...runPrompts, ...shadowPlan.prompts] : runPrompts,
+          savedJob.createdAt.toISOString()
+        ),
+        shadowPlan,
+        runPrompts.length,
+        MAX_AUDIT_CONTINUATIONS
       );
     const ledgerEnabled =
       Boolean(input.brandId) && isPromptAttemptLedgerEnabled();
@@ -818,7 +895,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             })
           )
         : null;
-    const prompts =
+    const plannedPrompts =
       savedCheckpoint?.prompts ??
       ledgerPlan?.prompts ??
       (await timed("resolve_prompts", () =>
@@ -830,11 +907,19 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           brandVariants
         )
       ));
-    if (prompts.length === 0) {
+    if (plannedPrompts.length === 0) {
       throw new Error("Audit run has no prompts");
     }
     const checkpoint =
-      savedCheckpoint ?? ledgerPlan?.checkpoint ?? buildCheckpoint(prompts);
+      savedCheckpoint ??
+      ledgerPlan?.checkpoint ??
+      buildCheckpoint(plannedPrompts);
+    // 질문 전체(기존 세트 + 그림자) — 질문 실행·checkpoint 는 이 목록으로 돈다.
+    //   점수·Tracking·처방은 앞쪽 기존 세트(prompts)만 쓴다.
+    const allPrompts = checkpoint.prompts;
+    const mainPromptCount = mainPromptCountOf(checkpoint);
+    const prompts = allPrompts.slice(0, mainPromptCount);
+    const continuationLimit = continuationLimitOf(checkpoint);
     if (!(savedCheckpoint || ledgerPlan)) {
       await saveQuestionCheckpoint(input.jobId, leaseToken, checkpoint);
     }
@@ -867,8 +952,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       (status?: "fulfilled" | "rejected") => void
     >();
     const engineQueryBase = (promptIndex: number) => ({
-      prompt: prompts[promptIndex].text,
-      language: prompts[promptIndex].lang,
+      prompt: allPrompts[promptIndex].text,
+      language: allPrompts[promptIndex].lang,
       brandName,
       brandVariants,
       // 🔴 N-47 — 자사 도메인을 엔진에 넘겨 **본문 URL 폴백에서 자사를 제외**한다.
@@ -890,7 +975,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           checkpoint,
           async (promptIndex) => {
             const ledgerPromptId = ledgerActive
-              ? prompts[promptIndex].promptId
+              ? allPrompts[promptIndex]?.promptId
               : undefined;
             if (ledgerPromptId) {
               // 유료 호출 직전 dispatch 기록 — live lease 가 아니면 여기서 멈춘다.
@@ -931,7 +1016,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             latestCheckpoint = updatedCheckpoint;
             const finishedIndex = updatedCheckpoint.responses.length - 1;
             const finishedPromptId = ledgerActive
-              ? prompts[finishedIndex]?.promptId
+              ? allPrompts[finishedIndex]?.promptId
               : undefined;
             if (finishedPromptId) {
               // checkpoint 저장과 원장 종료를 한 transaction 으로(둘 다 or 둘 다 아님).
@@ -958,7 +1043,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             log.info("audit.question.checkpoint_saved", {
               jobId: input.jobId,
               completedQuestions: updatedCheckpoint.responses.length,
-              totalQuestions: prompts.length,
+              totalQuestions: allPrompts.length,
             });
           },
           // 마감(270초) 전 35초 미만이면 새 질문을 시작하지 않고 저장된 지점에서 멈춘다.
@@ -972,7 +1057,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
                 : budget.stopStartingAtMs,
           }
         ),
-      { promptCount: prompts.length }
+      { promptCount: allPrompts.length }
     );
 
     // 🔴 마감으로 질문이 남았을 때의 이어가기(2026-10-06).
@@ -980,7 +1065,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     //   어느 것도 하지 않는다(시계열·추세는 최종 완료 때 **한 번만** 반영된다).
     //   checkpoint 에 받은 답이 그대로 남아 다음 호출은 남은 질문만 묻는다.
     //   다 썼으면 아래로 내려가 기존 계약대로 잠정(provisional) 공개한다.
-    const remainingQuestions = prompts.length - sevenEngineResponses.length;
+    const remainingQuestions = allPrompts.length - sevenEngineResponses.length;
     const continuationsUsed = checkpoint.continuation?.count ?? 0;
     let cells = checkpointCells({
       ...latestCheckpoint,
@@ -990,7 +1075,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       remainingQuestions > 0 &&
       input.continueWhenTruncated &&
       !input.finalizeOnly &&
-      continuationsUsed < MAX_AUDIT_CONTINUATIONS
+      continuationsUsed < continuationLimit
     ) {
       const continuation = {
         count: continuationsUsed + 1,
@@ -1010,7 +1095,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       log.info("audit.continuation.requested", {
         jobId: input.jobId,
         completedQuestions: sevenEngineResponses.length,
-        totalQuestions: prompts.length,
+        totalQuestions: allPrompts.length,
         continuation: continuation.count,
       });
       finishJob();
@@ -1085,8 +1170,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         costModelVersion: reaskCost.costModelVersion,
       });
     } else if (
-      (remainingQuestions === 0 ||
-        continuationsUsed >= MAX_AUDIT_CONTINUATIONS) &&
+      (remainingQuestions === 0 || continuationsUsed >= continuationLimit) &&
       input.continueWhenTruncated &&
       !input.finalizeOnly &&
       lateRoundsUsed < MAX_LATE_REASK_ROUNDS &&
@@ -1139,6 +1223,12 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         reasons,
       });
     }
+
+    // 그림자 v2 질문의 답을 여기서 떼어 낸다 — 아래 점수·Tracking·처방·PDF 는 기존 세트만 본다.
+    const shadowBatches = sevenEngineResponses.splice(mainPromptCount);
+    const mainCells = cells.filter(
+      (cell) => cell.promptIndex < mainPromptCount
+    );
 
     // 20번(dual-write): flat() 하면 각 응답이 어느 프롬프트에서 나왔는지 소실된다.
     //   Tracking은 promptId(=프롬프트별)로 정규화 저장하므로, flat 이전에 프롬프트 원문/언어를
@@ -1254,7 +1344,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     // 칸 표시는 원본 응답 순서(tagged)의 질문 번호·엔진으로 찾는다.
     const cellOfRow = (index: number, engineId: string) =>
       findCell(cells, tagged[index]?.promptIndex, engineId);
-    const reaskedRows = reaskedCells(cells).flatMap((cell) => {
+    const reaskedRows = reaskedCells(mainCells).flatMap((cell) => {
       const row = sevenEngineResponses[cell.promptIndex]?.find(
         (response) => response.engineId === cell.engineId
       );
@@ -1266,7 +1356,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             const reask = auditCost(reaskedRows.map(({ row }) => row));
             return {
               cells: reaskedRows.length,
-              resolved: resolvedLateCells(cells).length,
+              resolved: resolvedLateCells(mainCells).length,
               krw: Math.round(reask.totalKrw * 100) / 100,
               perEngine: Object.entries(
                 countByEngine(reaskedRows.map(({ cell }) => cell))
@@ -1290,7 +1380,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       const lateCell = lateCellMarker(cellOfRow(index, row.engineId));
       return lateCell ? { lateCell } : {};
     });
-    const resolvedLate = resolvedLateCells(cells);
+    const resolvedLate = resolvedLateCells(mainCells);
     const revisions =
       resolvedLate.length > 0
         ? [
@@ -1431,6 +1521,84 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       }),
     });
 
+    // 🔴 질문 계획 v2 그림자 결과(저장 전용) — 기존 점수가 다 계산된 **뒤에** 따로 판정한다.
+    //   판정 시간이 모자라면 판정 없이(unverified) 저장한다 — 기존 회차 완료를 늦추지 않는다.
+    let shadowPlanV2: ShadowPlanV2Result | null = null;
+    if (checkpoint.shadowPlanV2) {
+      const shadowMeta = checkpoint.shadowPlanV2;
+      const shadowPrompts = allPrompts.slice(mainPromptCount);
+      const shadowRaw = shadowBatches.flat();
+      const remainingMs = budget.stopStartingAtMs - Date.now();
+      let verified: typeof shadowRaw | null = null;
+      if (shadowRaw.length > 0 && remainingMs >= SHADOW_VERIFY_MIN_MS) {
+        try {
+          verified = await timed("shadow_plan_v2", () =>
+            awaitWithTimeout(
+              ai.verifyMentions(shadowRaw, {
+                brandName,
+                brandVariants,
+                brandDomain: input.domain,
+                industry: input.industry ?? undefined,
+                officialSite: officialSiteIdentity,
+                // 그림자 판정에는 v3 그림자를 다시 돌리지 않는다(원가).
+                shadowDeadlineAtMs: 0,
+              }),
+              Math.min(
+                SHADOW_VERIFY_MAX_MS,
+                remainingMs - SHADOW_VERIFY_RESERVE_MS
+              )
+            )
+          );
+        } catch (error) {
+          log.warn("audit.shadow_plan_v2.verify_skipped", {
+            jobId: input.jobId,
+            error: parseError(error),
+          });
+        }
+      }
+      let cursor = 0;
+      const batches = shadowBatches.map((batch) => {
+        const width = batch.length;
+        const slice = verified
+          ? verified.slice(cursor, cursor + width)
+          : [...batch];
+        cursor += width;
+        return slice;
+      });
+      const shadowCost = auditCost(shadowRaw);
+      shadowPlanV2 = buildShadowPlanV2Result({
+        checkpoint: shadowMeta,
+        prompts: shadowPrompts,
+        batches,
+        verification: verified ? "verified" : "unverified",
+        lateCellOf: (questionIndex, engineId) =>
+          lateCellMarker(
+            findCell(cells, mainPromptCount + questionIndex, engineId)
+          ),
+        cost: {
+          costModelVersion: shadowCost.costModelVersion,
+          totalKrw: Math.round(shadowCost.totalKrw * 100) / 100,
+          perEngine: shadowCost.perEngine.map((c) => ({
+            engineId: c.engineId,
+            krw: Math.round(c.krw * 100) / 100,
+          })),
+        },
+      });
+      log.info("audit.shadow_plan_v2.completed", {
+        jobId: input.jobId,
+        engineSetKey: shadowMeta.engineSetKey,
+        questionsPlanned: shadowMeta.questionCount,
+        questionsAnswered: shadowBatches.length,
+        verification: verified ? "verified" : "unverified",
+        costKrw: shadowPlanV2.cost.totalKrw,
+      });
+    }
+
+    // 수요 기반 질문의 출처(키워드·검색량·주제) — 플래그 켜짐일 때만 존재.
+    const demandFieldOf = (index: number) => {
+      const demand = prompts[tagged[index]?.promptIndex ?? -1]?.demand;
+      return demand ? { promptDemand: demand } : {};
+    };
     const result = {
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
       brandName,
@@ -1473,7 +1641,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
       // 늦은 답 반영으로 점수가 정정된 기록(2026-10-07). 없으면 키도 없다(기존 결과와 같은 모양).
       ...(revisions.length > 0 ? { revisions } : {}),
       briefingStatus: "not_requested" as const,
-      cost: costSummary,
+      // 그림자 v2 원가는 totalKrw 에 **넣지 않고** 따로 적는다(기존 회차 원가 시계열 유지 · 운영 합산용).
+      cost: shadowPlanV2
+        ? { ...costSummary, shadowPlanV2Krw: shadowPlanV2.cost.totalKrw }
+        : costSummary,
       engineResponses: flat.map((r, index) => ({
         // Excerpts remain a display convenience; revalidation must retain the
         // complete evidence and the raw-text name-match result. Adapters may
@@ -1495,9 +1666,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         // 이름 없는 질문인지(2026-09-29) — 화면이 「이름 없이 물었을 때 추천됨」을 따로 센다.
         promptKind: tagged[index]?.promptKind ?? "brand",
         // 수요 기반 질문의 출처(키워드·검색량·주제) — 플래그 켜짐일 때만 존재.
-        ...(prompts[tagged[index]?.promptIndex ?? -1]?.demand
-          ? { promptDemand: prompts[tagged[index]?.promptIndex ?? -1]?.demand }
-          : {}),
+        ...demandFieldOf(index),
         // 답변 4분류(+판정 보류) — 저장해 두면 화면·API 가 같은 판정을 읽는다.
         answerBucket: classifyAnswer(r),
         // 네이버 행은 이제 검색 결과 원문이다(2026-09-29). 이 표시가 없는 과거 행은 합성 요약.
@@ -1614,6 +1783,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
        */
       brandVariants,
       registeredCompetitors,
+      // 질문 계획 v2 그림자(저장 전용 · 점수·추세·Tracking 미사용). 꺼진 회차엔 키도 없다.
+      ...(shadowPlanV2 ? { shadowPlanV2 } : {}),
     };
 
     // 이 시각은 측정 1회의 식별자다. AuditJob과 모든 Tracking 행이 정확히 같은
