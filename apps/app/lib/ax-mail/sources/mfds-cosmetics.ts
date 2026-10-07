@@ -1,5 +1,7 @@
 import "server-only";
 
+import { regionFromText } from "../discovery/taxonomy";
+import { type DiscoveredCompany, emptyDiscovered } from "../discovery/types";
 import { dataGoKrItems, fetchJson, normalizeBizNo, str, ymd } from "./http";
 
 /**
@@ -116,4 +118,22 @@ export async function fetchMfdsCosmetics(
     ...page,
     items: page.items.filter((item) => item.kind === query.kind),
   };
+}
+
+// ── 발굴(목록) ──────────────────────────────────────────────────────────────
+
+/** 식약처 행 → 발굴 회사. 업종은 KSIC 가 아니라 원문(화장품제조/화장품책임판매)을 업종명으로 둔다. */
+export function mfdsToDiscovered(
+  row: MfdsCosmeticsBusiness
+): DiscoveredCompany {
+  const company = emptyDiscovered("mfds", row.name);
+  company.address = row.region;
+  company.asOf = row.permittedOn;
+  company.businessNumber = row.bizNo;
+  company.industryName = row.kind;
+  company.region = regionFromText(row.region);
+  company.sourceRef = row.entpSeq;
+  company.tags = ["mfds_cosmetics"];
+  company.extra = { kind: row.kind, permittedOn: row.permittedOn };
+  return company;
 }

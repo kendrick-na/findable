@@ -1,5 +1,11 @@
 import "server-only";
 
+import { regionFromText } from "../discovery/taxonomy";
+import {
+  type DiscoveredCompany,
+  type DiscoveryPage,
+  emptyDiscovered,
+} from "../discovery/types";
 import {
   dataGoKrItems,
   fetchJson,
@@ -133,4 +139,74 @@ export async function fetchFscCorp(
     return null;
   }
   return parseFscOutline(outcome.body, normalizeBizNo(query.businessNumber));
+}
+
+// ── 발굴(목록) ──────────────────────────────────────────────────────────────
+
+const ZERO_CRNO_RE = /^0+$/;
+
+/** 금융위 행 → 발굴 회사. 사업자번호도 정상 법인번호도 없는 행(해외 펀드 등, 실측 crno=0000000000000)은 null. */
+export function fscToDiscovered(row: FscCorpOutline): DiscoveredCompany | null {
+  const crno =
+    row.corpRegNo && !ZERO_CRNO_RE.test(row.corpRegNo) ? row.corpRegNo : null;
+  if (!(row.bizNo || crno)) {
+    return null;
+  }
+  const company = emptyDiscovered("fsc", row.name);
+  company.address = row.address;
+  company.asOf = row.asOf;
+  company.businessNumber = row.bizNo;
+  company.corpRegNo = crno;
+  company.employees =
+    row.employeeCount && row.employeeCount > 0 ? row.employeeCount : null;
+  company.foundedOn = row.foundedOn;
+  company.homepage = row.homepage;
+  company.industryName = row.industry ?? row.mainBusiness;
+  company.region = regionFromText(row.address);
+  company.sourceRef = crno;
+  const listed = Boolean(row.listedMarket && row.listedMarket !== "기타");
+  company.tags = listed ? ["listed"] : [];
+  company.extra = { isSme: row.isSme, listedMarket: row.listedMarket };
+  return company;
+}
+
+/**
+ * 법인명 없이 페이지 단위 목록(실측 2026-10-07: totalCount 1,295,826 — 기간별 이력 행 포함).
+ * 업종·지역 필터 파라미터는 없다 → 야간 배치로 훑어 DB 에서 거른다. 키 없음·HTTP 오류 → null.
+ */
+export async function listFscCorps(
+  query: { numOfRows?: number; pageNo?: number } = {},
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
+): Promise<DiscoveryPage | null> {
+  const key = process.env.DATA_GO_KR_SERVICE_KEY;
+  if (!key) {
+    return null;
+  }
+  const pageNo = query.pageNo ?? 1;
+  const params = new URLSearchParams({
+    serviceKey: key,
+    pageNo: String(pageNo),
+    numOfRows: String(Math.min(query.numOfRows ?? 100, 1000)),
+    resultType: "json",
+  });
+  const outcome = await fetchJson(
+    "fsc-corp-list",
+    `${ENDPOINT}?${params}`,
+    { signal: options.signal },
+    options.timeoutMs
+  );
+  if (!outcome.ok) {
+    return null;
+  }
+  const { resultCode, totalCount } = dataGoKrItems(outcome.body);
+  if (resultCode !== "00") {
+    return null;
+  }
+  return {
+    items: parseFscOutline(outcome.body)
+      .map((row) => fscToDiscovered(row))
+      .filter((c): c is DiscoveredCompany => c !== null),
+    pageNo,
+    totalCount,
+  };
 }

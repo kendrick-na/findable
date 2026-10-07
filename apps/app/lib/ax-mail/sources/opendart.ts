@@ -2,6 +2,8 @@ import "server-only";
 
 import { inflateRawSync } from "node:zlib";
 import { log } from "@repo/observability/log";
+import { regionFromText } from "../discovery/taxonomy";
+import { type DiscoveredCompany, emptyDiscovered } from "../discovery/types";
 import {
   asRecord,
   fetchJson,
@@ -49,6 +51,8 @@ export interface DartCompany {
   corpRegNo: string | null;
   foundedOn: string | null;
   homepage: string | null;
+  /** 업종코드(induty_code) — KSIC(한국표준산업분류) 코드 */
+  industryCode: string | null;
   name: string;
   stockCode: string | null;
 }
@@ -249,6 +253,7 @@ export function parseDartCompany(body: unknown): DartCompany | null {
     corpRegNo: str(root?.jurir_no),
     foundedOn: ymd(root?.est_dt),
     homepage: str(root?.hm_url),
+    industryCode: str(root?.induty_code),
     name,
     stockCode: str(root?.stock_code),
   };
@@ -364,4 +369,72 @@ export async function fetchDart(
     }
   }
   return { ambiguous: false, company, revenue };
+}
+
+// ── 발굴(목록) ──────────────────────────────────────────────────────────────
+
+/**
+ * 고유번호 전체 목록 — 공시대상 회사 전체(약 10만, 업종 없음). listedOnly 면 종목코드가 있는 상장사만.
+ * 업종(KSIC)은 회사마다 company.json 1회(fetchDartCompanyByCode)로 받는다 — 일 20,000회 한도(OpenDART 안내) [확인필요].
+ * 키 없음·다운로드 실패 → null.
+ */
+export async function listDartCorps(
+  options: { listedOnly?: boolean; timeoutMs?: number } = {}
+): Promise<DartCorpCode[] | null> {
+  const index = await loadCorpCodeIndex(options.timeoutMs);
+  if (!index) {
+    return null;
+  }
+  const all = [...index.values()].flat();
+  return options.listedOnly ? all.filter((c) => c.stockCode) : all;
+}
+
+const CORP_CODE_RE = /^\d{8}$/;
+
+/** 고유번호 → 기업개황 1건. 키 없음·오류·미존재 → null. */
+export async function fetchDartCompanyByCode(
+  corpCode: string,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
+): Promise<DartCompany | null> {
+  const key = process.env.OPENDART_API_KEY;
+  if (!(key && CORP_CODE_RE.test(corpCode))) {
+    return null;
+  }
+  const res = await fetchJson(
+    "opendart-company.json",
+    `${BASE}/company.json?${new URLSearchParams({ crtfc_key: key, corp_code: corpCode })}`,
+    { signal: options.signal },
+    options.timeoutMs
+  );
+  return res.ok ? parseDartCompany(res.body) : null;
+}
+
+const LISTED_CLASSES = new Set(["Y", "K", "N"]);
+
+/** 고유번호(+기업개황) → 발굴 회사. 개황이 없으면 이름·종목코드만. */
+export function dartToDiscovered(
+  corp: DartCorpCode,
+  company: DartCompany | null = null
+): DiscoveredCompany {
+  const out = emptyDiscovered("opendart", company?.name ?? corp.corpName);
+  out.dartCorpCode = corp.corpCode;
+  out.sourceRef = corp.corpCode;
+  if (company) {
+    out.address = company.address;
+    out.businessNumber = company.bizNo;
+    out.corpRegNo = company.corpRegNo;
+    out.foundedOn = company.foundedOn;
+    out.homepage = company.homepage;
+    out.industryCode = company.industryCode;
+    out.region = regionFromText(company.address);
+  }
+  const listed =
+    Boolean(corp.stockCode) ||
+    (company?.corpClass ? LISTED_CLASSES.has(company.corpClass) : false);
+  out.tags = listed ? ["listed"] : [];
+  out.extra = {
+    corpClass: company?.corpClass ?? null,
+    stockCode: corp.stockCode ?? company?.stockCode ?? null,
+  };
+  return out;
 }

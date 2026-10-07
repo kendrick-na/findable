@@ -1138,3 +1138,206 @@ model RenewalNotice {
 
   @@index([organizationId])
 }
+
+// ──────────────────────────────────────────────────
+// 영업 발굴 DB — 세그먼트 · 회사 카드 · 영업 파이프라인 (migration 20261007_sales_discovery)
+//   설계: docs/_적용/영업시스템_회사카드_DB설계안_20261006.md (2026-10-07 구현안).
+//   ⚠️ 이 테이블들은 **서로끼리만** relation 을 건다. 기존 모델(Organization/Brand/Lead …)과는
+//     relation 이 없으므로 migration 적용 전 배포에서도 기존 삭제 경로가 이 테이블을 조회하지 않는다.
+//   ⚠️ 기존 `Lead`(무료 진단·문의 리드)와 다른 축이라 영업 리드는 `SalesLead` 로 이름을 나눈다.
+//   원칙: 회사 1곳 = Company 1행, 사실 1개 = CompanyFact 1행(출처·기준일·가져온 시각).
+//     Company 의 업종·직원수 등 칸은 **필터용 사본**이고, 근거는 언제나 CompanyFact 에 있다.
+// ──────────────────────────────────────────────────
+
+/// 영업 파이프라인 단계. opted_out = 수신거부(이후 발송 금지).
+enum SalesLeadStatus {
+  found
+  measured
+  reported
+  drafted
+  sent
+  replied
+  meeting
+  won
+  lost
+  opted_out
+}
+
+/// 저장된 발굴 필터 — THE VC 「스마트 컬렉션」처럼 조건만 저장하고, 맞는 회사는 다시 돌려 채운다.
+model Segment {
+  id              String           @id @default(uuid())
+  name            String
+  description     String?
+  /// SegmentFilter JSON (apps/app/lib/ax-mail/discovery/segment-query.ts 의 zod 스키마로 검증)
+  filter          Json
+  /// true 면 새 회사가 적재될 때 다시 돌려 SegmentCompany 를 채운다.
+  autoRefresh     Boolean          @default(true)
+  lastRefreshedAt DateTime?
+  companyCount    Int?
+  /// Clerk userId (관리자)
+  createdBy       String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  companies       SegmentCompany[]
+  leads           SalesLead[]
+}
+
+model SegmentCompany {
+  segmentId String
+  companyId String
+  addedAt   DateTime @default(now())
+  segment   Segment  @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([segmentId, companyId])
+  @@index([companyId])
+}
+
+/// 회사 1곳. 식별자는 사업자번호(10자리) 우선 — 없으면(벤처기업명단 등) 이름+지역으로 만들고 matchConfidence=name_only.
+model Company {
+  id                String           @id @default(uuid())
+  businessNumber    String?          @unique
+  /// 법인등록번호 13자리
+  corpRegNo         String?
+  /// OpenDART 고유번호 8자리
+  dartCorpCode      String?
+  /// 표시용 이름(최신 사실의 사본)
+  legalName         String
+  /// 매칭용 정규화 이름(법인 표기·공백 제거, 소문자)
+  normalizedName    String
+  /// 자체 사이트 도메인(www·경로 제거). 스마트스토어 같은 입점몰 주소는 넣지 않는다(CompanyFact storeUrl).
+  domain            String?
+  industry          Industry?
+  /// KSIC(한국표준산업분류) 코드 — 원천이 코드를 줄 때만
+  industryCode      String?
+  /// 원천 업종명(예: "화장품 제조업")
+  industryName      String?
+  /// ksic | name | products | manual — manual 은 자동 적재가 덮어쓰지 않는다
+  industrySource    String?
+  /// 자유 태그: b2b · b2c · commerce · venture · vc_invested · innobiz · mainbiz · tips · listed · mfds_cosmetics …
+  tags              String[]         @default([])
+  /// 시·도 약칭 17종(서울·경기·…·제주)
+  region            String?
+  employeeCount     Int?
+  /// employeeCount 의 원천 기준일(YYYY-MM[-DD])
+  employeeAsOf      String?
+  /// 국민연금 비교 구간 가입자 변화율(0.12 = +12%). 2개월 미만이면 null.
+  employeeGrowth    Float?
+  foundedYear       Int?
+  /// 이 회사를 알려 준 원천들(venture · innobiz · mainbiz · ftc_mail_order · nps · fsc · opendart · mfds …)
+  sources           String[]         @default([])
+  /// exact(사업자번호 일치) | name_only
+  matchConfidence   String           @default("name_only")
+  /// 마지막 AI 노출 측정 점수(0~100) — 측정 결과의 사본
+  lastMeasuredScore Int?
+  lastMeasuredAt    DateTime?
+  lastEnrichedAt    DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  facts             CompanyFact[]
+  contacts          CompanyContact[]
+  leads             SalesLead[]
+  segments          SegmentCompany[]
+
+  @@index([normalizedName, region])
+  @@index([industry])
+  @@index([region])
+  @@index([domain])
+  @@index([employeeCount])
+  @@index([tags], type: Gin)
+}
+
+/// 사실 1개 = 출처 1개. 같은 field 라도 원천·기준일이 다르면 행이 쌓인다(덮어쓰지 않음 → 추이가 곧 영업 신호).
+/// 같은 (회사, field, 원천, 기준일)을 다시 받으면 그 행만 갱신한다(재적재 멱등).
+model CompanyFact {
+  id        String   @id @default(uuid())
+  companyId String
+  /// legalName | industry | address | homepage | storeUrl | employeeCount | employeeTrend
+  /// | foundedOn | products | certification | mailOrder | listing | revenue …
+  field     String
+  value     Json
+  /// venture | innobiz | mainbiz | ftc_mail_order | nps | fsc | opendart | mfds | nts | input
+  source    String
+  /// 원천 행 식별자(통신판매번호, NPS seq, DART 고유번호 …)
+  sourceRef String?
+  /// 원천 기준일(YYYY-MM-DD / YYYY-MM / 사업연도). 모르면 "" — 멱등 키에 들어가므로 null 대신 빈 문자열.
+  asOf      String   @default("")
+  /// 우리가 가져온 시각
+  fetchedAt DateTime
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, field, source, asOf])
+  @@index([companyId, field, fetchedAt])
+}
+
+/// 회사의 공개 연락처 메일(회사 사이트·정부 공개자료에서 확인한 것만).
+model CompanyContact {
+  id           String      @id @default(uuid())
+  companyId    String
+  email        String
+  /// partnership | general | press | cs | other | privacy (sources/contact-email.ts ContactRole)
+  role         String
+  /// 사람 이름처럼 보이는 주소 — 후보로 보여 주되 자동 1순위로 고르지 않는다
+  personalName Boolean     @default(false)
+  /// high | medium | low
+  confidence   String?
+  /// 주소 옆 글자(역할 판단 근거)
+  label        String?
+  /// 주소가 보인 공개 페이지 — 수신 근거의 「공개된 페이지 주소」
+  sourceUrl    String
+  fetchedAt    DateTime
+  createdAt    DateTime    @default(now())
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  leads        SalesLead[]
+
+  @@unique([companyId, email])
+}
+
+/// 영업 대상 1건(회사 단위). 기존 lib/ax-mail/data/leads-snapshot.json 을 옮겨 올 자리.
+model SalesLead {
+  id              String          @id @default(uuid())
+  companyId       String
+  /// 발송 대상 연락처(고르기 전엔 null)
+  contactId       String?
+  /// 어느 세그먼트에서 발굴했는지
+  segmentId       String?
+  status          SalesLeadStatus @default(found)
+  statusChangedAt DateTime        @default(now())
+  /// 고객 리포트 URL(reported 이후)
+  reportUrl       String?
+  note            String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contact         CompanyContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  segment         Segment?        @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  basis           ContactBasis[]
+
+  @@unique([companyId])
+  @@index([status])
+  @@index([contactId])
+  @@index([segmentId])
+}
+
+/// 수신 근거 — KISA 불법스팸 방지 안내서 기준 「먼저 보내도 되는 근거」의 법적 증빙.
+/// lib/ax-mail/contact-basis.ts 의 kind 4종과 같다. 수정·삭제하지 않고 새 행을 추가한다(이력 보존).
+model ContactBasis {
+  id          String    @id @default(uuid())
+  leadId      String
+  /// business_card | requested | existing_customer | public_contact
+  kind        String
+  /// 이 근거가 덮는 수신 주소
+  email       String
+  /// 명함 받은 장소 / 요청 방법 / 거래 내용 / 공개된 페이지 주소
+  detail      String
+  /// YYYY-MM-DD — 명함 받은 날 / 요청일 / 마지막 거래일 / 공개 메일 확인일
+  date        String
+  /// 명함 사진·요청 메일 캡처(Storage) — 분쟁 시 제출용
+  evidenceUrl String?
+  /// Clerk userId
+  recordedBy  String
+  recordedAt  DateTime  @default(now())
+  lead        SalesLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, recordedAt])
+}
