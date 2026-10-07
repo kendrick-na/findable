@@ -2041,6 +2041,12 @@
       "stageSaveFailed": "단계를 바꾸지 못했습니다.",
       "lastMeasure": "최근 측정",
       "lastMeasureNone": "측정 이력 없음",
+      "measureStatus": {
+        "queued": "대기 중",
+        "processing": "측정 중",
+        "completed": "완료",
+        "failed": "실패"
+      },
       "report": "리포트",
       "reportOpen": "발송 승인된 리포트 열기",
       "reportIssue": "리포트 발행 화면으로(측정 회차 채움)",

@@ -576,7 +576,7 @@ export function CompanyCard({
         <p className={`mt-3 text-xs ${subtle}`}>
           {labels.lastMeasure}:{" "}
           {card.lastJob
-            ? `${card.lastJob.status} · ${seoulDate(card.lastJob.createdAt)}`
+            ? `${labels.measureStatus[card.lastJob.status as keyof Labels["measureStatus"]] ?? card.lastJob.status} · ${seoulDate(card.lastJob.createdAt)}`
             : labels.lastMeasureNone}
         </p>
       </section>

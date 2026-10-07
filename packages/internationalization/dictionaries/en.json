@@ -2041,6 +2041,12 @@
       "stageSaveFailed": "Could not change the stage.",
       "lastMeasure": "Last measurement",
       "lastMeasureNone": "No measurement yet",
+      "measureStatus": {
+        "queued": "Queued",
+        "processing": "Measuring",
+        "completed": "Completed",
+        "failed": "Failed"
+      },
       "report": "Report",
       "reportOpen": "Open approved report",
       "reportIssue": "Go to report issuing (job prefilled)",
