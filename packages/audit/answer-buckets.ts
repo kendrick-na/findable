@@ -549,6 +549,7 @@ type ReasonKey =
   | "timeout"
   | "engine_error"
   | "unverified"
+  | "search_inconclusive"
   | "different_entity"
   | "confirmed"
   | "recommended"
@@ -567,6 +568,12 @@ const REASON_COPY: Record<ReasonKey, readonly [string, string]> = {
   unverified: [
     "판정기 오류로 같은 회사인지 확인하지 못했어요",
     "The verifier failed; identity not checked",
+  ],
+  // 검색 결과(네이버·다음)는 약관상 LLM 판정기를 쓰지 않는다(2026-10-07). 규칙만으로
+  //   결정적 근거가 없어 보류된 경우 — 「판정기 오류」가 아니다. 👤 대표 승인 문구.
+  search_inconclusive: [
+    "검색 결과만으로는 우리 브랜드인지 확인할 수 없었어요",
+    "The search results alone weren't enough to confirm it's your brand",
   ],
   different_entity: [
     "같은 이름의 다른 대상을 설명했어요",
@@ -612,6 +619,12 @@ function reasonKey(
   const bucket = classifyAnswer(row);
   if (bucket === "engine_error") {
     return engineErrorReason(row);
+  }
+  if (
+    bucket === "unverified" &&
+    row.verdictReason === "search_rule_inconclusive"
+  ) {
+    return "search_inconclusive";
   }
   if (bucket === "unverified" || bucket === "different_entity") {
     return bucket;
