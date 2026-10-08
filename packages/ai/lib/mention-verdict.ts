@@ -30,8 +30,11 @@ import { detectBrandMention } from "./engines/utils";
 
 export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
 
+// 판정 전용 모델. 크루/제안용 FINDABLE_CREW_LETSUR_MODEL 과 분리해 판정만 따로
+// 올리고 되돌릴 수 있게 한다. 코드 기본값을 두어 앱별 env 누락(parity) 사고를 피한다.
+// 2026-10-08 시험: haiku-5-5 가 4.5 와 97.4% 일치, 더 엄격한 쪽으로만 달랐고 단가 약 1/8.
 const LETSUR_VERDICT_MODEL_ID =
-  process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
+  process.env.FINDABLE_VERDICT_LETSUR_MODEL ?? "claude-haiku-5-5";
 
 async function verdictModel() {
   const letsurKey = process.env.LETSUR_API_KEY;
