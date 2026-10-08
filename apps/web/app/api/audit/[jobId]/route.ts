@@ -4,6 +4,11 @@
 // jobId는 UUID v4 (Prisma @default(uuid))이므로 추측 불가.
 
 import {
+  filterStoredGeoActions,
+  filterStoredTopRecommendations,
+} from "@repo/audit/action-display-filter";
+import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
+import {
   type AuditHistoryComparison,
   buildAuditHistory,
   EMPTY_HISTORY,
@@ -11,19 +16,24 @@ import {
 } from "@repo/audit/history";
 import { maskEmail } from "@repo/audit/mask";
 import {
+  hasFilteredStoredAuditAdvice,
+  hasRecomputedAuditMetricsChanged,
   hasStaleAuditPdf,
+  isCurrentAuditPdfUrl,
   isPublishableAuditResult,
   publicAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
+import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
 import { reconcileStaleAuditJob } from "@repo/audit/stale-job";
-import { database } from "@repo/database";
+import { type AuditJob, database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { resolveIsOwner } from "../_lib/owner";
+import { canExposeAuditResult } from "../_lib/public-access";
 
 export const runtime = "nodejs";
 
@@ -80,6 +90,7 @@ async function loadHistory(job: {
           domain: r.domain,
           createdAt: r.createdAt,
           score: scoreOf(result),
+          searchSamplingVersion: searchSamplingVersionOf(r.result),
           usable: isUsableRun(result),
         };
       }),
@@ -95,13 +106,26 @@ async function loadHistory(job: {
   }
 }
 
+function sanitizePublicAuditResult(result: unknown): Record<string, unknown> {
+  const publicResult = publicAuditResult(result) as Record<string, unknown>;
+  return {
+    ...publicResult,
+    geoActions: filterStoredGeoActions(
+      publicResult.geoActions as Record<string, unknown>[] | undefined
+    ),
+    topRecommendations: filterStoredTopRecommendations(
+      publicResult.topRecommendations as unknown[] | undefined
+    ),
+  };
+}
+
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const startedAt = performance.now();
   const { jobId } = await params;
   log.debug("audit.poll.received", { jobId });
 
   try {
-    if (!jobId || typeof jobId !== "string" || jobId.length < 10) {
+    if (!isPlausibleJobId(jobId)) {
       log.warn("audit.poll.invalid_id", { jobId });
       return NextResponse.json(
         { error: "잘못된 jobId입니다." },
@@ -139,47 +163,47 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const reconciledStatus = await reconcileStaleAuditJob(job);
-    if (reconciledStatus && reconciledStatus !== job.status) {
-      const refreshed = await database.auditJob.findUnique({
-        where: { id: job.id },
-        select: { status: true, completedAt: true, errorMessage: true },
-      });
-      if (refreshed) {
-        job.status = refreshed.status;
-        job.completedAt = refreshed.completedAt;
-        job.errorMessage = refreshed.errorMessage;
-      }
-    }
-
-    // 히스토리는 **완료된 job 에서만** 조회한다. 이 라우트는 진행 중 1초 간격으로
-    //   폴링되므로, 아직 결과가 없는 동안 매번 추가 쿼리를 도는 건 낭비다.
-    const history =
-      job.status === "completed" ? await loadHistory(job) : EMPTY_HISTORY;
-    const historyMs = Math.round(performance.now() - startedAt) - jobLookupMs;
-
     // 🔒 소유 판별 — 비로그인이면 `auth()` 가 빈 값을 주고 그대로 **비소유자**가 된다.
     //   ⚠️ 실패해도 결과 조회 자체는 깨뜨리지 않는다. 다만 실패 시 기본값은
     //      **비소유(false)** 다 — 판별을 못 하는 상황에서 노출하는 쪽으로 기울면
     //      그게 바로 이 항목이 생긴 이유다(닫히는 쪽이 안전한 기본값).
+    const ownerStartedAt = performance.now();
     const isOwner = await resolveIsOwner(job);
-    const ownerMs =
-      Math.round(performance.now() - startedAt) - jobLookupMs - historyMs;
-    if (performance.now() - startedAt > 1500) {
-      log.warn("audit.poll.slow", {
-        jobId,
-        jobLookupMs,
-        historyMs,
-        ownerMs,
-        totalMs: Math.round(performance.now() - startedAt),
-      });
+    const ownerMs = Math.round(performance.now() - ownerStartedAt);
+
+    // Free jobs remain link-readable by design. Workspace jobs are private:
+    // reject non-owners before reconciliation, history, or any response that
+    // could contain stored metrics, raw engine rows, or crew output.
+    if (!canExposeAuditResult(job, isOwner)) {
+      return NextResponse.json(
+        { error: "이 진단 결과를 조회할 권한이 없습니다." },
+        { status: 403 }
+      );
     }
 
+    const reconciledStatus = await reconcileStaleAuditJob(job);
+    if (reconciledStatus && reconciledStatus !== job.status) {
+      await refreshReconciledJob(job);
+    }
+
+    // 히스토리는 **완료된 job 에서만** 조회한다. 이 라우트는 진행 중 1초 간격으로
+    //   폴링되므로, 아직 결과가 없는 동안 매번 추가 쿼리를 도는 건 낭비다.
+    // 조직 Job 비소유자는 위의 private gate에서 이미 반환된다.
+    const historyStartedAt = performance.now();
+    const history =
+      job.status === "completed" ? await loadHistory(job) : EMPTY_HISTORY;
+    const historyMs = Math.round(performance.now() - historyStartedAt);
+    logSlowPoll({ jobId, startedAt, jobLookupMs, historyMs, ownerMs });
+
     const result = withRecomputedAuditMetrics(job.result);
-    const publishable = isPublishableAuditResult(result);
-    const pdfOutdated = Boolean(
-      job.pdfUrl && hasStaleAuditPdf(job.result, result)
+    const metricBasisChanged = hasRecomputedAuditMetricsChanged(
+      job.result,
+      result
     );
+    const adviceBasisChanged = hasFilteredStoredAuditAdvice(job.result);
+    const publishable = isPublishableAuditResult(result);
+    const safeResult = sanitizePublicAuditResult(result);
+    const pdfOutdated = isPdfOutdated(job.pdfUrl, job.result, result);
     return NextResponse.json({
       jobId: job.id,
       // 세션L L-1: 결과 소유권 연결용. 무료 진단은 "이 진단에 쓴 이메일로 가입해야"
@@ -203,9 +227,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       language: job.language,
       pdfUrl: pdfOutdated || !publishable ? null : job.pdfUrl,
       pdfOutdated,
-      result: publicAuditResult(result),
+      metricBasisChanged,
+      adviceBasisChanged,
+      result: safeResult,
       crewStatus: job.crewStatus,
-      crewResult: publishable ? job.crewResult : null,
+      crewResult: publishable ? sanitizeStoredCrewResult(job.crewResult) : null,
       crewOutdated: !publishable && Boolean(job.crewResult),
       crewStartedAt: job.crewStartedAt?.toISOString() ?? null,
       crewCompletedAt: job.crewCompletedAt?.toISOString() ?? null,
@@ -223,4 +249,58 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       { status: 500 }
     );
   }
+}
+
+function isPlausibleJobId(jobId: string): boolean {
+  return !(!jobId || typeof jobId !== "string" || jobId.length < 10);
+}
+
+/** Re-read only the fields stale-job reconciliation can change. */
+async function refreshReconciledJob(
+  job: Pick<AuditJob, "id" | "status" | "completedAt" | "errorMessage">
+): Promise<void> {
+  const refreshed = await database.auditJob.findUnique({
+    where: { id: job.id },
+    select: { status: true, completedAt: true, errorMessage: true },
+  });
+  if (refreshed) {
+    job.status = refreshed.status;
+    job.completedAt = refreshed.completedAt;
+    job.errorMessage = refreshed.errorMessage;
+  }
+}
+
+function logSlowPoll({
+  jobId,
+  startedAt,
+  jobLookupMs,
+  historyMs,
+  ownerMs,
+}: {
+  jobId: string;
+  startedAt: number;
+  jobLookupMs: number;
+  historyMs: number;
+  ownerMs: number;
+}): void {
+  if (performance.now() - startedAt > 1500) {
+    log.warn("audit.poll.slow", {
+      jobId,
+      jobLookupMs,
+      historyMs,
+      ownerMs,
+      totalMs: Math.round(performance.now() - startedAt),
+    });
+  }
+}
+
+function isPdfOutdated(
+  pdfUrl: string | null,
+  storedResult: unknown,
+  result: ReturnType<typeof withRecomputedAuditMetrics>
+): boolean {
+  return Boolean(
+    pdfUrl &&
+      (!isCurrentAuditPdfUrl(pdfUrl) || hasStaleAuditPdf(storedResult, result))
+  );
 }

@@ -1,6 +1,5 @@
 "use server";
 
-import { generateContentDraft } from "@repo/ai";
 import { actionTargetKey } from "@repo/audit/actions";
 import { checkContentQuality } from "@repo/audit/content-quality";
 import { isAdmin, requireAdmin } from "@repo/auth/admin";
@@ -12,6 +11,11 @@ import { z } from "zod";
 import { latestContentBrief } from "@/lib/content/latest-brief";
 import { contentSlug, contentSlugAfterDraftEdit } from "@/lib/content/slug";
 import { scopedBrandById } from "@/lib/db/scoped";
+import { getAppDictionary } from "@/lib/i18n";
+import { generateContentDraftUnlessPreview } from "@/lib/preview/ai-guards";
+
+/** 고객 화면 오류 문구 — 사전 `app.contentErrors`(요청 밖이면 ko). 운영 검수(moderate)·작업 기록 메모는 한국어 그대로. */
+const contentErrors = async () => (await getAppDictionary()).contentErrors;
 
 export interface ContentActionResult {
   contentId?: string;
@@ -168,10 +172,10 @@ async function assertPublishableCoverImage(url: string | null) {
   try {
     parsed = new URL(url);
   } catch {
-    throw new Error("대표 이미지 URL을 확인해 주세요.");
+    throw new Error((await contentErrors()).coverUrlInvalid);
   }
   if (parsed.protocol !== "https:") {
-    throw new Error("대표 이미지는 HTTPS URL이어야 합니다.");
+    throw new Error((await contentErrors()).coverHttps);
   }
   const response = await fetch(parsed, {
     cache: "no-store",
@@ -179,10 +183,8 @@ async function assertPublishableCoverImage(url: string | null) {
     signal: AbortSignal.timeout(10_000),
   });
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!response.ok || !contentType.startsWith("image/")) {
-    throw new Error(
-      "대표 이미지를 공개 URL에서 확인할 수 없습니다. 배포 후 다시 승인해 주세요."
-    );
+  if (!(response.ok && contentType.startsWith("image/"))) {
+    throw new Error((await contentErrors()).coverUnreachable);
   }
 }
 
@@ -192,17 +194,17 @@ export async function generateDraftFromLatestAction(input: {
 }): Promise<ContentActionResult> {
   const { userId } = await auth();
   if (!userId) {
-    return { error: "로그인이 필요합니다." };
+    return { error: (await contentErrors()).signIn };
   }
   const brand = await scopedBrandById(input.brandId);
   if (!brand) {
-    return { error: "브랜드를 찾을 수 없습니다." };
+    return { error: (await contentErrors()).brandNotFound };
   }
   const brief = await latestContentBrief(brand.id);
   if (!brief) {
-    return { error: "먼저 브랜드 측정을 실행해야 초안을 만들 수 있습니다." };
+    return { error: (await contentErrors()).measureFirst };
   }
-  const draft = await generateContentDraft({
+  const draft = await generateContentDraftUnlessPreview({
     action: brief.action,
     brand: { name: brand.name, domain: brand.domain },
     locale: input.locale,
@@ -287,11 +289,11 @@ export async function createPublisherDraft(input: {
 }): Promise<ContentActionResult> {
   const { userId } = await auth();
   if (!userId) {
-    return { error: "로그인이 필요합니다." };
+    return { error: (await contentErrors()).signIn };
   }
   const brand = await scopedBrandById(input.brandId);
   if (!brand) {
-    return { error: "브랜드를 찾을 수 없습니다." };
+    return { error: (await contentErrors()).brandNotFound };
   }
   const ko = input.locale === "ko";
   const title = ko ? "새 블로그 글 초안" : "New blog post draft";
@@ -425,15 +427,15 @@ export async function saveContentDraft(
 ): Promise<ContentActionResult> {
   const parsed = editSchema.safeParse(raw);
   if (!parsed.success) {
-    return { error: "제목과 본문을 확인해 주세요." };
+    return { error: (await contentErrors()).titleBodyRequired };
   }
   const { userId } = await auth();
   if (!userId) {
-    return { error: "로그인이 필요합니다." };
+    return { error: (await contentErrors()).signIn };
   }
   const content = await ownedContent(parsed.data.contentId);
   if (!content || ["published", "archived"].includes(content.status)) {
-    return { error: "수정할 수 있는 콘텐츠를 찾지 못했습니다." };
+    return { error: (await contentErrors()).notEditable };
   }
   const version = (content.revisions[0]?.version ?? 0) + 1;
   const slug = contentSlugAfterDraftEdit({
@@ -488,11 +490,11 @@ export async function withdrawContentReview(
 ): Promise<ContentActionResult> {
   const { userId } = await auth();
   if (!userId) {
-    return { error: "로그인이 필요합니다." };
+    return { error: (await contentErrors()).signIn };
   }
   const content = await ownedContent(contentId);
   if (!content || content.status !== "moderation_review") {
-    return { error: "철회할 검수 요청을 찾지 못했습니다." };
+    return { error: (await contentErrors()).noReviewToWithdraw };
   }
   await database.$transaction([
     database.content.update({
@@ -656,11 +658,11 @@ export async function approveContent(
 ): Promise<ContentActionResult> {
   const { userId } = await auth();
   if (!userId) {
-    return { error: "로그인이 필요합니다." };
+    return { error: (await contentErrors()).signIn };
   }
   const content = await ownedContent(contentId);
   if (!content || content.status !== "publisher_review") {
-    return { error: "승인 대기 중인 콘텐츠를 찾지 못했습니다." };
+    return { error: (await contentErrors()).noPendingApproval };
   }
   const latestRevision = content.revisions[0];
   const quality = checkContentQuality({
@@ -718,7 +720,7 @@ export async function approveContent(
     refreshContentPaths(content);
     return {
       contentId,
-      error: "발행 작업이 실패했습니다. 원문은 보존됐어요. 다시 승인해 주세요.",
+      error: (await contentErrors()).publishFailed,
       status: "publisher_review",
     };
   }
@@ -840,11 +842,11 @@ export async function cancelScheduledContent(
 ): Promise<ContentActionResult> {
   const { userId } = await auth();
   if (!userId) {
-    return { error: "로그인이 필요합니다." };
+    return { error: (await contentErrors()).signIn };
   }
   const content = await ownedContent(contentId);
   if (!content || content.status !== "scheduled") {
-    return { error: "예약 발행 중인 콘텐츠를 찾지 못했습니다." };
+    return { error: (await contentErrors()).noScheduled };
   }
   await database.$transaction([
     database.content.update({

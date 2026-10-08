@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
@@ -36,7 +37,9 @@ describe.each([
 ] as const)("%s 브랜드 확인", (mode) => {
   it("시장·업종을 확인하기 전에는 측정을 시작하지 못한다", async () => {
     suggestBrandNameMock.mockResolvedValue({ name: "설화수", industry: null });
-    const screen = render(<AssignBrandForm mode={mode} />);
+    const screen = render(
+      <AssignBrandForm mode={mode} t={koDict.app.brandForm} />
+    );
     const domain = screen.getByLabelText("도메인") as HTMLInputElement;
     fireEvent.change(domain, { target: { value: "sulwhasoo.com" } });
     fireEvent.blur(domain);
@@ -55,7 +58,11 @@ describe.each([
   it("확인 후 도메인을 바꾸면 기존 확인을 취소한다", async () => {
     suggestBrandNameMock.mockResolvedValue({ name: "설화수", industry: null });
     const screen = render(
-      <AssignBrandForm initialDomain="sulwhasoo.com" mode={mode} />
+      <AssignBrandForm
+        initialDomain="sulwhasoo.com"
+        mode={mode}
+        t={koDict.app.brandForm}
+      />
     );
     const domain = screen.getByLabelText("도메인") as HTMLInputElement;
     await waitFor(() =>
@@ -74,7 +81,11 @@ describe.each([
   it("업종을 고르고 세 값을 확인하면 측정 버튼이 활성화된다", async () => {
     suggestBrandNameMock.mockResolvedValue({ name: "설화수", industry: null });
     const screen = render(
-      <AssignBrandForm initialDomain="sulwhasoo.com" mode={mode} />
+      <AssignBrandForm
+        initialDomain="sulwhasoo.com"
+        mode={mode}
+        t={koDict.app.brandForm}
+      />
     );
     await waitFor(() =>
       expect(
@@ -103,7 +114,11 @@ describe.each([
       industry: "beauty",
     });
     const screen = render(
-      <AssignBrandForm initialDomain="sulwhasoo.com" mode={mode} />
+      <AssignBrandForm
+        initialDomain="sulwhasoo.com"
+        mode={mode}
+        t={koDict.app.brandForm}
+      />
     );
     const industry = screen.getByRole("combobox", { name: "업종" });
     await waitFor(() => expect(industry.textContent).toContain("뷰티·화장품"));
@@ -126,7 +141,11 @@ describe.each([
     });
     assignBrandOwnerMock.mockResolvedValue({ error: "검증용 중단" });
     const screen = render(
-      <AssignBrandForm initialDomain="sulwhasoo.com" mode={mode} />
+      <AssignBrandForm
+        initialDomain="sulwhasoo.com"
+        mode={mode}
+        t={koDict.app.brandForm}
+      />
     );
     await waitFor(() =>
       expect(
@@ -160,7 +179,9 @@ describe.each([
           })
       )
       .mockResolvedValueOnce({ name: "현재브랜드", industry: "education" });
-    const screen = render(<AssignBrandForm mode={mode} />);
+    const screen = render(
+      <AssignBrandForm mode={mode} t={koDict.app.brandForm} />
+    );
     const domain = screen.getByLabelText("도메인") as HTMLInputElement;
     fireEvent.change(domain, { target: { value: "old.example" } });
     fireEvent.blur(domain);

@@ -1,16 +1,24 @@
 // /audit/[jobId] — Audit 결과 페이지 (PRD §13.1)
 
-import { database } from "@repo/database";
 import {
+  hasFilteredStoredAuditAdvice,
+  hasRecomputedAuditMetricsChanged,
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { database } from "@repo/database";
+import { getDictionary } from "@repo/internationalization";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
+// 상대 경로인 이유: `apps/app` 테스트가 이 파일을 직접 import 하면 `@/` 가 app 으로 풀린다.
+import { freeAuditPublicEnabled } from "../../../../lib/free-audit";
+import { resolveIsOwner } from "../../../api/audit/_lib/owner";
+import { canExposeAuditResult } from "../../../api/audit/_lib/public-access";
 import { AuditResultView } from "./components/audit-result";
 import { AuditSummarySsr } from "./components/audit-summary-ssr";
+import { AuditMetricBasisNotice } from "./components/metric-basis-notice";
 
 interface AuditResultPageProps {
   params: Promise<{ locale: string; jobId: string }>;
@@ -58,11 +66,26 @@ async function loadSummaryJob(jobId: string) {
   try {
     const job = await database.auditJob.findUnique({
       where: { id: jobId },
-      select: { domain: true, result: true, status: true },
+      select: {
+        email: true,
+        organizationId: true,
+        domain: true,
+        result: true,
+        status: true,
+      },
     });
-    return job
-      ? { ...job, result: withRecomputedAuditMetrics(job.result) }
-      : null;
+    if (
+      !(job && (await canExposeAuditResult(job, await resolveIsOwner(job))))
+    ) {
+      return null;
+    }
+    const result = withRecomputedAuditMetrics(job.result);
+    return {
+      ...job,
+      result,
+      metricBasisChanged: hasRecomputedAuditMetricsChanged(job.result, result),
+      adviceBasisChanged: hasFilteredStoredAuditAdvice(job.result),
+    };
   } catch (error) {
     log.error("audit.ssr_summary.failed", { error: parseError(error) });
     return null;
@@ -72,6 +95,8 @@ async function loadSummaryJob(jobId: string) {
 const AuditResultPage = async ({ params }: AuditResultPageProps) => {
   const { locale, jobId } = await params;
   const summaryJob = await loadSummaryJob(jobId);
+  // 결과 화면은 ko/en 두 벌만 쓴다(isKo) — 사전도 그 둘 중에서 고른다.
+  const dictionary = await getDictionary(locale.startsWith("ko") ? "ko" : "en");
 
   return (
     <div className="dark relative min-h-screen w-full overflow-hidden bg-zinc-950 text-zinc-100">
@@ -87,7 +112,26 @@ const AuditResultPage = async ({ params }: AuditResultPageProps) => {
         {summaryJob && isPublishableAuditResult(summaryJob.result) && (
           <AuditSummarySsr job={summaryJob} locale={locale} />
         )}
-        <AuditResultView jobId={jobId} locale={locale} />
+        {(summaryJob?.metricBasisChanged || summaryJob?.adviceBasisChanged) && (
+          <AuditMetricBasisNotice
+            adviceBasisChanged={summaryJob.adviceBasisChanged}
+            locale={locale}
+            metricBasisChanged={summaryJob.metricBasisChanged}
+            provisional={!isPublishableAuditResult(summaryJob.result)}
+          />
+        )}
+        <AuditResultView
+          copy={{
+            discoveryCoverage: dictionary.web.audit.discoveryCoverage,
+            noResponseEngines: dictionary.web.audit.noResponseEngines,
+          }}
+          correctionNoticeShown={Boolean(
+            summaryJob?.metricBasisChanged || summaryJob?.adviceBasisChanged
+          )}
+          freeAuditPublic={freeAuditPublicEnabled()}
+          jobId={jobId}
+          locale={locale}
+        />
       </div>
     </div>
   );

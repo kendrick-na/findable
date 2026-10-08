@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /*
  * 🔴 **등록하고 측정 시작: 안 돌았으면 안 돌았다고 말한다** — 2026-08-14 (재설계안 v2 §3-b ⑴).
  *
@@ -161,7 +162,9 @@ describe("브랜드 등록 → 자동 측정: 결말을 숨기지 않는다", ()
  * ⚠️ `/brand`(기존 브랜드 관리)와 `/welcome`(온보딩)이 **같은 폼**을 쓴다 — 둘 다
  *   필수로 간다(👤 결정). 갈라서 적용하면 두 경로의 프롬프트 품질이 갈린다.
  */
-const REJECTS_EMPTY_NAME = /브랜드 이름\(또는 회사명\)을 입력해 주세요/;
+// 🔴 2026-10-06 — 문구는 사전(`app.brandErrors.nameRequired`)으로 옮겨졌다.
+const KO_ERRORS = koDict.app.brandErrors;
+const REJECTS_EMPTY_NAME = /\(await brandErrors\(\)\)\.nameRequired/;
 const NAME_NO_LONGER_FALLS_BACK_TO_DOMAIN =
   /input\.name\?\.trim\(\)\s*\|\|\s*domain/;
 // onChange 가 확인 상태도 초기화하므로 속성 간 거리가 늘었다. 실제 렌더 계약은
@@ -171,6 +174,9 @@ const FORM_NAME_REQUIRED = /id="brand-name"[\s\S]{0,600}?\brequired\b/;
 describe("브랜드 이름은 필수 입력이다", () => {
   test("🔴 이름이 비면 서버가 거부한다", () => {
     expect(REJECTS_EMPTY_NAME.test(actionCode)).toBe(true);
+    expect(KO_ERRORS.nameRequired).toBe(
+      "브랜드 이름(또는 회사명)을 입력해 주세요."
+    );
   });
 
   test("이름이 비어도 도메인으로 조용히 대체하지 않는다 (예전 폴백 제거)", () => {

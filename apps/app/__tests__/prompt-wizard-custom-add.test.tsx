@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 추적 질문 「직접 추가」 — 2026-08-22 신설.
  *
@@ -38,7 +39,7 @@ afterEach(() => {
 
 describe("추적 질문 직접 추가", () => {
   it("idle 상태에 AI 제안 버튼과 직접 추가 버튼이 나란히 있다", () => {
-    render(<PromptWizard brandId="brand-1" />);
+    render(<PromptWizard brandId="brand-1" t={koDict.app.promptWizard} />);
     // getByRole은 못 찾으면 throw한다 — 통과 자체가 존재 검증이다.
     screen.getByRole("button", { name: "AI 추적 질문 제안받기" });
     screen.getByRole("button", { name: "직접 추가" });
@@ -47,13 +48,13 @@ describe("추적 질문 직접 추가", () => {
   });
 
   it("직접 추가를 누르면 입력창이 뜬다", () => {
-    render(<PromptWizard brandId="brand-1" />);
+    render(<PromptWizard brandId="brand-1" t={koDict.app.promptWizard} />);
     fireEvent.click(screen.getByRole("button", { name: "직접 추가" }));
     screen.getByPlaceholderText("예: 우리 브랜드 어때?");
   });
 
   it("3자 미만이면 서버 액션을 호출하지 않는다", () => {
-    render(<PromptWizard brandId="brand-1" />);
+    render(<PromptWizard brandId="brand-1" t={koDict.app.promptWizard} />);
     fireEvent.click(screen.getByRole("button", { name: "직접 추가" }));
     fireEvent.change(screen.getByPlaceholderText("예: 우리 브랜드 어때?"), {
       target: { value: "ab" },
@@ -64,7 +65,7 @@ describe("추적 질문 직접 추가", () => {
 
   it("정상 텍스트면 topic:custom·category:brand로 저장 액션을 호출한다", async () => {
     saveApprovedPromptsActionMock.mockResolvedValue({ ok: true, saved: 1 });
-    render(<PromptWizard brandId="brand-1" />);
+    render(<PromptWizard brandId="brand-1" t={koDict.app.promptWizard} />);
     fireEvent.click(screen.getByRole("button", { name: "직접 추가" }));
     fireEvent.change(screen.getByPlaceholderText("예: 우리 브랜드 어때?"), {
       target: { value: "우리 브랜드 어때?" },
@@ -88,7 +89,7 @@ describe("추적 질문 직접 추가", () => {
 
   it("한글이 없으면 language:en으로 넘긴다", async () => {
     saveApprovedPromptsActionMock.mockResolvedValue({ ok: true, saved: 1 });
-    render(<PromptWizard brandId="brand-1" />);
+    render(<PromptWizard brandId="brand-1" t={koDict.app.promptWizard} />);
     fireEvent.click(screen.getByRole("button", { name: "직접 추가" }));
     fireEvent.change(screen.getByPlaceholderText("예: 우리 브랜드 어때?"), {
       target: { value: "Is our brand good?" },

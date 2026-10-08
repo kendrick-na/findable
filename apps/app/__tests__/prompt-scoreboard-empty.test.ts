@@ -65,13 +65,25 @@ const stripToCode = (raw: string): string => {
 
 const code = stripToCode(readFileSync(FILE, "utf8"));
 
+/**
+ * 🔴 2026-10-06 — 문구가 사전(`app.promptScoreboard`)으로 옮겨졌다.
+ *   분기 구조는 소스에서, **실제 문장**은 사전(ko)에서 검사한다(같은 계약).
+ */
+const KO = JSON.parse(
+  readFileSync(
+    join(ROOT, "packages/internationalization/dictionaries/ko.json"),
+    "utf8"
+  )
+).app.promptScoreboard as Record<string, string>;
+
 // 정규식은 최상위에(lint: useTopLevelRegex).
 const RETURNS_NULL = /if \(scores\.length === 0\) \{\s*return null;/;
 // 0건 분기 = `if (...) {` 부터 그 분기를 닫는 `\n  }` 까지.
 // ⚠️ JSX 가 들어 있어 중간에 `  }` 처럼 보이는 줄이 없다는 보장이 없다 →
 //   `);` 로 닫히는 return 문까지를 명시적으로 잡는다(느슨하게 잡으면 본문을 놓친다).
 const EMPTY_BRANCH = /if \(scores\.length === 0\) \{[\s\S]*?\n {4}\);\n {2}\}/;
-const HEADING = /질문별 성적/g;
+const HEADING = /\{t\.title\}/g;
+const EMPTY_KEY = /\{t\.empty\}/;
 // ⚠️ 화면 문구는 **줄바꿈으로 쪼개져 있다**(JSX 들여쓰기). 한 줄로 가정하면
 //   문구가 멀쩡한데도 가드가 실패한다 → 공백/줄바꿈을 `\s+` 로 흡수한다.
 const SAYS_WHY = /질문별로\s+나눠\s+볼\s+기록이\s+없어요/;
@@ -94,9 +106,10 @@ describe("v4 탭2 — 질문별 성적 0건 상태", () => {
     expect(branch, "0건 분기를 못 찾았다").not.toBeNull();
     const body = branch?.[0] ?? "";
     // 이유가 없으면 사용자는 자기 잘못인지 버그인지 모른다.
-    expect(body, "왜 비었는지 설명이 없다").toMatch(SAYS_WHY);
+    expect(body, "0건 분기가 빈 상태 문구를 안 그린다").toMatch(EMPTY_KEY);
+    expect(KO.empty, "왜 비었는지 설명이 없다").toMatch(SAYS_WHY);
     // 다음 순서가 없으면 막다른 화면이 된다.
-    expect(body, "다음에 뭘 할지 안 알려준다").toMatch(SAYS_NEXT);
+    expect(KO.empty, "다음에 뭘 할지 안 알려준다").toMatch(SAYS_NEXT);
   });
 
   // ── 가드 ③: 제목이 데이터 있을 때와 같다 ──────────────────────
@@ -105,8 +118,9 @@ describe("v4 탭2 — 질문별 성적 0건 상태", () => {
     // 두 분기에 각각 하나씩 = 총 2회 등장해야 한다.
     expect(
       code.match(HEADING),
-      "제목이 두 분기에서 갈렸다(「질문별 성적」 2회여야 한다)"
+      "제목이 두 분기에서 갈렸다(같은 `t.title` 2회여야 한다)"
     ).toHaveLength(2);
+    expect(KO.title).toBe("질문별 성적");
     // 크기까지 같아야 한다 — 눈으로 보면 다른 섹션처럼 보인다.
     expect(code.match(HEADING_SIZE)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
@@ -116,8 +130,9 @@ describe("v4 탭2 — 질문별 성적 0건 상태", () => {
     const branch = code.match(EMPTY_BRANCH);
     // 이 카드가 보이는 시점엔 이미 측정이 있다(`hasData` 분기 안).
     // 원인은 **질문이 안 붙은 것**이지 측정을 안 한 게 아니다.
+    expect(branch?.[0]).toMatch(EMPTY_KEY);
     expect(
-      branch?.[0],
+      KO.empty,
       "측정이 이미 있는데 「측정을 시작하세요」라고 하면 거짓 안내가 된다"
     ).not.toMatch(MISLEADS_MEASURE);
   });

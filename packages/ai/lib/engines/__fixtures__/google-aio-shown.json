@@ -1,0 +1,71 @@
+{
+  "general": {
+    "search_engine": "google",
+    "query": "PDRN 앰플 추천",
+    "language": "ko",
+    "mobile": false
+  },
+  "organic": [
+    {
+      "link": "https://www.example-shop.co.kr/pdrn",
+      "title": "합성 예시 결과",
+      "rank": 1,
+      "global_rank": 2
+    }
+  ],
+  "ai_overview": {
+    "global_rank": 1,
+    "texts": [
+      {
+        "type": "paragraph",
+        "snippet": "PDRN 앰플은 피부 재생 성분을 담은 제품입니다(테스트용 합성 문장).",
+        "reference_indexes": [0, 1]
+      },
+      {
+        "type": "list",
+        "title": "많이 언급되는 제품",
+        "list": [
+          {
+            "type": "paragraph",
+            "snippet": "프란츠 PDRN 앰플 — 합성 예시",
+            "reference_indexes": [0]
+          },
+          {
+            "type": "paragraph",
+            "snippet": "다른 브랜드 앰플 — 합성 예시",
+            "reference_indexes": [2]
+          }
+        ]
+      }
+    ],
+    "references": [
+      {
+        "href": "https://www.franzskincare.com/product/pdrn",
+        "title": "프란츠 PDRN 앰플",
+        "source": "franzskincare.com",
+        "index": 0
+      },
+      {
+        "href": "https://blog.example.com/review",
+        "title": "리뷰 블로그(합성)",
+        "source": "example.com",
+        "index": 1
+      },
+      {
+        "href": "https://blog.example.com/review",
+        "title": "중복 인용",
+        "index": 3
+      },
+      {
+        "href": "not a url",
+        "title": "깨진 링크",
+        "index": 4
+      },
+      {
+        "href": "https://m.other-brand.kr/a",
+        "title": "다른 브랜드",
+        "index": 2
+      }
+    ]
+  }
+}

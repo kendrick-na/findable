@@ -21,11 +21,16 @@ import {
   HEADLINE_BUCKETS,
   isDiscoveryAnswer,
   isLegacyNaverSynthesis,
+  noResponseAiEngines,
   officialDomainExposed,
   type PromptKind,
 } from "@repo/audit/answer-buckets";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
 import { engineDisplayName, engineNote } from "@repo/audit/engine-labels";
+import {
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { AlertCircle, ChevronDown } from "lucide-react";
 import { useState } from "react";
@@ -89,17 +94,74 @@ function toggleCopy(open: boolean, isKo: boolean): string {
   return isKo ? "원문 전체 보기" : "Show full answer";
 }
 
+/** 이름 없는 질문이 마감으로 잘렸을 때의 문구(사전 `web.audit.discoveryCoverage`). */
+export interface DiscoveryCoverageCopy {
+  /** 아무것도 묻지 못했을 때. */
+  none: string;
+  /** 일부만 물었을 때. `{planned}`·`{measured}` 자리표시자. */
+  partial: string;
+}
+
+function discoveryPartialNote(
+  copy: DiscoveryCoverageCopy | undefined,
+  planned: number | undefined,
+  asked: number | undefined
+): string | null {
+  if (!copy || planned === undefined || asked === undefined) {
+    return null;
+  }
+  if (asked <= 0 || asked >= planned) {
+    return null;
+  }
+  return copy.partial
+    .replace("{planned}", String(planned))
+    .replace("{measured}", String(asked));
+}
+
 export function AnswerBucketBoard({
   summary,
   isKo,
   discoveryPromptCount,
+  discoveryAskedCount,
+  discoveryCoverageCopy,
+  noResponseCopy,
+  noResponseRows,
+  searchSamplingVersion,
 }: {
   summary: AnswerBucketSummary;
   isKo: boolean;
   /** 러너가 만든 이름 없는 질문 수. undefined = 그 기능 이전 회차(말하지 않는다). */
   discoveryPromptCount?: number;
+  /**
+   * 그중 실제로 물어본 질문 수(`askedDiscoveryQuestionCount`). 마감으로 일부가 잘리면
+   * 계획보다 작다 — 그때만 「질문 n개 중 m개만 측정」을 덧붙인다(2026-10-06).
+   */
+  discoveryAskedCount?: number;
+  /** 위 안내 문구(사전). 없으면 안내 없이 기존 표시 그대로. */
+  discoveryCoverageCopy?: DiscoveryCoverageCopy;
+  /**
+   * 「답을 받지 못한 AI: {engines}」(사전 `web.audit.noResponseEngines`) — 2026-10-07.
+   * 측정 실패 칸이 있을 때 어느 AI 가 답하지 않았는지 이름으로 말한다. 없으면 표시하지 않는다.
+   */
+  noResponseCopy?: string;
+  /** 엔진 이름을 찾을 원문 행(저장된 engineResponses). */
+  noResponseRows?: readonly MatrixAnswer[];
+  /** 이 회차 네이버 검색 표본 방식(`searchSamplingVersionOf`). 라벨로만 쓴다. */
+  searchSamplingVersion?: string | null;
 }) {
   const { ai } = summary;
+  const noResponseNames = noResponseAiEngines(noResponseRows).map((engineId) =>
+    engineDisplayName(engineId, isKo)
+  );
+  const discoveryNote = discoveryPartialNote(
+    discoveryCoverageCopy,
+    discoveryPromptCount,
+    discoveryAskedCount
+  );
+  const discoveryNotMeasured =
+    Boolean(discoveryCoverageCopy) &&
+    (discoveryPromptCount ?? 0) > 0 &&
+    discoveryAskedCount === 0;
   return (
     <div className="mt-6" data-testid="answer-bucket-board">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -151,6 +213,11 @@ export function AnswerBucketBoard({
       </div>
 
       <ul className="mt-3 space-y-1.5 text-xs text-zinc-400 leading-relaxed">
+        {noResponseCopy && noResponseNames.length > 0 && (
+          <li className="break-keep" data-testid="no-response-engines">
+            {noResponseCopy.replace("{engines}", noResponseNames.join(", "))}
+          </li>
+        )}
         {ai.unverified > 0 && (
           <li className="break-keep">
             <span className="font-medium text-zinc-300">
@@ -175,34 +242,129 @@ export function AnswerBucketBoard({
               (isKo
                 ? ` 측정 실패 ${summary.discovery.engineError}개는 뺐어요.`
                 : ` ${summary.discovery.engineError} failed answers excluded.`)}
+            {discoveryNote && (
+              <span data-testid="discovery-partial"> {discoveryNote}</span>
+            )}
           </li>
         ) : (
-          discoveryPromptCount === 0 && (
-            <li className="break-keep" data-testid="discovery-line">
-              {isKo
-                ? "이름 없이 묻는 질문 — 공식 사이트 제목·설명에서 업종 단서를 찾지 못해 이번엔 만들지 않았어요."
-                : "Unbranded questions — none this run: no category cue was found in the official site's title or description."}
-            </li>
-          )
+          <DiscoveryFallbackLine
+            discoveryPromptCount={discoveryPromptCount}
+            isKo={isKo}
+            notMeasuredCopy={
+              discoveryNotMeasured ? discoveryCoverageCopy?.none : undefined
+            }
+          />
         )}
-        {Object.entries(summary.searchByEngine ?? {}).length > 0 && (
-          <li className="break-keep" data-testid="search-exposure-line">
-            <span className="font-medium text-zinc-300">
-              {Object.entries(summary.searchByEngine ?? {})
-                .map(
-                  ([id, g]) =>
-                    `${engineDisplayName(id, isKo)} ${g.confirmed}/${g.adjudicated}`
-                )
-                .join(" · ")}
-            </span>{" "}
-            —{" "}
-            {isKo
-              ? "AI 답변이 아니라 검색 결과에 우리 브랜드·공식 도메인이 나왔는지 본 값이라 AI 비율과 따로 셌어요."
-              : "Whether search results show your brand or official domain — not AI answers, so counted separately."}
-          </li>
-        )}
+        <SearchExposureLine
+          isKo={isKo}
+          searchByEngine={summary.searchByEngine}
+          searchSamplingVersion={searchSamplingVersion}
+        />
       </ul>
     </div>
+  );
+}
+
+/**
+ * 이름 없는 질문 결과가 없을 때의 한 줄.
+ *   · 계획 0개 → 기존 안내(업종 단서 없음).
+ *   · 계획은 있는데 하나도 못 물음(마감) → 줄을 지우지 않고 「이번에는 측정하지 못했어요」.
+ */
+function DiscoveryFallbackLine({
+  discoveryPromptCount,
+  isKo,
+  notMeasuredCopy,
+}: {
+  discoveryPromptCount?: number;
+  isKo: boolean;
+  notMeasuredCopy?: string;
+}) {
+  if (notMeasuredCopy) {
+    return (
+      <li className="break-keep" data-testid="discovery-line">
+        <span className="font-medium text-zinc-300">
+          {isKo
+            ? "이름 없이 물었을 때 추천됨"
+            : "Recommended without your name"}
+        </span>{" "}
+        — <span data-testid="discovery-not-measured">{notMeasuredCopy}</span>
+      </li>
+    );
+  }
+  if (discoveryPromptCount !== 0) {
+    return null;
+  }
+  return (
+    <li className="break-keep" data-testid="discovery-line">
+      {isKo
+        ? "이름 없이 묻는 질문 — 공식 사이트 제목·설명에서 업종 단서를 찾지 못해 이번엔 만들지 않았어요."
+        : "Unbranded questions — none this run: no category cue was found in the official site's title or description."}
+    </li>
+  );
+}
+
+function legacySummaryToggleCopy(open: boolean, isKo: boolean): string {
+  if (open) {
+    return isKo ? "요약 접기" : "Hide summary";
+  }
+  return isKo ? "당시 요약 보기" : "Show that summary";
+}
+
+/** 검색 노출 한 줄 — AI 비율과 따로 센 값 + 네이버 표본 방식 라벨. */
+function SearchExposureLine({
+  searchByEngine,
+  isKo,
+  searchSamplingVersion,
+}: {
+  searchByEngine: AnswerBucketSummary["searchByEngine"] | undefined;
+  isKo: boolean;
+  searchSamplingVersion?: string | null;
+}) {
+  const entries = Object.entries(searchByEngine ?? {});
+  if (entries.length === 0) {
+    return null;
+  }
+  return (
+    <li className="break-keep" data-testid="search-exposure-line">
+      <span className="font-medium text-zinc-300">
+        {entries
+          .map(
+            ([id, g]) =>
+              `${engineDisplayName(id, isKo)} ${g.confirmed}/${g.adjudicated}`
+          )
+          .join(" · ")}
+      </span>{" "}
+      —{" "}
+      {isKo
+        ? "AI 답변이 아니라 검색 결과에 우리 브랜드·공식 도메인이 나왔는지 본 값이라 AI 비율과 따로 셌어요."
+        : "Whether search results show your brand or official domain — not AI answers, so counted separately."}
+      {entries.some(([id]) => id === "naver") &&
+        searchSamplingVersion !== undefined && (
+          <SearchSamplingTag isKo={isKo} version={searchSamplingVersion} />
+        )}
+    </li>
+  );
+}
+
+/** 네이버 검색 노출 값 옆의 작은 표본 방식 라벨(W1 정책: 방식이 다르면 비교 안 함). */
+export function SearchSamplingTag({
+  version,
+  isKo,
+}: {
+  version: string | null | undefined;
+  isKo: boolean;
+}) {
+  const label = searchSamplingLabel(version, isKo);
+  if (!label) {
+    return null;
+  }
+  return (
+    <span
+      className="ml-1.5 inline-block rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500"
+      data-testid="search-sampling-label"
+    >
+      {label}
+    </span>
   );
 }
 
@@ -245,6 +407,7 @@ export interface MatrixAnswer {
   excerpt: string;
   isStub: boolean;
   mentionQuality?: string | null;
+  naverSamplingVersion?: string | null;
   naverSource?: string | null;
   promptKind?: PromptKind | null;
   promptText?: string | null;
@@ -342,13 +505,7 @@ function LegacyNaverRow({
             onClick={() => setOpen((v) => !v)}
             type="button"
           >
-            {open
-              ? isKo
-                ? "요약 접기"
-                : "Hide summary"
-              : isKo
-                ? "당시 요약 보기"
-                : "Show that summary"}
+            {legacySummaryToggleCopy(open, isKo)}
           </button>
         )}
         {open && (
@@ -382,6 +539,15 @@ function MatrixRow({
   );
 }
 
+function excludedSearchCopy(isKo: boolean) {
+  return {
+    label: isKo ? "집계 제외 · 이름 없는 검색" : "Excluded · unbranded search",
+    reason: isKo
+      ? "이름 없는 검색 결과는 AI 추천이나 브랜드 질문 검색 노출로 집계하지 않습니다."
+      : "Unbranded search results are not counted as AI recommendations or branded search exposure.",
+  };
+}
+
 function CurrentMatrixRow({
   row,
   isKo,
@@ -395,22 +561,36 @@ function CurrentMatrixRow({
   const [open, setOpen] = useState(false);
   const bucket = classifyAnswer(row);
   const isSearch = answerGroup(row.engineId) === "search";
+  const excludedDiscoverySearch = isSearch && isDiscoveryAnswer(row);
+  let displayBucket: string = bucket;
+  if (retired) {
+    displayBucket = "retired";
+  } else if (excludedDiscoverySearch) {
+    displayBucket = "excluded_discovery_search";
+  }
+  const excludedCopy = excludedSearchCopy(isKo);
+  let excludedLabel = excludedCopy.label;
+  if (retired) {
+    excludedLabel = isKo
+      ? "집계 제외 · 서비스 종료"
+      : "Excluded · service ended";
+  }
   const hasText = bucket !== "engine_error" && Boolean(row.excerpt);
   const full = hasText ? stripMarkdown(row.excerpt) : "";
   const short = hasText ? preview(row.excerpt) : "";
   return (
     <li
       className="grid gap-2 border-white/5 border-t px-4 py-3 first:border-t-0 sm:grid-cols-[12rem_1fr] sm:gap-4"
-      data-bucket={retired ? "retired" : bucket}
+      data-bucket={displayBucket}
     >
       <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-start">
         <span className="font-medium text-sm text-zinc-100">
           {engineDisplayName(row.engineId, isKo)}
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
-          {retired ? (
+          {retired || excludedDiscoverySearch ? (
             <span className="inline-flex self-start whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-medium text-xs text-zinc-400">
-              {isKo ? "집계 제외 · 서비스 종료" : "Excluded · service ended"}
+              {excludedLabel}
             </span>
           ) : (
             <AnswerBucketPill bucket={bucket} isKo={isKo} />
@@ -424,7 +604,9 @@ function CurrentMatrixRow({
       </div>
       <div className="min-w-0">
         <p className="break-keep text-xs text-zinc-400">
-          {answerReason(row, isKo)}
+          {excludedDiscoverySearch
+            ? excludedCopy.reason
+            : answerReason(row, isKo)}
         </p>
         {hasText && (
           <p className="mt-1 whitespace-pre-line text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]">
@@ -451,6 +633,17 @@ function EngineLegend({ rows, isKo }: { rows: MatrixAnswer[]; isKo: boolean }) {
   const notes = [...new Set(rows.map((r) => r.engineId))]
     .map((id) => engineNote(id, isKo))
     .filter((note): note is string => Boolean(note));
+  const samplingLabel = searchSamplingLabel(
+    searchSamplingVersionOf({ engineResponses: rows }),
+    isKo
+  );
+  if (samplingLabel) {
+    notes.push(
+      isKo
+        ? `${samplingLabel} — 표본 방식이 다른 회차와는 검색 노출 수를 비교하지 않아요.`
+        : `${samplingLabel} — search exposure is not compared with runs that used another sampling method.`
+    );
+  }
   if (notes.length === 0) {
     return null;
   }
@@ -492,8 +685,8 @@ export function QuestionEngineMatrix({
         </div>
         <p className="mt-1.5 break-keep text-xs text-zinc-500 leading-relaxed">
           {isKo
-            ? `이번 측정에서 던진 질문 ${groups.length}개와 엔진별 답변 전부예요. 답변마다 위 4가지 중 어디에 들어갔는지와 그 이유를 적었어요. 날짜별 변화는 대시보드의 ‘추적 질문’에서 볼 수 있어요.`
-            : `All ${groups.length} questions from this run and every engine's answer, each with its category and reason. Track changes over time in the dashboard.`}
+            ? `이번 측정에서 던진 질문 ${groups.length}개와 엔진별 답변 전부예요. 집계 대상은 판정과 이유를, 제외 대상은 제외 사유를 표시합니다. 날짜별 변화는 대시보드의 ‘추적 질문’에서 볼 수 있어요.`
+            : `All ${groups.length} questions from this run and every engine's answer. Counted answers show their category and reason; excluded rows show why. Track changes over time in the dashboard.`}
         </p>
       </div>
       <EngineLegend isKo={isKo} rows={rows} />
@@ -593,19 +786,19 @@ export function RevenueImpactOptIn({
         data-testid="revenue-opt-in"
       >
         {isKo
-          ? "놓치는 유입이 궁금하다면 — 직접 입력하면 계산해 드려요"
-          : "Curious about missed traffic? Enter your own numbers to calculate"}
+          ? "가정한 유입 규모를 보고 싶다면 — 숫자를 입력해 보세요"
+          : "Explore an assumed traffic scenario — enter your numbers"}
       </summary>
       <p className="mt-3 break-keep text-xs text-zinc-400 leading-relaxed">
         {isKo
-          ? "우리 숫자 없이 기본 가정으로 만든 추정은 보여드리지 않아요. 내 검색량과 고객당 매출을 넣으면 그 값으로만 계산해요."
-          : "We don't show estimates built only on default assumptions. Enter your search volume and revenue per customer to calculate."}
+          ? "월 AI 답변 노출 수와 고객당 매출을 입력하면 시나리오를 계산합니다. 클릭률·전환율 등은 기본 가정이 남으며 아래에서 바꿀 수 있어요. 실제 손실 측정값은 아닙니다."
+          : "Enter monthly AI answer views and revenue per customer for a what-if scenario. Click and conversion rates still use editable defaults below. This is not measured loss."}
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block text-xs text-zinc-300">
           {isKo
-            ? "월 AI 답변 노출 수(내 브랜드 관련 검색량)"
-            : "Monthly AI answer views (your search volume)"}
+            ? "가정할 월 AI 답변 노출 수"
+            : "Assumed monthly AI answer views"}
           <input
             className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 tabular-nums"
             inputMode="numeric"

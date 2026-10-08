@@ -1,4 +1,5 @@
 import { Button } from "@repo/design-system/components/ui/button";
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import { SovTrendChart } from "./sov-trend-chart";
 
@@ -20,6 +21,8 @@ const MockButton = () => <Button size="sm">측정 시작</Button>;
  *   ① 빈 상태 + 버튼  ② 빈 상태인데 도메인이 없어 버튼을 **숨기는** 경우  ③ 그려진 그래프
  */
 const meta = {
+  // 문구는 사전에서 온다(`app.trendChart`). JSON 직접 import — `getAppDictionary` 는 server-only.
+  args: { t: koDict.app.trendChart },
   component: SovTrendChart,
   parameters: { layout: "padded" },
   title: "대시보드/시간에 따른 변화",

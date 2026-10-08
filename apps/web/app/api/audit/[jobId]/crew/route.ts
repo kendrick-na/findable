@@ -27,6 +27,7 @@ import { checkBotId } from "botid/server";
 import type { NextRequest } from "next/server";
 import { after, NextResponse } from "next/server";
 import { resolveIsOwner } from "../../_lib/owner";
+import { canExposeAuditResult } from "../../_lib/public-access";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -179,6 +180,14 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    const isOwner = await resolveIsOwner(job);
+    if (!canExposeAuditResult(job, isOwner)) {
+      return NextResponse.json(
+        { error: "이 진단 결과를 조회할 권한이 없습니다." },
+        { status: 403 }
+      );
+    }
+
     // 🔴 전역 일일 상한 — 자격 판정 **앞**에 둔다. 크레딧을 태우는 것은 자격이 아니라
     //   실행이고, 상한이 소진되면 누가 눌렀든 새 실행을 막아야 한다.
     //   ⚠️ 단 admin 은 예외 — 상한 소진 시에도 운영자가 원인을 조사할 수 있어야 한다
@@ -226,7 +235,6 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     //   (`(authenticated)/page.tsx:47` = 로그인 이메일 ∪ org) → 제품 두 곳이
     //   **같은 사람을 서로 다르게 판정**하고 있었다. 그 판정을 하나로 합친다.
     //   ⚠️ 원가는 **앞의 전역 일일 상한**이 막는다(자격과 역할을 섞지 않는다).
-    const isOwner = await resolveIsOwner(job);
     // 자격 없으면 무료 체험 1회 판정으로 넘긴다(소진 시 403 응답을 그대로 반환).
     const quotaBlock =
       isOwner || canRunDeepAnalysis(job.email)

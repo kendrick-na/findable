@@ -1,17 +1,27 @@
+import {
+  isAuditContinuationPending,
+  isLateReaskInProgress,
+} from "@repo/audit/audit-execution-lease";
 import { isStaleAuditJob } from "@repo/audit/stale-job";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { continueOrgTracking } from "@/app/actions/brand/continue-tracking";
 import { getTrackingStatus } from "@/app/actions/brand/tracking-status";
 import { env } from "@/env";
 import { requireOrg } from "@/lib/db/scoped";
+import { dateLocaleFor, getAppDictionary, getAppLocale } from "@/lib/i18n";
 import { sampleReportUrl } from "@/lib/sample-report";
 import { Header } from "../../components/header";
 import { MeasuringView } from "./measuring-view";
 
-export const metadata: Metadata = {
-  title: "측정 중 · Findable",
-  description: "AI에게 물어보는 중이에요.",
+// 이 화면의 폴링이 이어가기 서버액션(continueOrgTracking)을 부른다(2026-10-06).
+//   서버액션 시간 상한은 그 액션을 쓰는 page 의 maxDuration 을 따른다(brand/page.tsx 주석).
+export const maxDuration = 300;
+
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = (await getAppDictionary()).measuring;
+  return { title: t.metaTitle, description: t.metaDescription };
 };
 
 interface MeasuringPageProps {
@@ -36,7 +46,17 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
 
   const job = await database.auditJob.findFirst({
     where: { id: jobId, email: `org:${orgId}` },
-    select: { domain: true, status: true, createdAt: true },
+    // attemptStartedAt·leaseUntil 까지 읽어야 이어가기 대기(queued + leaseUntil)를
+    //   오래된 대기열로 오판하지 않는다(stale-job).
+    select: {
+      domain: true,
+      status: true,
+      createdAt: true,
+      attemptStartedAt: true,
+      leaseUntil: true,
+      // 늦은 AI 답 회차(lateReask)인지 — 안내 문구만 가른다(2026-10-07).
+      checkpoint: true,
+    },
   });
 
   // 내 org 것이 아니거나 없는 job → 대기할 것이 없다.
@@ -56,16 +76,33 @@ const MeasuringPage = async ({ searchParams }: MeasuringPageProps) => {
     redirect("/history");
   }
 
+  const [dict, locale] = await Promise.all([
+    getAppDictionary(),
+    getAppLocale(),
+  ]);
+
   return (
     <>
-      <Header page="측정 중" pages={["Findable"]} showMetric={false} />
+      <Header
+        page={dict.measuring.headerTitle}
+        pages={["Findable"]}
+        showMetric={false}
+      />
       <MeasuringView
+        continueJob={continueOrgTracking}
         createdAt={job.createdAt.toISOString()}
+        dateLocale={dateLocaleFor(locale)}
         domain={job.domain}
+        initialContinuing={
+          isAuditContinuationPending(job) ||
+          (job.status === "processing" && isLateReaskInProgress(job.checkpoint))
+        }
+        initialLateAnswers={isLateReaskInProgress(job.checkpoint)}
         initialStatus={job.status}
         jobId={jobId}
         pollStatus={getTrackingStatus}
         sampleUrl={sampleReportUrl(env.NEXT_PUBLIC_WEB_URL)}
+        t={dict.measuring}
       />
     </>
   );

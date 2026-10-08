@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { verifyMention } from "./mention-verdict";
+import { verifyMention, verifyMentions } from "./mention-verdict";
 
 vi.mock("ai", () => ({ generateObject: vi.fn() }));
 
@@ -62,5 +62,66 @@ describe("mention verification provider failure", () => {
       via: "skipped",
       reason: "judge_failed",
     });
+  });
+
+  it("does not retry or switch providers after an abort", async () => {
+    vi.stubEnv("LETSUR_API_KEY", "test-key");
+    vi.stubEnv("GOOGLE_API_KEY", "test-google-key");
+    const controller = new AbortController();
+    controller.abort(new DOMException("deadline", "AbortError"));
+    vi.mocked(generateObject).mockRejectedValue(
+      new DOMException("deadline", "AbortError")
+    );
+
+    await expect(
+      verifyMention({ ...input, signal: controller.signal })
+    ).rejects.toThrow("deadline");
+    expect(generateObject).toHaveBeenCalledTimes(0);
+  });
+
+  it("keeps a free rule verdict when the shared signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException("deadline", "AbortError"));
+    expect(
+      await verifyMention({
+        ...input,
+        signal: controller.signal,
+        stringMatched: false,
+      })
+    ).toEqual({ counted: false, quality: "absent", via: "rule" });
+  });
+
+  it("keeps successful verdicts when one concurrent verdict aborts", async () => {
+    vi.stubEnv("LETSUR_API_KEY", "test-key");
+    vi.mocked(generateObject)
+      .mockResolvedValueOnce({ object: { quality: "confirmed" } } as never)
+      .mockRejectedValueOnce(new DOMException("deadline", "AbortError"));
+
+    const result = await verifyMentions(
+      [
+        {
+          brandMentioned: true,
+          errorMessage: null,
+          rawResponse: input.text,
+          citedSources: [],
+        },
+        {
+          brandMentioned: true,
+          errorMessage: null,
+          rawResponse: input.text,
+          citedSources: [],
+        },
+      ],
+      {
+        brandName: input.brandName,
+        brandDomain: input.brandDomain,
+        officialSite: input.officialSite,
+      }
+    );
+
+    expect(result.map((row) => row.mentionQuality)).toEqual([
+      "confirmed",
+      "unverified",
+    ]);
   });
 });

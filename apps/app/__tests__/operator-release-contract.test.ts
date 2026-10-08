@@ -26,7 +26,7 @@ describe("운영 릴리스 계약", () => {
   });
 
   it("사이드바 전체 탭의 사전 로딩으로 DB 세션 풀을 소진하지 않는다", () => {
-    expect(SIDEBAR).toContain('<Link href={href} prefetch={false}>');
+    expect(SIDEBAR).toContain("<Link href={href} prefetch={false}>");
     expect(MOBILE_TABS).toContain("prefetch={false}");
     expect(MOBILE_TABS).toContain('useSearchParams().get("brand")');
   });
@@ -52,5 +52,20 @@ describe("운영 릴리스 계약", () => {
     }
     expect(APP_PACKAGE).toContain("verify-production-source.js");
     expect(WEB_PACKAGE).toContain("verify-production-source.js");
+  });
+
+  it("독립 빌드와 앱 테스트가 Prisma client를 먼저 생성한다", () => {
+    expect(JSON.parse(WEB_PACKAGE).scripts.build).toMatch(
+      /^pnpm --filter @repo\/database build && /
+    );
+    expect(JSON.parse(APP_PACKAGE).scripts.build).toMatch(
+      /^pnpm --filter @repo\/database build && /
+    );
+    expect(JSON.parse(APP_PACKAGE).scripts.test).toMatch(
+      /^pnpm --filter @repo\/database build && /
+    );
+    expect(JSON.parse(APP_PACKAGE).scripts["test:pg"]).toMatch(
+      /^pnpm --filter @repo\/database build && /
+    );
   });
 });

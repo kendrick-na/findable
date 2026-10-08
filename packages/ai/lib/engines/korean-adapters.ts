@@ -8,6 +8,7 @@
 // 환경변수 미설정 시 stub 응답.
 // Naver Cue: 직접 스크래핑은 D-004에 따라 v1.0 제외 (약관·법적 리스크).
 
+import { isAbortError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type {
   CitedSource,
@@ -131,6 +132,7 @@ export const hyperclovaAdapter: EngineAdapter = async (query) => {
           repeatPenalty: 1.1,
           includeAiFilters: true,
         }),
+        signal: query.signal,
       }
     );
 
@@ -160,6 +162,9 @@ export const hyperclovaAdapter: EngineAdapter = async (query) => {
       clovaUsage(data)
     );
   } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw error;
+    }
     return makeErrorResponse(
       "hyperclova",
       error instanceof Error ? error.message : String(error),
@@ -172,6 +177,9 @@ export const hyperclovaAdapter: EngineAdapter = async (query) => {
 // 2. Naver Search API (블로그·뉴스·웹문서) — 검색 노출(2026-09-29: 합성 폐지)
 //    ⛔ 예전 D-008(검색 결과 + HyperCLOVA 합성으로 Cue: 재현)은 폐지 — 아래 naverAdapter 주석.
 // ─────────────────────────────────────────────
+
+/** Stored with each new Naver search row; older unmarked rows are not comparable. */
+export const NAVER_SEARCH_SAMPLING_VERSION = "interleave-v1";
 
 interface NaverSearchItem {
   bloggername?: string;
@@ -186,7 +194,10 @@ interface NaverSearchResult {
   items: NaverSearchItem[];
 }
 
-async function naverSearch(query: string): Promise<NaverSearchResult> {
+async function naverSearch(
+  query: string,
+  signal?: AbortSignal
+): Promise<NaverSearchResult> {
   const clientId = process.env.NAVER_CLIENT_ID;
   const clientSecret = process.env.NAVER_CLIENT_SECRET;
   if (!(clientId && clientSecret)) {
@@ -205,6 +216,7 @@ async function naverSearch(query: string): Promise<NaverSearchResult> {
           "X-Naver-Client-Id": clientId,
           "X-Naver-Client-Secret": clientSecret,
         },
+        signal,
       });
       if (!resp.ok) {
         throw new Error(`${kind} HTTP ${resp.status}`);
@@ -213,9 +225,35 @@ async function naverSearch(query: string): Promise<NaverSearchResult> {
       return data.items ?? [];
     })
   );
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException("Aborted", "AbortError");
+  }
+
+  // The APIs rank within each endpoint, not across endpoints. Concatenating
+  // blog first and slicing to ten silently drops all news/web evidence when
+  // blog has ten hits. Interleave by rank to represent every available channel.
+  const groups = results.map((result) =>
+    result.status === "fulfilled" ? result.value : []
+  );
+  const items: NaverSearchItem[] = [];
+  for (
+    let rank = 0;
+    items.length < 10 && groups.some((group) => rank < group.length);
+    rank++
+  ) {
+    for (const group of groups) {
+      const item = group[rank];
+      if (item) {
+        items.push(item);
+        if (items.length === 10) {
+          break;
+        }
+      }
+    }
+  }
 
   return {
-    items: results.flatMap((r) => (r.status === "fulfilled" ? r.value : [])),
+    items,
     failures: results.flatMap((r) =>
       r.status === "rejected"
         ? [r.reason instanceof Error ? r.reason.message : String(r.reason)]
@@ -248,7 +286,7 @@ export const naverAdapter: EngineAdapter = async (query) => {
   }
 
   try {
-    const { items, failures } = await naverSearch(query.prompt);
+    const { items, failures } = await naverSearch(query.prompt, query.signal);
     if (failures.length > 0) {
       return makeErrorResponse(
         "naver",
@@ -277,6 +315,9 @@ export const naverAdapter: EngineAdapter = async (query) => {
 
     return analyzeText("naver", text, query, Date.now() - start, citedSources);
   } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw error;
+    }
     return makeErrorResponse(
       "naver",
       error instanceof Error ? error.message : String(error),
@@ -313,6 +354,7 @@ export const daumAdapter: EngineAdapter = async (query) => {
           const url = `https://dapi.kakao.com/v2/search/${kind}?query=${encodeURIComponent(q)}&size=10`;
           const resp = await fetch(url, {
             headers: { Authorization: `KakaoAK ${restKey}` },
+            signal: query.signal,
           });
           if (!resp.ok) {
             return [];
@@ -321,6 +363,9 @@ export const daumAdapter: EngineAdapter = async (query) => {
           return data.documents ?? [];
         })
       );
+      if (query.signal?.aborted) {
+        throw query.signal.reason ?? new DOMException("Aborted", "AbortError");
+      }
       return res.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
     };
 
@@ -402,6 +447,9 @@ export const daumAdapter: EngineAdapter = async (query) => {
       renderDocs(displayDocs)
     );
   } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw error;
+    }
     return makeErrorResponse(
       "daum",
       error instanceof Error ? error.message : String(error),

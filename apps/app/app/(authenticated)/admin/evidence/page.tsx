@@ -1,22 +1,10 @@
-// 관리자 — 고객사 조치 전후(before/after) 근거 자료 (2026-08-12 세션N-24)
+// 관리자 — 조치 완료 기록. 비교 가능한 실행 원장이 없으면 변화 수치는 차단한다.
 //
-// 왜 만드나: 대표님이 투자·영업 자리에서 *"우리 처방을 실행한 고객사가 실제로 올랐다"* 를
-//   숫자로 보여줘야 한다. 지금은 그 화면이 없어서 매번 DB 를 직접 뒤져야 했다.
-//
-// 🔴 **이 화면의 규칙: 유리하게 보이려고 하지 않는다.**
-//   - 인과로 단정하지 않는다(경고를 숫자 옆에 **항상** 붙인다)
-//   - 떨어진 건도 숨기지 않는다
-//   - after 가 없으면 0 이 아니라 **"아직 모름"** 으로 쓴다
-//   근거: 설화수 16→27 상승분을 그대로 내놨으면 VC 에게 *"측정 방식이 바뀐 것"* 으로
-//   정확히 반대로 읽혔을 사고 이력이 있다(투두리스트 "만들지 말 것" 항목).
-//
-// ⚠️ 계산은 `@repo/audit/before-after` 순수 함수가 한다. 이 파일은 **조회와 표시만**.
-//   (같은 계산을 화면에서 다시 하면 두 숫자가 갈린다 — 프로젝트 규칙.)
+// 과거에는 답변별 Tracking을 회차 성과처럼 비교해 거짓 ±%p를 만들 수 있었다.
+// 완료 당시 보였던 값은 남기되, 측정 출처와 코호트를 확인할 때까지 전후 차이는 숨긴다.
 
-import {
-  type BeforeAfterRow,
-  buildBeforeAfterRow,
-} from "@repo/audit/before-after";
+import type { BeforeAfterRow } from "@repo/audit/before-after";
+import { buildUnattributedEvidenceRow } from "@repo/audit/evidence-series";
 import { isAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
@@ -24,8 +12,8 @@ import { notFound } from "next/navigation";
 import { Header } from "../../components/header";
 
 export const metadata: Metadata = {
-  title: "성과 근거",
-  description: "고객사 조치 전후 대조 — 읽기 전용",
+  title: "조치 완료 기록",
+  description: "완료 기록과 당시 화면 값 — 전후 효과 미판정",
 };
 
 /** 한 번에 보여줄 조치 건수 상한. 넘치면 잘렸다고 화면에 밝힌다. */
@@ -37,7 +25,7 @@ const pctText = (v: number | null): string =>
 /** 델타 표기 — 부호를 명시한다. 🔴 "↗" 같은 화살표는 방향 오독을 낳아 쓰지 않는다. */
 const deltaText = (v: number | null): string => {
   if (v === null) {
-    return "아직 모름";
+    return "비교 불가";
   }
   const pp = Math.round(v * 100);
   return `${pp > 0 ? "+" : ""}${pp}%p`;
@@ -64,45 +52,26 @@ const AdminEvidencePage = async () => {
 
   const totalCompletions = await database.actionCompletion.count();
 
-  // 조치가 있는 브랜드의 측정 시계열만 가져온다(전체를 긁지 않는다).
-  const brandIds = [...new Set(completions.map((c) => c.brandId))];
-  const trackings = brandIds.length
-    ? await database.tracking.findMany({
-        orderBy: { trackedAt: "asc" },
-        select: { brandId: true, shareOfVoice: true, trackedAt: true },
-        where: { brandId: { in: brandIds } },
-      })
-    : [];
-
-  // 브랜드별 측정 시계열로 접는다.
-  const seriesByBrand = new Map<
-    string,
-    { measuredAt: Date; sov: number | null }[]
-  >();
-  for (const t of trackings) {
-    const list = seriesByBrand.get(t.brandId) ?? [];
-    list.push({ measuredAt: t.trackedAt, sov: t.shareOfVoice });
-    seriesByBrand.set(t.brandId, list);
-  }
-
   const rows = completions.map((c) => ({
     brandLabel: c.brand?.name ?? c.brand?.domain ?? "(브랜드 없음)",
-    row: buildBeforeAfterRow(c, seriesByBrand.get(c.brandId) ?? []),
+    row: buildUnattributedEvidenceRow(c),
   }));
 
   const withNumbers = rows.filter((r) => r.row.deltaSov !== null);
 
   return (
     <>
-      <Header page="성과 근거" pages={["관리자"]} />
+      <Header page="조치 완료 기록" pages={["관리자"]} />
       <div className="flex flex-col gap-8 px-4 py-6 md:px-6">
         <div className="flex flex-col gap-1">
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)] tracking-tight">
-            고객사 조치 전후 대조
+            고객사 조치 완료 기록
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            처방을 완료 표시한 뒤 재측정에서 점수가 어떻게 변했는지 봅니다. 읽기
-            전용이며, 외부에 인용할 때는 각 행의 주의사항을 함께 옮기세요.
+            완료 표시할 때 화면에 보였던 언급률만 표시합니다. 측정 시각·출처는
+            확인되지 않았습니다. 과거 측정에는 실행·질문·엔진·판정 버전의 연결
+            정보가 없어 이후 측정과 안전하게 짝지을 수 없습니다. 전후 변화나
+            처방 효과를 투자·영업 근거로 인용하지 마세요.
           </p>
         </div>
 
@@ -119,8 +88,9 @@ const AdminEvidencePage = async () => {
             </p>
           ) : null}
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-            비교가 안 되는 건은 대부분 “조치 후 재측정이 아직 없음”입니다.
-            시간이 지나면 채워집니다.
+            재측정이 있더라도 현재 데이터만으로는 동일한 질문·엔진·판정 기준인지
+            확인할 수 없습니다. 비교 수치는 실행 원장과 검증 절차를 갖춘 뒤
+            표시합니다.
           </p>
         </section>
 
@@ -131,8 +101,8 @@ const AdminEvidencePage = async () => {
             </h2>
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
               고객사가 진단 결과에서 처방을 실행하고 “완료로 표시”를 누르면
-              여기에 쌓입니다. 그 뒤 재측정이 한 번 더 돌면 전후 비교가
-              만들어집니다.
+              여기에 쌓입니다. 전후 비교는 동일한 측정 조건과 실행 이력을 검증한
+              뒤에만 제공됩니다.
             </p>
           </section>
         ) : (
@@ -155,7 +125,7 @@ const EvidenceTable = ({
           <th className="py-2 pr-3 font-medium">브랜드</th>
           <th className="py-2 pr-3 font-medium">조치</th>
           <th className="py-2 pr-3 font-medium">완료일</th>
-          <th className="py-2 pr-3 font-medium">전</th>
+          <th className="py-2 pr-3 font-medium">완료 시 화면 값</th>
           <th className="py-2 pr-3 font-medium">후</th>
           <th className="py-2 pr-3 font-medium">변화</th>
           <th className="py-2 font-medium">주의사항</th>

@@ -1,12 +1,12 @@
 "use client";
 
 import { requestIssueBillingKey } from "@portone/browser-sdk/v2";
-import { useUser } from "@repo/auth/client";
 import {
   trackCheckoutCompleted,
   trackCheckoutFailed,
   trackCheckoutStarted,
 } from "@repo/analytics/funnel";
+import { useUser } from "@repo/auth/client";
 import { Button } from "@repo/design-system/components/ui/button";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { cn } from "@repo/design-system/lib/utils";
@@ -18,6 +18,8 @@ import {
 } from "@/app/actions/billing/subscription";
 import { kakaoBillingKeyDisplayAmount } from "@/lib/billing/kakao-billing-key";
 import { describeSubscriptionError } from "@/lib/billing/subscription-error";
+import type { AppDictionary } from "@/lib/i18n";
+import { PurchaseNotice } from "./purchase-notice";
 
 /**
  * 정기결제(월 자동결제) 등록 버튼 — 2026-08-11 세션N-18.
@@ -39,6 +41,36 @@ const BILLING_CHANNEL_KEY =
 
 const won = (n: number) => `₩${n.toLocaleString("ko-KR")}`;
 
+/**
+ * 🔴 `granted` 가 false 면 "결제는 됐는데 권한이 안 붙은" 상태다 — 성공으로 세지 않는다.
+ *   (단건 흐름의 `not_granted` 와 같은 판정. 두 흐름이 같은 규칙을 쓴다.)
+ */
+const trackConfirmOutcome = (plan: PayablePlan, granted: boolean) => {
+  if (granted) {
+    trackCheckoutCompleted({ plan, isSubscription: true });
+    return;
+  }
+  trackCheckoutFailed({
+    plan,
+    stage: "verify",
+    isSubscription: true,
+    reasonCode: "not_granted",
+  });
+};
+
+const subscribedMessage = (
+  result: {
+    granted: boolean;
+    renewalScheduled?: boolean;
+  },
+  t: AppDictionary["subscribe"]
+): string => {
+  if (!result.granted) {
+    return t.granted;
+  }
+  return result.renewalScheduled ? t.started : t.firstPaid;
+};
+
 export const SubscribeButton = ({
   plan,
   label,
@@ -46,6 +78,9 @@ export const SubscribeButton = ({
   chargedPrice,
   featured,
   contactHref,
+  termsHref,
+  notice,
+  t,
 }: {
   chargedPrice: number;
   contactHref: string;
@@ -53,6 +88,16 @@ export const SubscribeButton = ({
   label: string;
   listPrice: number;
   plan: PayablePlan;
+  /** 이용약관(환불 규정) 주소 — 결제 전 고지에서 연결한다. */
+  termsHref: string;
+  /** 사전 `app.purchaseNotice`(⚖️ 공개 영문 약관 문장). */
+  notice: AppDictionary["purchaseNotice"];
+  /**
+   * 사전 `app.subscribe`.
+   * ⚖️ `disclosure*`·`consent` 는 전자상거래법 결제 전 고지·동의 문구라 **영어판이 아직 없다**
+   *   (👤 승인 대기 — 영어 사전에도 한국어를 그대로 둔다).
+   */
+  t: AppDictionary["subscribe"];
 }) => {
   const router = useRouter();
   const { user } = useUser();
@@ -119,7 +164,7 @@ export const SubscribeButton = ({
           reasonCode: issued?.code ?? "window_closed",
         });
         if (issued?.code) {
-          toast.error(issued.message ?? "결제수단 등록이 취소되었습니다.");
+          toast.error(issued.message ?? t.cardCancelled);
         }
         return;
       }
@@ -131,26 +176,8 @@ export const SubscribeButton = ({
         return;
       }
 
-      // 🔴 `granted` 가 false 면 "결제는 됐는데 권한이 안 붙은" 상태다 — 성공으로 세지 않는다.
-      //   (단건 흐름의 `not_granted` 와 같은 판정. 두 흐름이 같은 규칙을 쓴다.)
-      if (result.granted) {
-        trackCheckoutCompleted({ plan, isSubscription: true });
-      } else {
-        trackCheckoutFailed({
-          plan,
-          stage: "verify",
-          isSubscription: true,
-          reasonCode: "not_granted",
-        });
-      }
-
-      toast.success(
-        result.granted && result.renewalScheduled
-          ? "정기결제가 시작되었어요."
-          : result.granted
-            ? "첫 결제는 완료됐어요. 다음 결제 예약을 확인 중이니 잠시 후 다시 확인해 주세요."
-            : "결제는 완료됐어요. 권한 반영이 지연되면 새로고침해 주세요."
-      );
+      trackConfirmOutcome(plan, result.granted);
+      toast.success(subscribedMessage(result, t));
       setNoticeOpen(false);
       // 결제 서버가 갱신한 publicMetadata를 현재 세션에도 반영한 뒤 화면을 다시 그린다.
       await user?.reload();
@@ -164,7 +191,9 @@ export const SubscribeButton = ({
       });
       // SDK/채널 설정 문제를 일반 문구로 덮으면 안전한 수정이 불가능하다.
       // 코드·메시지만 표시하고 billingKey 등 예외 객체 전체는 노출하지 않는다.
-      toast.error(`정기결제 등록 실패: ${describeSubscriptionError(error)}`);
+      toast.error(
+        t.failed.replace("{reason}", describeSubscriptionError(error))
+      );
     } finally {
       setIsPending(false);
     }
@@ -187,53 +216,55 @@ export const SubscribeButton = ({
       {/* ⚖️ 전자상거래법 — 정기결제는 결제 전에 금액·주기·차기 결제일·해지 방법을
           고지하고 동의를 받아야 한다. 화면에 실제로 보이게 둔다(약관 링크 뒤로 숨기지 않는다). */}
       <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-        정기결제 안내
+        {t.disclosureTitle}
       </p>
       <dl className="flex flex-col gap-1.5 text-xs">
         <div className="flex justify-between gap-2">
           <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            상품
+            {t.disclosureProduct}
           </dt>
           <dd className="text-[color:var(--findable-ink-muted,#d0d6e0)]">
-            Findable {plan} 월 정기결제
+            {t.disclosureProductValue.replace("{plan}", plan)}
           </dd>
         </div>
         <div className="flex justify-between gap-2">
           <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            결제 금액
+            {t.disclosureAmount}
           </dt>
           <dd className="text-[color:var(--findable-ink,#f7f8f8)]">
             {won(chargedPrice)}{" "}
             <span className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-              (VAT 포함 · 표시가 {won(listPrice)})
+              {t.disclosureAmountNote.replace("{list}", won(listPrice))}
             </span>
           </dd>
         </div>
         <div className="flex justify-between gap-2">
           <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            결제 주기
+            {t.disclosureCycle}
           </dt>
           <dd className="text-[color:var(--findable-ink-muted,#d0d6e0)]">
-            매월 1회 자동결제
+            {t.disclosureCycleValue}
           </dd>
         </div>
         <div className="flex justify-between gap-2">
           <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            차기 결제일
+            {t.disclosureNext}
           </dt>
           <dd className="text-[color:var(--findable-ink-muted,#d0d6e0)]">
-            등록일로부터 1개월 후 같은 날
+            {t.disclosureNextValue}
           </dd>
         </div>
         <div className="flex justify-between gap-2">
           <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            해지 방법
+            {t.disclosureCancel}
           </dt>
           <dd className="text-[color:var(--findable-ink-muted,#d0d6e0)]">
-            요금제 화면에서 언제든 직접 해지
+            {t.disclosureCancelValue}
           </dd>
         </div>
       </dl>
+
+      <PurchaseNotice kind="subscription" t={notice} termsHref={termsHref} />
 
       <label className="flex cursor-pointer items-start gap-2 text-[color:var(--findable-ink-muted,#d0d6e0)] text-xs">
         <input
@@ -242,9 +273,7 @@ export const SubscribeButton = ({
           onChange={(e) => setAgreed(e.target.checked)}
           type="checkbox"
         />
-        <span>
-          위 내용을 확인했으며, 매월 자동으로 결제되는 것에 동의합니다.
-        </span>
+        <span>{t.consent}</span>
       </label>
 
       <div className="flex gap-2">
@@ -254,7 +283,7 @@ export const SubscribeButton = ({
           onClick={subscribe}
           size="sm"
         >
-          {isPending ? "처리 중…" : "동의하고 정기결제 시작"}
+          {isPending ? t.processing : t.submit}
         </Button>
         <Button
           disabled={isPending}
@@ -262,7 +291,7 @@ export const SubscribeButton = ({
           size="sm"
           variant="ghost"
         >
-          취소
+          {t.cancel}
         </Button>
       </div>
     </div>

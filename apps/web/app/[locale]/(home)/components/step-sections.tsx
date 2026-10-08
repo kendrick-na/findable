@@ -13,7 +13,7 @@ const SECTIONS_KO = [
     body: "AI 답변 4곳과 네이버·다음 검색 노출을 동시에 모아서, 3분 안에 결과를 드립니다. 한국어와 영어, 둘 다 추적합니다.",
     bullets: [
       "AI 답변 4곳 + 네이버·다음 검색 노출 병렬 수집",
-      "Princeton GEO-Bench 산식 기반 점유율 측정",
+      "판별된 답변 중 브랜드가 확인된 비율(답변 등장률) 측정",
       "한국어 표기 변형까지 빠짐없이 추적",
     ],
     mock: "engines",
@@ -73,7 +73,7 @@ const SECTIONS_EN = [
     body: "We pull answers from 4 AI engines plus Naver and Daum search in parallel and return results within 3 minutes, tracking both Korean and English.",
     bullets: [
       "4 AI engines + Naver/Daum search exposure, collected in parallel",
-      "Share-of-voice scored on the Princeton GEO-Bench formula",
+      "Appearance rate: share of classified answers that verify the brand",
       "Tracks every Korean spelling variant, no misses",
     ],
   },
@@ -244,7 +244,9 @@ const MiniMock = ({ kind, isKo = true }: { kind: string; isKo?: boolean }) => {
     return (
       <div className="text-[12px] leading-[1.7]" style={fontMono}>
         <div className="mb-2 text-[var(--findable-ink-tertiary)]">
-          {isKo ? "화면 예시 · 실제 측정값 아님" : "UI example · not measured data"}
+          {isKo
+            ? "화면 예시 · 실제 측정값 아님"
+            : "UI example · not measured data"}
         </div>
         <div className="text-[var(--findable-ink-subtle)]">
           $ findable audit your-brand.co.kr

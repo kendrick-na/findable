@@ -20,13 +20,17 @@
 //    그게 의도다 — 기존 점수가 부풀려져 있었다.
 
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { getDomain } from "tldts";
 import { z } from "zod";
-import { describeProviderError } from "./engines/provider-error";
+import { describeProviderError, isAbortError } from "./engines/provider-error";
 import { detectBrandMention } from "./engines/utils";
+import {
+  HELPER_GATEWAY_MODEL_ID,
+  letsurModelWithFallback,
+} from "./letsur-fallback";
+import { isSearchResultEngine } from "./search-api-rows";
 
 export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
 
@@ -36,14 +40,14 @@ export { MENTION_VERDICT_VERSION } from "./mention-verdict-version";
 const LETSUR_VERDICT_MODEL_ID =
   process.env.FINDABLE_VERDICT_LETSUR_MODEL ?? "claude-haiku-5-5";
 
-async function verdictModel() {
-  const letsurKey = process.env.LETSUR_API_KEY;
-  if (letsurKey) {
-    const letsur = createOpenAI({
-      baseURL: "https://gw.letsur.ai/v1",
-      apiKey: letsurKey,
-    });
-    return letsur(LETSUR_VERDICT_MODEL_ID);
+export async function verdictModel() {
+  // 🔴 Letsur 불가(유닛 소진·만료·인증)면 같은 호출을 Gateway 로 명시적 폴백(letsur-fallback.ts).
+  const letsur = letsurModelWithFallback(LETSUR_VERDICT_MODEL_ID, {
+    callSite: "mention-verdict",
+    gatewayModelId: HELPER_GATEWAY_MODEL_ID,
+  });
+  if (letsur) {
+    return letsur;
   }
   // `models` reads server-only API keys at module evaluation time. Load it only
   // when an ambiguous response really needs an LLM verdict; pure rule tests and
@@ -72,18 +76,31 @@ export type MentionQuality =
 export interface MentionVerdict {
   /** 점수·SoV에 실제로 반영할 최종 판정. confirmed 만 true. */
   counted: boolean;
+  /**
+   * 공식 홈페이지를 못 읽어 근거 검사 없이 판정기를 믿은 confirmed(2026-10-06, 무신사 REDIRECT_FAILED).
+   * 화면 표시는 사용자 승인 전이라 데이터 플래그로만 남긴다.
+   */
+  officialProfileUnavailable?: true;
   quality: MentionQuality;
-  /** 판정 경로(관측용). rule=규칙만으로 확정, llm=모호해서 LLM 판정, skipped=검증 미실행. */
-  via: "rule" | "llm" | "skipped";
   /** 비집계 판정의 사유(관측·재검증용). 없으면 quality 자체가 사유다. */
   reason?: MentionVerdictReason;
+  /**
+   * 판정 경로(관측용). rule=규칙만으로 확정, llm=모호해서 LLM 판정, skipped=검증 미실행,
+   * rules_search_terms=검색 API 결과(네이버·다음)라 약관상 LLM 없이 규칙만으로 판정.
+   */
+  via: "rule" | "llm" | "skipped" | "rules_search_terms";
 }
 
 export type MentionVerdictReason =
   /** LLM이 confirmed라 했지만 공식 사이트 고유 사실·도메인 근거가 답변에 없음. */
   | "official_evidence_missing"
   /** 판정기(LLM) 호출이 재시도·폴백까지 모두 실패함. */
-  | "judge_failed";
+  | "judge_failed"
+  /**
+   * 검색 결과(네이버·다음)에 이름은 있으나 결정적 근거(공식 도메인·상호·사업자번호)가 없어
+   * 같은 회사인지 판정하지 않았다. 약관상 LLM 판정기를 쓸 수 없는 행이다(2026-10-07).
+   */
+  | "search_rule_inconclusive";
 
 // ─────────────────────────────────────────────────────────
 // 1단계: 규칙 — 명확한 것은 LLM 없이 끝낸다(원가·지연 보호)
@@ -101,15 +118,13 @@ const CLARIFICATION_RE =
 const UNKNOWN_RE =
   /(들어본 적|알지 못|찾을 수 없|정보가 없|확인되지 않|잘 모르|알려진 바가 없)|(don't|do not) have (any )?(information|knowledge)|(i'm|i am) not (familiar|aware)|no information (about|on)|couldn't find/i;
 
-/**
- * 브랜드명이 일반 단어인지(=B 유형 위험). 사전이 아니라 형태로 판정한다:
- * 영문 단문 소문자 단어("forget")는 일반명사일 가능성이 높다.
- * ⚠️ 이건 "모호 후보"를 고르는 신호일 뿐, 그 자체로 미인지 판정을 하지 않는다.
- */
-const COMMON_WORD_RE = /^[a-z]{3,12}$/;
-
-/** 한글 2~3글자 브랜드는 다른 단어에 섞여들 위험이 크다("기아"⊂"푸에기아", "현대"⊂"현대적"). */
-const SHORT_HANGUL_RE = /^[가-힣]{2,3}$/;
+const URL_SCHEME_PREFIX_RE = /^https?:\/\//;
+const WWW_PREFIX_RE = /^www\./;
+const URL_PATH_SPLIT_RE = /[/?#]/;
+const IDENTITY_TOKEN_SPLIT_RE = /[^a-z0-9가-힣]+/;
+const ASCII_LETTER_RE = /[a-z]/;
+const DIGITS_ONLY_RE = /^\d+$/;
+const LONG_HANGUL_NAME_RE = /^[가-힣]{4,}$/;
 
 /**
  * 이름이 같기 쉬운 **대상 유형** 신호.
@@ -130,16 +145,19 @@ const UNSUPPORTED_KNOWLEDGE_RE =
 const UNRESOLVED_IDENTITY_RE =
   /(?:can|could|may)\s+refer\s+to[\s\S]{0,100}?(?:different|several|multiple|few)|refers?\s+to\s+(?:a\s+few|several|multiple)\s+(?:different\s+|distinct\s+)?(?:entities|products?|brands?|services?)|which\s+one\s+you\s+mean|(?:여러|몇)\s*(?:가지|개의)?\s*(?:다른|동명)?\s*(?:대상|브랜드|서비스|제품)|어느\s*(?:것|브랜드|서비스)을?\s*(?:뜻|의미)/i;
 
-function mentionsOfficialDomain(text: string, brandDomain?: string): boolean {
+export function mentionsOfficialDomain(
+  text: string,
+  brandDomain?: string
+): boolean {
   if (!brandDomain) {
     return false;
   }
   const domain = brandDomain
     .trim()
     .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .split(/[/?#]/)[0];
+    .replace(URL_SCHEME_PREFIX_RE, "")
+    .replace(WWW_PREFIX_RE, "")
+    .split(URL_PATH_SPLIT_RE)[0];
   return (
     domain.length > 0 &&
     [
@@ -148,16 +166,16 @@ function mentionsOfficialDomain(text: string, brandDomain?: string): boolean {
   );
 }
 
-function normalizedHost(value: string): string {
+export function normalizedHost(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .split(/[/?#]/)[0];
+    .replace(URL_SCHEME_PREFIX_RE, "")
+    .replace(WWW_PREFIX_RE, "")
+    .split(URL_PATH_SPLIT_RE)[0];
 }
 
-function compactIdentity(value: string): string {
+export function compactIdentity(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9가-힣]/g, "");
 }
 
@@ -207,7 +225,7 @@ function identityTokens(
 ): string[] {
   return value
     .toLowerCase()
-    .split(/[^a-z0-9가-힣]+/)
+    .split(IDENTITY_TOKEN_SPLIT_RE)
     .map((token) => token.replace(KOREAN_PARTICLE_SUFFIX_RE, ""))
     .filter(
       (token) =>
@@ -218,9 +236,10 @@ function identityTokens(
         // "Melt Halo"의 `Halo` 한 단어만으로 통과할 수 있다. 영문 보조 근거는
         // 최소 5글자로 제한하고, 짧은 제품명은 아래의 한국 제품 메타데이터 경로에서
         // 서로 다른 두 개가 맞을 때만 별도로 허용한다.
-        token.length >= (/[a-z]/.test(token) ? asciiMinLength : minLength) &&
+        token.length >=
+          (ASCII_LETTER_RE.test(token) ? asciiMinLength : minLength) &&
         !IDENTITY_TOKEN_STOPWORDS.has(token) &&
-        !/^\d+$/.test(token)
+        !DIGITS_ONLY_RE.test(token)
     );
 }
 
@@ -247,7 +266,7 @@ function isRegisteredNameFragment(token: string, input: VerifyInput): boolean {
  * 영어·짧은 한글명에는 절대 적용하지 않는다.
  */
 function hasKoreanProductMetadataEvidence(input: VerifyInput): boolean {
-  if (!/^[가-힣]{4,}$/.test(input.brandName.trim())) {
+  if (!LONG_HANGUL_NAME_RE.test(input.brandName.trim())) {
     return false;
   }
   const description = input.officialSite?.description ?? "";
@@ -271,7 +290,10 @@ function hasKoreanProductMetadataEvidence(input: VerifyInput): boolean {
 }
 
 /** 등록 도메인의 하위 서비스와 본사 도메인은 같은 공식 소유 범위로 본다. */
-function isOfficialDomain(domain: string, brandDomain?: string): boolean {
+export function isOfficialDomain(
+  domain: string,
+  brandDomain?: string
+): boolean {
   const official = brandDomain ? normalizedHost(brandDomain) : "";
   const candidate = normalizedHost(domain);
   return Boolean(
@@ -286,16 +308,171 @@ function isOfficialDomain(domain: string, brandDomain?: string): boolean {
   );
 }
 
+/** 「함께해요」「만들어요」 같은 슬로건의 서술어 끝 — 회사를 가르는 사실이 아니다. */
+const PREDICATE_ENDING_RE = /(?:요|다|니다|세요|하자|해요)$/;
+const LEGAL_SUFFIX_RE = /\(주\)|㈜|주식회사|\(유\)|유한회사/g;
+/** 슬로건에 흔한 2글자 군말 — 회사를 가르지 못한다. */
+const SLOGAN_FILLER = new Set([
+  "하나",
+  "모든",
+  "우리",
+  "함께",
+  "가장",
+  "최고",
+  "지금",
+  "마침내",
+  "당신",
+  "누구",
+]);
+
+/** 공식 프로필(title·description·H1)에서 엔티티를 가르는 고유 토큰. */
+function officialProfileTokens(input: VerifyInput): Set<string> {
+  const site = input.officialSite;
+  const brandToken = compactIdentity(input.brandName);
+  return new Set(
+    [site?.title, site?.description, site?.h1]
+      .filter((value): value is string => Boolean(value))
+      // ⚠️ 2글자 명사는 근거로 받지 않는다(2026-10-06 컨트롤타워 검증): 「금융」⊂「금융권」,
+      //   「결제」⊂「결제대행」처럼 업종 일반명사가 동명 타사 답변을 통과시켰다. 슬로건형 브랜드는
+      //   토큰 대신 상호·사업자번호·공식 별칭 앵커(hasRegisteredEntityAnchor)로 푼다.
+      .flatMap((value) => identityTokens(value))
+      .filter((token) => {
+        const compact = compactIdentity(token);
+        // 조사 제거 과정에서 고유명사 끝 글자까지 떨어져 나올 수 있다
+        // (예: `멜트헤일로` → `멜트헤일`). 등록명/별칭의 일부는 독립적인
+        // 공식 사실이 아니므로, 그 자체로는 엔티티 근거가 될 수 없다.
+        return (
+          compact !== brandToken &&
+          !isRegisteredNameFragment(token, input) &&
+          !PREDICATE_ENDING_RE.test(token) &&
+          !SLOGAN_FILLER.has(token)
+        );
+      })
+  );
+}
+
+/**
+ * 근거 없음 강등을 **요구할 수 있는** 프로필인가(2026-10-06 운영 실측).
+ * - 홈페이지를 못 읽어 내용이 비면(무신사 REDIRECT_FAILED) 근거를 만들 재료가 없다.
+ * - 슬로건뿐인 홈페이지(당근 24건 중 17건 강등)는 강등을 끄지 않고 앵커(상호·사업자번호·
+ *   「당근마켓」 같은 공식 별칭)로 근거를 넓혀 푼다.
+ * ⚠️ 「토큰이 적으면 강등 생략」은 쓰지 않는다 — TechDD(「정량 기술 실사」, 4글자 토큰 0)의
+ *   해외 동명사를 거르는 이 강등이 실제로 필요했다(회귀 테스트 mention-entity-regression).
+ */
+export function canDemandOfficialEvidence(input: VerifyInput): boolean {
+  const site = input.officialSite;
+  return Boolean(
+    site &&
+      [site.title, site.description, site.h1, site.siteName].some((value) =>
+        Boolean(value?.trim())
+      )
+  );
+}
+
+/**
+ * 등록 정보로 엔티티를 특정하는 앵커:
+ * ① 푸터 상호(「바이오센서연구소」) ② 사업자등록번호 ③ 등록명을 품은 더 긴 공식 별칭
+ *   (「당근」 → 「당근마켓」). ③은 등록명 자체·짧은 별칭(「Franz」)은 받지 않는다.
+ */
+/**
+ * 상호 앵커로 쓰면 안 되는 일반 단어(2026-10-06 컨트롤타워 검토).
+ * 고객이 직접 넣는 상호가 「코리아」「솔루션」뿐이면 그 단어가 들어간 다른 회사 답변까지
+ * 우리 회사로 확정된다(점수 부풀리기 경로). 회사명 전체가 이 단어들뿐일 때만 막는다.
+ */
+const GENERIC_LEGAL_NAME_TOKENS = new Set([
+  "코리아",
+  "솔루션",
+  "솔루션즈",
+  "테크",
+  "테크놀로지",
+  "컴퍼니",
+  "그룹",
+  "홀딩스",
+  "글로벌",
+  "인터내셔널",
+  "파트너스",
+  "코퍼레이션",
+  "서비스",
+  "플랫폼",
+  "시스템",
+  "시스템즈",
+  "네트웍스",
+  "커머스",
+  "랩스",
+  "스튜디오",
+  "미디어",
+  "korea",
+  "solution",
+  "solutions",
+  "tech",
+  "technology",
+  "company",
+  "group",
+  "holdings",
+  "global",
+  "international",
+  "partners",
+  "corporation",
+  "service",
+  "platform",
+  "systems",
+  "labs",
+  "studio",
+  "media",
+  "commerce",
+]);
+
+/**
+ * 상호가 엔티티를 **따로** 특정하는가. 등록명·별칭과 같거나 그 안에 들어가면 이름 일치와
+ * 다를 게 없어 동명 타사 차단이 무력화된다(예: 브랜드 「무신사」 + 상호 「㈜무신사」).
+ */
+function isDistinctiveLegalName(legal: string, input: VerifyInput): boolean {
+  if (legal.length < 3 || GENERIC_LEGAL_NAME_TOKENS.has(legal)) {
+    return false;
+  }
+  const names = [input.brandName, ...(input.brandVariants ?? [])]
+    .map((name) => compactIdentity(name))
+    .filter((name) => name.length > 0);
+  return !names.some((name) => name === legal || name.includes(legal));
+}
+
+function hasRegisteredEntityAnchor(input: VerifyInput): boolean {
+  const text = compactIdentity(input.text);
+  const legal = compactIdentity(
+    (input.officialSite?.legalName ?? "").replace(LEGAL_SUFFIX_RE, "")
+  );
+  if (isDistinctiveLegalName(legal, input) && text.includes(legal)) {
+    return true;
+  }
+  const bizNo = input.officialSite?.businessNumber;
+  if (bizNo && input.text.includes(bizNo)) {
+    return true;
+  }
+  const brand = compactIdentity(input.brandName);
+  return (input.brandVariants ?? []).some((variant) => {
+    const v = compactIdentity(variant);
+    return (
+      brand.length >= 2 &&
+      v.length > brand.length + 1 &&
+      v.includes(brand) &&
+      text.includes(v)
+    );
+  });
+}
+
 /**
  * LLM이 `confirmed`라고 해도 공식 사이트의 고유 사실이 답변에 실제로 있어야 한다.
  * 도메인 직접 언급/인용은 강한 근거이고, 그 외에는 title·description·H1의 서로 다른
  * 고유 토큰이 최소 2개 일치해야 한다. 이름만 넣은 업종 일반론·환각은 여기서 탈락한다.
  */
-function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
+export function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
   if (!input.officialSite) {
     return false;
   }
   if (mentionsOfficialDomain(input.text, input.brandDomain)) {
+    return true;
+  }
+  if (hasRegisteredEntityAnchor(input)) {
     return true;
   }
   // Mixed-source lists may contain an unused official search candidate. Require
@@ -318,26 +495,7 @@ function hasOfficialIdentityEvidence(input: VerifyInput): boolean {
     return true;
   }
 
-  const brandToken = compactIdentity(input.brandName);
-  const tokens = new Set(
-    [
-      input.officialSite.title,
-      input.officialSite.description,
-      input.officialSite.h1,
-    ]
-      .filter((value): value is string => Boolean(value))
-      .flatMap((value) => identityTokens(value))
-      .filter((token) => {
-        const compact = compactIdentity(token);
-        // 조사 제거 과정에서 고유명사 끝 글자까지 떨어져 나올 수 있다
-        // (예: `멜트헤일로` → `멜트헤일`). 등록명/별칭의 일부는 독립적인
-        // 공식 사실이 아니므로, 그 자체로는 엔티티 근거가 될 수 없다.
-        return (
-          compact !== brandToken &&
-          !isRegisteredNameFragment(token, input)
-        );
-      })
-  );
+  const tokens = officialProfileTokens(input);
   const response = input.text.toLowerCase();
   let matches = 0;
   for (const token of tokens) {
@@ -385,10 +543,6 @@ function hasConflictingBrandDomain(input: {
   );
 }
 
-function isShortHangul(name: string): boolean {
-  return SHORT_HANGUL_RE.test(name.trim());
-}
-
 /**
  * 문자열이 일치한 응답은 이름 형태와 무관하게 엔티티 판정을 거친다.
  *
@@ -419,7 +573,7 @@ const VerdictSchema = z.object({
 /** 판정에 넣을 답변 길이 상한 — 토큰·지연 보호. 앞부분에 판단 근거가 몰려 있다. */
 const VERDICT_TEXT_LIMIT = 1200;
 
-interface VerifyInput {
+export interface VerifyInput {
   /** 브랜드 도메인 — 어떤 엔티티인지 특정하는 가장 강한 단서. */
   brandDomain?: string;
   brandName: string;
@@ -431,12 +585,17 @@ interface VerifyInput {
   industry?: string;
   /** 공식 홈페이지에서 직접 읽은 엔티티 단서. 판정의 기준 사실로만 사용한다. */
   officialSite?: {
+    /** 푸터 사업자등록번호. 판정 v3 근거 전용(v2 판정·프롬프트는 읽지 않는다). */
+    businessNumber?: string | null;
     description?: string | null;
     finalUrl?: string;
     h1?: string | null;
+    /** 푸터 상호(법인명). 판정 v3 근거 전용(v2 판정·프롬프트는 읽지 않는다). */
+    legalName?: string | null;
     siteName?: string | null;
     title?: string | null;
   } | null;
+  signal?: AbortSignal;
   text: string;
 }
 
@@ -515,6 +674,7 @@ ${text.slice(0, VERDICT_TEXT_LIMIT)}
 판정하세요. 언급 방식(주제/비교대상/스쳐지나감)은 상관없습니다.`;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: retry and fallback policy must preserve one provider boundary.
 async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
   const prompt = buildVerdictPrompt(input);
 
@@ -524,18 +684,23 @@ async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
       schema: VerdictSchema,
       prompt,
       temperature: 0,
+      abortSignal: input.signal,
     });
     return object.quality;
-  } catch (error) {
-    const primaryError = describeProviderError(error);
+  } catch (primaryError) {
+    if (isAbortError(primaryError) || input.signal?.aborted) {
+      throw primaryError;
+    }
+    let error: unknown = primaryError;
+    const primaryFailure = describeProviderError(primaryError);
 
     // 일시적인 5xx/연결 오류 한 번으로 실제 브랜드 판별을 포기하면, 고객은
     // "잠정 결과"만 보게 된다. 같은 입력을 한 번만 즉시 재시도한다. 429는
     // 재시도해도 악화될 수 있어 독립 Google 판정기로 바로 넘긴다.
     if (
-      primaryError.statusCode === null ||
-      primaryError.statusCode === 408 ||
-      primaryError.statusCode >= 500
+      primaryFailure.statusCode === null ||
+      primaryFailure.statusCode === 408 ||
+      primaryFailure.statusCode >= 500
     ) {
       try {
         const { object } = await generateObject({
@@ -543,12 +708,16 @@ async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
           schema: VerdictSchema,
           prompt,
           temperature: 0,
+          abortSignal: input.signal,
         });
         log.info("mention.verdict.primary_retry_succeeded", {
           brandName: input.brandName,
         });
         return object.quality;
       } catch (retryError) {
+        if (isAbortError(retryError) || input.signal?.aborted) {
+          throw retryError;
+        }
         error = retryError;
       }
     }
@@ -565,12 +734,16 @@ async function llmVerdict(input: VerifyInput): Promise<MentionQuality | null> {
           schema: VerdictSchema,
           prompt,
           temperature: 0,
+          abortSignal: input.signal,
         });
         log.info("mention.verdict.google_fallback", {
           brandName: input.brandName,
         });
         return object.quality;
       } catch (fallbackError) {
+        if (isAbortError(fallbackError) || input.signal?.aborted) {
+          throw fallbackError;
+        }
         log.warn("mention.verdict.google_fallback_failed", {
           brandName: input.brandName,
           ...describeProviderError(fallbackError),
@@ -631,6 +804,12 @@ export async function verifyMention(
     return { counted: true, quality: "confirmed", via: "rule" };
   }
 
+  // Rule-only decisions are free and deterministic; an invocation deadline
+  // must not turn a completed rule result into an unverified row.
+  if (input.signal?.aborted) {
+    throw input.signal.reason ?? new DOMException("Aborted", "AbortError");
+  }
+
   const quality = await llmVerdict(input);
   if (quality === null) {
     // LLM 실패 → 측정은 완료하되 모호 응답을 성공으로 계산하지 않는다.
@@ -645,7 +824,7 @@ export async function verifyMention(
 
   if (
     quality === "confirmed" &&
-    input.officialSite &&
+    canDemandOfficialEvidence(input) &&
     !hasOfficialIdentityEvidence(input)
   ) {
     // 판정기는 정상 작동했고, 답변이 공식 사이트의 고유 사실을 하나도 말하지
@@ -660,7 +839,77 @@ export async function verifyMention(
     };
   }
 
-  return { counted: quality === "confirmed", quality, via: "llm" };
+  return {
+    counted: quality === "confirmed",
+    quality,
+    via: "llm",
+    ...(quality === "confirmed" && !canDemandOfficialEvidence(input)
+      ? { officialProfileUnavailable: true as const }
+      : {}),
+  };
+}
+
+// ─────────────────────────────────────────────────────────
+// 검색 API 결과(네이버·다음) — 규칙 전용 판정 (2026-10-07 👤 대표 결정)
+// ─────────────────────────────────────────────────────────
+
+// 검색 API 결과 엔진 집합·판별은 공용 가드(`./search-api-rows`)가 단일 출처다.
+//   이 파일의 기존 export 는 호환을 위해 그대로 다시 내보낸다.
+export {
+  isSearchResultEngine,
+  SEARCH_RESULT_ENGINE_IDS,
+} from "./search-api-rows";
+
+/**
+ * 검색 결과 행의 규칙 전용 판정. LLM·네트워크 호출이 없다(동기 함수).
+ *
+ * 순서(앞이 우선):
+ *   1. 이름 표기가 없으면 absent — 기존 규칙과 같다.
+ *   2. 검색 결과 링크·본문에 **공식 도메인(하위 도메인 포함, isOfficialDomain)** 이 있으면
+ *      confirmed — 「공식 사이트가 이 검색 결과에 나왔다」는 그 자체가 검색 노출의 정의다
+ *      (과거 네이버 합성 행도 같은 기준: answer-buckets `legacyNaverBucket`).
+ *   3. 되물음형 다의성 문구 → unknown_brand, 같은 이름의 다른 도메인 → different_entity
+ *      (verifyMention 의 기존 규칙 그대로).
+ *   4. 고객이 등록한 상호(일반 단어 아님)·사업자등록번호·등록명을 품은 더 긴 공식 별칭이
+ *      본문에 있으면 confirmed (hasRegisteredEntityAnchor — 기존 앵커 그대로).
+ *   5. 그 밖(이름만 있음) → unverified + reason `search_rule_inconclusive`.
+ *      예전엔 이 경우가 LLM 으로 갔다. LLM 없이 「같은 회사다/아니다」를 지어내지 않고
+ *      「판정 보류」로 둔다 — 등장률 분모·Tracking 시계열에서 빠지고(못 잰 것을 「모름」으로
+ *      세지 않는다), 공개 여부(publication)는 AI 그룹만 보므로 잠정 처리를 늘리지 않는다.
+ *   ⚠️ 공식 페이지 제목·설명 토큰 일치(hasOfficialIdentityEvidence 의 토큰 경로)는 쓰지 않는다.
+ *      그 경로는 LLM 판정 **뒤의 보조 확인**용이라, 단독으로 confirmed 를 만들면 업종 일반어
+ *      겹침으로 동명 타사가 통과한다.
+ */
+export function verifySearchRowByRules(
+  input: VerifyInput & { stringMatched: boolean }
+): MentionVerdict {
+  const via = "rules_search_terms" as const;
+  if (!input.stringMatched) {
+    return { counted: false, quality: "absent", via };
+  }
+  const officialDomainExposed =
+    mentionsOfficialDomain(input.text, input.brandDomain) ||
+    (input.citedDomains ?? []).some((domain) =>
+      isOfficialDomain(domain, input.brandDomain)
+    );
+  if (officialDomainExposed) {
+    return { counted: true, quality: "confirmed", via };
+  }
+  if (UNRESOLVED_IDENTITY_RE.test(input.text)) {
+    return { counted: false, quality: "unknown_brand", via };
+  }
+  if (hasConflictingBrandDomain(input)) {
+    return { counted: false, quality: "different_entity", via };
+  }
+  if (hasRegisteredEntityAnchor(input)) {
+    return { counted: true, quality: "confirmed", via };
+  }
+  return {
+    counted: false,
+    quality: "unverified",
+    via,
+    reason: "search_rule_inconclusive",
+  };
 }
 
 /** 테스트·오프라인 분석용 — LLM 없이 규칙만으로 모호 여부를 본다. */
@@ -686,10 +935,231 @@ export const __internal = {
 export interface VerifiableResponse {
   brandMentioned: boolean;
   citedSources?: Array<{ domain?: string; url?: string }>;
+  /** naver·daum(검색 API 결과)이면 LLM 없이 규칙만으로 판정한다(verifySearchRowByRules). */
+  engineId?: string;
   errorMessage: string | null;
   isStub?: boolean;
   mentionPosition?: number | null;
   rawResponse: string;
+}
+
+/** 판정 v3 그림자 결과(저장 전용 — 점수·집계에 쓰지 않는다). */
+export interface VerdictV3Shadow {
+  evidence?: string;
+  quality: string;
+  reason?: string;
+  via: string;
+}
+
+export interface VerifiedResponseFields {
+  mentionQuality: MentionQuality;
+  officialProfileUnavailable?: true;
+  verdictReason?: MentionVerdictReason;
+  verdictV3?: VerdictV3Shadow;
+  verdictVia: string;
+}
+
+interface VerifyBrand {
+  brandDomain?: string;
+  brandName: string;
+  brandVariants?: string[];
+  industry?: string;
+  officialSite?: VerifyInput["officialSite"];
+  signal?: AbortSignal;
+}
+
+/** 측정 실패·stub 은 판정 대상이 아니다(null). v2·v3 가 같은 입력을 쓴다. */
+function buildVerdictInput(
+  r: VerifiableResponse,
+  brand: VerifyBrand
+): (VerifyInput & { stringMatched: boolean }) | null {
+  if (r.errorMessage || r.isStub) {
+    return null;
+  }
+  return {
+    brandName: brand.brandName,
+    brandVariants: brand.brandVariants,
+    brandDomain: brand.brandDomain,
+    citedDomains: (r.citedSources ?? [])
+      .map((source) => source.domain ?? source.url ?? "")
+      .filter(Boolean),
+    industry: brand.industry,
+    officialSite: brand.officialSite,
+    signal: brand.signal,
+    text: r.rawResponse ?? "",
+    // Adapter flags are an optimization hint, not the source of truth.
+    // A live Naver AI Briefing response started with the brand name while
+    // its adapter flag was false; passing that flag through made a named
+    // answer look absent before the entity verifier could inspect it.
+    stringMatched: detectBrandMention(
+      r.rawResponse ?? "",
+      brand.brandName,
+      brand.brandVariants
+    ).mentioned,
+  };
+}
+
+/** 판정 부가 필드(사유·홈페이지 미확인 플래그) — 있는 것만 싣는다. */
+function verdictExtras(verdict: MentionVerdict): {
+  officialProfileUnavailable?: true;
+  verdictReason?: MentionVerdictReason;
+} {
+  return {
+    ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
+    ...(verdict.officialProfileUnavailable
+      ? { officialProfileUnavailable: true as const }
+      : {}),
+  };
+}
+
+function shadowField(
+  shadow: {
+    evidence?: string;
+    quality: string;
+    reason?: string;
+    via: string;
+  } | null
+): { verdictV3?: VerdictV3Shadow } {
+  if (!shadow) {
+    return {};
+  }
+  return {
+    verdictV3: {
+      quality: shadow.quality,
+      via: shadow.via,
+      ...(shadow.reason ? { reason: shadow.reason } : {}),
+      ...(shadow.evidence ? { evidence: shadow.evidence } : {}),
+    },
+  };
+}
+
+function logShadowDistribution(
+  out: Array<{ brandMentioned: boolean; verdictV3?: VerdictV3Shadow }>,
+  brandName: string
+): void {
+  const v3Dist: Record<string, number> = {};
+  let disagreements = 0;
+  for (const r of out) {
+    if (!r.verdictV3) {
+      continue;
+    }
+    v3Dist[r.verdictV3.quality] = (v3Dist[r.verdictV3.quality] ?? 0) + 1;
+    if ((r.verdictV3.quality === "confirmed") !== r.brandMentioned) {
+      disagreements += 1;
+    }
+  }
+  log.info("mention.verdict_v3.shadow_distribution", {
+    brandName,
+    disagreements,
+    ...v3Dist,
+  });
+}
+
+/** 그림자 판정 청크 상한 — 넘으면 그 청크는 기록하지 않는다(v2 판정은 영향 없음). */
+const SHADOW_CHUNK_DEADLINE_MS = 15_000;
+/**
+ * 그림자 판정을 **시작하지 않는** 남은 시간 하한(2026-10-06).
+ * 측정 전체 예산(runner 270초) 중 이만큼도 안 남았으면 그림자는 통째로 건너뛴다 —
+ * 점수에 쓰지 않는 기록 때문에 집계·DB 저장이 함수 시간 상한(300초)에 걸리면 안 된다.
+ */
+export const SHADOW_MIN_REMAINING_MS = 60_000;
+/** 호출자가 마감 시각을 주지 않을 때의 기본 예산(runner 의 AUDIT_RUN_TIME_BUDGET_MS 와 같다). */
+export const SHADOW_DEFAULT_BUDGET_MS = 270_000;
+
+function withShadowDeadline<T>(
+  run: (signal: AbortSignal) => Promise<(T | null)[]>,
+  size: number,
+  deadlineMs: number,
+  parent?: AbortSignal
+): Promise<(T | null)[]> {
+  // 시간이 지나면 실제로 판정기 호출을 취소한다 — 계속 돌면 다음 단계와 호출 한도를
+  //   나눠 가진다(컨트롤타워 검증 2026-10-06).
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort();
+  parent?.addEventListener("abort", onParentAbort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<(T | null)[]>((resolve) => {
+    timer = setTimeout(() => {
+      log.warn("mention.verdict_v3.shadow_deadline", { size });
+      controller.abort();
+      resolve(new Array(size).fill(null));
+    }, deadlineMs);
+  });
+  return Promise.race([run(controller.signal), timeout]).finally(() => {
+    clearTimeout(timer);
+    parent?.removeEventListener("abort", onParentAbort);
+  });
+}
+
+/**
+ * v2 판정이 **모두 끝난 뒤에만** 그림자 v3 를 돌려 `verdictV3` 를 덧붙인다(2026-10-06).
+ * 남은 예산이 SHADOW_MIN_REMAINING_MS 미만이면 시작하지 않고(청크마다 재확인),
+ * 청크 상한도 「남은 시간 − 하한」을 넘지 않는다 → 그림자는 마지막 60초를 절대 쓰지 않는다.
+ * v2 결과(brandMentioned·mentionQuality 등)는 건드리지 않는다.
+ */
+async function attachShadowVerdicts<R extends { verdictV3?: VerdictV3Shadow }>(
+  out: R[],
+  verdictInputs: Array<(VerifyInput & { stringMatched: boolean }) | null>,
+  options: {
+    brandName: string;
+    deadlineAtMs: number;
+    signal?: AbortSignal;
+    verifyMentionV3: (
+      input: VerifyInput & { stringMatched: boolean }
+    ) => Promise<Parameters<typeof shadowField>[0]>;
+  }
+): Promise<void> {
+  const startedAt = Date.now();
+  let attached = 0;
+  for (let start = 0; start < out.length; start += VERDICT_CONCURRENCY) {
+    const remainingMs = options.deadlineAtMs - Date.now();
+    let skipReason: "aborted" | "budget" | null = null;
+    if (options.signal?.aborted) {
+      skipReason = "aborted";
+    } else if (remainingMs < SHADOW_MIN_REMAINING_MS) {
+      skipReason = "budget";
+    }
+    if (skipReason) {
+      log.info("mention.verdict_v3.shadow_skipped", {
+        brandName: options.brandName,
+        reason: skipReason,
+        remainingMs: Math.round(remainingMs),
+        minRemainingMs: SHADOW_MIN_REMAINING_MS,
+        skippedRows: out.length - start,
+      });
+      break;
+    }
+    const inputs = verdictInputs.slice(start, start + VERDICT_CONCURRENCY);
+    const shadows = await withShadowDeadline(
+      (shadowSignal) =>
+        Promise.all(
+          inputs.map((verdictInput) =>
+            verdictInput
+              ? options
+                  .verifyMentionV3({ ...verdictInput, signal: shadowSignal })
+                  .catch(() => null)
+              : Promise.resolve(null)
+          )
+        ),
+      inputs.length,
+      Math.min(SHADOW_CHUNK_DEADLINE_MS, remainingMs - SHADOW_MIN_REMAINING_MS),
+      options.signal
+    );
+    for (const [i, shadow] of shadows.entries()) {
+      const row = out[start + i];
+      const field = shadowField(shadow);
+      if (row && field.verdictV3) {
+        row.verdictV3 = field.verdictV3;
+        attached += 1;
+      }
+    }
+  }
+  log.info("mention.verdict_v3.shadow_finished", {
+    brandName: options.brandName,
+    durationMs: Date.now() - startedAt,
+    rows: out.length,
+    attached,
+  });
 }
 
 /**
@@ -712,56 +1182,75 @@ export async function verifyMentions<T extends VerifiableResponse>(
     brandDomain?: string;
     industry?: string;
     officialSite?: VerifyInput["officialSite"];
-  }
-): Promise<
-  Array<
-    T & {
-      mentionQuality: MentionQuality;
-      verdictReason?: MentionVerdictReason;
-      verdictVia: string;
-    }
-  >
-> {
-  const out: Array<
-    T & {
-      mentionQuality: MentionQuality;
-      verdictReason?: MentionVerdictReason;
-      verdictVia: string;
-    }
-  > = new Array(responses.length);
+    signal?: AbortSignal;
+    /**
+     * 측정 전체 마감 시각(epoch ms). 그림자 v3 는 이 시각까지
+     * SHADOW_MIN_REMAINING_MS 이상 남았을 때만 돈다. 없으면 호출 시점 + 270초.
+     */
+    shadowDeadlineAtMs?: number;
+  },
+  onChunkEvent?: (event: {
+    chunkIndex: number;
+    responseCount: number;
+    phase: "started" | "finished";
+  }) => void
+): Promise<Array<T & VerifiedResponseFields>> {
+  const out: Array<T & VerifiedResponseFields> = new Array(responses.length);
+  // 판정 v3 그림자 기록(2026-10-05, 기본 off) — 점수에는 쓰지 않고 나란히 저장만 한다.
+  const { isVerdictV3ShadowEnabled, verifyMentionV3 } = await import(
+    "./mention-verdict-v3"
+  );
+  const shadowV3 = isVerdictV3ShadowEnabled();
+  const shadowDeadlineAtMs =
+    brand.shadowDeadlineAtMs ?? Date.now() + SHADOW_DEFAULT_BUDGET_MS;
+  const allVerdictInputs: Array<
+    (VerifyInput & { stringMatched: boolean }) | null
+  > = new Array(responses.length).fill(null);
 
   // 인덱스를 청크로 끊어 동시 실행 상한을 지킨다.
   for (let start = 0; start < responses.length; start += VERDICT_CONCURRENCY) {
     const slice = responses.slice(start, start + VERDICT_CONCURRENCY);
+    const event = {
+      chunkIndex: start / VERDICT_CONCURRENCY,
+      responseCount: slice.length,
+    };
+    try {
+      onChunkEvent?.({ ...event, phase: "started" });
+    } catch {
+      /* logging is best-effort */
+    }
+    const verdictInputs = slice.map((r) => buildVerdictInput(r, brand));
+    for (const [i, verdictInput] of verdictInputs.entries()) {
+      // 검색 결과 행은 그림자 v3(LLM)에도 넣지 않는다 — 입력 null = 그림자 호출 0.
+      allVerdictInputs[start + i] = isSearchResultEngine(slice[i]?.engineId)
+        ? null
+        : verdictInput;
+    }
     const verdicts = await Promise.all(
-      slice.map((r): Promise<MentionVerdict> => {
+      slice.map((r, i): Promise<MentionVerdict> => {
+        const verdictInput = verdictInputs[i];
         // 측정 실패/stub 은 판정 대상 아님 — 원본 유지.
-        if (r.errorMessage || r.isStub) {
+        if (!verdictInput) {
           return Promise.resolve({
             counted: r.brandMentioned,
             quality: "absent" as MentionQuality,
             via: "skipped" as const,
           });
         }
-        return verifyMention({
-          brandName: brand.brandName,
-          brandVariants: brand.brandVariants,
-          brandDomain: brand.brandDomain,
-          citedDomains: (r.citedSources ?? [])
-            .map((source) => source.domain ?? source.url ?? "")
-            .filter(Boolean),
-          industry: brand.industry,
-          officialSite: brand.officialSite,
-          text: r.rawResponse ?? "",
-          // Adapter flags are an optimization hint, not the source of truth.
-          // A live Naver AI Briefing response started with the brand name while
-          // its adapter flag was false; passing that flag through made a named
-          // answer look absent before the entity verifier could inspect it.
-          stringMatched: detectBrandMention(
-            r.rawResponse ?? "",
-            brand.brandName,
-            brand.brandVariants
-          ).mentioned,
+        // 🔴 네이버·다음 검색 결과는 약관상 AI 입력 금지 → 규칙 전용(LLM 호출 0).
+        if (isSearchResultEngine(r.engineId)) {
+          return Promise.resolve(verifySearchRowByRules(verdictInput));
+        }
+        return verifyMention(verdictInput).catch((error) => {
+          if (isAbortError(error) || brand.signal?.aborted) {
+            return {
+              counted: false,
+              quality: "unverified" as MentionQuality,
+              via: "skipped" as const,
+              reason: "judge_failed" as const,
+            };
+          }
+          throw error;
         });
       })
     );
@@ -774,9 +1263,26 @@ export async function verifyMentions<T extends VerifiableResponse>(
         mentionPosition: verdict.counted ? original.mentionPosition : null,
         mentionQuality: verdict.quality,
         verdictVia: verdict.via,
-        ...(verdict.reason ? { verdictReason: verdict.reason } : {}),
+        ...verdictExtras(verdict),
       };
     }
+    try {
+      onChunkEvent?.({ ...event, phase: "finished" });
+    } catch {
+      /* logging is best-effort */
+    }
+  }
+
+  // 그림자 v3 는 v2 가 전부 끝난 뒤에만, 남은 예산이 있을 때만 돈다(2026-10-06).
+  //   이전엔 청크마다 v2 와 나란히 돌고 청크가 그림자를 기다려(최대 15초×청크 수)
+  //   측정 시간을 늘렸다 — 운영 실측: kurly 첫 측정이 판정 단계에서 시간 초과.
+  if (shadowV3) {
+    await attachShadowVerdicts(out, allVerdictInputs, {
+      brandName: brand.brandName,
+      deadlineAtMs: shadowDeadlineAtMs,
+      signal: brand.signal,
+      verifyMentionV3,
+    });
   }
 
   // 판정 분포 관측(2026-08-03 세션N) — 이 판정은 계산·과금까지 하고 **아무 곳에도
@@ -793,10 +1299,13 @@ export async function verifyMentions<T extends VerifiableResponse>(
     absent: 0,
     unverified: 0,
   };
-  const viaDist = { rule: 0, llm: 0, skipped: 0 };
+  const viaDist = { rule: 0, llm: 0, skipped: 0, rules_search_terms: 0 };
   for (const r of out) {
     dist[r.mentionQuality] += 1;
     viaDist[r.verdictVia as keyof typeof viaDist] += 1;
+  }
+  if (shadowV3) {
+    logShadowDistribution(out, brand.brandName);
   }
   log.info("mention.verdict.distribution", {
     brandName: brand.brandName,
@@ -806,6 +1315,7 @@ export async function verifyMentions<T extends VerifiableResponse>(
     viaRule: viaDist.rule,
     viaLlm: viaDist.llm,
     viaSkipped: viaDist.skipped,
+    viaRulesSearchTerms: viaDist.rules_search_terms,
   });
 
   return out;

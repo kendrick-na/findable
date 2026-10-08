@@ -1,6 +1,7 @@
 import "server-only";
 import { getDictionary } from "@repo/internationalization";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { pickLocaleFromAcceptLanguage } from "./accept-language";
 
 /**
  * `apps/app`(로그인 후 대시보드) 다국어 — **뼈대**.
@@ -22,8 +23,11 @@ import { cookies } from "next/headers";
  *
  * 🔴 **로케일을 어디서 얻나**: `apps/app` 은 `apps/web` 과 달리 URL 에 로케일이 없다
  *   (`app/(authenticated)/...`). 라우팅을 `[locale]` 로 바꾸는 건 **전 화면 URL 변경**이라
- *   범위 밖이다. → `NEXT_LOCALE` 쿠키를 읽는다. 이 쿠키는 **`apps/web` 의 i18n 프록시가
- *   이미 심는 것**이라(같은 등록 도메인) 새 메커니즘을 만들지 않는다.
+ *   범위 밖이다. → `NEXT_LOCALE` 쿠키를 읽는다(헤더 토글 `app/locale/route.ts` 가 심는다).
+ *   🔴 정정(2026-10-06): 예전 주석은 *"`apps/web` 의 i18n 프록시가 이미 심는 쿠키"* 라 했지만
+ *     [확인사실] 웹(`next-international` 1.3.1)이 심는 쿠키 이름은 **`Next-Locale`** 이라 다르다.
+ *     일부러 이어 받지 않는다 — 웹은 **IP 국가**로 언어를 정해서(해외 출장 중 한국 고객 → 영어),
+ *     로그인 후 앱에 그대로 쓰면 안 된다. 대신 아래 브라우저 언어 감지를 쓴다.
  *   ⚠️ 쿠키가 없으면 **한국어**가 기본이다 — 현재 화면이 전부 한국어이므로,
  *     영어로 떨어뜨리면 사전에 없는 키만 영어로 나와 **화면이 뒤섞인다.**
  */
@@ -38,17 +42,82 @@ export type AppLocale = (typeof APP_LOCALES)[number];
  */
 export const APP_DEFAULT_LOCALE: AppLocale = "ko";
 
+/**
+ * 앱 영어 지원을 **고객에게 열지**. 켜면 ① 헤더 KO/EN 토글이 보이고
+ * ② 쿠키가 없는 첫 방문자는 브라우저 언어(`Accept-Language`)로 ko/en 을 고른다.
+ *
+ * 🔴 **왜 꺼 두나**(2026-10-06 · `docs/_적용/영어화면_범위_20261006.md` 3·5장):
+ *   [실측] EN 을 누르면 사이드바만 영어가 되고 본문·로그인(Clerk koKR)·날짜(ko-KR)·
+ *   AI 리포트는 한국어로 남는다 → **반쯤 영어인 화면은 고장으로 보인다.** 외국 고객 0명.
+ *   → 핵심 화면(온보딩·대시보드·브랜드·기록·결제) 이관 + 👤 결정(약관·통화·용어집) 전까지 끈다.
+ * ⚠️ 토글과 자동 감지는 **반드시 함께** 켜고 끈다. 감지만 켜면 영어 브라우저 사용자가
+ *   반쯤 영어인 화면에 갇히고 되돌릴 버튼이 없다.
+ * 🔴 정정(2026-10-07 관제 검증): 꺼져 있을 때 **운영에서는 쿠키도 무시한다**.
+ *   예전 main 은 토글을 항상 보여줘서, 그때 EN 을 누른 고객에게 1년짜리 `NEXT_LOCALE=en` 이 남아 있다.
+ *   토글을 숨긴 채 그 쿠키를 따르면 그 고객은 반쯤 영어인 화면에 갇히고 돌아갈 버튼이 없다.
+ *   → 내부 미리보기는 Vercel Preview·로컬 개발에서만 쿠키(`/locale?locale=en`)로 연다.
+ */
+export const APP_ENGLISH_ENABLED = false;
+
+/**
+ * `NEXT_LOCALE` 쿠키를 따를지. 영어 공개 전에는 **Preview·로컬 개발에서만** 따른다
+ * (운영에서는 영어가 절대 나오지 않게). `VERCEL_ENV` 는 Vercel 이 배포 단위로 넣는 값이다.
+ */
+export function honorsLocaleCookie(): boolean {
+  if (APP_ENGLISH_ENABLED) {
+    return true;
+  }
+  return (
+    process.env.VERCEL_ENV === "preview" ||
+    process.env.NODE_ENV === "development"
+  );
+}
+
+/**
+ * 날짜·숫자 표기용 BCP 47 태그. `toLocaleDateString(dateLocaleFor(locale))` 처럼 쓴다.
+ * ⚠️ 2026-10-06 실측: 앱에 `"ko-KR"` 고정이 58곳 — 화면을 옮길 때 이걸로 바꾼다.
+ */
+export const dateLocaleFor = (locale: AppLocale): string =>
+  locale === "en" ? "en-US" : "ko-KR";
+
 const isAppLocale = (v: string | undefined): v is AppLocale =>
   v !== undefined && APP_LOCALES.includes(v as AppLocale);
 
 /**
- * 현재 요청의 로케일. `NEXT_LOCALE` 쿠키 → 없거나 미지원이면 기본(ko).
- * ⚠️ 서버 컴포넌트 전용(`cookies()`).
+ * 현재 요청의 로케일. 우선순위:
+ *   ① `NEXT_LOCALE` 쿠키(사용자가 토글로 고른 값 — 브라우저 단위, 조직과 무관).
+ *      단 `honorsLocaleCookie()` 일 때만(영어 공개 전 운영에서는 무시 → ko)
+ *   ② `APP_ENGLISH_ENABLED` 일 때만: 브라우저 `Accept-Language` 의 ko/en 중 먼저 나오는 것
+ *   ③ 기본(ko)
+ * 📐 계정 단위 저장(기기 간 유지)은 아직 없다 — 페이지마다 Clerk 조회가 한 번 더 붙어
+ *   느려지므로, 영어를 고객에게 열 때 함께 설계한다(범위 문서 3장).
+ * ⚠️ 서버 컴포넌트 전용(`cookies()`·`headers()`).
  */
 export async function getAppLocale(): Promise<AppLocale> {
-  const store = await cookies();
+  // 🔴 요청 밖(테스트·cron·백그라운드 작업)에서는 `cookies()` 가 throw 한다.
+  //   서버 액션이 오류 문구를 사전에서 읽게 되면서(2026-10-06) 그 경로가 생겼다 → 기본값(ko).
+  let store: Awaited<ReturnType<typeof cookies>>;
+  try {
+    store = await cookies();
+  } catch {
+    return APP_DEFAULT_LOCALE;
+  }
   const raw = store.get("NEXT_LOCALE")?.value?.split("-")[0];
-  return isAppLocale(raw) ? raw : APP_DEFAULT_LOCALE;
+  if (honorsLocaleCookie() && isAppLocale(raw)) {
+    return raw;
+  }
+  if (!APP_ENGLISH_ENABLED) {
+    return APP_DEFAULT_LOCALE;
+  }
+  try {
+    const requestHeaders = await headers();
+    return (
+      pickLocaleFromAcceptLanguage(requestHeaders.get("accept-language")) ??
+      APP_DEFAULT_LOCALE
+    );
+  } catch {
+    return APP_DEFAULT_LOCALE;
+  }
 }
 
 /**
@@ -69,3 +138,6 @@ export async function getAppDictionary() {
   const dictionary = await getDictionary(locale);
   return dictionary.app;
 }
+
+/** `app` 네임스페이스 사전 타입. 부품에 `t: AppDictionary["dashboard"]` 처럼 넘길 때 쓴다. */
+export type AppDictionary = Awaited<ReturnType<typeof getAppDictionary>>;

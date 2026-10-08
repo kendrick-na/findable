@@ -1,3 +1,5 @@
+import enDict from "@repo/internationalization/dictionaries/en.json";
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 감성 정직성 회귀 테스트 (2026-08-16 세션N-34 · G-1).
  *
@@ -29,46 +31,58 @@ import {
   sentimentComparison,
   sentimentTier as tier,
 } from "../app/(authenticated)/components/dashboard-kpis";
+
+/** 문구는 사전에서 온다(2026-10-06) — 한국어 화면 기준으로 검사. */
+const KO_KPIS = koDict.app.kpis;
+
 import { positiveRateOf } from "../app/(authenticated)/lib/dashboard-data";
 
 describe("감성 티어 — 상태를 좋게 반올림하지 않는다", () => {
   it("🔴 긍정이 소수면 「우호적」이라 하지 않는다 (실측 재현)", () => {
     // 실측 그대로: 나이키 긍5·중28·부0 = 긍정 15%
-    expect(tier({ positive: 5, neutral: 28, negative: 0, total: 33 })).toBe(
-      "중립적"
-    );
+    expect(
+      tier({ positive: 5, neutral: 28, negative: 0, total: 33 }, KO_KPIS)
+    ).toBe("중립적");
     // sulwhasoo 긍2·중12 = 14%
-    expect(tier({ positive: 2, neutral: 12, negative: 0, total: 14 })).toBe(
-      "중립적"
-    );
+    expect(
+      tier({ positive: 2, neutral: 12, negative: 0, total: 14 }, KO_KPIS)
+    ).toBe("중립적");
     // 엔비디아 긍2·중15 = 12%
-    expect(tier({ positive: 2, neutral: 15, negative: 0, total: 17 })).toBe(
-      "중립적"
-    );
+    expect(
+      tier({ positive: 2, neutral: 15, negative: 0, total: 17 }, KO_KPIS)
+    ).toBe("중립적");
   });
 
   it("긍정이 실제로 지배적이면 「우호적」이 맞다", () => {
-    expect(tier({ positive: 20, neutral: 10, negative: 0, total: 30 })).toBe(
-      "우호적"
-    );
+    expect(
+      tier({ positive: 20, neutral: 10, negative: 0, total: 30 }, KO_KPIS)
+    ).toBe("우호적");
   });
 
   it("🔴 긍정·부정이 같은 경계(3할)를 쓴다 — 한쪽만 후하면 안 된다", () => {
     // 대칭성 계약: 같은 비중이면 같은 강도로 판정한다
-    const p = tier({ positive: 3, neutral: 7, negative: 0, total: 10 }); // 긍정 30%
-    const n = tier({ positive: 0, neutral: 7, negative: 3, total: 10 }); // 부정 30%
+    const p = tier(
+      { positive: 3, neutral: 7, negative: 0, total: 10 },
+      KO_KPIS
+    ); // 긍정 30%
+    const n = tier(
+      { positive: 0, neutral: 7, negative: 3, total: 10 },
+      KO_KPIS
+    ); // 부정 30%
     expect(p).toBe("우호적");
     expect(n).toBe("부정 많음");
   });
 
   it("부정은 소수여도 숨기지 않는다 (기존 동작 보존)", () => {
-    expect(tier({ positive: 0, neutral: 32, negative: 1, total: 33 })).toBe(
-      "부정 섞임"
-    );
+    expect(
+      tier({ positive: 0, neutral: 32, negative: 1, total: 33 }, KO_KPIS)
+    ).toBe("부정 섞임");
   });
 
   it("측정이 0건이면 판정하지 않는다", () => {
-    expect(tier({ positive: 0, neutral: 0, negative: 0, total: 0 })).toBe("—");
+    expect(
+      tier({ positive: 0, neutral: 0, negative: 0, total: 0 }, KO_KPIS)
+    ).toBe("—");
   });
 });
 
@@ -84,7 +98,7 @@ describe("긍정 비율 — 같은 수치 2벌 금지 (세션N-34 감사)", () =
     const current = { positive: 5, neutral: 4, negative: 0, total: 9 }; // 56%
     const prevRate = positiveRateOf(previous);
     const currRate = positiveRateOf(current);
-    const text = sentimentComparison(current, previous);
+    const text = sentimentComparison(current, previous, KO_KPIS, true);
     // 문장이 말하는 이전 값 = 단일 진실이 낸 값
     expect(text).toContain(`${prevRate}%`);
     // 변화폭도 두 값의 차이와 같아야 한다
@@ -93,14 +107,16 @@ describe("긍정 비율 — 같은 수치 2벌 금지 (세션N-34 감사)", () =
 
   it("변화가 없으면 올랐다/내렸다고 하지 않는다", () => {
     const same = { positive: 5, neutral: 28, negative: 0, total: 33 };
-    const text = sentimentComparison(same, same);
+    const text = sentimentComparison(same, same, KO_KPIS, true);
     expect(text).toContain("같아요");
     expect(text).not.toMatch(/올랐|내렸/);
   });
 
   it("이전 측정이 없으면 비교를 지어내지 않는다", () => {
     const current = { positive: 5, neutral: 28, negative: 0, total: 33 };
-    expect(sentimentComparison(current, null)).toContain("2회차");
+    expect(sentimentComparison(current, null, KO_KPIS, true)).toContain(
+      "2회차"
+    );
   });
 });
 
@@ -134,5 +150,19 @@ describe("분류기 — `별로` 조사 오탐", () => {
     expect(
       estimateSentiment("전혀 다른 이야기입니다.", "테스트브랜드")
     ).toBeNull();
+  });
+});
+
+describe("🔴 영어 화면도 같은 판정을 한다(2026-10-06 사전 이관)", () => {
+  const EN_KPIS = enDict.app.kpis;
+  it("부정 비중이 크면 영어도 'Mostly negative' 로 말한다", () => {
+    expect(
+      tier({ positive: 0, neutral: 7, negative: 3, total: 10 }, EN_KPIS)
+    ).toBe("Mostly negative");
+  });
+  it("부정이 하나라도 섞이면 영어도 숨기지 않는다", () => {
+    expect(
+      tier({ positive: 0, neutral: 32, negative: 1, total: 33 }, EN_KPIS)
+    ).toBe("Some negative");
   });
 });

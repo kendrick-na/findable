@@ -3,17 +3,13 @@
 // 카톡/X 링크 미리보기에 점수가 자랑스럽게 노출되도록.
 // next/og의 ImageResponse 사용 (Edge 가능하지만 Node로 두어 DB 접근 가능).
 
+import { countBrandAiRecognition } from "@repo/audit/brand-ai-recognition";
 import {
   geoAxisScores,
   type ScoreTier,
   scoreTier,
   TIER_LABEL_KO,
-  uniqueEngineCount,
 } from "@repo/audit/geo-score";
-// 🔴 세션N-28 — 분모는 `countMeasurementCoverage` 단일 진실을 쓴다.
-//   종전엔 `measuredEngineCount`(= 고유엔진 − 오류엔진)를 썼는데 그 규칙이 결과 화면의
-//   「7/6·117%」 버그와 **같은 원인**이다(1회라도 실패한 엔진을 통째로 제외).
-import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
 import { auditPublicationIssue } from "@repo/audit/normalize-stored-metrics";
 import { ImageResponse } from "next/og";
 
@@ -52,6 +48,9 @@ interface JobShape {
       engineId: string;
       errorMessage?: string | null;
       isStub?: boolean;
+      brandMentioned?: boolean | null;
+      mentionQuality?: string | null;
+      promptKind?: "brand" | "discovery" | null;
     }>;
   } | null;
 }
@@ -129,19 +128,12 @@ export async function GET(
   }
   const score = metrics ? geoAxisScores(metrics).total : 0;
   const t = tier(score);
-  // P1-g(2026-07-27): metrics 배열은 응답 단위(엔진×프롬프트=중복)라 고유화 필수.
-  // 분모는 측정 성공 엔진(오류 제외) — 결과 페이지 언급률과 동일 기준.
-  const mentioned = uniqueEngineCount(metrics?.enginesWithMention ?? []);
-  // 🔴 세션N-28: 결과 화면과 **같은 함수**로 분모를 구한다(종전 `measuredEngineCount` 는
-  //   1회라도 실패한 엔진을 통째로 빼서 「7/6」 같은 값을 만들었다).
-  //   engineResponses 가 없는 옛 회차는 고유 엔진 수로 폴백한다(분자보다 작아지지 않게).
-  const total = job?.result?.engineResponses
-    ? countMeasurementCoverage(
-        job.result.engineResponses.filter(
-          (r) => r.engineId !== "naver-briefing"
-        )
-      ).measured
-    : uniqueEngineCount(metrics?.enginesCovered ?? []);
+  // Stored metrics mix AI answers and search exposure. Only answer-level brand
+  // AI verdicts can support this AI-labelled statement. Legacy rows without
+  // response provenance must not invent a numerator or denominator.
+  const recognition = job?.result?.engineResponses
+    ? countBrandAiRecognition(job.result.engineResponses)
+    : null;
 
   return new ImageResponse(
     <div
@@ -274,7 +266,9 @@ export async function GET(
               display: "flex",
             }}
           >
-            AI 엔진 {total}곳 중 {mentioned}곳에서 언급
+            {recognition
+              ? `AI 엔진 ${recognition.measured}곳 중 ${recognition.mentioned}곳에서 확인`
+              : "AI 답변별 집계 정보 없음"}
           </div>
         </div>
       </div>

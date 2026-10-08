@@ -1,0 +1,76 @@
+/*
+ * v12 리포트 — 화면 보기·도구 막대 (손으로 쓴 부분). 인쇄(?print=1·PDF)에서는 전부 꺼진다.
+ * 리포트 본문 CSS 는 report-v12.css(원본 템플릿에서 기계 변환)만 쓴다.
+ */
+body:has(> .fr12-root) {
+  margin: 0;
+  padding: 0;
+}
+.fr12-screen {
+  min-height: 100vh;
+  padding: 24px 0 56px;
+  background: #e7e2dc;
+}
+.fr12-screen .fr12 {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: center;
+  background: transparent;
+}
+.fr12-screen .fr12 .page {
+  zoom: var(--fr-scale, 1);
+  box-shadow:
+    0 1px 3px rgba(23, 19, 15, 0.08),
+    0 12px 32px rgba(23, 19, 15, 0.14);
+}
+.fr12-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  max-width: 794px;
+  margin: 0 auto 16px;
+  padding: 0 16px;
+  font:
+    500 13px / 1.5 "Pretendard Variable",
+    Pretendard,
+    -apple-system,
+    sans-serif;
+}
+.fr12-bar a {
+  padding: 10px 18px;
+  font-weight: 700;
+  color: #fff;
+  text-decoration: none;
+  background: #17130f;
+  border-radius: 99px;
+}
+.fr12-bar .internal {
+  padding: 10px 14px;
+  color: #8f2a22;
+  text-align: center;
+  background: #fceae7;
+  border: 1px solid #f1b8ae;
+  border-radius: 10px;
+}
+.fr12-print {
+  background: #fff;
+}
+@media print {
+  .fr12-screen {
+    min-height: 0;
+    padding: 0;
+    background: #fff;
+  }
+  .fr12-screen .fr12 {
+    display: block;
+  }
+  .fr12-screen .fr12 .page {
+    zoom: 1;
+    box-shadow: none;
+  }
+  .fr12-bar {
+    display: none;
+  }
+}

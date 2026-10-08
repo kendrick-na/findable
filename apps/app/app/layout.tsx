@@ -5,6 +5,7 @@ import { DesignSystemProvider } from "@repo/design-system";
 import { fonts } from "@repo/design-system/lib/fonts";
 import { Toolbar } from "@repo/feature-flags/components/toolbar";
 import type { ReactNode } from "react";
+import { getAppLocale } from "@/lib/i18n";
 
 interface RootLayoutProperties {
   readonly children: ReactNode;
@@ -25,8 +26,13 @@ interface RootLayoutProperties {
  * ⚠️ app UI 는 **전부 한국어**다(i18n 라우팅 없음 · 사이드바·요금제·빈 상태 전수 확인).
  *   나중에 app 에 영어를 넣는다면 그때 `[locale]` 구조로 가야 하고, 이 값도 동적이어야 한다.
  */
-const RootLayout = ({ children }: RootLayoutProperties) => (
-  <html className={fonts} lang="ko" suppressHydrationWarning>
+/*
+ * 🔴 2026-10-06 — `lang` 을 현재 로케일로 바꾼다(위 S4 주석의 "나중에 동적이어야 한다").
+ *   쿠키가 없으면 여전히 "ko" 다(`getAppLocale` 기본값). 클라이언트 에러 경계
+ *   (`(authenticated)/error.tsx`)도 이 값을 읽어 문구 언어를 고른다.
+ */
+const RootLayout = async ({ children }: RootLayoutProperties) => (
+  <html className={fonts} lang={await getAppLocale()} suppressHydrationWarning>
     <body>
       <AnalyticsProvider>
         {/* 🔴 대시보드는 **다크 고정**(2026-08-07 세션N-9).
@@ -41,6 +47,7 @@ const RootLayout = ({ children }: RootLayoutProperties) => (
             잉크4·표면4·헤어라인3 토큰이 전부 다크 전제로만 설계돼 있다.
             web 결과페이지도 이미 같은 선택을 했다(`audit/[jobId]/page.tsx` className="dark"). */}
         <DesignSystemProvider
+          authLocale={await getAppLocale()}
           forcedTheme="dark"
           helpUrl={env.NEXT_PUBLIC_DOCS_URL}
           privacyUrl={new URL(

@@ -33,14 +33,13 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
   }
 
   // 독립적인 Clerk/DB 조회를 직렬로 기다리면 모든 탭 전환이 느려진다.
-  const [betaFeature, plan, admin, partner, headerMetric] =
-    await Promise.all([
-      showBetaFeature(),
-      getCurrentPlan(),
-      isAdmin(),
-      getMyPartnerStatus(),
-      scopedHeaderMetric(),
-    ]);
+  const [betaFeature, plan, admin, partner, headerMetric] = await Promise.all([
+    showBetaFeature(),
+    getCurrentPlan(),
+    isAdmin(),
+    getMyPartnerStatus(),
+    scopedHeaderMetric(),
+  ]);
   const t = await getAppDictionary();
   // 파트너 배지 노출 판정(진실=DB status). 승인 파트너만 true.
   const isPartner = partner.status === "approved";
@@ -65,13 +64,16 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
           isPartner={isPartner}
           labels={{
             adminAudits: t.sidebar.adminAudits,
+            partnerBadge: t.sidebar.partnerBadge,
             adminContent: t.sidebar.adminContent,
+            adminDiscover: t.sidebar.adminDiscover,
             adminEvidence: t.sidebar.adminEvidence,
             adminMeasure: t.sidebar.adminMeasure,
             adminMail: t.sidebar.adminMail,
             adminOps: t.sidebar.adminOps,
             adminOrgs: t.sidebar.adminOrgs,
             adminPartners: t.sidebar.adminPartners,
+            adminReports: t.sidebar.adminReports,
             alerts: t.sidebar.alerts,
             billing: t.sidebar.billing,
             brandMeasure: t.sidebar.brandMeasure,

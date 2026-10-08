@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { AppDictionary } from "@/lib/i18n";
 
 /**
  * 측정 대기 화면 — 재설계안 v2 §4-c.
@@ -36,29 +37,48 @@ const POLL_TIMEOUT_MS = 4 * 60 * 1000;
  * ✅ 대신 백엔드가 **실제로 하는 일**(runner.ts)을 문구로 옮긴다 — 지어낸 무드가 아니라
  *   "AI 여러 곳에 묻고 · 답변에서 언급 찾고 · 경쟁사도 같이 본다"는 실제 동작 그대로.
  */
-const MOOD_PHRASES = [
-  "AI 여러 곳에 당신의 브랜드를 묻고 있어요",
-  "답변 속에서 브랜드 언급을 찾고 있어요",
-  "경쟁사도 함께 살펴보고 있어요",
-  "찾은 내용을 리포트로 정리하고 있어요",
-  "곧 결과를 보여드릴게요",
+const moodPhrases = (t: AppDictionary["measuring"]) => [
+  t.mood1,
+  t.mood2,
+  t.mood3,
+  t.mood4,
+  t.mood5,
 ];
 const MOOD_ROTATE_MS = 4000;
+/** 순환 문구 개수(`moodPhrases` 길이와 같다). 효과가 문구 배열에 의존하지 않게 상수로 둔다. */
+const MOOD_COUNT = 5;
 
 type ViewState = "measuring" | "slow" | "failed";
 
 export const MeasuringView = ({
+  continueJob,
   createdAt,
   jobId,
   domain,
+  initialContinuing = false,
+  initialLateAnswers = false,
   initialStatus,
   pollStatus,
   sampleUrl,
+  dateLocale,
+  t,
 }: {
+  /**
+   * 마감으로 잘린 측정 이어가기(2026-10-06) — pollStatus 와 같은 이유로 **주입받는다**.
+   * 폴링이 `needs_continuation` 을 보면 대기 한 번당 한 번 부른다. 없으면 cron 이 이어받는다.
+   */
+  continueJob?: (jobId: string) => Promise<unknown>;
   createdAt: string;
   jobId: string;
   /** 무엇을 측정 중인지. 지금 화면에서 유일하게 개인화된 정보다. */
   domain: string | null;
+  /** 이 화면에 들어온 시점에 이미 이어가기 대기였는지(queued + leaseUntil). */
+  initialContinuing?: boolean;
+  /**
+   * 그 이어가기가 「늦게 온 AI 답 마저 받기」 회차인지(2026-10-07 · checkpoint.lateReask).
+   * 질문 이어가기는 기존 「남은 질문을 이어서」 문구를 그대로 쓴다.
+   */
+  initialLateAnswers?: boolean;
   initialStatus: "queued" | "processing";
   /**
    * 진행 상태 폴링 — **주입받는다**(N-44).
@@ -78,15 +98,28 @@ export const MeasuringView = ({
    *
    * ⛔ 초대코드·요금제는 넣지 않는다 — 기다림과 무관한 별개 작업이고,
    *   초대코드 입력은 이미 `/billing` 상단에 있다(같은 걸 두 곳에 두지 않는다).
-   *   ⚠️ 가격 숫자는 이 화면에 **0곳**이다(카카오페이 심사 동결).
+   *   ⚠️ 가격 숫자는 이 화면에 **0곳**이다(가격은 `/pricing`·`/billing` 한 곳에서만 · 카카오페이 심사 완료(2026-09-22, cf405634)).
    *
    * ⚠️ 서버 의존(`env`)은 페이지가 먹고 값만 내려온다 — 📕N-37·N-41 주입 패턴.
    */
   sampleUrl: string;
+  /** 시작 시각 표기 로케일(`dateLocaleFor`). */
+  dateLocale: string;
+  /** 사전 `app.measuring` (client 라 서버가 넘긴다). */
+  t: AppDictionary["measuring"];
 }) => {
+  const MOOD_PHRASES = moodPhrases(t);
   const router = useRouter();
   const [view, setView] = useState<ViewState>("measuring");
   const [status, setStatus] = useState<"queued" | "processing">(initialStatus);
+  // 한 번 이어가기에 들어가면 완료/실패까지 「남은 질문을 이어서」 안내를 유지한다.
+  const [continuing, setContinuing] = useState(initialContinuing);
+  // 늦은 AI 답 회차면 문구만 바꾼다(동작은 질문 이어가기와 같다).
+  const [lateAnswers, setLateAnswers] = useState(initialLateAnswers);
+  let continuingCopy: string | undefined;
+  if (continuing) {
+    continuingCopy = lateAnswers ? t.collectingLateAnswers : t.continuing;
+  }
   const [moodIndex, setMoodIndex] = useState(0);
   const [moodVisible, setMoodVisible] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -99,7 +132,7 @@ export const MeasuringView = ({
     const rotate = setInterval(() => {
       setMoodVisible(false);
       setTimeout(() => {
-        setMoodIndex((i) => (i + 1) % MOOD_PHRASES.length);
+        setMoodIndex((i) => (i + 1) % MOOD_COUNT);
         setMoodVisible(true);
       }, 300);
     }, MOOD_ROTATE_MS);
@@ -115,6 +148,15 @@ export const MeasuringView = ({
       }
     };
 
+    // 이어가기 요청 여부 — 대기 한 번당 한 번. 실제로 다시 돌기 시작하면(processing) 풀린다.
+    let continuationRequested = false;
+    const requestContinuationOnce = async () => {
+      if (continuationRequested || !continueJob) {
+        return;
+      }
+      continuationRequested = true;
+      await continueJob(jobId);
+    };
     timerRef.current = setInterval(async () => {
       // 4분부터 지연을 알리되 폴링은 계속한다. 서버가 6분 초과 작업을
       // 실패로 정리하면 이 화면도 반드시 최종 상태로 전환해야 한다.
@@ -130,7 +172,17 @@ export const MeasuringView = ({
         } else if (status === "failed") {
           stop();
           setView("failed");
+        } else if (
+          status === "needs_continuation" ||
+          status === "needs_late_answers"
+        ) {
+          // 질문이 남았거나(남은 질문만) 늦은 AI 답이 남았다(그 칸만) — 계속 「물어보는 중」이다.
+          setStatus("processing");
+          setContinuing(true);
+          setLateAnswers(status === "needs_late_answers");
+          await requestContinuationOnce();
         } else if (status === "queued" || status === "processing") {
+          continuationRequested &&= status !== "processing";
           setStatus(status);
         }
         // queued/processing/not_found → 다음 폴링까지 대기.
@@ -142,7 +194,7 @@ export const MeasuringView = ({
     }, POLL_INTERVAL_MS);
 
     return stop;
-  }, [jobId, router, pollStatus]);
+  }, [jobId, router, pollStatus, continueJob]);
 
   return (
     // 중앙 정렬 + 압도적 여백(Profound). 화면 전체를 쓰되 내용은 가운데 한 덩어리.
@@ -166,9 +218,7 @@ export const MeasuringView = ({
               aria-live="polite"
               className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]"
             >
-              {status === "queued"
-                ? "측정 대기 중이에요"
-                : "AI 7곳에 물어보고 있어요"}
+              {continuingCopy ?? (status === "queued" ? t.queued : t.asking)}
             </h1>
             {domain ? (
               <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
@@ -176,12 +226,14 @@ export const MeasuringView = ({
               </p>
             ) : null}
             <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-              회차 {jobId.slice(-8)} · 시작{" "}
-              {new Intl.DateTimeFormat("ko-KR", {
-                timeZone: "Asia/Seoul",
-                hour: "numeric",
-                minute: "2-digit",
-              }).format(new Date(createdAt))}
+              {t.runStarted.replace("{id}", jobId.slice(-8)).replace(
+                "{time}",
+                new Intl.DateTimeFormat(dateLocale, {
+                  timeZone: "Asia/Seoul",
+                  hour: "numeric",
+                  minute: "2-digit",
+                }).format(new Date(createdAt))
+              )}
             </p>
           </div>
 
@@ -198,11 +250,11 @@ export const MeasuringView = ({
 
           <div className="flex flex-col gap-1">
             <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm">
-              보통 1~3분 걸려요. 끝나면 자동으로 결과 화면으로 넘어가요.
+              {t.duration}
             </p>
             {/* 기다림을 강제하지 않는다 — 러너는 서버 백그라운드에서 돈다. */}
             <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm">
-              이 화면을 닫아도 측정은 계속돼요.
+              {t.canClose}
             </p>
           </div>
         </>
@@ -211,10 +263,10 @@ export const MeasuringView = ({
       {view === "slow" && (
         <div className="flex flex-col gap-3">
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-            측정이 조금 오래 걸리고 있어요
+            {t.slowTitle}
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            아직 완료되지 않았어요. 계속 상태를 확인하고 있습니다.
+            {continuingCopy ?? t.slowBody}
           </p>
         </div>
       )}
@@ -222,10 +274,10 @@ export const MeasuringView = ({
       {view === "failed" && (
         <div className="flex flex-col gap-3">
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-            측정에 실패했어요
+            {t.failedTitle}
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            브랜드는 등록됐어요. 측정만 다시 시작하면 돼요.
+            {t.failedBody}
           </p>
         </div>
       )}
@@ -239,7 +291,7 @@ export const MeasuringView = ({
           rel="noopener noreferrer"
           target="_blank"
         >
-          결과가 이렇게 나와요 — 실제 진단 보기
+          {t.sample}
         </a>
       )}
 
@@ -249,20 +301,20 @@ export const MeasuringView = ({
           className="findable-btn-secondary inline-flex items-center rounded-md border border-[color:var(--findable-hairline,#23252a)] px-4 py-2 font-medium text-sm"
           href="/"
         >
-          대시보드로 가기
+          {t.toDashboard}
         </a>
         <a
           className="inline-flex items-center rounded-md px-4 py-2 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm"
           href="/history"
         >
-          측정 이력 보기
+          {t.toHistory}
         </a>
         {view !== "measuring" && (
           <a
             className="inline-flex items-center rounded-md px-4 py-2 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm"
             href="/brand"
           >
-            브랜드 목록
+            {t.toBrands}
           </a>
         )}
       </div>

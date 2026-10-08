@@ -34,40 +34,39 @@ interface RevenueImpactCardProps {
   sov: number;
 }
 
-const T = (isKo: boolean) => ({
+export const revenueImpactCopy = (isKo: boolean) => ({
   // 🔴 감사 5번(2026-08-07 세션N-8): 주 숫자를 금액→세션으로 바꾸면서 제목도 맞춘다.
   //   제목이 "매출"인데 큰 숫자가 세션이면 둘이 어긋나 보인다.
-  eyebrow: isKo ? "놓치는 유입 (추정)" : "Missed Traffic (Estimate)",
+  eyebrow: isKo ? "가정 기반 시나리오" : "Assumption-based scenario",
   headline: isKo
-    ? "AI 답변에서 놓치고 있는 방문"
-    : "Visits you may be missing in AI answers",
+    ? "입력한 조건에서의 방문 규모"
+    : "Visits under your chosen assumptions",
   // KPI 프레이밍(시뮬 병목: "이게 내 이번 분기 문제인지 인식"에 직결).
   // 해요체 + 주 숫자(세션)와 같은 층위로 — 금액은 아래 토글에서만 말한다(감사 5번).
   kpiFraming: isKo
-    ? "지금 이 순간에도 AI에게 브랜드를 묻는 잠재고객이 다른 답을 받고 있어요. 그 중 우리에게 올 수 있었던 방문을 세어봤어요."
-    : "Right now, prospects asking AI about your category are getting someone else's answer. Here's how many visits that costs you.",
-  perMonth: isKo ? "/ 월 (추정)" : "/ mo (est.)",
-  directLoss: isKo ? "직접 유입 손실" : "Direct referral loss",
+    ? "입력한 월 AI 노출 수 × (1 − 이번 회차의 AI·검색 등장률) × 가정 클릭률로 계산해요. 측정 질문의 등장률이 전체 월 AI 노출을 대표한다고 가정하지만, 검색 결과와 브랜드명 질문도 섞일 수 있어 실제 놓친 방문이나 매출을 측정한 값은 아닙니다."
+    : "Monthly AI views you enter × (1 − this run's AI/search appearance rate) × an assumed click rate. This assumes the measured questions represent all monthly AI views, although search results and branded questions may be mixed in. It is not measured lost visits or revenue.",
+  perMonth: isKo ? "/ 월 (가정)" : "/ mo (scenario)",
+  directLoss: isKo ? "직접 유입 가정액" : "Assumed direct referral value",
   directHint: isKo
-    ? "답변에서 클릭해 들어올 방문의 매출"
-    : "Revenue from clicks you'd receive",
-  influenceLoss: isKo ? "제로클릭 영향 손실" : "Zero-click influence loss",
+    ? "가정한 클릭·전환이 발생할 경우의 금액"
+    : "Value if assumed clicks and conversions occurred",
+  influenceLoss: isKo ? "제로클릭 영향 가정액" : "Assumed zero-click value",
   influenceHint: isKo
-    ? "클릭 없이 답변만 보고 결정이 바뀌는 몫"
-    : "Decisions shaped by the answer without a click",
-  adEquivalent: isKo ? "광고비 환산 가치" : "Ad-equivalent value",
+    ? "클릭 없이 구매 결정이 바뀐다고 가정한 몫"
+    : "Assumed decisions influenced without a click",
+  adEquivalent: isKo ? "가정 광고비 환산" : "Assumed ad-equivalent value",
   adHint: isKo
-    ? "이 노출을 검색광고로 사면 드는 월 비용 (매출과 별도)"
-    : "What buying this exposure as search ads would cost (separate from revenue)",
-  missedSessions: isKo ? "놓치는 유입(추정)" : "Missed sessions (est.)",
-  recoverable: isKo ? "회복 가능 매출(추정)" : "Recoverable revenue (est.)",
+    ? "가정한 세션과 클릭당 비용으로 환산한 금액 (매출과 별도)"
+    : "Value from assumed sessions and CPC (separate from revenue)",
+  missedSessions: isKo ? "가정상 방문" : "Scenario sessions",
   sessionsUnit: isKo ? "세션 / 월" : "sessions / mo",
   disclaimer: isKo
-    ? "2025-2026 공개 실측 연구 기반 추정입니다 — 클릭률 8%(Pew Research), AI 방문자 전환가치 2.5배(Semrush 4.4배·Adobe +54%의 보수 반영), 제로클릭 영향 20%(Bain: 검색 60%가 클릭 없이 종료). 실제 값은 업종·객단가에 따라 다르니 규모 선택과 가정 조정으로 맞춰 보세요."
-    : "Based on published 2025-2026 studies — 8% answer CTR (Pew), 2.5x AI-visitor conversion (conservative vs Semrush 4.4x / Adobe +54%), 20% zero-click influence (Bain: 60% of searches end without a click). Adjust size and assumptions to fit your brand.",
+    ? "기본 클릭률 8%는 검증된 AI 답변 클릭률이 아닌 임의 시작값입니다. 전환율·제로클릭 영향률도 이 브랜드의 실측값이 아닌 편집 가능한 가정입니다. Pew의 8%는 미국 Google AI 요약이 있는 검색에서 일반 검색결과 링크를 클릭한 비율이며, AI 답변 링크 클릭률이 아닙니다. 이 결과를 실제 유입·손실·효과로 해석하지 마세요."
+    : "The default 8% click rate is an arbitrary starting value, not a validated AI-answer CTR. Conversion and zero-click factors are editable assumptions, not measured for your brand. Pew's 8% concerns clicks on ordinary search results when a Google AI summary appeared in a U.S. study, not clicks on AI-answer links. This is not measured traffic, loss, or lift.",
   sizeLabel: isKo ? "브랜드 규모" : "Brand size",
   adjust: isKo ? "가정 조정" : "Adjust assumptions",
-  queries: isKo ? "월 AI 답변 노출(추정)" : "Monthly AI answer views (est.)",
+  queries: isKo ? "월 AI 답변 노출(가정)" : "Monthly AI answer views (assumed)",
   ctr: isKo ? "답변→클릭률" : "Answer→click rate",
   conv: isKo ? "AI 방문→고객 전환율" : "AI visitor→customer rate",
   influenceRate: isKo ? "제로클릭 영향률" : "Zero-click influence rate",
@@ -79,31 +78,43 @@ const T = (isKo: boolean) => ({
   //   (사내 보고에 못 쓴다 = 우리 숫자를 안 믿는다). 아래 문구는 전부 코드에 이미
   //   적혀 있던 출처를 화면으로 끌어올린 것이다 — **새로 지어낸 근거는 없다**.
   hQueries: isKo
-    ? "선택한 브랜드 규모에서 자동으로 잡혀요. 내 검색량을 알면 직접 넣어주세요."
-    : "Set by the brand size you picked. Enter your own if you know it.",
+    ? "처음 값은 위에서 직접 입력한 월 AI 노출 가정입니다. 일반 검색량과 같다고 볼 수 없어요."
+    : "Starts with your assumed monthly AI views above. This is not necessarily your search volume.",
   hCtr: isKo
-    ? "Pew Research 실측 8% — AI 요약을 본 사람이 링크를 누르는 비율"
-    : "8% measured by Pew Research — link clicks after seeing an AI summary",
+    ? "기본 8%는 근거 있는 AI 답변 클릭률이 아닌 임의 시작값입니다. 직접 조정해 주세요."
+    : "The default 8% is an arbitrary starting value, not an evidenced AI-answer CTR. Adjust it yourself.",
   hConv: isKo
-    ? "일반 방문의 2.5배로 잡았어요(Semrush 4.4배·Adobe +54%를 보수적으로 반영)"
-    : "2.5x normal visitors — conservative vs Semrush 4.4x / Adobe +54%",
+    ? "브랜드 실측값이 아닌 가정이에요. 실제 전환율을 알면 바꿔주세요."
+    : "An assumption, not your measured rate. Replace it if you know your conversion rate.",
   hInfluenceRate: isKo
-    ? "클릭 없이 답변만 보고 영향받는 비율. Bain 조사(검색 60%가 클릭 없이 끝남) 기반 보수치"
-    : "Influenced without clicking. Conservative, based on Bain (60% of searches end click-free)",
+    ? "클릭 없이 영향을 받는다는 가정입니다. 이 브랜드에서 측정한 비율은 아니에요."
+    : "Assumed influence without a click; not measured for your brand.",
   hInfluenceConv: isKo
-    ? "위에서 영향받은 사람이 매장·직접방문·지명검색으로 사는 비율"
-    : "Of those influenced, the share converting via store, direct, or branded search",
+    ? "영향받았다고 가정한 사람이 매장·직접방문·지명검색으로 산다고 가정한 비율"
+    : "Assumed share buying via store, direct, or branded search after assumed influence",
   hCpc: isKo
-    ? "같은 노출을 광고로 사면 얼마인지 환산할 때 써요. 네이버 검색광고 단가 밴드 기준"
-    : "Used to price the same exposure as ads. Based on Naver search-ad CPC bands",
+    ? "광고비 비교를 위한 가정 단가예요. 실제 입찰가가 있으면 바꿔주세요."
+    : "Assumed ad cost for comparison. Replace it with your actual bid if available.",
   hAov: isKo
-    ? "고객 1명이 한 번에 사는 평균 금액(객단가). 내 값으로 바꾸면 추정이 크게 정확해져요."
-    : "Average revenue per customer. Replacing this with your own sharpens the estimate most.",
+    ? "고객 1명당 매출 가정입니다. 실제 값을 넣어도 다른 가정은 검증된 값이 아니에요."
+    : "Assumed revenue per customer. Your actual value does not validate the other assumptions.",
   reset: isKo ? "기본값으로" : "Reset",
-  range: isKo ? "추정 범위" : "Estimate range",
-  showMoney: isKo ? "금액으로 환산해 보기" : "Convert to revenue",
-  hideMoney: isKo ? "금액 추정 접기" : "Hide revenue estimate",
+  range: isKo ? "고정 ±40% 시나리오 폭(통계적 신뢰구간 아님)" : "Fixed ±40% scenario band (not a confidence interval)",
+  showMoney: isKo ? "가정 금액으로 환산해 보기" : "View assumed revenue scenario",
+  hideMoney: isKo ? "가정 금액 접기" : "Hide assumed revenue scenario",
 });
+
+export function initialRevenueAssumptions(
+  defaultSizeKey: BrandSizeKey,
+  customerInput?: RevenueImpactCardProps["customerInput"]
+): RevenueAssumptions {
+  return {
+    ...DEFAULT_ASSUMPTIONS,
+    monthlyAiQueries: SIZE_PRESETS[defaultSizeKey].monthlyAiQueries,
+    cpcKrw: SIZE_PRESETS[defaultSizeKey].cpcKrw,
+    ...(customerInput ?? {}),
+  };
+}
 
 export function RevenueImpactCard({
   attemptedEngines,
@@ -114,16 +125,13 @@ export function RevenueImpactCard({
   readOnly = false,
   customerInput,
 }: RevenueImpactCardProps) {
-  const t = T(isKo);
+  const t = revenueImpactCopy(isKo);
   // 규모 프리셋: AI 답변 노출량과 광고 CPC를 함께 조정.
   // 초기값 = 측정 신호 기반 추정(전수감사 §A-1: small 하드코딩이 SK하이닉스에
   // ₩63만/월을 보여줬던 결함). 가정도 그 규모로 시작해야 첫 숫자가 정합.
-  const [assumptions, setAssumptions] = useState<RevenueAssumptions>(() => ({
-    ...DEFAULT_ASSUMPTIONS,
-    monthlyAiQueries: SIZE_PRESETS[defaultSizeKey].monthlyAiQueries,
-    cpcKrw: SIZE_PRESETS[defaultSizeKey].cpcKrw,
-    ...(customerInput ?? {}),
-  }));
+  const [assumptions, setAssumptions] = useState<RevenueAssumptions>(() =>
+    initialRevenueAssumptions(defaultSizeKey, customerInput)
+  );
   const [sizeKey, setSizeKey] = useState<BrandSizeKey>(defaultSizeKey);
   const [open, setOpen] = useState(false);
   // 금액은 기본 접힘 — 감사 5번(방어 못 하는 숫자를 페이지 최대 숫자로 두지 않는다).
@@ -208,13 +216,13 @@ export function RevenueImpactCard({
           {est.missedSessionsPerMonth.toLocaleString()}
         </span>
         <span className="pb-1 text-sm text-zinc-400">
-          {isKo ? "세션 / 월 (추정)" : "sessions / mo (est.)"}
+          {isKo ? "세션 / 월 (가정)" : "sessions / mo (scenario)"}
         </span>
       </div>
       <p className="mt-1 text-xs text-zinc-400">
         {isKo
-          ? "AI 답변에서 우리를 못 봐서 놓치는 방문이에요."
-          : "Visits you miss because AI answers don't surface you."}
+          ? "실제 방문 손실을 측정한 값이 아닌 가정상 규모예요."
+          : "This is an assumed scale, not a measurement of lost visits."}
       </p>
 
       {!readOnly && <button
@@ -246,8 +254,8 @@ export function RevenueImpactCard({
               ⚠️ 가정값은 **비율(0~1)** 이다. 0.05를 그대로 쓰면 "0.05%"가 되어 100배 틀린다. */}
           <p className="mt-2 text-[11px] text-zinc-400 leading-relaxed">
             {isKo
-              ? `직접 유입분은 세션 ${est.missedSessionsPerMonth.toLocaleString()}건 × 전환율 ${(assumptions.aiVisitorConversionRate * 100).toFixed(1)}% × 고객당 매출 ${assumptions.revenuePerConversion.toLocaleString()}원이에요. 나머지는 클릭 없이 답변만 보고 결정이 바뀌는 몫이고요. 아래 '가정 조정'에서 우리 값으로 바꿀 수 있어요.`
-              : `The direct portion is ${est.missedSessionsPerMonth.toLocaleString()} sessions × ${(assumptions.aiVisitorConversionRate * 100).toFixed(1)}% conversion × ${assumptions.revenuePerConversion.toLocaleString()} KRW per customer. The rest is zero-click influence. Adjust below.`}
+              ? `직접 유입 가정액은 세션 ${est.missedSessionsPerMonth.toLocaleString()}건 × 전환율 ${(assumptions.aiVisitorConversionRate * 100).toFixed(1)}% × 고객당 매출 ${assumptions.revenuePerConversion.toLocaleString()}원으로 계산해요. 나머지는 클릭 없이 구매에 영향을 줄 수 있다는 별도 가정이며, 실제 효과를 측정한 값이 아닙니다. 아래에서 계수를 바꿀 수 있어요.`
+              : `The direct scenario is ${est.missedSessionsPerMonth.toLocaleString()} sessions × ${(assumptions.aiVisitorConversionRate * 100).toFixed(1)}% conversion × ${assumptions.revenuePerConversion.toLocaleString()} KRW per customer. The remainder assumes influence without a click; it is not measured lift. Adjust the factors below.`}
           </p>
         </div>
       )}
@@ -275,21 +283,6 @@ export function RevenueImpactCard({
         </div>
       )}
 
-      {/* 보조 지표 — "놓치는 유입"은 위 주 숫자와 **같은 값**이라 중복 제거(감사 5번).
-          "회복 가능 매출"도 금액이므로 금액 토글 안으로 들어간다 — 밖에 두면
-          금액을 접어도 초록색 금액이 그대로 남아 강등이 무의미해진다. */}
-      {showMoney && (
-        <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-          <p className="text-xs text-zinc-400">{t.recoverable}</p>
-          <p className="mt-1 font-semibold text-emerald-300 text-lg tabular-nums">
-            +{formatKrwCompact(est.recoverableRevenuePerMonth)}
-            <span className="ml-1 font-normal text-xs text-zinc-400">
-              SoV {sov}% → {est.targetSov}%
-            </span>
-          </p>
-        </div>
-      )}
-
       {/* 🔴 측정 분모 고지 (2026-08-10 세션N-14) — **이 숫자가 몇 개로 잰 것인지 밝힌다.**
           임계값으로 경고하거나 숨기지 않는다(그런 경계선은 근거가 없다).
           전부 성공한 회차는 굳이 말하지 않는다(노이즈) — **일부만 성공했을 때만** 밝힌다. */}
@@ -301,8 +294,8 @@ export function RevenueImpactCard({
             <Info aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <p>
               {isKo
-                ? `AI ${attemptedEngines}곳 중 ${measuredEngines}곳에서 측정한 결과로 계산했어요. 나머지는 응답을 받지 못해 이 추정에 들어가지 않았어요.`
-                : `Calculated from ${measuredEngines} of ${attemptedEngines} AI engines. The rest didn't respond and aren't included in this estimate.`}
+                ? `AI·검색 ${attemptedEngines}곳 중 ${measuredEngines}곳에서 측정한 결과를 사용했어요. 나머지는 응답을 받지 못해 이 시나리오에 들어가지 않았어요.`
+                : `Uses results from ${measuredEngines} of ${attemptedEngines} AI/search engines. The rest didn't respond and aren't included in this scenario.`}
             </p>
           </div>
         )}
@@ -386,12 +379,7 @@ export function RevenueImpactCard({
           <button
             className="text-left text-xs text-zinc-400 hover:text-zinc-300"
             onClick={() => {
-              // 리셋도 측정 기반 초기값으로 — small 고정이면 자동인식이 무효가 된다.
-              setAssumptions({
-                ...DEFAULT_ASSUMPTIONS,
-                monthlyAiQueries: SIZE_PRESETS[defaultSizeKey].monthlyAiQueries,
-                cpcKrw: SIZE_PRESETS[defaultSizeKey].cpcKrw,
-              });
+              setAssumptions(initialRevenueAssumptions(defaultSizeKey, customerInput));
               setSizeKey(defaultSizeKey);
             }}
             type="button"

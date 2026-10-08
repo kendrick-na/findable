@@ -14,6 +14,7 @@ import { currentUser } from "@repo/auth/server";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { scopedTrackingForExport } from "@/lib/db/scoped";
+import { type AppDictionary, getAppDictionary } from "@/lib/i18n";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,20 +23,21 @@ export const dynamic = "force-dynamic";
 //   한국 고객이 받는 파일이라 필수 — 없으면 "설화수"가 "�ㅼ빀��"로 열린다.
 const UTF8_BOM = "﻿";
 
-const BASE_HEADERS = [
-  "측정일시",
-  "브랜드",
-  "도메인",
-  "엔진",
-  "언급됨",
-  "언급순위",
-  // 세션N-10: 순위의 분모. 이게 없으면 "1위"가 2개 중인지 50개 중인지 알 수 없다.
-  "목록항목수",
-  "감성",
-  "점유율",
-] as const;
+type CsvLabels = AppDictionary["csvExport"];
 
-const SOURCES_HEADER = "인용출처";
+// 🔴 2026-10-06 — 머리글·값 문구는 사전(`app.csvExport`)에서 온다(받는 사람의 언어로).
+const baseHeaders = (t: CsvLabels) => [
+  t.measuredAt,
+  t.brand,
+  t.domain,
+  t.engine,
+  t.mentioned,
+  t.position,
+  // 세션N-10: 순위의 분모. 이게 없으면 "1위"가 2개 중인지 50개 중인지 알 수 없다.
+  t.listSize,
+  t.sentiment,
+  t.share,
+];
 
 // RICE#5 — 내보내기 확인 모달의 기간 옵션. 값은 일수, "all"은 필터 없음.
 const PERIOD_DAYS: Record<string, number | null> = {
@@ -85,11 +87,11 @@ function csvCell(value: unknown): string {
   return NEEDS_QUOTING.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
 
-const SENTIMENT_KO: Record<string, string> = {
-  positive: "긍정",
-  neutral: "보통",
-  negative: "부정",
-};
+const sentimentLabel = (t: CsvLabels): Record<string, string> => ({
+  positive: t.positive,
+  neutral: t.neutral,
+  negative: t.negative,
+});
 
 export async function GET(request: Request) {
   try {
@@ -114,9 +116,11 @@ export async function GET(request: Request) {
     // org 필터는 이 헬퍼가 강제한다(brandId 를 찔러도 org 소속 검증됨).
     const rows = await scopedTrackingForExport(brandId, sinceDateFor(period));
 
+    const t = (await getAppDictionary()).csvExport;
+    const SENTIMENT = sentimentLabel(t);
     const headers = includeSources
-      ? [...BASE_HEADERS, SOURCES_HEADER]
-      : BASE_HEADERS;
+      ? [...baseHeaders(t), t.sources]
+      : baseHeaders(t);
     const lines = [headers.join(",")];
     for (const row of rows) {
       const cells = [
@@ -124,10 +128,10 @@ export async function GET(request: Request) {
         row.brand.name || row.brand.domain,
         row.brand.domain,
         row.engineId,
-        row.brandMentioned ? "예" : "아니오",
+        row.brandMentioned ? t.yes : t.no,
         row.mentionPosition ?? "",
         row.mentionListSize ?? "",
-        row.sentiment ? (SENTIMENT_KO[row.sentiment] ?? row.sentiment) : "",
+        row.sentiment ? (SENTIMENT[row.sentiment] ?? row.sentiment) : "",
         row.shareOfVoice === null ? "" : Math.round(row.shareOfVoice * 100),
       ];
       if (includeSources) {

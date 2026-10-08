@@ -8,9 +8,10 @@
 // 디자인 톤: hero.tsx와 동일한 --findable-* CSS 변수 + fadeup 애니메이션
 
 import { database } from "@repo/database";
+import { auditJobNotInternal } from "@repo/database/internal-orgs";
 import { log } from "@repo/observability/log";
-import Link from "next/link";
 import { unstable_cache } from "next/cache";
+import Link from "next/link";
 import { loadDatasetResponseCount } from "./sov-chart-data";
 
 const BETA_LAUNCH_DATE = new Date("2026-05-04T00:00:00Z");
@@ -27,10 +28,15 @@ const getLiveStats = unstable_cache(
     );
 
     try {
+      // 공개 카운터 — 내부 조직(영업 전용) 측정·브랜드는 고객 숫자가 아니라 뺀다(2026-10-07 검수).
+      const customerCompleted = {
+        ...auditJobNotInternal,
+        status: "completed" as const,
+      };
       const [auditCount, distinctDomains] = await Promise.all([
-        database.auditJob.count({ where: { status: "completed" } }),
+        database.auditJob.count({ where: customerCompleted }),
         database.auditJob.findMany({
-          where: { status: "completed" },
+          where: customerCompleted,
           select: { domain: true },
           distinct: ["domain"],
         }),

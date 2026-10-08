@@ -3,6 +3,8 @@ import Link from "next/link";
 import type { BrandOption } from "../lib/dashboard-data";
 
 interface BrandSwitcherProps {
+  /** 내비게이션 접근성 이름(사전 `app.dashboard.brandSwitcherLabel`). */
+  label: string;
   options: BrandOption[];
   selectedId: string | null;
 }
@@ -24,11 +26,12 @@ interface BrandSwitcherProps {
  * 호출부가 `options.length < 2` 이면 렌더하지 않는다 — 고를 게 없는데 고르는 UI 를
  *   두면 화면만 복잡해진다.
  */
-export const BrandSwitcher = ({ options, selectedId }: BrandSwitcherProps) => (
-  <nav
-    aria-label="브랜드 선택"
-    className="flex min-w-0 flex-wrap items-center gap-2"
-  >
+export const BrandSwitcher = ({
+  label,
+  options,
+  selectedId,
+}: BrandSwitcherProps) => (
+  <nav aria-label={label} className="flex min-w-0 flex-wrap items-center gap-2">
     {options.map((option) => {
       const active = option.id === selectedId;
       return (

@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { describeProviderError } from "./provider-error";
+import { describeProviderError, isAbortError } from "./provider-error";
 
 describe("describeProviderError", () => {
+  it("recognizes aborts without assigning a retryable provider status", () => {
+    expect(isAbortError(new DOMException("deadline", "AbortError"))).toBe(true);
+    expect(
+      describeProviderError(new DOMException("deadline", "AbortError"))
+    ).toEqual({
+      statusCode: null,
+      providerCode: null,
+      retryAfterSeconds: null,
+    });
+    expect(isAbortError(new Error("provider connection aborted"))).toBe(false);
+  });
   it("reads the final API error beneath SDK retries without exposing response text", () => {
     expect(
       describeProviderError({

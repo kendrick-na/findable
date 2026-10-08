@@ -5,8 +5,10 @@
 //   free=null(자동 없음)·starter=168h(주간)·growth/scale=24h(데일리).
 //
 // 동작(멱등):
-//   1) Organization.plan 이 자동 갱신을 허용(autoRefreshHours != null)하는 org 조회.
-//      ⚠️ cron 은 유저 세션이 없다 → plan 진실은 **DB Organization.plan**(Clerk metadata 아님).
+//   1) 측정 범위(FINDABLE_AUTO_MEASUREMENT_SCOPE, 기본 "paid")에 맞는 org 조회.
+//      "paid" = 실제 결제 플랜만(주기·브랜드 상한도 결제 플랜 기준), "all" = 실효 플랜 전부.
+//      ⚠️ 결제 권한은 Clerk 에만 있고 Organization.plan 에는 없다(2026-10-05 실측).
+//      → 화면 게이트와 같은 판정 + 출처로 고른다(lib/billing/auto-refresh-eligibility).
 //   2) 각 org 의 브랜드마다 마지막 org 측정(email=`org:{orgId}`) 시각을 보고,
 //      주기가 지났으면 새 AuditJob 생성 + 러너 직접 실행(start-tracking 서버액션의 cron 판).
 //   3) 이미 저장된 마법사 프롬프트가 있으면 러너가 그걸 우선 사용(resolveRunPrompts).
@@ -35,20 +37,37 @@
 //      → `packages/security/cron.ts` 로 통일(fail closed). **폴백을 되살리지 말 것.**
 
 import {
+  type AuditContinuationOutcome,
+  continueOldestPendingAudit,
+} from "@repo/audit/audit-continuation";
+import {
   type DigestEntry,
   selectDigestEntries,
 } from "@repo/audit/digest-filter";
 import { buildAuditHistory } from "@repo/audit/history";
+import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
-import { type Plan, planCapabilities } from "@repo/auth/plan";
+import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
+import { planCapabilities } from "@repo/auth/plan";
 import { database } from "@repo/database";
+import { notInternalOrg } from "@repo/database/internal-orgs";
 import { resend } from "@repo/email";
 import { TrackingDigestEmail } from "@repo/email/templates/tracking-digest";
 import { log } from "@repo/observability/log";
 import { denyIfNotCron } from "@repo/security/cron";
 import type { NextRequest } from "next/server";
 import { env } from "@/env";
+import {
+  type AutoRefreshOrganization,
+  loadAutoRefreshOrganizations,
+} from "@/lib/billing/auto-refresh-eligibility";
+import {
+  expireCancelledSubscriptions,
+  expireOneOffPaymentGrants,
+} from "@/lib/billing/period-end-expiry";
+import { expireLapsedRenewalGrants } from "@/lib/billing/renewal-grace";
+import { sendRenewalNotices } from "@/lib/billing/renewal-notice";
 
 export const maxDuration = 300;
 
@@ -66,6 +85,36 @@ const MAX_TRIGGERS_PER_RUN = 1;
  */
 const digestEmailEnabled = (): boolean =>
   process.env.FINDABLE_ENABLE_DIGEST_EMAIL === "1";
+
+/**
+ * 자동 측정 범위 스위치(2026-10-05 대표 결정). `FINDABLE_AUTO_MEASUREMENT_SCOPE`:
+ *   - "paid"(**미설정 시 기본**): 실제 결제(Clerk 결제 출처, 이용 기간 또는 갱신 실패 7일 유예 중)로
+ *     얻은 플랜의 조직만. 주기·브랜드 상한은 결제 플랜 기준(lib/billing/auto-refresh-eligibility).
+ *   - "all": 예전 동작 — 실효 유료 플랜 전부(관리자·초대·파트너 부여 포함).
+ *   - "off": 측정 없음.
+ * 예전 스위치 호환: SCOPE 가 없고 `FINDABLE_AUTO_MEASUREMENT_ENABLED=true` 면 "all",
+ *   `=false` 로 명시돼 있으면 "off"(운영자가 명시적으로 끈 값을 존중).
+ * 모르는 SCOPE 값은 "off"(원가 쪽으로 열지 않는다).
+ * 어느 범위든 결제 권한 만료(0-a/0-b)는 계속 돈다 — 결제 안전장치는 측정과 무관하다.
+ */
+export type AutoMeasurementScope = "paid" | "all" | "off";
+
+export function autoMeasurementScope(
+  source: Record<string, string | undefined> = process.env
+): AutoMeasurementScope {
+  const raw = source.FINDABLE_AUTO_MEASUREMENT_SCOPE?.trim().toLowerCase();
+  if (raw) {
+    return raw === "paid" || raw === "all" ? raw : "off";
+  }
+  const legacy = source.FINDABLE_AUTO_MEASUREMENT_ENABLED?.trim().toLowerCase();
+  if (legacy === "true") {
+    return "all";
+  }
+  if (legacy === "false") {
+    return "off";
+  }
+  return "paid";
+}
 
 /** 히스토리 비교용 조회 상한(브랜드당). `/api/audit/[jobId]` 와 같은 값. */
 const HISTORY_TAKE = 50;
@@ -107,6 +156,7 @@ async function compareWithPrevious(
         domain: r.domain,
         createdAt: r.createdAt,
         score: scoreOf(r.result),
+        searchSamplingVersion: searchSamplingVersionOf(r.result),
         usable: isUsableRun(r.result),
       })),
       jobId,
@@ -174,18 +224,6 @@ async function sendDigest(
   return true;
 }
 
-/** 자동 갱신 대상 org 조회 결과(브랜드 포함). */
-interface OrgWithBrands {
-  brands: Array<{
-    domain: string;
-    entityVariants: unknown;
-    id: string;
-    name: string;
-  }>;
-  id: string;
-  plan: Plan;
-}
-
 /** JSON 별칭 필드에서 실제 문자열만 골라 러너에 넘긴다. */
 const stringList = (value: unknown): string[] =>
   Array.isArray(value)
@@ -203,7 +241,7 @@ const stringList = (value: unknown): string[] =>
  *   다른 브랜드의 측정 기회를 빼앗는다. 측정 이력이 없으면 즉시 대상이 된다.
  */
 async function collectDueBrands(
-  orgs: readonly OrgWithBrands[],
+  orgs: readonly AutoRefreshOrganization[],
   now: number
 ): Promise<DueBrand[]> {
   const due: DueBrand[] = [];
@@ -275,7 +313,103 @@ async function sendDigests(digestByOrg: DigestByOrg): Promise<number> {
   return sent;
 }
 
+/**
+ * 마감으로 잘린 측정의 이어가기(2026-10-06) — 화면을 닫아도 측정이 끝나게 하는 안전망.
+ *
+ * 이어가기 대기(queued + leaseUntil) 중 가장 오래 기다린 **한 건**만 남은 질문을 잰다.
+ * 고객이 이미 시작한 측정을 마무리하는 일이라 자동 측정 범위 스위치(off 포함)와 무관하게 돈다
+ * — 원가 상한은 Job 당 이어가기 2회(MAX_AUDIT_CONTINUATIONS)다.
+ * 실패를 가둔다(만료·안내 단계와 같은 규칙). 이 실행이 유료 호출을 했으면 새 자동 측정은
+ * 다음 30분 실행으로 미룬다(한 호출 = 유료 실행 1건 · 300초 상한).
+ */
+async function runPendingContinuation(
+  invocationStartedAtMs: number
+): Promise<AuditContinuationOutcome | null> {
+  try {
+    return await continueOldestPendingAudit({ invocationStartedAtMs });
+  } catch (error) {
+    log.error("cron.auto-refresh.continuation_failed", {
+      error: String(error),
+    });
+    return null;
+  }
+}
+
+/** 이어가기가 이번 호출의 유료 실행 1건을 썼으면 새 측정 상한은 0. */
+const triggerLimitAfter = (
+  continuation: AuditContinuationOutcome | null
+): number => (continuation?.ran ? 0 : MAX_TRIGGERS_PER_RUN);
+
+const NO_EXPIRY = { expired: 0, scanned: 0, failed: 0 };
+
+/**
+ * 결제 권한 만료 단계 — 측정 대상 선정 **전에** 돈다(만료된 조직이 한 번 더 측정되지 않게).
+ *
+ * 결제 권한은 Clerk 에만 있으므로(위 planExpiresAt 단계로는 안 내려간다) 각 단계가 Clerk
+ * 결제 출처를 지운다. 단계마다 실패를 가둔다 — 측정 cron 은 계속 돌고, 남은 대상은 다음
+ * 실행(30분 뒤)에서 다시 시도한다. Clerk 실패는 권한을 늘리지 않는다(지우지 못했을 뿐).
+ *   - renewalGrace: 갱신 결제 실패 7일 유예가 끝난 조직 → expired
+ *   - cancelledPeriodEnd: 해지 후 이미 결제한 기간이 끝난 조직 → expired (유예 없음)
+ *   - oneOffPeriodEnd: 1회 결제 후 1개월이 지난 결제 권한
+ */
+async function expirePaymentAccess(now: Date) {
+  let renewalGrace = NO_EXPIRY;
+  let cancelledPeriodEnd = NO_EXPIRY;
+  let oneOffPeriodEnd = NO_EXPIRY;
+  try {
+    renewalGrace = await expireLapsedRenewalGrants(now);
+  } catch (error) {
+    log.error("billing.renewal_grace.scan_failed", { error: String(error) });
+  }
+  try {
+    cancelledPeriodEnd = await expireCancelledSubscriptions(now);
+  } catch (error) {
+    log.error("billing.period_end.cancelled_scan_failed", {
+      error: String(error),
+    });
+  }
+  try {
+    oneOffPeriodEnd = await expireOneOffPaymentGrants(now);
+  } catch (error) {
+    log.error("billing.period_end.one_off_scan_failed", {
+      error: String(error),
+    });
+  }
+  return { renewalGrace, cancelledPeriodEnd, oneOffPeriodEnd };
+}
+
+const NO_RENEWAL_NOTICES = {
+  status: "failed",
+  candidates: 0,
+  sent: 0,
+  failed: 0,
+} as const;
+
+/**
+ * 정기결제 갱신 사전 안내 단계(2026-10-05) — `lib/billing/renewal-notice.ts`.
+ *
+ * 🔒 스위치 `FINDABLE_RENEWAL_NOTICE_ENABLED` 가 정확히 "true" 가 아니면 아무것도 안 한다.
+ *   Preview 에서는 `resend` 가 없으므로(createResendClient) 발송하지 않는다.
+ *   측정보다 **앞**에 둔다 — 측정이 300초 한도에 걸려도 안내가 굶지 않게. 실행당 상한이 있고
+ *   실패는 여기서 가둔다(만료·측정 단계는 계속 돈다).
+ */
+async function runRenewalNotices(now: Date) {
+  try {
+    return await sendRenewalNotices({
+      now,
+      client: resend,
+      from: env.RESEND_FROM,
+      appUrl: env.NEXT_PUBLIC_APP_URL,
+      termsUrl: new URL("/ko/legal/terms", env.NEXT_PUBLIC_WEB_URL).toString(),
+    });
+  } catch (error) {
+    log.error("billing.renewal_notice.step_failed", { error: String(error) });
+    return NO_RENEWAL_NOTICES;
+  }
+}
+
 export const GET = async (request: NextRequest) => {
+  const invocationStartedAtMs = Date.now();
   // 🔒 원가가 나가기 전에 먼저 막는다(측정 1건 ~87원).
   const denied = denyIfNotCron(request);
   if (denied) {
@@ -292,6 +426,7 @@ export const GET = async (request: NextRequest) => {
   //     DB 가 권위이고, 게이팅은 org.plan 을 읽으므로 화면은 즉시 정확해진다.
   const expired = await database.organization.updateMany({
     where: {
+      ...notInternalOrg,
       planExpiresAt: { not: null, lt: new Date(now) },
       plan: { not: "free" },
     },
@@ -303,27 +438,43 @@ export const GET = async (request: NextRequest) => {
     log.info("cron.plan.expired_downgraded", { count: expired.count });
   }
 
-  // 1) 자동 갱신 허용 플랜의 org (DB plan 진실). free 는 autoRefreshHours=null 이라 제외.
-  const autoPlans = (
-    ["starter", "growth", "scale", "enterprise"] as Plan[]
-  ).filter((p) => planCapabilities(p).autoRefreshHours !== null);
-  const orgs = await database.organization.findMany({
-    where: { plan: { in: autoPlans } },
-    select: {
-      id: true,
-      plan: true,
-      brands: {
-        select: { domain: true, entityVariants: true, id: true, name: true },
-      },
-    },
-  });
+  // 0-b) 결제 권한 만료(갱신 실패 유예 · 해지 기간 끝 · 1회 결제 1개월).
+  const paymentExpiry = await expirePaymentAccess(new Date(now));
+
+  // 0-c) 정기결제 갱신 사전 안내(스위치 기본 꺼짐 · Preview 미발송 · 예약 결제당 1통).
+  const renewalNotices = await runRenewalNotices(new Date(now));
+
+  // 0-d) 마감으로 잘린 측정 이어가기 — 측정 범위 스위치 **앞**(고객이 시작한 측정의 마무리).
+  const continuation = await runPendingContinuation(invocationStartedAtMs);
+
+  // 측정 범위 스위치는 결제 만료(0-b)·갱신 안내(0-c) **뒤**에 둔다 — 측정을 멈춰도
+  //   만료 강하와 사전 안내는 계속 돌아야 한다.
+  const scope = autoMeasurementScope();
+  if (scope === "off") {
+    log.info("cron.auto_measurement.disabled", {});
+    return Response.json({
+      ok: true,
+      autoMeasurement: scope,
+      continuation,
+      dueCount: 0,
+      triggered: 0,
+      digestsSent: 0,
+      renewalNotices,
+      ...paymentExpiry,
+    });
+  }
+
+  // 1) 자동 갱신 허용 플랜의 org — "paid" 는 결제 플랜만(브랜드 상한 적용), "all" 은 실효 플랜 전부.
+  //   0-b 뒤에 둬야 방금 권한이 끝난 조직이 이번 실행에서 측정되지 않는다.
+  const orgs = await loadAutoRefreshOrganizations(new Date(now), scope);
 
   // 2) 브랜드별 마지막 측정 시각 → 주기 경과분만 수집.
   const due = await collectDueBrands(orgs, now);
 
   // 3) 오래된 것 우선, 상한까지만 트리거(원가 보호).
   due.sort((a, b) => a.lastMeasuredMs - b.lastMeasuredMs);
-  const batch = due.slice(0, MAX_TRIGGERS_PER_RUN);
+  // 이어가기가 이번 호출의 유료 실행 1건을 이미 썼으면 새 측정은 다음 실행으로 미룬다.
+  const batch = due.slice(0, triggerLimitAfter(continuation));
 
   let triggered = 0;
   // org별 알림 후보 — 측정이 성공한 브랜드만 담는다(발송은 루프 뒤 한 번에).
@@ -343,6 +494,28 @@ export const GET = async (request: NextRequest) => {
       continue;
     }
 
+    // Cron never auto-resumes a timed-out paid call. Stop retrying a brand
+    // after repeated failed/no-progress runs in the last 24 hours.
+    const recentFailures = await database.auditJob.findMany({
+      where: {
+        email: `org:${item.orgId}`,
+        brandId: item.brandId,
+        domain: item.domain,
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+      select: { status: true, checkpoint: true },
+    });
+    const retryStop = newAuditAttemptBlockReason(recentFailures);
+    if (retryStop) {
+      log.warn("cron.auto-refresh.retry_stopped", {
+        brandId: item.brandId,
+        reason: retryStop,
+      });
+      continue;
+    }
+
     // AuditJob 생성(FK forward-fill) 후 러너 직접 실행(start-tracking 6~7 단계의 cron 판).
     const job = await database.auditJob.create({
       data: {
@@ -356,6 +529,7 @@ export const GET = async (request: NextRequest) => {
     });
     try {
       await runAuditJob({
+        invocationStartedAtMs,
         jobId: job.id,
         domain: item.domain,
         language: "both",
@@ -363,7 +537,17 @@ export const GET = async (request: NextRequest) => {
         brandVariants: item.brandVariants,
         organizationId: item.orgId,
         brandId: item.brandId,
+        // 마감으로 질문이 남으면 이어가기 대기로 멈추고 다음 cron 실행이 이어서 잰다.
+        continueWhenTruncated: true,
       });
+      const finalized = await database.auditJob.findUnique({
+        where: { id: job.id },
+        select: { status: true },
+      });
+      if (finalized?.status !== "completed") {
+        log.warn("cron.auto-refresh.job_not_completed", { jobId: job.id });
+        continue;
+      }
       triggered += 1;
 
       // 알림 후보 수집 — 스위치가 꺼져 있으면 비교 쿼리조차 돌리지 않는다(불필요한 부하 0).
@@ -390,8 +574,25 @@ export const GET = async (request: NextRequest) => {
 
   const digestsSent = await sendDigests(digestByOrg);
 
-  const result = { dueCount: due.length, triggered, digestsSent };
-  if (triggered > 0) {
+  const result = {
+    autoMeasurement: scope,
+    continuation,
+    dueCount: due.length,
+    triggered,
+    digestsSent,
+    renewalNotices,
+    ...paymentExpiry,
+  };
+  const paymentExpired =
+    paymentExpiry.renewalGrace.expired +
+    paymentExpiry.cancelledPeriodEnd.expired +
+    paymentExpiry.oneOffPeriodEnd.expired;
+  if (
+    triggered > 0 ||
+    continuation?.ran ||
+    paymentExpired > 0 ||
+    renewalNotices.sent > 0
+  ) {
     log.info("cron.auto-refresh.triggered", result);
   }
   return Response.json({ ok: true, ...result });

@@ -101,8 +101,19 @@ describe("B-5 질의 축 표기 — 브리핑이 다른 질문임을 화면이 �
 
   it("🔴 **질의 축이 다르다는 안내**가 카드 안에 있다", () => {
     // 「효과·후기·장단점」으로 물었다는 사실을 그 자리에서 밝혀야 한다.
+    // 🔴 2026-10-06 — 앱 카드 문구는 사전(`app.truthMirror.briefingBefore`)으로 옮겨졌다.
+    const appKo = JSON.parse(
+      readFileSync(
+        join(
+          process.cwd(),
+          "../../packages/internationalization/dictionaries/ko.json"
+        ),
+        "utf8"
+      )
+    ).app.truthMirror.briefingBefore as string;
+    expect(APP_MIRROR).toContain("{t.briefingBefore}");
     for (const [name, src] of [
-      ["app", APP_MIRROR],
+      ["app", appKo],
       ["web", WEB_MIRROR],
     ] as const) {
       expect(src, `${name} 에 질의 축 안내가 없다`).toMatch(
@@ -175,13 +186,16 @@ describe("B-5 축 분리 — 브리핑이 다른 집계를 오염시키지 않�
     expect(MIRROR_DATA).toMatch(/\n\s*engines,/);
   });
 
-  it("🔴 등장률 분모(`metrics`)가 **브리핑 앞에서** 확정된다", () => {
-    // 뒤에 있으면 브리핑이 「측정한 AI N곳」에 들어가 분모가 8이 된다.
-    //   그러면 7엔진 등장률이 조용히 희석된다(축이 다른데 같은 분모).
+  it("🔴 본류 점수는 별도 요청 브리핑 없이 확정된다", () => {
     const metrics = RUNNER.indexOf("const metrics = aggregateAudit");
-    const call = RUNNER.indexOf("runBriefingForAuditJob({");
+    const commit = RUNNER.indexOf("commitAuditResult(");
+    const route = readFileSync(
+      join(ROOT, "apps/web/app/api/audit/[jobId]/briefing/route.ts"),
+      "utf8"
+    );
     expect(metrics).toBeGreaterThan(-1);
-    expect(call).toBeGreaterThan(-1);
-    expect(metrics, "점수 확정이 브리핑 뒤에 있다").toBeLessThan(call);
+    expect(commit).toBeGreaterThan(metrics);
+    expect(RUNNER).not.toContain("runBriefingForAuditJob({");
+    expect(route).toContain("runBriefingForAuditJob({");
   });
 });

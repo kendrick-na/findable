@@ -296,6 +296,18 @@ function addDiscovery(tally: DiscoveryTally, bucket: AnswerBucket): void {
   }
 }
 
+function addAiDiscovery(
+  tally: DiscoveryTally,
+  row: BucketableAnswer,
+  group: AnswerGroup
+): number {
+  if (group !== "ai") {
+    return 0;
+  }
+  addDiscovery(tally, classifyAnswer(row));
+  return 1;
+}
+
 function isAdjudicated(bucket: AnswerBucket): boolean {
   return (
     bucket === "confirmed" ||
@@ -328,6 +340,12 @@ export function summarizeAnswerBuckets(
     if (group === "briefing" || group === "retired") {
       continue;
     }
+    // Search results from an unbranded discovery prompt are neither brand-query
+    // search exposure nor an AI recommendation. Keep both denominators clean.
+    if (isDiscoveryAnswer(row)) {
+      discoveryRows += addAiDiscovery(discovery, row, group);
+      continue;
+    }
     const bucket = isLegacyNaverSynthesis(row)
       ? legacyNaverBucket(row, options.brandDomain)
       : classifyAnswer(row);
@@ -337,11 +355,6 @@ export function summarizeAnswerBuckets(
       const perEngine = searchEngines.get(row.engineId) ?? emptyCounts();
       add(perEngine, bucket);
       searchEngines.set(row.engineId, perEngine);
-      continue;
-    }
-    if (isDiscoveryAnswer(row)) {
-      discoveryRows += 1;
-      addDiscovery(discovery, bucket);
       continue;
     }
     add(ai, bucket);
@@ -366,6 +379,27 @@ export function summarizeAnswerBuckets(
     ),
     discovery: discoveryRows > 0 ? discovery : null,
   };
+}
+
+/**
+ * 브랜드 질문에서 **답을 받지 못한 AI 엔진**(측정 실패 칸의 엔진, 처음 나온 순서) — 2026-10-07.
+ * 「측정 실패 n개는 뺐어요」만으로는 어느 AI 가 답하지 않았는지 알 수 없다(늦은 엔진 반영 설계 B).
+ * 4칸의 「측정 실패」와 같은 범위(AI 그룹 · 이름 없는 질문 제외)를 쓴다. 스텁 행은 넣지 않는다.
+ */
+export function noResponseAiEngines(
+  rows: readonly BucketableAnswer[] | null | undefined
+): string[] {
+  const engines = new Set<string>();
+  for (const row of rows ?? []) {
+    if (
+      answerGroup(row.engineId) === "ai" &&
+      !isDiscoveryAnswer(row) &&
+      row.errorMessage
+    ) {
+      engines.add(row.engineId);
+    }
+  }
+  return [...engines];
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -515,6 +549,7 @@ type ReasonKey =
   | "timeout"
   | "engine_error"
   | "unverified"
+  | "search_inconclusive"
   | "different_entity"
   | "confirmed"
   | "recommended"
@@ -533,6 +568,12 @@ const REASON_COPY: Record<ReasonKey, readonly [string, string]> = {
   unverified: [
     "판정기 오류로 같은 회사인지 확인하지 못했어요",
     "The verifier failed; identity not checked",
+  ],
+  // 검색 결과(네이버·다음)는 약관상 LLM 판정기를 쓰지 않는다(2026-10-07). 규칙만으로
+  //   결정적 근거가 없어 보류된 경우 — 「판정기 오류」가 아니다. 👤 대표 승인 문구.
+  search_inconclusive: [
+    "검색 결과만으로는 우리 브랜드인지 확인할 수 없었어요",
+    "The search results alone weren't enough to confirm it's your brand",
   ],
   different_entity: [
     "같은 이름의 다른 대상을 설명했어요",
@@ -578,6 +619,12 @@ function reasonKey(
   const bucket = classifyAnswer(row);
   if (bucket === "engine_error") {
     return engineErrorReason(row);
+  }
+  if (
+    bucket === "unverified" &&
+    row.verdictReason === "search_rule_inconclusive"
+  ) {
+    return "search_inconclusive";
   }
   if (bucket === "unverified" || bucket === "different_entity") {
     return bucket;

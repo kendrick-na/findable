@@ -1,7 +1,15 @@
+import { database } from "@repo/database";
 import { ArrowRightIcon, LinkIcon, ScanSearchIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { database } from "@repo/database";
+import {
+  type AppDictionary,
+  dateLocaleFor,
+  getAppDictionary,
+  getAppLocale,
+} from "@/lib/i18n";
+
+type StatusLabels = AppDictionary["systemStatus"];
 
 /**
  * 대시보드 요약은 진단 상세 타입 전체가 아니라 집계 수치만 읽는다. 별도 진단
@@ -18,12 +26,16 @@ interface SiteReadinessSummary {
   score?: number;
 }
 
-function formatUpdatedAt(value: Date | null | undefined) {
+function formatUpdatedAt(
+  value: Date | null | undefined,
+  t: StatusLabels,
+  dateLocale: string
+) {
   if (!value) {
-    return "아직 실행 기록이 없어요";
+    return t.neverRun;
   }
 
-  return new Intl.DateTimeFormat("ko-KR", {
+  return new Intl.DateTimeFormat(dateLocale, {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
@@ -32,11 +44,17 @@ function formatUpdatedAt(value: Date | null | undefined) {
   }).format(value);
 }
 
-function connectionStatusLabel(status: string) {
-  if (status === "connected") return "연결됨";
-  if (status === "syncing") return "동기화 중";
-  if (status === "error") return "확인 필요";
-  return "속성 선택 필요";
+function connectionStatusLabel(status: string, t: StatusLabels) {
+  if (status === "connected") {
+    return t.connected;
+  }
+  if (status === "syncing") {
+    return t.syncing;
+  }
+  if (status === "error") {
+    return t.needsCheck;
+  }
+  return t.needsProperty;
 }
 
 const StatusCard = ({
@@ -79,8 +97,8 @@ const StatusCard = ({
   </Link>
 );
 
-export const DashboardSystemStatusSkeleton = () => (
-  <section aria-label="전체 상태 불러오는 중" className="space-y-3">
+export const DashboardSystemStatusSkeleton = ({ label }: { label: string }) => (
+  <section aria-label={label} className="space-y-3">
     <div className="h-5 w-20 animate-pulse rounded bg-white/10 motion-reduce:animate-none" />
     <div className="grid gap-3 md:grid-cols-2">
       <div className="findable-card h-40 animate-pulse bg-white/[0.02] motion-reduce:animate-none" />
@@ -94,6 +112,12 @@ export const DashboardSystemStatus = async ({
   canAudit,
   organizationId,
 }: DashboardSystemStatusProps) => {
+  const [dict, locale] = await Promise.all([
+    getAppDictionary(),
+    getAppLocale(),
+  ]);
+  const t = dict.systemStatus;
+  const dateLocale = dateLocaleFor(locale);
   if (!canAudit) {
     return (
       <section aria-labelledby="dashboard-system-status" className="space-y-3">
@@ -101,24 +125,24 @@ export const DashboardSystemStatus = async ({
           className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm"
           id="dashboard-system-status"
         >
-          전체 상태
+          {t.title}
         </h2>
         <div className="grid gap-3 md:grid-cols-2">
           <StatusCard
-            description="사이트의 SEO·GEO 기술 상태를 확인합니다."
+            description={t.readinessLockedBody}
             href={`/site-audit?brand=${brandId}`}
             icon={<ScanSearchIcon className="size-4" />}
-            label="사이트 준비도"
-            meta="Growth 플랜에서 확인"
-            value="확인 필요"
+            label={t.readinessLabel}
+            meta={t.readinessLockedMeta}
+            value={t.needsCheck}
           />
           <StatusCard
-            description="실제 검색 노출·클릭·유입 데이터를 연결합니다."
+            description={t.searchLockedBody}
             href={`/site-audit/integrations?brand=${brandId}`}
             icon={<LinkIcon className="size-4" />}
-            label="검색 데이터"
-            meta="Growth 플랜에서 연결"
-            value="연결 필요"
+            label={t.searchLabel}
+            meta={t.searchLockedMeta}
+            value={t.connectNeeded}
           />
         </div>
       </section>
@@ -152,28 +176,32 @@ export const DashboardSystemStatus = async ({
   const readinessValue =
     latestReadinessRun?.status === "completed" &&
     typeof readinessReport?.score === "number"
-      ? `${readinessReport.score}점`
+      ? t.score.replace("{n}", String(readinessReport.score))
       : latestReadinessRun?.status === "completed"
-        ? "점검 완료"
+        ? t.checkDone
         : latestReadinessRun?.status === "processing" ||
             latestReadinessRun?.status === "queued"
-          ? "점검 중"
-          : "진단 전";
+          ? t.checking
+          : t.notChecked;
   const readinessMeta =
     latestReadinessRun?.status === "failed"
-      ? "최근 점검을 완료하지 못했습니다 · 다시 실행해 보세요"
+      ? t.lastFailed
       : formatUpdatedAt(
-          latestReadinessRun?.completedAt ?? latestReadinessRun?.createdAt
+          latestReadinessRun?.completedAt ?? latestReadinessRun?.createdAt,
+          t,
+          dateLocale
         );
   const connectedCount = connections.filter(
     (connection) => connection.status === "connected"
   ).length;
   const latestConnection = connections[0];
   const connectionMeta = latestConnection
-    ? `${connectionStatusLabel(latestConnection.status)} · ${formatUpdatedAt(
-        latestConnection.lastSyncedAt ?? latestConnection.updatedAt
+    ? `${connectionStatusLabel(latestConnection.status, t)} · ${formatUpdatedAt(
+        latestConnection.lastSyncedAt ?? latestConnection.updatedAt,
+        t,
+        dateLocale
       )}`
-    : "Search Console·GA4·네이버 데이터를 연결할 수 있어요";
+    : t.searchConnectHint;
 
   return (
     <section aria-labelledby="dashboard-system-status" className="space-y-3">
@@ -182,36 +210,37 @@ export const DashboardSystemStatus = async ({
           className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm"
           id="dashboard-system-status"
         >
-          전체 상태
+          {t.title}
         </h2>
         <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-          핵심 상태만 요약했어요. 카드를 누르면 근거와 해결 방법을 확인할 수
-          있어요.
+          {t.lede}
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <StatusCard
           description={
             latestReadinessRun?.status === "failed"
-              ? "점검을 다시 실행해 원인을 확인하세요."
-              : "저장한 도메인의 SEO·GEO 기술 준비도를 확인하세요."
+              ? t.readinessRetryBody
+              : t.readinessBody
           }
           href={`/site-audit?brand=${brandId}`}
           icon={<ScanSearchIcon className="size-4" />}
-          label="사이트 준비도"
+          label={t.readinessLabel}
           meta={readinessMeta}
           value={readinessValue}
         />
         <StatusCard
-          description="Search Console·GA4·네이버 데이터를 연결하고 성과를 확인하세요."
+          description={t.searchBody}
           href={`/site-audit/integrations?brand=${brandId}`}
           icon={<LinkIcon className="size-4" />}
-          label="검색 데이터"
+          label={t.searchLabel}
           meta={connectionMeta}
           value={
             connections.length === 0
-              ? "아직 연결 없음"
-              : `${connectedCount}/${connections.length}개 연결`
+              ? t.noConnections
+              : t.connectedCount
+                  .replace("{connected}", String(connectedCount))
+                  .replace("{total}", String(connections.length))
           }
         />
       </div>

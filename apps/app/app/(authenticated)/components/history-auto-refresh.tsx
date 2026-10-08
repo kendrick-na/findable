@@ -3,6 +3,7 @@
 import { RefreshCwIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { AppDictionary } from "@/lib/i18n";
 
 /**
  * 진행 중인 측정이 있을 때만 이력 화면을 자동 갱신한다.
@@ -31,9 +32,15 @@ const MAX_POLLS = (10 * 60 * 1000) / POLL_INTERVAL_MS; // 10분 = 40회
 export const HistoryAutoRefresh = ({
   hasPending,
   pendingCount,
+  t,
 }: {
   hasPending: boolean;
   pendingCount: number;
+  /** 사전 `app.historyList` 의 새로고침 문구(client 라 서버가 넘긴다). */
+  t: Pick<
+    AppDictionary["historyList"],
+    "refreshNow" | "refreshPending" | "refreshSlow"
+  >;
 }) => {
   const router = useRouter();
   const [timedOut, setTimedOut] = useState(false);
@@ -71,14 +78,9 @@ export const HistoryAutoRefresh = ({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] px-3 py-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
       {timedOut ? (
-        <span>
-          측정이 예상보다 오래 걸리고 있어요. 아래 버튼으로 다시 확인해 주세요.
-        </span>
+        <span>{t.refreshSlow}</span>
       ) : (
-        <span>
-          측정 {pendingCount}건 진행 중 — 끝나면 자동으로 갱신돼요. 1~3분
-          걸려요.
-        </span>
+        <span>{t.refreshPending.replace("{n}", String(pendingCount))}</span>
       )}
       <button
         className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-[color:var(--findable-hairline,#23252a)] px-2.5 py-1 text-[color:var(--findable-ink-muted,#d0d6e0)] text-xs transition-colors hover:border-[color:var(--findable-ink-subtle,#8a8f98)] hover:text-[color:var(--findable-ink,#f7f8f8)]"
@@ -91,7 +93,7 @@ export const HistoryAutoRefresh = ({
         type="button"
       >
         <RefreshCwIcon className="size-3" />
-        지금 새로고침
+        {t.refreshNow}
       </button>
     </div>
   );

@@ -5,6 +5,10 @@ import { resolveTxt } from "node:dns/promises";
 import { auth } from "@repo/auth/server";
 import { database, Prisma } from "@repo/database";
 import { revalidatePath } from "next/cache";
+import { getAppDictionary } from "@/lib/i18n";
+
+/** 고객 화면 오류 문구 — 사전 `app.contentErrors`(요청 밖이면 ko). 운영 검수(moderate)·작업 기록 메모는 한국어 그대로. */
+const contentErrors = async () => (await getAppDictionary()).contentErrors;
 
 const PROTOCOL_RE = /^https?:\/\//;
 const TRAILING_SLASH_RE = /\/$/;
@@ -80,7 +84,7 @@ export async function savePublisherSettings(formData: FormData) {
     !customDomain ||
     (DOMAIN_RE.test(customDomain) && !customDomain.endsWith("findable.co.kr"));
   if (!valid) {
-    throw new Error("올바른 외부 도메인을 입력해 주세요.");
+    throw new Error((await contentErrors()).domainInvalid);
   }
   const changed = customDomain !== (publisher.customDomain ?? "");
   let customDomainStatus = publisher.customDomainStatus;
@@ -137,7 +141,7 @@ async function addDomainToVercel(domain: string) {
   };
   if (!response.ok) {
     throw new Error(
-      body.error?.message ?? "Vercel 도메인 연결에 실패했습니다."
+      body.error?.message ?? (await contentErrors()).vercelFailed
     );
   }
   if (body.verified === true) {

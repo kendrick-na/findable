@@ -1,40 +1,129 @@
-import { database, type AuditStatus } from "@repo/database";
+import { type AuditStatus, database } from "@repo/database";
 
 export const AUDIT_JOB_STALE_AFTER_MS = 6 * 60 * 1000;
+export const AUDIT_JOB_QUEUE_STALE_AFTER_MS = 30 * 60 * 1000;
 
 export const AUDIT_JOB_STALE_ERROR =
   "FUNCTION_INVOCATION_TIMEOUT: 측정 처리 시간이 6분을 초과해 자동 종료했습니다. 다시 측정해 주세요.";
+export const AUDIT_JOB_QUEUE_STALE_ERROR =
+  "QUEUE_START_TIMEOUT: 측정 실행이 시작되지 않아 자동 종료했습니다. 다시 측정해 주세요.";
 
 export type PendingAuditStatus = "queued" | "processing";
 
+// 🔴 2026-10-06: 마감으로 잘린 회차의 「이어가기 대기」(queued + leaseUntil,
+//   audit-execution-lease)는 **실패로 정리하지 않는다**(stale 이 아니다).
+//   시간창(leaseUntil)이 지나도 실패시키면 받아 둔 답이 공개되지 못한다 — 이어가기 이전의
+//   계약은 「잠정 공개」였다. 시간창이 지난 대기는 `continueAuditJob` 이 잠정으로 마감한다
+//   (화면 폴링·앱 cron·정리 cron 이 부른다. claim 으로 늦은 이어가기와 경합하지 않는다).
+//   leaseUntil 이 없는 queued(새 Job·관리자 재개)는 기존 30분 규칙 그대로다.
 export const isStaleAuditJob = (
-  job: { createdAt: Date; status: string },
+  job: {
+    createdAt: Date;
+    attemptStartedAt?: Date | null;
+    leaseUntil?: Date | null;
+    status: string;
+  },
   now = Date.now()
-): boolean =>
-  (job.status === "queued" || job.status === "processing") &&
-  job.createdAt.getTime() < now - AUDIT_JOB_STALE_AFTER_MS;
+): boolean => {
+  if (job.status === "queued") {
+    return (
+      !job.leaseUntil &&
+      (job.attemptStartedAt ?? job.createdAt).getTime() <
+        now - AUDIT_JOB_QUEUE_STALE_AFTER_MS
+    );
+  }
+  if (job.status !== "processing") {
+    return false;
+  }
+  if (job.leaseUntil) {
+    return job.leaseUntil.getTime() < now;
+  }
+  return (
+    (job.attemptStartedAt ?? job.createdAt).getTime() <
+    now - AUDIT_JOB_STALE_AFTER_MS
+  );
+};
+
+/**
+ * Bulk form of `isStaleAuditJob` for the sweep cron: same thresholds and the
+ * same lease rule, so the cron never fails a job the per-job check still
+ * treats as alive (e.g. a queued job younger than the queue limit, or a
+ * continuation wait — queued with leaseUntil — which is finalized, not failed).
+ */
+export const staleAuditJobsWhere = (
+  status: PendingAuditStatus,
+  now = new Date()
+) => {
+  const before = new Date(
+    now.getTime() -
+      (status === "queued"
+        ? AUDIT_JOB_QUEUE_STALE_AFTER_MS
+        : AUDIT_JOB_STALE_AFTER_MS)
+  );
+  const aged = [
+    { attemptStartedAt: { lt: before } },
+    { attemptStartedAt: null, createdAt: { lt: before } },
+  ];
+  if (status === "queued") {
+    return { status, leaseUntil: null, OR: aged };
+  }
+  return {
+    status,
+    OR: [
+      { leaseUntil: { lt: now } },
+      ...aged.map((clause) => ({ leaseUntil: null, ...clause })),
+    ],
+  };
+};
 
 /** Finalize jobs killed by the serverless time limit before runner catch ran. */
 export async function reconcileStaleAuditJob(job: {
   id: string;
   email: string;
   createdAt: Date;
+  attemptStartedAt?: Date | null;
+  leaseUntil?: Date | null;
   status: AuditStatus;
 }): Promise<AuditStatus | null> {
   if (!isStaleAuditJob(job)) {
     return job.status;
   }
+  const expiredAt = new Date();
+  const staleBefore = new Date(
+    expiredAt.getTime() -
+      (job.status === "queued"
+        ? AUDIT_JOB_QUEUE_STALE_AFTER_MS
+        : AUDIT_JOB_STALE_AFTER_MS)
+  );
+  const staleWhere = (() => {
+    if (job.leaseUntil) {
+      return { leaseUntil: { lt: expiredAt } };
+    }
+    if (job.attemptStartedAt) {
+      return { leaseUntil: null, attemptStartedAt: { lt: staleBefore } };
+    }
+    return {
+      leaseUntil: null,
+      attemptStartedAt: null,
+      createdAt: { lt: staleBefore },
+    };
+  })();
   const expired = await database.auditJob.updateMany({
     where: {
       id: job.id,
       email: job.email,
-      status: { in: ["queued", "processing"] },
-      createdAt: { lt: new Date(Date.now() - AUDIT_JOB_STALE_AFTER_MS) },
+      status: job.status,
+      ...staleWhere,
     },
     data: {
       status: "failed",
-      errorMessage: AUDIT_JOB_STALE_ERROR,
+      errorMessage:
+        job.status === "queued"
+          ? AUDIT_JOB_QUEUE_STALE_ERROR
+          : AUDIT_JOB_STALE_ERROR,
       completedAt: new Date(),
+      leaseToken: null,
+      leaseUntil: null,
     },
   });
   if (expired.count > 0) {

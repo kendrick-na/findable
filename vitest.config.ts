@@ -4,6 +4,9 @@ import { defineConfig } from "vitest/config";
 const root = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
+  oxc: {
+    jsx: "automatic",
+  },
   resolve: {
     alias: {
       "@repo/observability/log": `${root}packages/observability/log.ts`,

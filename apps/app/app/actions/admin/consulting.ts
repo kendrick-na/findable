@@ -1,10 +1,19 @@
 "use server";
 
+import {
+  type PromptKind,
+  summarizeAnswerBuckets,
+} from "@repo/audit/answer-buckets";
+import {
+  isPublishableAuditResult,
+  withRecomputedAuditMetrics,
+} from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun, metricsOf, scoreOf } from "@repo/audit/run-quality";
 import { requireAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
+import { resolveAdminOrgPlan } from "@/lib/admin/effective-plan";
 import type { SiteReadinessReport } from "@/lib/site-readiness/types";
 
 const NOTE_MAX_LENGTH = 2000;
@@ -15,8 +24,11 @@ export interface ConsultingEngineResponse {
   engineId: string;
   errorMessage: string | null;
   excerpt: string;
+  isStub: boolean;
   mentionPosition: number | null;
   mentionQuality: string | null;
+  naverSource: string | null;
+  promptKind: PromptKind | null;
 }
 
 export interface ConsultingAudit {
@@ -29,7 +41,7 @@ export interface ConsultingAudit {
   geoScore: number | null;
   id: string;
   measuredAt: Date;
-  mentionedResponses: number;
+  mentionedResponses: number | null;
   responseCount: number;
   sov: number | null;
   status: string;
@@ -87,7 +99,16 @@ export interface ConsultingNote {
 export interface ConsultingWorkspace {
   brands: ConsultingBrand[];
   notes: ConsultingNote[];
-  organization: { id: string; name: string; plan: string };
+  organization: {
+    /** 원본 `Organization.plan`(초대·관리자 부여분). 결제 권한은 Clerk 에 있다. */
+    dbPlan: string;
+    id: string;
+    name: string;
+    /** 실효 플랜 — `resolveOrganizationPlan`(cron 과 같은 판정). */
+    plan: string;
+    /** false = Clerk 조회 실패 → DB 부여분만으로 계산(미확인). */
+    planVerified: boolean;
+  };
 }
 
 function recordOf(value: unknown): Record<string, unknown> | null {
@@ -102,6 +123,10 @@ function finiteNumber(value: unknown): number | null {
 
 function stringOf(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function promptKindOf(value: unknown): PromptKind | null {
+  return value === "brand" || value === "discovery" ? value : null;
 }
 
 function sourceDomain(
@@ -147,7 +172,8 @@ function toAuditSnapshot(audit: {
   result: unknown;
   status: string;
 }): ConsultingAudit {
-  const result = recordOf(audit.result);
+  const correctedResult = withRecomputedAuditMetrics(audit.result);
+  const result = recordOf(correctedResult);
   const responses = Array.isArray(result?.engineResponses)
     ? result.engineResponses.flatMap((response) => {
         const row = recordOf(response);
@@ -163,13 +189,21 @@ function toAuditSnapshot(audit: {
             mentionPosition: finiteNumber(row?.mentionPosition),
             excerpt: stringOf(row?.excerpt) ?? "",
             errorMessage: stringOf(row?.errorMessage),
+            isStub: row?.isStub === true,
+            promptKind: promptKindOf(row?.promptKind),
+            naverSource: stringOf(row?.naverSource),
             citedSources: sourceRows(row?.citedSources),
           },
         ];
       })
     : [];
-  const metrics = metricsOf(audit.result);
-  const sov = finiteNumber(metrics?.sov);
+  const metrics = metricsOf(correctedResult);
+  const sov = isPublishableAuditResult(correctedResult)
+    ? finiteNumber(metrics?.sov)
+    : null;
+  const answerBuckets = summarizeAnswerBuckets(responses, {
+    brandDomain: stringOf(result?.domain),
+  });
   const failedEngineIds = [
     ...(metrics?.errors?.map((error) => error.engineId) ?? []),
     ...responses.flatMap((response) =>
@@ -184,12 +218,13 @@ function toAuditSnapshot(audit: {
     completedAt: audit.completedAt,
     measuredAt: audit.completedAt ?? audit.createdAt,
     errorMessage: audit.errorMessage,
-    geoScore: scoreOf(audit.result),
+    geoScore: scoreOf(correctedResult),
     sov,
-    usable: isUsableRun(audit.result),
-    responseCount: responses.length,
-    mentionedResponses: responses.filter((response) => response.brandMentioned)
-      .length,
+    usable: isUsableRun(correctedResult),
+    responseCount: answerBuckets.ai.total + (answerBuckets.search?.total ?? 0),
+    mentionedResponses: isPublishableAuditResult(correctedResult)
+      ? answerBuckets.ai.confirmed + (answerBuckets.search?.confirmed ?? 0)
+      : null,
     errorCount: failedEngineIds.length,
     failedEngineIds,
     engineResponses: responses,
@@ -208,6 +243,9 @@ export async function getConsultingWorkspace(
       id: true,
       name: true,
       plan: true,
+      planExpiresAt: true,
+      ownerId: true,
+      users: { select: { id: true } },
       brands: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -282,12 +320,24 @@ export async function getConsultingWorkspace(
   if (!organization) {
     return null;
   }
+  // 결제 권한은 Clerk 에 있다 — DB plan 만 보면 결제 고객이 free 로 보인다. 실패해도 throw 안 함.
+  const planView = await resolveAdminOrgPlan({
+    id: organization.id,
+    plan: organization.plan,
+    planExpiresAt: organization.planExpiresAt ?? null,
+    memberIds: [
+      organization.ownerId,
+      ...(organization.users ?? []).map((u) => u.id),
+    ].filter((id): id is string => typeof id === "string"),
+  });
 
   return {
     organization: {
       id: organization.id,
       name: organization.name,
-      plan: organization.plan,
+      plan: planView.effectivePlan,
+      dbPlan: organization.plan,
+      planVerified: planView.verified,
     },
     brands: organization.brands.map((brand) => {
       const audits = brand.auditJobs.map(toAuditSnapshot);

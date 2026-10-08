@@ -3,14 +3,22 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+const KO_APP = JSON.parse(
+  read("../../packages/internationalization/dictionaries/ko.json")
+).app;
 
 describe("측정 상태·결과 IA 계약", () => {
   it("검색 연동을 하나도 설정하지 않았을 때 0/0로 오해시키지 않는다", () => {
     const status = read(
       "app/(authenticated)/components/dashboard-system-status.tsx"
     );
-    expect(status).toContain('connections.length === 0');
-    expect(status).toContain('"아직 연결 없음"');
+    expect(status).toContain("connections.length === 0");
+    // 🔴 2026-10-06 — 문구는 사전(`app.systemStatus.noConnections`)으로 옮겨졌다.
+    expect(status).toMatch(/connections\.length === 0\s*\?\s*t\.noConnections/);
+    const dict = JSON.parse(
+      read("../../packages/internationalization/dictionaries/ko.json")
+    ).app.systemStatus;
+    expect(dict.noConnections).toBe("아직 연결 없음");
   });
 
   it("완료된 측정 이력은 정식 공개 리포트로 연결한다", () => {
@@ -18,7 +26,10 @@ describe("측정 상태·결과 IA 계약", () => {
       "app/(authenticated)/components/audit-history-list.tsx"
     );
     expect(history).toContain("NEXT_PUBLIC_WEB_URL");
-    expect(history).toMatch(/\/ko\/audit\/\$\{job\.id\}/);
+    // 🔴 2026-10-06 — 링크는 `publicReportUrl` 단일 출처(ko → `/ko/audit/…`, en → `/audit/…`).
+    expect(history).toContain("publicReportUrl(webUrl, job.id, locale)");
+    const link = read("lib/public-report.ts");
+    expect(link).toMatch(/locale === "ko" \? "\/ko" : ""/);
   });
 
   it("실제 AI 응답이 없는 완료 회차는 이력에서도 0%가 아니라 측정 불가다", () => {
@@ -27,8 +38,11 @@ describe("측정 상태·결과 IA 계약", () => {
     );
     expect(history).toContain("withRecomputedAuditMetrics(job.result)");
     expect(history).toContain("!isUsableRun(result)");
-    expect(history).toMatch(/isPartial\s*\?\s*"잠정 결과"/);
-    expect(history).toMatch(/isUnavailable\s*\?\s*"측정 불가"/);
+    // 🔴 2026-10-06 — 라벨은 사전(`app.jobStatus`)으로 옮겨졌다.
+    expect(history).toMatch(/isPartial\s*\?\s*s\.partial/);
+    expect(history).toMatch(/isUnavailable\s*\?\s*s\.unavailable/);
+    expect(KO_APP.jobStatus.partial).toBe("잠정 결과");
+    expect(KO_APP.jobStatus.unavailable).toBe("측정 불가");
     expect(history).toMatch(/const sov = isUnavailable\s*\? null/);
   });
 
@@ -36,8 +50,15 @@ describe("측정 상태·결과 IA 계약", () => {
     const brand = read("app/(authenticated)/brand/page.tsx");
     const scoped = read("lib/db/scoped.ts");
     expect(brand).toContain("withRecomputedAuditMetrics(job.result)");
-    expect(brand).toContain('"잠정 결과"');
-    expect(brand).toContain('"잠정 결과 보기"');
+    // 🔴 2026-10-06 — 라벨은 사전(`app.jobStatus.partial*`)으로 옮겨졌다.
+    expect(brand).toMatch(
+      /isPartial\)\s*\{\s*return \{\s*label: t\.partial,\s*linkLabel: t\.partialLink/
+    );
+    const jobStatus = JSON.parse(
+      read("../../packages/internationalization/dictionaries/ko.json")
+    ).app.jobStatus;
+    expect(jobStatus.partial).toBe("잠정 결과");
+    expect(jobStatus.partialLink).toBe("잠정 결과 보기");
     expect(scoped).toContain(
       "!isUsableRun(withRecomputedAuditMetrics(latestJob.result))"
     );
@@ -72,8 +93,14 @@ describe("측정 상태·결과 IA 계약", () => {
     );
     expect(measuring).toContain('status === "queued"');
     expect(measuring).toContain('status === "processing"');
-    expect(measuring).toContain("대시보드");
-    expect(measuring).toContain("측정 이력");
+    // 🔴 2026-10-06 — 두 결과 위치 문구는 사전(`app.measuring.to*`)으로 옮겨졌다.
+    expect(measuring).toContain("{t.toDashboard}");
+    expect(measuring).toContain("{t.toHistory}");
+    const measuringKo = JSON.parse(
+      read("../../packages/internationalization/dictionaries/ko.json")
+    ).app.measuring;
+    expect(measuringKo.toDashboard).toContain("대시보드");
+    expect(measuringKo.toHistory).toContain("측정 이력");
     expect(measuring).toContain("jobId.slice(-8)");
     expect(measuring).toContain("createdAt");
     expect(measuring).not.toMatch(/\d+\s*%\s*완료/);
@@ -81,10 +108,17 @@ describe("측정 상태·결과 IA 계약", () => {
 
   it("내부 측정 상세는 종합 점수와 답변 등장률을 서로 다른 지표로 정의한다", () => {
     const detail = read("app/(authenticated)/history/[jobId]/page.tsx");
-    expect(detail).toContain("GEO 종합 진단 점수");
-    expect(detail).toContain("AI 답변 등장률");
-    expect(detail).toContain("5축 진단");
-    expect(detail).toContain("성공한 답변");
+    // 🔴 2026-10-06 — 문구는 사전(`app.historyDetail`)으로 옮겨졌다.
+    expect(detail).toContain("{t.geoScore}");
+    expect(detail).toContain("{t.mentionRate}");
+    expect(detail).toContain("{t.geoScoreNote}");
+    expect(detail).toContain("t.mentionRateBasis");
+    expect(KO_APP.historyDetail.geoScore).toBe("GEO 종합 진단 점수");
+    expect(KO_APP.historyDetail.mentionRate).toBe("AI·검색 등장률");
+    expect(KO_APP.historyDetail.geoScoreNote).toContain("5축 진단");
+    expect(KO_APP.historyDetail.mentionRateBasis).toContain(
+      "성공한 AI·검색 응답"
+    );
     expect(detail).toContain("successfulResponseCount(metrics)");
     expect(detail).toContain("countMeasurementCoverage");
     expect(detail).toContain('value.engineId !== "naver-briefing"');
@@ -115,7 +149,11 @@ describe("측정 상태·결과 IA 계약", () => {
     expect(actions).toContain(
       "domain: { in: brands.map((brand) => brand.domain) }"
     );
-    expect(actions).toContain("다른 브랜드의 과거 처방은 섞지 않아요");
+    // 🔴 2026-10-06 — 안내 문구는 사전(`app.actionsPage.noMixing`)으로 옮겨졌다.
+    expect(actions).toContain("{t.noMixing}");
+    expect(KO_APP.actionsPage.noMixing).toContain(
+      "다른 브랜드의 과거 처방은 섞지 않아요"
+    );
   });
 
   it("추적 질문의 저장·측정·결과 위치를 한 화면에서 설명한다", () => {
@@ -123,9 +161,14 @@ describe("측정 상태·결과 IA 계약", () => {
     const scoreboard = read(
       "app/(authenticated)/components/prompt-scoreboard.tsx"
     );
-    expect(prompts).toContain("질문 저장");
-    expect(prompts).toContain("다음 측정에 사용");
-    expect(prompts).toContain("결과 누적");
+    // 🔴 2026-10-06 — 흐름 문구는 사전(`app.promptsPage.flowBefore`)으로 옮겨졌다.
+    expect(prompts).toContain("{t.flowBefore}");
+    const flow = JSON.parse(
+      read("../../packages/internationalization/dictionaries/ko.json")
+    ).app.promptsPage.flowBefore;
+    expect(flow).toContain("질문 저장");
+    expect(flow).toContain("다음 측정에 사용");
+    expect(flow).toContain("결과 누적");
     expect(prompts).toContain("/#tracked-prompts");
     expect(scoreboard).toContain('id="tracked-prompts"');
   });

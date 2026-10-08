@@ -221,6 +221,32 @@ describe("이름 없는 질문·검색 노출은 헤드라인 분모 밖", () =>
     expect(summary.search).toMatchObject({ confirmed: 1, total: 1 });
     expect(summary.engines).toEqual({ measured: 1, confirmed: 1 });
   });
+  it("검색 엔진의 discovery 응답은 검색 노출률이나 AI discovery 추천률에 섞지 않는다", () => {
+    const summary = summarizeAnswerBuckets([
+      {
+        engineId: "naver",
+        naverSource: "search_results",
+        brandMentioned: true,
+        mentionQuality: "confirmed",
+        promptKind: "brand",
+      },
+      {
+        engineId: "naver",
+        naverSource: "search_results",
+        brandMentioned: true,
+        mentionQuality: "confirmed",
+        promptKind: "discovery",
+      },
+      {
+        engineId: "chatgpt",
+        brandMentioned: true,
+        mentionQuality: "confirmed",
+        promptKind: "discovery",
+      },
+    ]);
+    expect(summary.search).toMatchObject({ confirmed: 1, total: 1 });
+    expect(summary.discovery).toMatchObject({ asked: 1, recommended: 1 });
+  });
   it("discovery 가 없는 회차는 null(「0/0」을 말하지 않는다)", () => {
     expect(summarizeAnswerBuckets(rows.slice(0, 2)).discovery).toBeNull();
   });
@@ -300,5 +326,33 @@ describe("문구", () => {
         true
       )
     ).toContain("공식 사이트 근거");
+  });
+  it("사유: 검색 결과 규칙 판정 보류는 「판정기 오류」가 아니다(2026-10-07)", () => {
+    for (const engineId of ["naver", "daum"]) {
+      const row = {
+        engineId,
+        brandMentioned: true,
+        mentionQuality: "unverified" as const,
+        verdictReason: "search_rule_inconclusive",
+      };
+      expect(answerReason(row, true)).toBe(
+        "검색 결과만으로는 우리 브랜드인지 확인할 수 없었어요"
+      );
+      expect(answerReason(row, false)).toBe(
+        "The search results alone weren't enough to confirm it's your brand"
+      );
+    }
+    // 사유가 없는 미확인(판정기 실패)은 기존 문구 그대로.
+    expect(
+      answerReason(
+        {
+          engineId: "chatgpt",
+          brandMentioned: true,
+          mentionQuality: "unverified",
+          verdictReason: "judge_failed",
+        },
+        true
+      )
+    ).toContain("판정기 오류");
   });
 });

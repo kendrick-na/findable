@@ -1,0 +1,119 @@
+import { describe, expect, it } from "vitest";
+import {
+  chatgptEngineSetOf,
+  compareAcrossSearchSampling,
+  MIXED_SEARCH_SAMPLING_VERSION,
+  SEARCH_SAMPLING_CHANGED,
+  sameSearchSamplingSeries,
+  searchSamplingChangeLabel,
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "./search-sampling-version";
+
+const V1 = "interleave-v1";
+const WEB = "chatgpt-web-v1";
+const naver = {
+  engineId: "naver",
+  naverSource: "search_results",
+  naverSamplingVersion: V1,
+};
+
+const apiRun = { engineResponses: [{ engineId: "chatgpt" }, naver] };
+const webRun = {
+  engineResponses: [{ engineId: "chatgpt", chatgptEngineSet: WEB }, naver],
+};
+
+describe("ChatGPT source switch guard (CHATGPT_SOURCE=web)", () => {
+  it("leaves every API-collected run's version string exactly as before", () => {
+    expect(searchSamplingVersionOf(apiRun)).toBe(V1);
+    expect(chatgptEngineSetOf(apiRun)).toBeNull();
+  });
+
+  it("composes the search version with the ChatGPT engine set for web runs", () => {
+    expect(searchSamplingVersionOf(webRun)).toBe(`${V1}+${WEB}`);
+    // The marker may also live only on usage (e.g. rows stored by older readers).
+    expect(
+      searchSamplingVersionOf({
+        engineResponses: [
+          { engineId: "chatgpt", usage: { chatgptEngineSet: WEB } },
+          naver,
+        ],
+      })
+    ).toBe(`${V1}+${WEB}`);
+  });
+
+  it("blocks API → web deltas and trend lines (never a number, never 0)", () => {
+    const blocked = compareAcrossSearchSampling(
+      { value: 40, version: searchSamplingVersionOf(apiRun) },
+      { value: 55, version: searchSamplingVersionOf(webRun) }
+    );
+    expect(blocked).toEqual({
+      blockedReason: SEARCH_SAMPLING_CHANGED,
+      comparable: false,
+      delta: null,
+    });
+    const series = sameSearchSamplingSeries(
+      [apiRun, webRun, webRun],
+      searchSamplingVersionOf,
+      searchSamplingVersionOf(webRun)
+    );
+    expect(series).toEqual({ excludedCount: 1, points: [webRun, webRun] });
+  });
+
+  it("keeps two web runs comparable", () => {
+    expect(
+      compareAcrossSearchSampling(
+        { value: 40, version: searchSamplingVersionOf(webRun) },
+        { value: 55, version: searchSamplingVersionOf(webRun) }
+      ).delta
+    ).toBe(15);
+  });
+
+  it("treats a run whose chatgpt rows disagree as mixed (never comparable)", () => {
+    const mixed = {
+      engineResponses: [
+        { engineId: "chatgpt", chatgptEngineSet: WEB },
+        { engineId: "chatgpt" },
+        naver,
+      ],
+    };
+    expect(searchSamplingVersionOf(mixed)).toBe(MIXED_SEARCH_SAMPLING_VERSION);
+  });
+
+  it("does not show the web method in the visible search label", () => {
+    // CEO 2026-10-07: the engine set stays in the version (guard) only.
+    expect(searchSamplingLabel(`${V1}+${WEB}`, true)).toBe(
+      "검색 표본 v2 · 블로그·뉴스·웹문서 교차"
+    );
+    expect(searchSamplingLabel(`${V1}+${WEB}`, false)).toBe(
+      "Search sample v2 · blog/news/web interleaved"
+    );
+    expect(searchSamplingLabel(V1, true)).toBe(
+      "검색 표본 v2 · 블로그·뉴스·웹문서 교차"
+    );
+    // No Naver row → still no search label, as before.
+    expect(searchSamplingLabel(`none+${WEB}`, true)).toBeNull();
+  });
+});
+
+describe("searchSamplingChangeLabel (비교 불가 보조 문구)", () => {
+  it("omits the line when before/after labels are equal (API → web, same search sample)", () => {
+    expect(searchSamplingChangeLabel(V1, `${V1}+${WEB}`, true)).toBeNull();
+    expect(searchSamplingChangeLabel(V1, `${V1}+${WEB}`, false)).toBeNull();
+  });
+
+  it("keeps the A → B line unchanged when the labels differ", () => {
+    expect(searchSamplingChangeLabel(undefined, V1, true)).toBe(
+      "검색 표본 v1 · 이전 방식 → 검색 표본 v2 · 블로그·뉴스·웹문서 교차"
+    );
+  });
+
+  it("shows the one label when the other side has none, null when both have none", () => {
+    expect(searchSamplingChangeLabel(`none+${WEB}`, V1, true)).toBe(
+      "검색 표본 v2 · 블로그·뉴스·웹문서 교차"
+    );
+    expect(
+      searchSamplingChangeLabel(`none+${WEB}`, `none+${WEB}`, true)
+    ).toBeNull();
+  });
+});

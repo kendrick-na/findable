@@ -14,8 +14,73 @@
 //
 // HTML → PDF 변환 후 Vercel Blob에 public 업로드 → URL 반환.
 
+import { log } from "@repo/observability/log";
 import { put } from "@repo/storage";
 import { type AuditPdfData, renderAuditPdfHtml } from "./pdf-template";
+import { assertNotVercelPreview } from "./preview-guard";
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw (
+      signal.reason ?? new DOMException("PDF generation aborted", "AbortError")
+    );
+  }
+}
+
+async function runPdfStage<T>(
+  jobId: string,
+  stage: string,
+  operation: () => Promise<T>,
+  signal: AbortSignal | undefined,
+  overallStartedAt: number,
+  cleanupLateResult?: (result: T) => Promise<void>
+): Promise<T> {
+  const startedAt = Date.now();
+  throwIfAborted(signal);
+  const operationPromise = operation();
+  let abortHandler: (() => void) | undefined;
+  try {
+    const aborted = signal
+      ? new Promise<never>((_, reject) => {
+          abortHandler = () =>
+            reject(
+              signal.reason ??
+                new DOMException("PDF generation aborted", "AbortError")
+            );
+          signal.addEventListener("abort", abortHandler, { once: true });
+        })
+      : null;
+    const result = await (aborted
+      ? Promise.race([operationPromise, aborted])
+      : operationPromise);
+    log.info("audit.pdf.stage", {
+      jobId,
+      stage,
+      durationMs: Date.now() - startedAt,
+      elapsedMs: Date.now() - overallStartedAt,
+    });
+    return result;
+  } catch (error) {
+    log.warn("audit.pdf.stage_failed", {
+      jobId,
+      stage,
+      durationMs: Date.now() - startedAt,
+      elapsedMs: Date.now() - overallStartedAt,
+      timeoutReason: signal?.aborted
+        ? String(signal.reason ?? "aborted")
+        : undefined,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    if (signal?.aborted && cleanupLateResult) {
+      operationPromise.then(cleanupLateResult).catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    if (signal && abortHandler) {
+      signal.removeEventListener("abort", abortHandler);
+    }
+  }
+}
 
 /** 고객 웹 리포트 PDF(client-report/pdf.ts)도 같은 브라우저 실행 경로를 쓴다. */
 export async function getBrowser() {
@@ -64,33 +129,87 @@ export interface GeneratePdfResult {
  */
 export async function generateAuditPdf(
   jobId: string,
-  data: AuditPdfData
+  data: AuditPdfData,
+  signal?: AbortSignal
 ): Promise<GeneratePdfResult> {
+  // No Chromium launch and no public Blob write from a Preview deployment.
+  assertNotVercelPreview("Audit PDF generation and Blob upload");
+  const overallStartedAt = Date.now();
   const html = renderAuditPdfHtml(data);
-  const browser = await getBrowser();
+  throwIfAborted(signal);
+  const browser = await runPdfStage(
+    jobId,
+    "browser_launch",
+    () => getBrowser(),
+    signal,
+    overallStartedAt,
+    async (lateBrowser) => lateBrowser.close()
+  );
 
   try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    throwIfAborted(signal);
+    const page = await runPdfStage(
+      jobId,
+      "new_page",
+      () => browser.newPage(),
+      signal,
+      overallStartedAt
+    );
+    throwIfAborted(signal);
+    await runPdfStage(
+      jobId,
+      "set_content",
+      () => page.setContent(html, { waitUntil: "networkidle0" }),
+      signal,
+      overallStartedAt
+    );
     // Pretendard CDN 폰트 로드 대기 (document.fonts.ready)
-    await page.evaluate(() =>
-      document.fonts ? document.fonts.ready : Promise.resolve()
+    throwIfAborted(signal);
+    await runPdfStage(
+      jobId,
+      "font_ready",
+      () =>
+        page.evaluate(() =>
+          document.fonts ? document.fonts.ready : Promise.resolve()
+        ),
+      signal,
+      overallStartedAt
     );
 
-    const buffer = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      preferCSSPageSize: true,
-    });
+    throwIfAborted(signal);
+    const buffer = await runPdfStage(
+      jobId,
+      "render_pdf",
+      () =>
+        page.pdf({
+          format: "A4",
+          printBackground: true,
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+          preferCSSPageSize: true,
+        }),
+      signal,
+      overallStartedAt
+    );
 
     // Vercel Blob 업로드. Public access — Audit 결과는 비밀 아님 (jobId secret).
-    const filename = `audit-${jobId}-${Date.now()}.pdf`;
-    const uploaded = await put(`audits/${filename}`, buffer as Buffer, {
-      access: "public",
-      contentType: "application/pdf",
-      addRandomSuffix: false,
-    });
+    throwIfAborted(signal);
+    // Version the artifact URL so readers can distinguish PDFs generated
+    // before the current verification/action-display contract existed.
+    const filename = `audit-v3-${jobId}-${Date.now()}.pdf`;
+    const uploaded = await runPdfStage(
+      jobId,
+      "blob_upload",
+      () =>
+        put(`audits/${filename}`, buffer as Buffer, {
+          access: "public",
+          contentType: "application/pdf",
+          addRandomSuffix: false,
+          abortSignal: signal,
+        }),
+      signal,
+      overallStartedAt
+    );
+    throwIfAborted(signal);
 
     return {
       pdfUrl: uploaded.url,

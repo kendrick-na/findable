@@ -22,6 +22,7 @@ import {
   trackCrewTriggered,
   trackReportViewed,
 } from "@repo/analytics/funnel";
+import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
 import { objectParticle } from "@repo/audit/actions";
 import {
   type AnswerBucketSummary,
@@ -32,7 +33,9 @@ import {
   type PromptKind,
   summarizeAnswerBuckets,
 } from "@repo/audit/answer-buckets";
+import { countBrandAiRecognition } from "@repo/audit/brand-ai-recognition";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
+import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 import { engineDisplayName } from "@repo/audit/engine-labels";
 import {
   geoAxisScores,
@@ -52,7 +55,13 @@ import {
   MIN_VERIFIED_ANSWERS,
   PROVISIONAL_MAX_UNVERIFIED_SHARE,
 } from "@repo/audit/normalize-stored-metrics";
+import { askedDiscoveryQuestionCount } from "@repo/audit/question-coverage";
 import { detailedRankLabel } from "@repo/audit/rank-label";
+import {
+  searchSamplingBlockedCopy,
+  searchSamplingChangeLabel,
+  searchSamplingVersionOf,
+} from "@repo/audit/search-sampling-version";
 import { stripMarkdown } from "@repo/audit/strip-markdown";
 import { Button } from "@repo/design-system/components/ui/button";
 import {
@@ -72,28 +81,142 @@ import {
   Zap,
 } from "lucide-react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  ActionDetails as TeaserActionDetails,
+  ActionLead as TeaserActionLead,
+} from "./action-teaser-cards";
 import {
   AnswerBucketBoard,
   AnswerBucketPill,
   BrandNameMismatchNotice,
+  type DiscoveryCoverageCopy,
   QuestionEngineMatrix,
-  RevenueImpactOptIn,
 } from "./answer-buckets";
 import { CompetitorBenchmark } from "./competitor-benchmark";
+import { AuditMetricBasisNotice } from "./metric-basis-notice";
 import { NaverVsAiGap } from "./naver-vs-ai-gap";
+import { ProvisionalEvidenceView } from "./provisional-evidence-view";
 import { TruthMirror } from "./truth-mirror";
 
+/** 서버(page)가 사전에서 골라 내려주는 문구 — 클라이언트는 사전 파일을 직접 읽지 않는다. */
+interface AuditResultCopy {
+  discoveryCoverage: DiscoveryCoverageCopy;
+  /** 「답을 받지 못한 AI: {engines}」(2026-10-07). */
+  noResponseEngines?: string;
+}
+
 interface Props {
+  copy?: AuditResultCopy;
+  correctionNoticeShown?: boolean;
+  /**
+   * 공개 무료 진단(`/audit` 폼)이 열려 있는가 — 서버(`page.tsx`)가 env
+   * `FREE_AUDIT_PUBLIC_ENABLED` 를 읽어 내려준다(기본 꺼짐).
+   * 👤 2026-10-07 CEO 결정: 꺼져 있으면 이 결과 화면에서 `/audit` 로 가는 모든 동선
+   *   (다시 시도·다른 브랜드 진단·카톡 「내 브랜드 측정」·공유뷰 「우리 브랜드 무료 진단」)을 숨긴다.
+   *   결과 화면 자체는 대시보드·admin·발송 메일이 링크하므로 그대로 동작한다.
+   */
+  freeAuditPublic?: boolean;
   jobId: string;
   locale: string;
 }
+
+/** `/audit` 폼으로 보내는 링크를 그려도 되는가(결과 화면 전역). 기본값 = 숨김. */
+const FreeAuditPublicContext = createContext(false);
+const useFreeAuditPublic = (): boolean => useContext(FreeAuditPublicContext);
 
 // ──────────────────────────────────────────────────────────────────
 // 타입 (orchestrator AnalystOutput·StrategistOutput과 일치)
 // ──────────────────────────────────────────────────────────────────
 
 type Severity = "red" | "amber" | "green";
+
+function byLocale<T extends string>(isKo: boolean, ko: T, en: T): T {
+  return isKo ? ko : en;
+}
+
+function actionExpandLabel(
+  expanded: boolean,
+  hasSteps: boolean,
+  isKo: boolean
+): string {
+  if (expanded) {
+    return byLocale(isKo, "간단히 보기", "Show less");
+  }
+  return hasSteps
+    ? byLocale(isKo, "근거와 실행 방법 보기", "View rationale and steps")
+    : byLocale(isKo, "근거 전체 보기", "View full rationale");
+}
+
+function severityDotClass(severity: Severity): string {
+  if (severity === "green") {
+    return "bg-[var(--signal-good)]";
+  }
+  return severity === "amber"
+    ? "bg-[var(--signal-warn)]"
+    : "bg-[var(--signal-bad)]";
+}
+
+function donutTextColor(severity: Severity): string {
+  if (severity === "green") {
+    return "text-[var(--signal-good)]";
+  }
+  return severity === "amber" ? "text-[var(--signal-warn)]" : "text-zinc-100";
+}
+
+function axisTone(pct: number): Severity {
+  if (pct >= 70) {
+    return "green";
+  }
+  return pct >= 40 ? "amber" : "red";
+}
+
+function axisBarColor(tone: Severity): string {
+  if (tone === "green") {
+    return "bg-[var(--signal-good)]";
+  }
+  return tone === "amber" ? "bg-[var(--signal-warn)]" : "bg-white/25";
+}
+
+function kpiValueColor(tone: Severity | undefined): string {
+  if (tone === "green") {
+    return "text-[var(--signal-good)]";
+  }
+  if (tone === "amber") {
+    return "text-[var(--signal-warn)]";
+  }
+  return tone === "red" ? "text-[var(--signal-bad)]" : "text-zinc-100";
+}
+
+function findingDotClass(severity: Severity): string {
+  if (severity === "red") {
+    return "bg-[var(--signal-bad)]";
+  }
+  return severity === "amber"
+    ? "bg-[var(--signal-warn)]"
+    : "bg-[var(--signal-good)]";
+}
+
+function sentimentToneClass(
+  tone: "positive" | "negative" | "neutral" | "muted"
+): string {
+  if (tone === "positive") {
+    return "bg-[var(--signal-good)]/10 text-[var(--signal-good)] border-[var(--signal-good)]/30";
+  }
+  if (tone === "negative") {
+    return "bg-[var(--signal-bad)]/10 text-[var(--signal-bad)] border-[var(--signal-bad)]/30";
+  }
+  return tone === "neutral"
+    ? "bg-[var(--signal-warn)]/10 text-[var(--signal-warn)] border-[var(--signal-warn)]/30"
+    : "bg-white/5 text-zinc-400 border-white/10";
+}
 type CrewStatus =
   | "not_requested"
   | "queued"
@@ -321,6 +444,7 @@ function normalizeLegacyResult(result: JobResult): JobResult {
 /** packages/audit/actions.ts GeoAction 과 동일 모양(클라 컴포넌트라 타입만 재선언). */
 interface GeoActionView {
   evidence: string;
+  guide?: import("@repo/audit/action-rules").ActionGuide;
   how: string;
   kind: string;
   priority: 1 | 2 | 3;
@@ -330,6 +454,7 @@ interface GeoActionView {
   where?: string;
 }
 interface JobResponse {
+  adviceBasisChanged?: boolean;
   completedAt: string | null;
   createdAt: string;
   crewCompletedAt: string | null;
@@ -348,15 +473,19 @@ interface JobResponse {
    * 첫 측정이면 전부 null·totalRuns=1 → 배지가 아예 렌더되지 않는다.
    */
   history?: {
+    comparisonBlockedReason?: string | null;
+    currentSearchSamplingVersion?: string | null;
     deltaPoints: number | null;
     previousAt: string | null;
     previousJobId: string | null;
     previousScore: number | null;
+    previousSearchSamplingVersion?: string | null;
     totalRuns: number;
   } | null;
   isWorkspaceAudit?: boolean;
   jobId: string;
   language: string;
+  metricBasisChanged?: boolean;
   pdfOutdated?: boolean;
   pdfUrl: string | null;
   result: JobResult | null;
@@ -462,6 +591,33 @@ function PreviousRunBadge({
   history: JobResponse["history"];
   isKo: boolean;
 }) {
+  if (history?.comparisonBlockedReason) {
+    // W1 정책: 검색 표본 방식이 바뀐 직전 회차와는 점수 차이를 내지 않는다.
+    // 이전·이번 라벨이 같으면(예: ChatGPT 수집 방식만 바뀜) 보조 문구를 통째로 생략한다.
+    const changeLabel = searchSamplingChangeLabel(
+      history.previousSearchSamplingVersion,
+      history.currentSearchSamplingVersion,
+      isKo
+    );
+    return (
+      <div
+        className="flex flex-col items-center gap-1 text-center"
+        data-testid="previous-run-blocked"
+      >
+        <span className="font-medium text-xs text-zinc-400">
+          {searchSamplingBlockedCopy(isKo)}
+        </span>
+        {changeLabel ? (
+          <span
+            className="text-[11px] text-zinc-500"
+            data-testid="previous-run-blocked-change"
+          >
+            {changeLabel}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
   const delta = history?.deltaPoints;
   if (!history || delta === null || delta === undefined) {
     return null;
@@ -624,8 +780,8 @@ function fiveAxisScores(metrics: JobMetrics, isKo: boolean): FiveAxisView {
       score: sovAxis,
       max: 10,
       hint: isKo
-        ? "성공한 AI 답변 중 우리 브랜드가 등장한 비율"
-        : "Share of successful AI answers that mention your brand",
+        ? "성공한 AI·검색 응답 중 우리 브랜드가 등장한 비율"
+        : "Share of successful AI answers and search results that mention your brand",
     },
     {
       key: "competition",
@@ -657,7 +813,20 @@ function totalFiveAxis(view: FiveAxisView): number {
 // 메인 진입점
 // ──────────────────────────────────────────────────────────────────
 
-export function AuditResultView({ jobId, locale }: Props) {
+export function AuditResultView({ freeAuditPublic = false, ...props }: Props) {
+  return (
+    <FreeAuditPublicContext.Provider value={freeAuditPublic}>
+      <AuditResultBody {...props} />
+    </FreeAuditPublicContext.Provider>
+  );
+}
+
+function AuditResultBody({
+  copy,
+  correctionNoticeShown = false,
+  jobId,
+  locale,
+}: Omit<Props, "freeAuditPublic">) {
   const isKo = locale.startsWith("ko");
   const [job, setJob] = useState<JobResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -694,6 +863,13 @@ export function AuditResultView({ jobId, locale }: Props) {
           const body = (await response.json().catch(() => null)) as {
             error?: string;
           } | null;
+          // 접근 권한은 재시도로 바뀌지 않는다. 다른 조직이 활성화된 사용자를
+          // 4·8·16초 동안 로딩에 묶지 말고, 즉시 조직 전환 안내를 보여준다.
+          if (response.status === 403) {
+            pollControlRef.current.active = false;
+            setError("REPORT_FORBIDDEN");
+            return;
+          }
           // 존재하지 않는 ID와 잘못된 ID는 재시도해도 바뀌지 않는다. 이전에는
           // 4·8·16초를 더 기다린 뒤에야 오류를 보여, 대시보드에서 잘못 연결된
           // 리포트가 계속 로딩 중인 것처럼 보였다.
@@ -709,7 +885,12 @@ export function AuditResultView({ jobId, locale }: Props) {
           return;
         }
         consecutiveErrors = 0;
-        setJob(data);
+        // 저장된 crewResult 의 근거 없는 수치 문장(Reddit 40%·+40% 가시성 등)은
+        // 화면에 그리기 전에 뺀다 — 저장 데이터는 그대로다(`crew-display-filter.ts`).
+        setJob({
+          ...data,
+          crewResult: sanitizeStoredCrewResult(data.crewResult),
+        });
 
         // 🔴 세션N-25 — 이 이벤트는 **완료 시점에 발화하는데 이름이 `audit_started`**
         //   였다. 퍼널을 그리면 *"시작"* 칸에 완료 수가 들어가 **시작·완료가 같은 숫자로
@@ -789,7 +970,7 @@ export function AuditResultView({ jobId, locale }: Props) {
         }
       }
     }
-    void poll();
+    poll();
   }, [jobId]);
 
   useEffect(() => {
@@ -851,7 +1032,21 @@ export function AuditResultView({ jobId, locale }: Props) {
 
   return (
     <>
-      <CompletedView job={job} locale={locale} result={displayResult} />
+      {(job.metricBasisChanged || job.adviceBasisChanged) &&
+        !correctionNoticeShown && (
+          <AuditMetricBasisNotice
+            adviceBasisChanged={job.adviceBasisChanged}
+            locale={locale}
+            metricBasisChanged={job.metricBasisChanged}
+            provisional={auditPublicationIssue(displayResult) !== null}
+          />
+        )}
+      <CompletedView
+        copy={copy}
+        job={job}
+        locale={locale}
+        result={displayResult}
+      />
       {auditPublicationIssue(displayResult) === null && (
         <ViralBar job={job} locale={locale} />
       )}
@@ -887,6 +1082,7 @@ export function getLeadResultMessage(
 }
 
 function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
+  const freeAuditPublic = useFreeAuditPublic();
   const isKo = locale.startsWith("ko");
   const [emailOpen, setEmailOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -983,7 +1179,7 @@ function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
         ? `내 GEO 점수 ${score}점 받았어요! · Findable\n${url}`
         : `My GEO score is ${score}/100 · Findable\n${url}`;
       if (typeof navigator !== "undefined" && navigator.clipboard) {
-        void navigator.clipboard.writeText(text);
+        navigator.clipboard.writeText(text);
         alert(
           isKo
             ? "링크를 복사했어요. 카카오톡에 붙여넣어 주세요."
@@ -1054,13 +1250,18 @@ function ViralBar({ job, locale }: { job: JobResponse; locale: string }) {
             title: isKo ? "결과 보기" : "View result",
             link: { mobileWebUrl: url, webUrl: url },
           },
-          {
-            title: isKo ? "내 브랜드 측정" : "Audit my brand",
-            link: {
-              mobileWebUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/${locale}/audit`,
-              webUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/${locale}/audit`,
-            },
-          },
+          // 무료 진단이 닫혀 있으면 `/audit` 버튼을 싣지 않는다(받는 사람에게 404).
+          ...(freeAuditPublic
+            ? [
+                {
+                  title: isKo ? "내 브랜드 측정" : "Audit my brand",
+                  link: {
+                    mobileWebUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/${locale}/audit`,
+                    webUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/${locale}/audit`,
+                  },
+                },
+              ]
+            : []),
         ],
       });
     } catch {
@@ -1176,30 +1377,38 @@ function LoadingState({ message }: { message: string }) {
 
 function ErrorState({ message, isKo }: { message: string; isKo: boolean }) {
   const reportNotFound = message === "REPORT_NOT_FOUND";
+  const reportForbidden = message === "REPORT_FORBIDDEN";
+  let title = isKo ? "결과 로드 실패" : "Failed to load";
+  let detail = message;
+  let actionLabel = isKo
+    ? "대시보드에서 측정 이력 열기"
+    : "Open dashboard history";
+  if (reportForbidden) {
+    title = isKo
+      ? "현재 조직에서는 이 리포트를 볼 수 없어요"
+      : "This report belongs to another workspace";
+    detail = isKo
+      ? "대시보드에서 이 측정을 만든 조직으로 전환한 뒤 다시 열어 주세요."
+      : "Switch to the workspace that created this measurement, then open it again.";
+    actionLabel = isKo
+      ? "대시보드에서 해당 조직으로 전환"
+      : "Switch workspace in the dashboard";
+  } else if (reportNotFound) {
+    title = isKo ? "이 리포트를 찾을 수 없어요" : "This report is unavailable";
+    detail = isKo
+      ? "이전 측정 기록이 공개 리포트와 아직 연결되지 않았습니다. 대시보드의 측정 이력에서 해당 회차를 확인해 주세요."
+      : "This earlier measurement is not yet connected to a public report. Check the run in your dashboard history.";
+  }
   return (
     <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6 text-red-300">
       <div className="flex items-center gap-2 font-semibold">
         <XCircle className="h-5 w-5" />
-        {reportNotFound
-          ? isKo
-            ? "이 리포트를 찾을 수 없어요"
-            : "This report is unavailable"
-          : isKo
-            ? "결과 로드 실패"
-            : "Failed to load"}
+        {title}
       </div>
-      <p className="mt-2 text-sm">
-        {reportNotFound
-          ? isKo
-            ? "이전 측정 기록이 공개 리포트와 아직 연결되지 않았습니다. 대시보드의 측정 이력에서 해당 회차를 확인해 주세요."
-            : "This earlier measurement is not yet connected to a public report. Check the run in your dashboard history."
-          : message}
-      </p>
-      {reportNotFound && (
+      <p className="mt-2 text-sm">{detail}</p>
+      {(reportNotFound || reportForbidden) && (
         <Button asChild className="mt-4" variant="outline">
-          <a href="https://app.findable.co.kr/history">
-            {isKo ? "대시보드에서 측정 이력 열기" : "Open dashboard history"}
-          </a>
+          <a href="https://app.findable.co.kr/history">{actionLabel}</a>
         </Button>
       )}
     </div>
@@ -1218,6 +1427,7 @@ function NoDataState({ isKo }: { isKo: boolean }) {
 
 function FailedState({ job, locale }: { job: JobResponse; locale: string }) {
   const isKo = locale.startsWith("ko");
+  const freeAuditPublic = useFreeAuditPublic();
   return (
     <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
       <div className="flex items-center gap-2 font-semibold text-red-300">
@@ -1227,9 +1437,11 @@ function FailedState({ job, locale }: { job: JobResponse; locale: string }) {
       <p className="mt-2 text-red-300 text-sm">
         {job.errorMessage ?? (isKo ? "알 수 없는 오류" : "Unknown error")}
       </p>
-      <Button asChild className="mt-4" variant="outline">
-        <a href={`/${locale}/audit`}>{isKo ? "다시 시도" : "Try again"}</a>
-      </Button>
+      {freeAuditPublic && (
+        <Button asChild className="mt-4" variant="outline">
+          <a href={`/${locale}/audit`}>{isKo ? "다시 시도" : "Try again"}</a>
+        </Button>
+      )}
     </div>
   );
 }
@@ -1260,6 +1472,7 @@ function MeasurementFailedView({
   locale: string;
   result: JobResult;
 }) {
+  const freeAuditPublic = useFreeAuditPublic();
   return (
     <div className="space-y-6 pb-24 lg:pb-12">
       <MeasuredAtNotice isKo={isKo} job={job} />
@@ -1283,11 +1496,13 @@ function MeasurementFailedView({
             : "This isn't a score of zero — it means we don't know yet. We can only tell you how AI describes your brand once a measurement succeeds."}
         </p>
 
-        <Button asChild className="mt-6" variant="outline">
-          <a href={`/${locale}/audit`}>
-            {isKo ? "다시 측정하기" : "Run it again"}
-          </a>
-        </Button>
+        {freeAuditPublic && (
+          <Button asChild className="mt-6" variant="outline">
+            <a href={`/${locale}/audit`}>
+              {isKo ? "다시 측정하기" : "Run it again"}
+            </a>
+          </Button>
+        )}
       </section>
     </div>
   );
@@ -1306,9 +1521,20 @@ function VerificationPartialView({
   const coreResponses = result.engineResponses.filter(
     (response) => response.engineId !== "naver-briefing"
   );
-  const answerCount = coreResponses.filter(
-    (response) => !(response.errorMessage || response.isStub)
-  ).length;
+  const brandAiResponses = coreResponses.filter(
+    (response) =>
+      answerGroup(response.engineId) === "ai" && !isDiscoveryAnswer(response)
+  );
+  const searchResponses = coreResponses.filter(
+    (response) => answerGroup(response.engineId) === "search"
+  );
+  const aiAnswers = result.metrics.answerBuckets?.ai;
+  const searchAnswers = result.metrics.answerBuckets?.search;
+  const answerCount = aiAnswers
+    ? aiAnswers.adjudicated + aiAnswers.unverified
+    : brandAiResponses.filter(
+        (response) => !(response.errorMessage || response.isStub)
+      ).length;
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://app.findable.co.kr";
   // 이 화면은 이제 「확정 답변이 0건」이거나 판정 계약 이전 회차(재검증 필요)일
@@ -1320,8 +1546,8 @@ function VerificationPartialView({
       <section className="rounded-2xl border border-amber-400/30 bg-zinc-900/80 p-6 md:p-10">
         <div className="font-medium text-amber-300 text-xs uppercase tracking-[0.16em]">
           {isKo
-            ? "판별 미완료 · 잠정 결과"
-            : "Verification incomplete · provisional result"}
+            ? "AI 측정·판별 미완료 · 결과 보류"
+            : "AI measurement or verification incomplete · result withheld"}
         </div>
         <h1 className="mt-3 max-w-3xl font-semibold text-2xl text-zinc-50 leading-tight md:text-4xl">
           {isKo
@@ -1330,27 +1556,43 @@ function VerificationPartialView({
         </h1>
         <p className="mt-4 max-w-2xl text-sm text-zinc-300 leading-relaxed">
           {isKo
-            ? "답변은 일부 수집했지만 같은 이름이 실제 이 브랜드를 뜻하는지 확인하는 과정이 완료되지 않았습니다. 따라서 0점·미노출·놓치는 유입·개선 처방을 확정값으로 보여주지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
-            : "Some answers were collected, but we could not finish checking whether the name refers to this brand. We are withholding scores, absence claims, missed-visit estimates, and recommendations for this run."}
+            ? "이번 회차의 브랜드 AI 답변을 확정 근거로 사용할 수 없어 점수·미노출 주장·개선 처방을 공개하지 않습니다. 검색 노출 결과는 별도로 보존하며, 검색 성공을 AI 성공으로 간주하지 않습니다. 이는 고객 사이트의 문제가 아니라 이번 측정의 제한입니다."
+            : "Brand AI answers cannot be used as conclusive evidence for this run, so scores, absence claims and recommendations are withheld. Search exposure is preserved separately and does not count as AI success."}
         </p>
         {result.metrics.errors.length > 0 && (
           <p className="mt-3 max-w-2xl text-amber-200 text-sm leading-relaxed">
             {isKo
-              ? `별도로 AI 엔진 호출 ${result.metrics.errors.length}건이 실패했습니다. 이는 고객 사이트의 오류가 아니며 Findable 운영팀이 제공업체 연결 상태를 복구해야 합니다.`
-              : `Separately, ${result.metrics.errors.length} AI engine calls failed. This is not a problem with your site; Findable must restore the provider connection.`}
+              ? `별도로 응답 수집 ${result.metrics.errors.length}건이 실패했습니다. 이는 고객 사이트의 오류가 아니며 Findable 운영팀이 제공업체 연결 상태를 확인해야 합니다.`
+              : `Separately, ${result.metrics.errors.length} response collections failed. This is not a problem with your site; Findable must check the provider connection.`}
           </p>
         )}
         <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            [isKo ? "측정 시도" : "Attempts", coreResponses.length],
-            [isKo ? "수집된 답변" : "Answers collected", answerCount],
             [
-              isKo ? "엔진 오류" : "Engine errors",
-              result.metrics.errors.length,
+              isKo ? "브랜드 AI 시도" : "Brand AI attempts",
+              aiAnswers?.total ?? brandAiResponses.length,
+            ],
+            [
+              isKo ? "수집된 브랜드 AI 답변" : "Brand AI answers collected",
+              answerCount,
+            ],
+            [
+              isKo ? "브랜드 AI 오류" : "Brand AI errors",
+              aiAnswers?.engineError ??
+                brandAiResponses.filter(
+                  (response) => response.errorMessage || response.isStub
+                ).length,
             ],
             [
               isKo ? "브랜드 판별 불가" : "Unverified matches",
-              result.metrics.unverifiedCount ?? 0,
+              aiAnswers?.unverified ?? result.metrics.unverifiedCount ?? 0,
+            ],
+            [
+              isKo ? "검색 노출 수집" : "Search results collected",
+              searchAnswers?.adjudicated ??
+                searchResponses.filter(
+                  (response) => !(response.errorMessage || response.isStub)
+                ).length,
             ],
           ].map(([label, value]) => (
             <div
@@ -1367,8 +1609,8 @@ function VerificationPartialView({
         {job.pdfOutdated && (
           <p className="mt-5 text-amber-200 text-xs">
             {isKo
-              ? "이전 PDF는 이번 판별·출처 귀속 상태를 반영하지 않아 제공하지 않습니다."
-              : "The previous PDF does not reflect the current verification or citation attribution status and is unavailable."}
+              ? "이전 PDF는 현재 검증·권고 기준을 확인할 수 없어 제공하지 않습니다. 최신 결과는 이 페이지에서 확인하세요."
+              : "The previous PDF cannot be verified against the current verification and recommendation rules. Use this page for the latest result."}
           </p>
         )}
         <a
@@ -1383,12 +1625,14 @@ function VerificationPartialView({
 
       <section aria-label={isKo ? "수집된 답변" : "Collected answers"}>
         <h2 className="font-semibold text-xl text-zinc-100">
-          {isKo ? "AI가 실제로 준 답변" : "Answers actually returned"}
+          {isKo
+            ? "AI 답변·검색 결과 원문"
+            : "Saved AI answers and search results"}
         </h2>
         <p className="mt-2 text-sm text-zinc-400">
           {isKo
-            ? "아래는 판정 결과가 아닌 저장된 답변 내용입니다. 긴 답변은 저장 길이 제한으로 일부만 보일 수 있습니다."
-            : "These are saved answer excerpts, not verified brand mentions. Long answers may be truncated."}
+            ? "아래는 판정 결과가 아닌 저장된 AI 답변과 검색 결과입니다. 긴 내용은 저장 길이 제한으로 일부만 보일 수 있습니다."
+            : "These are saved AI answers and search results, not verified brand mentions. Long content may be truncated."}
         </p>
         <div className="mt-4 space-y-2">
           {coreResponses.map((response, index) => (
@@ -1402,12 +1646,8 @@ function VerificationPartialView({
                 </span>
                 <span className="text-xs text-zinc-400">
                   {response.errorMessage
-                    ? isKo
-                      ? "응답 오류"
-                      : "Error"
-                    : isKo
-                      ? "답변 수집"
-                      : "Answer collected"}
+                    ? byLocale(isKo, "응답 오류", "Error")
+                    : byLocale(isKo, "답변 수집", "Answer collected")}
                 </span>
               </summary>
               <div className="whitespace-pre-wrap border-white/10 border-t px-4 py-4 text-sm text-zinc-300 leading-relaxed">
@@ -1453,7 +1693,7 @@ function ProcessingState({
       <p className="mt-2 text-zinc-400">
         {isKo
           ? `${domain}을 여러 AI에서 측정하고 있어요. 약 30초~3분 걸려요.`
-          : `Measuring ${domain} across 7 AI engines. ~30s-3m.`}
+          : `Measuring ${domain} across several AI engines. ~30s-3m.`}
       </p>
       <p className="mt-4 font-medium text-xs text-zinc-400">
         {isKo
@@ -1469,10 +1709,12 @@ function ProcessingState({
 // ──────────────────────────────────────────────────────────────────
 
 function CompletedView({
+  copy,
   job,
   result,
   locale,
 }: {
+  copy?: AuditResultCopy;
   job: JobResponse;
   result: JobResult;
   locale: string;
@@ -1483,7 +1725,7 @@ function CompletedView({
   );
   // 계산은 `@repo/audit/measurement-coverage` 단일 진실을 쓴다(규칙 복제 금지).
   const coverage = countMeasurementCoverage(coreResponses);
-  const { measured, attempted } = coverage;
+  const { attempted } = coverage;
   // 「우리를 어떻게 설명하나」를 보는 섹션(진실거울·네이버 격차)에는 **브랜드 이름으로 물은
   //   AI 답변만** 넘긴다(2026-09-29). Daum 은 검색 결과 조각이고, 이름 없는 질문은
   //   「설명」이 아니라 「추천」을 잰다 — 섞으면 「모른다」가 부풀려진다.
@@ -1508,13 +1750,42 @@ function CompletedView({
 
   // 🔴 2026-09-28 — 예전엔 게이트에 걸리면 이 화면 전체를 경고 화면으로 **통째로
   //   교체**했다. 이제는 확정 답변이 하나도 없을 때만 교체하고, 잠정 회차는 원래
-  //   섹션을 그대로 보여주되 점수 옆 경고 띠 + 확인 안 된 파생 수치(놓치는 유입
-  //   금액·개선 처방)만 가린다. 판별 불가 답변은 분모에서 이미 빠져 있다.
+  //   섹션을 그대로 보여주되 점수 옆 경고 띠와 미확정 개선 처방을 보여준다.
+  //   판별 불가 답변은 분모에서 이미 빠져 있다.
   const publicationStatus = auditPublicationStatus(result);
   if (publicationStatus === "withheld") {
     return <VerificationPartialView isKo={isKo} job={job} result={result} />;
   }
-  const provisional = publicationStatus === "provisional";
+  if (publicationStatus === "provisional") {
+    const summary =
+      result.metrics.answerBuckets ??
+      summarizeAnswerBuckets(result.engineResponses, {
+        brandDomain: result.domain,
+      });
+    return (
+      <div className="space-y-8">
+        <MeasuredAtNotice isKo={isKo} job={job} />
+        <BrandNameMismatchNotice
+          check={result.measurementContext?.brandNameCheck}
+          isKo={isKo}
+        />
+        <ProvisionalEvidenceView
+          brandName={result.brandName}
+          discoveryCoverageCopy={copy?.discoveryCoverage}
+          discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
+          domain={result.domain}
+          isKo={isKo}
+          issue={auditPublicationIssue(result)}
+          noResponseCopy={copy?.noResponseEngines}
+          rows={coreResponses}
+          summary={summary}
+        />
+      </div>
+    );
+  }
+  // Provisional and withheld runs returned above; the original hero is
+  // published-only, so its blended GEO score never receives a masked value.
+  const provisional = false;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -1531,15 +1802,13 @@ function CompletedView({
         />
 
         <HeroSection
+          discoveryCoverageCopy={copy?.discoveryCoverage}
           isKo={isKo}
           job={job}
+          noResponseCopy={copy?.noResponseEngines}
           provisional={provisional}
           result={result}
         />
-
-        {/* 🔴 「놓치는 유입(추정)」 카드는 여기(2번째)에 있었다(2026-09-29 이동).
-            고객 숫자 없이 기본 가정만으로 만든 추정을 측정 결과처럼 크게 보여줬다.
-            → 맨 아래 「직접 입력하면 계산」 링크로 접었다(RevenueImpactOptIn). */}
 
         <CompetitorBenchmark
           brandName={result.brandName}
@@ -1560,11 +1829,10 @@ function CompletedView({
             기존엔 페이지 맨 아래라 crew 액션과 뒤섞여 "추가 액션이랑 오늘 할일이랑
             무슨 관계냐"는 혼란을 만들었다. 측정 처방 먼저, 심층 분석은 그 다음. */}
         {provisional ? (
-          <ProvisionalMaskNotice isKo={isKo} subject="actions" />
+          <ProvisionalMaskNotice isKo={isKo} />
         ) : (
           <ActionTeaser isKo={isKo} locale={locale} result={result} />
         )}
-
         <NaverBriefingReadOnlyCard
           briefingPrompt={result.briefingPrompt}
           briefingStatus={result.briefingStatus ?? "not_requested"}
@@ -1610,36 +1878,16 @@ function CompletedView({
         {!job.isWorkspaceAudit && (
           <UpsellCard isKo={isKo} job={job} locale={locale} result={result} />
         )}
-
-        {provisional ? null : (
-          <RevenueImpactOptIn
-            attemptedEngines={attempted}
-            isKo={isKo}
-            measuredEngines={measured}
-            sov={result.metrics.sov}
-          />
-        )}
       </div>
     </div>
   );
 }
 
 /** 잠정 회차에서 확정 판별이 필요한 파생 수치 자리를 가린다(섹션 자체는 유지). */
-function ProvisionalMaskNotice({
-  isKo,
-  subject,
-}: {
-  isKo: boolean;
-  subject: "impact" | "actions";
-}) {
-  const copy =
-    subject === "impact"
-      ? isKo
-        ? "놓치는 유입 추정 — 이번 회차는 잠정 결과라 금액을 표시하지 않습니다. 판별이 충분한 다음 측정에서 제공됩니다."
-        : "Missed-visit estimate — hidden because this run is provisional. It appears once a run is final."
-      : isKo
-        ? "개선 처방 — 이번 회차는 잠정 결과라 처방을 확정하지 않습니다. 아래 엔진별 답변 원문은 그대로 확인할 수 있습니다."
-        : "Recommendations — withheld because this run is provisional. Engine answers below remain available.";
+function ProvisionalMaskNotice({ isKo }: { isKo: boolean }) {
+  const copy = isKo
+    ? "개선 처방 — 이번 회차는 잠정 결과라 처방을 확정하지 않습니다. 아래 엔진별 답변 원문은 그대로 확인할 수 있습니다."
+    : "Recommendations — withheld because this run is provisional. Engine answers below remain available.";
   return (
     <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-200 text-sm">
       {copy}
@@ -1652,11 +1900,15 @@ function ProvisionalMaskNotice({
 // ──────────────────────────────────────────────────────────────────
 
 function HeroSection({
+  discoveryCoverageCopy,
   job,
   result,
   isKo,
+  noResponseCopy,
   provisional = false,
 }: {
+  discoveryCoverageCopy?: DiscoveryCoverageCopy;
+  noResponseCopy?: string;
   job: JobResponse;
   result: JobResult;
   isKo: boolean;
@@ -1742,9 +1994,11 @@ function HeroSection({
   const bucketHeadline = answerBucketHeadline(result.brandName, buckets, isKo);
   // 잠정 회차는 아래 처방을 가리므로 「무엇부터 손볼지 알려드려요」류 약속을 하지 않는다.
   const headline = provisional
-    ? isKo
-      ? `${bucketHeadline} 브랜드 판별이 충분히 끝나지 않아 이번 회차는 잠정 결과예요.`
-      : `${bucketHeadline} Brand verification is incomplete, so this run is provisional.`
+    ? byLocale(
+        isKo,
+        `${bucketHeadline} 브랜드 판별이 충분히 끝나지 않아 이번 회차는 잠정 결과예요.`,
+        `${bucketHeadline} Brand verification is incomplete, so this run is provisional.`
+      )
     : bucketHeadline;
 
   // ──────────────────────────────────────────────────
@@ -1788,13 +2042,7 @@ function HeroSection({
           </div>
           <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-medium text-xs">
             <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                severity === "green"
-                  ? "bg-[var(--signal-good)]"
-                  : severity === "amber"
-                    ? "bg-[var(--signal-warn)]"
-                    : "bg-[var(--signal-bad)]"
-              }`}
+              className={`h-1.5 w-1.5 rounded-full ${severityDotClass(severity)}`}
             />
             {/* (2026-09-29) 이 등급은 GEO 참고 점수의 등급이다 — 4칸 헤드라인과 섞여 읽히지 않게 이름을 붙인다. */}
             <span className="text-zinc-300">
@@ -1818,8 +2066,8 @@ function HeroSection({
         {job.pdfOutdated && (
           <span className="text-xs text-zinc-400">
             {isKo
-              ? "이전 PDF는 현재 재계산된 수치와 달라 제공하지 않습니다. 최신 결과는 이 페이지에서 확인하세요."
-              : "The old PDF differs from recalculated metrics. Use this page for the corrected result."}
+              ? "이전 PDF는 현재 검증·권고 기준과 달라 제공하지 않습니다. 최신 결과는 이 페이지에서 확인하세요."
+              : "The old PDF does not match the current verification and recommendation rules. Use this page for the latest result."}
           </span>
         )}
       </div>
@@ -1870,8 +2118,8 @@ function HeroSection({
           role="status"
         >
           {isKo
-            ? `잠정 결과 — 브랜드 판별 불가 ${result.metrics.unverifiedCount ?? 0}건은 제외하고 확정 답변 ${result.metrics.verifiedCount ?? 0}건으로 계산했습니다. 판별 불가가 ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}%를 넘거나 확정 답변이 ${MIN_VERIFIED_ANSWERS}건 미만이면 점수를 확정하지 않습니다. 놓치는 유입 추정·개선 처방·PDF·공유는 확정된 회차에서만 제공합니다.`
-            : `Provisional — ${result.metrics.unverifiedCount ?? 0} unverified answers were excluded; figures use ${result.metrics.verifiedCount ?? 0} verified answers. A run is not final when more than ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}% of answers are unverified or fewer than ${MIN_VERIFIED_ANSWERS} are verified. Missed-visit estimates, recommendations, PDF and sharing are available only for final runs.`}
+            ? `잠정 결과 — 브랜드 판별 불가 ${result.metrics.unverifiedCount ?? 0}건은 제외하고 확정 답변 ${result.metrics.verifiedCount ?? 0}건으로 계산했습니다. 판별 불가가 ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}%를 넘거나 확정 답변이 ${MIN_VERIFIED_ANSWERS}건 미만이면 점수를 확정하지 않습니다. 개선 처방·PDF·공유는 확정된 회차에서만 제공합니다.`
+            : `Provisional — ${result.metrics.unverifiedCount ?? 0} unverified answers were excluded; figures use ${result.metrics.verifiedCount ?? 0} verified answers. A run is not final when more than ${Math.round(PROVISIONAL_MAX_UNVERIFIED_SHARE * 100)}% of answers are unverified or fewer than ${MIN_VERIFIED_ANSWERS} are verified. Recommendations, PDF and sharing are available only for final runs.`}
         </p>
       ) : (
         (result.metrics.unverifiedCount ?? 0) > 0 && (
@@ -1889,8 +2137,15 @@ function HeroSection({
           읽혔다. 이제 비율은 **답변 기준**(이 4칸)과 **엔진 기준**(아래 KPI) 둘뿐이고
           각각 라벨에 기준을 적는다. */}
       <AnswerBucketBoard
+        discoveryAskedCount={askedDiscoveryQuestionCount(
+          result.engineResponses
+        )}
+        discoveryCoverageCopy={discoveryCoverageCopy}
         discoveryPromptCount={result.measurementContext?.discoveryPromptCount}
         isKo={isKo}
+        noResponseCopy={noResponseCopy}
+        noResponseRows={result.engineResponses}
+        searchSamplingVersion={searchSamplingVersionOf(result)}
         summary={buckets}
       />
 
@@ -1900,7 +2155,7 @@ function HeroSection({
         </div>
         <p className="mt-1 break-keep text-xs text-zinc-500 leading-relaxed">
           {isKo
-            ? `인지·감정·노출 품질·AI 답변 등장률·경쟁 위치를 가중 합산한 기존 진단값이에요. 지난 측정과 비교할 수 있게 계산 방식은 그대로 두었어요(네이버·다음 검색 노출 포함 · 등장률 ${Math.round(result.metrics.sov)}%).`
+            ? `인지·감정·노출 품질·AI·검색 합산 등장률·경쟁 위치를 가중 합산한 기존 진단값이에요. 지난 측정과 비교할 수 있게 계산 방식은 그대로 두었어요(네이버·다음 검색 노출 포함 · 등장률 ${Math.round(result.metrics.sov)}%).`
             : `The existing weighted composite of recognition, sentiment, presence, answer appearance and competition. Kept unchanged so runs stay comparable (includes Naver/Daum search · appearance ${Math.round(result.metrics.sov)}%).`}
         </p>
       </div>
@@ -1913,9 +2168,11 @@ function HeroSection({
           <ScoreDonut isKo={isKo} severity={severity} value={totalScore} />
           <p className="max-w-[14rem] text-center text-sm text-zinc-400 leading-relaxed">
             {provisional
-              ? isKo
-                ? "잠정 점수예요. 판별이 충분한 다음 측정에서 확정돼요."
-                : "Provisional score — it becomes final once a run is sufficiently verified."
+              ? byLocale(
+                  isKo,
+                  "잠정 점수예요. 판별이 충분한 다음 측정에서 확정돼요.",
+                  "Provisional score — it becomes final once a run is sufficiently verified."
+                )
               : scoreTierMeaning(totalScore, isKo)}
           </p>
           <PreviousRunBadge history={job.history} isKo={isKo} />
@@ -2004,9 +2261,7 @@ function HeroSection({
           )}
           unit={
             result.metrics.averageMentionPosition !== null
-              ? isKo
-                ? "번째"
-                : ""
+              ? byLocale(isKo, "번째", "")
               : "—"
           }
           value={result.metrics.averageMentionPosition ?? 0}
@@ -2208,18 +2463,9 @@ function ScoreDonut({
   //        ④ 색맹 99%가 적녹이라 접근성 문제도 겹친다.
   //   → 좋은 상태(green)만 색으로 보상하고, 낮은 상태는 **중립**으로 사실만 전달한다.
   //     "좋은지 나쁜지"는 색이 아니라 옆의 티어 라벨(scoreTierLabel)이 글자로 말한다.
-  const gradId =
-    severity === "green"
-      ? "g-good"
-      : severity === "amber"
-        ? "g-warn"
-        : "g-warn";
-  const textColor =
-    severity === "green"
-      ? "text-[var(--signal-good)]"
-      : severity === "amber"
-        ? "text-[var(--signal-warn)]"
-        : "text-zinc-100";
+  // Amber and red share the warm gradient (anti-panic gauge).
+  const gradId = severity === "green" ? "g-good" : "g-warn";
+  const textColor = donutTextColor(severity);
 
   return (
     <div className="relative flex h-56 w-56 shrink-0 items-center justify-center">
@@ -2306,15 +2552,10 @@ function ScoreDonut({
 
 function FiveAxisBar({ axis, isKo }: { axis: AxisScore; isKo: boolean }) {
   const pct = (axis.score / axis.max) * 100;
-  const tone: Severity = pct >= 70 ? "green" : pct >= 40 ? "amber" : "red";
+  const tone: Severity = axisTone(pct);
   // 저점 빨강 제거 — 게이지(ScoreDonut)와 같은 안티패닉 규율. 0점 고객 화면이 온통 빨강이 되면
   //   개선 가능한 상태가 "실패 통보"로 읽힌다. 낮음은 **채움이 짧은 것**으로 이미 보인다.
-  const barColor =
-    tone === "green"
-      ? "bg-[var(--signal-good)]"
-      : tone === "amber"
-        ? "bg-[var(--signal-warn)]"
-        : "bg-white/25";
+  const barColor = axisBarColor(tone);
   const width = useMotionValue(0);
   const widthPct = useTransform(width, (v: number) => `${v}%`);
   useEffect(() => {
@@ -2395,14 +2636,7 @@ function KpiCell({
     return () => ctrl.stop();
   }, [value, v]);
 
-  const valueColor =
-    tone === "green"
-      ? "text-[var(--signal-good)]"
-      : tone === "amber"
-        ? "text-[var(--signal-warn)]"
-        : tone === "red"
-          ? "text-[var(--signal-bad)]"
-          : "text-zinc-100";
+  const valueColor = kpiValueColor(tone);
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-3">
@@ -2477,6 +2711,7 @@ function ActionCenterSticky({
   locale: string;
   isKo: boolean;
 }) {
+  const freeAuditPublic = useFreeAuditPublic();
   const ready =
     job.crewStatus === "completed" &&
     job.crewResult?.analysts &&
@@ -2520,15 +2755,17 @@ function ActionCenterSticky({
           방금 진단을 끝낸 사람에게 "또 진단하세요"가 카드의 유일한 실동작 버튼이었다.
           지우지는 않는다 — 다른 도메인을 재는 사람에게는 실제로 필요한 동선이다.
           full-width 버튼 → **작은 텍스트 링크**로 위계만 낮춘다(주 CTA와 경쟁 제거). */}
-      <div className="mt-3 border-white/10 border-t pt-3 text-center">
-        <a
-          className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-300"
-          href={`/${locale}/audit`}
-        >
-          <RotateCw className="h-3 w-3" />
-          {isKo ? "다른 브랜드 진단하기" : "Audit another brand"}
-        </a>
-      </div>
+      {freeAuditPublic && (
+        <div className="mt-3 border-white/10 border-t pt-3 text-center">
+          <a
+            className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-300"
+            href={`/${locale}/audit`}
+          >
+            <RotateCw className="h-3 w-3" />
+            {isKo ? "다른 브랜드 진단하기" : "Audit another brand"}
+          </a>
+        </div>
+      )}
     </SpotlightCard>
   );
 }
@@ -2738,6 +2975,7 @@ function ActionCenterEmpty({ jobId, isKo }: { jobId: string; isKo: boolean }) {
 }
 
 function LegacyCrewNotice({ locale, isKo }: { locale: string; isKo: boolean }) {
+  const freeAuditPublic = useFreeAuditPublic();
   return (
     <SpotlightCard border="brand" className="p-6 md:p-8">
       <div className="flex items-center gap-2 font-medium text-[var(--brand-2)] text-xs">
@@ -2754,12 +2992,14 @@ function LegacyCrewNotice({ locale, isKo }: { locale: string; isKo: boolean }) {
           ? "Findable이 4 에이전트 분석 출력 형식을 JSON 구조화로 업그레이드했어요. 새 형식(Monday Action·Top Actions·Findings 분리)을 보려면 새 진단을 시작해주세요."
           : "Findable upgraded the 4-agent output to structured JSON. Run a new audit to see the new format."}
       </p>
-      <Button asChild className="mt-5 gap-2" size="lg">
-        <a href={`/${locale}/audit`}>
-          <Sparkles className="h-4 w-4" />
-          {isKo ? "새 진단 시작하기" : "Start a new audit"}
-        </a>
-      </Button>
+      {freeAuditPublic && (
+        <Button asChild className="mt-5 gap-2" size="lg">
+          <a href={`/${locale}/audit`}>
+            <Sparkles className="h-4 w-4" />
+            {isKo ? "새 진단 시작하기" : "Start a new audit"}
+          </a>
+        </Button>
+      )}
     </SpotlightCard>
   );
 }
@@ -3067,10 +3307,8 @@ function CrewFailedCard({ jobId, isKo }: { jobId: string; isKo: boolean }) {
           >
             {retrying ? (
               <Loader2 className="h-4 w-4 animate-spin" />
-            ) : isKo ? (
-              "다시 시도"
             ) : (
-              "Retry"
+              byLocale(isKo, "다시 시도", "Retry")
             )}
           </Button>
         </div>
@@ -3283,12 +3521,12 @@ function NaverBriefingTriggerCard({
               <>
                 <Search className="h-4 w-4" />
                 {failed
-                  ? isKo
-                    ? "다시 측정하기"
-                    : "Retry measurement"
-                  : isKo
-                    ? "네이버 AI 브리핑 측정"
-                    : "Measure Naver AI Briefing"}
+                  ? byLocale(isKo, "다시 측정하기", "Retry measurement")
+                  : byLocale(
+                      isKo,
+                      "네이버 AI 브리핑 측정",
+                      "Measure Naver AI Briefing"
+                    )}
               </>
             )}
           </Button>
@@ -3370,13 +3608,17 @@ export function BriefingNotSurfaced({
           {isKo ? "이번엔 측정하지 못했어요" : "We couldn't measure this time"}
         </p>
         <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">
-          {isKo
-            ? throttled
-              ? "요청이 몰려 잠시 막혔어요. 조금 뒤에 다시 시도하면 측정됩니다."
-              : "측정 도구 연결에 문제가 있어요. 저희가 확인하고 있으니 곧 다시 측정됩니다."
-            : throttled
-              ? "Requests were throttled. Try again shortly and it will measure."
-              : "Our measurement tool is having trouble connecting. We're on it — this will be measured again soon."}
+          {throttled
+            ? byLocale(
+                isKo,
+                "요청이 몰려 잠시 막혔어요. 조금 뒤에 다시 시도하면 측정됩니다.",
+                "Requests were throttled. Try again shortly and it will measure."
+              )
+            : byLocale(
+                isKo,
+                "측정 도구 연결에 문제가 있어요. 저희가 확인하고 있으니 곧 다시 측정됩니다.",
+                "Our measurement tool is having trouble connecting. We're on it — this will be measured again soon."
+              )}
         </p>
         <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
           {isKo
@@ -3468,9 +3710,11 @@ function NaverBriefingCompletedCard({
           ) : null}
           <p className="mt-4 whitespace-pre-line text-sm text-zinc-300 leading-relaxed [overflow-wrap:anywhere]">
             {briefing.isStub
-              ? isKo
-                ? "네이버 AI 브리핑 연결이 아직 켜지지 않았어요 (Browserbase 미설정)."
-                : "Naver AI Briefing is not connected yet (Browserbase not configured)."
+              ? byLocale(
+                  isKo,
+                  "네이버 AI 브리핑 연결이 아직 켜지지 않았어요 (Browserbase 미설정).",
+                  "Naver AI Briefing is not connected yet (Browserbase not configured)."
+                )
               : (() => {
                   // 브리핑 박스는 접힌 상태로 스크랩돼 문장이 중간에 끊길 수 있다
                   // ("…준비형 콘텐츠가 더 많" §A-5). 끊겼으면 말줄임을 붙여
@@ -3652,17 +3896,7 @@ function ActionCard({ action, isKo }: { action: ActionItem; isKo: boolean }) {
         onClick={() => setExpanded((value) => !value)}
         type="button"
       >
-        {isKo
-          ? expanded
-            ? "간단히 보기"
-            : action.steps.length > 0
-              ? "근거와 실행 방법 보기"
-              : "근거 전체 보기"
-          : expanded
-            ? "Show less"
-            : action.steps.length > 0
-              ? "View rationale and steps"
-              : "View full rationale"}
+        {actionExpandLabel(expanded, action.steps.length > 0, isKo)}
       </button>
       <div className="mt-4 flex items-center justify-between border-white/5 border-t pt-3 text-xs">
         {/* 🔴 S7-2차(2026-08-11) — `임팩트 4/5`·`노력 2/5` 만 있고 **5가 뭘 뜻하는지
@@ -3857,12 +4091,7 @@ function AnalystAccordion({
 }
 
 function FindingRow({ finding }: { finding: Finding }) {
-  const dotCls =
-    finding.severity === "red"
-      ? "bg-[var(--signal-bad)]"
-      : finding.severity === "amber"
-        ? "bg-[var(--signal-warn)]"
-        : "bg-[var(--signal-good)]";
+  const dotCls = findingDotClass(finding.severity);
   return (
     <div className="flex items-start gap-3 rounded-md border border-white/5 bg-white/5 px-3 py-2.5">
       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dotCls}`} />
@@ -3930,14 +4159,7 @@ function Pill({
   tone: "positive" | "negative" | "neutral" | "muted";
   children: React.ReactNode;
 }) {
-  const cls =
-    tone === "positive"
-      ? "bg-[var(--signal-good)]/10 text-[var(--signal-good)] border-[var(--signal-good)]/30"
-      : tone === "negative"
-        ? "bg-[var(--signal-bad)]/10 text-[var(--signal-bad)] border-[var(--signal-bad)]/30"
-        : tone === "neutral"
-          ? "bg-[var(--signal-warn)]/10 text-[var(--signal-warn)] border-[var(--signal-warn)]/30"
-          : "bg-white/5 text-zinc-400 border-white/10";
+  const cls = sentimentToneClass(tone);
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2 py-0.5 font-medium text-xs ${cls}`}
@@ -4294,85 +4516,6 @@ function EngineGapCta({ result, isKo }: { isKo: boolean; result: JobResult }) {
  * ⚠️ "하지 말 것"(kind='avoid') 액션은 티저로 쓰지 않는다. 첫인상이 금지사항이면
  *    처방의 가치가 전달되지 않으므로, 실행형 액션을 우선 고른다.
  */
-/**
- * 처방 1건 = 접힌 카드. 눌러야 `how`(실행 방법)가 열린다.
- *
- * 🔴 접기는 **밀도** 때문이지 **잠금이 아니다** — 내용은 전부 여기 있고 클릭 한 번이면 열린다.
- *   (같은 세션 D 작업의 진실거울 접기와 동일 원칙: 삭제·요약 아닌 접기.)
- * `<details>` 를 쓰는 이유: JS 상태 없이 동작하고 **브라우저 검색(Ctrl+F)·스크린리더가
- *   접힌 내용도 찾는다**. 접근성 기본값이 가장 좋은 요소다.
- */
-function ActionDetails({
-  action,
-  index,
-  isKo,
-}: {
-  action: GeoActionView;
-  index: number;
-  isKo: boolean;
-}) {
-  const isAvoid = action.kind === "avoid";
-  return (
-    <details className="group rounded-lg border border-white/10 bg-white/[0.02] transition-colors hover:border-white/20">
-      <summary className="flex cursor-pointer list-none items-start gap-3 p-4">
-        <div
-          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-semibold text-[11px] tabular-nums ${
-            isAvoid
-              ? "bg-white/10 text-zinc-400"
-              : "bg-[var(--brand-3)]/15 text-[var(--brand-3)]"
-          }`}
-        >
-          {isAvoid ? "!" : index}
-        </div>
-        <h4 className="min-w-0 flex-1 font-medium text-sm text-zinc-100 leading-snug">
-          {action.title}
-        </h4>
-        <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="border-white/5 border-t px-4 pt-4 pb-4">
-        {/* 🔴 `how` 는 마크다운 `**강조**` 를 포함한다 — 파서가 없으므로 그대로 그리면
-            별표가 글자로 보인다(라이브 실측). 표시 직전 단일 통로인 stripMarkdown 으로 푼다. */}
-        <p className="whitespace-pre-line text-sm text-zinc-300 leading-relaxed">
-          {stripMarkdown(action.how)}
-        </p>
-        {(action.where || action.verification) && (
-          <div className="mt-4 space-y-2 rounded-lg border border-sky-300/15 bg-sky-300/[0.04] p-3 text-sm leading-relaxed">
-            {action.where && (
-              <p className="text-zinc-300">
-                <span className="font-medium text-sky-300">
-                  {isKo ? "수정 위치 · " : "Where to change · "}
-                </span>
-                {stripMarkdown(action.where)}
-              </p>
-            )}
-            {action.verification && (
-              <p className="text-zinc-400">
-                <span className="font-medium text-sky-300">
-                  {isKo ? "검증 방법 · " : "How to verify · "}
-                </span>
-                {stripMarkdown(action.verification)}
-              </p>
-            )}
-          </div>
-        )}
-        {action.evidence && (
-          <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3">
-            <div className="mb-1.5 font-medium text-[11px] text-zinc-400">
-              {isKo ? "이 처방이 나온 근거 (실측)" : "Evidence (measured)"}
-            </div>
-            <p className="whitespace-pre-line text-sm text-zinc-400 leading-relaxed">
-              {stripMarkdown(action.evidence)}
-            </p>
-          </div>
-        )}
-        {action.source && (
-          <p className="mt-3 text-xs text-zinc-400">{action.source}</p>
-        )}
-      </div>
-    </details>
-  );
-}
-
 function ActionTeaser({
   result,
   isKo,
@@ -4382,7 +4525,9 @@ function ActionTeaser({
   locale: string;
   result: JobResult;
 }) {
-  const storedActions = result.geoActions ?? [];
+  // 저장된 과거 처방 중 근거 없는 카드(순위별 효과·자사 100% 단정·논문 효과 수치)는
+  // 표시 시점에 뺀다 — 저장 데이터는 그대로 둔다(`action-display-filter.ts`).
+  const storedActions = filterStoredGeoActions(result.geoActions);
   const mentionedEngines = new Set(result.metrics.enginesWithMention).size;
   // 구 진단 일부는 언급 품질 검증에서 false positive가 제외된 뒤에도, 검증 전
   // 순위로 만든 `rank_strategy`/부분 언급 처방을 JSON에 보존하고 있다. 최신 지표가
@@ -4468,25 +4613,7 @@ function ActionTeaser({
           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand-3)]/15 font-semibold text-[11px] text-[var(--brand-3)] tabular-nums">
             1
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-base text-zinc-50 leading-snug md:text-lg">
-              {lead.title}
-            </h3>
-            <p className="mt-3 whitespace-pre-line text-sm text-zinc-300 leading-relaxed">
-              {stripMarkdown(lead.how)}
-            </p>
-            <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3">
-              <div className="mb-1.5 font-medium text-[11px] text-zinc-400">
-                {isKo ? "이 처방이 나온 근거 (실측)" : "Evidence (measured)"}
-              </div>
-              <p className="whitespace-pre-line text-sm text-zinc-400 leading-relaxed">
-                {stripMarkdown(lead.evidence)}
-              </p>
-            </div>
-            {lead.source && (
-              <p className="mt-3 text-xs text-zinc-400">{lead.source}</p>
-            )}
-          </div>
+          <TeaserActionLead action={lead} isKo={isKo} />
         </div>
 
         {restAll.length > 0 && (
@@ -4498,7 +4625,7 @@ function ActionTeaser({
             </p>
             <div className="flex flex-col gap-2">
               {restAll.map((action, index) => (
-                <ActionDetails
+                <TeaserActionDetails
                   action={action}
                   index={index + 2}
                   isKo={isKo}
@@ -4512,7 +4639,8 @@ function ActionTeaser({
       <p className="mt-3 text-xs text-zinc-400">
         {isKo ? (
           <>
-            처방은 이번 측정 결과와 각 카드에 표시한 근거를 함께 사용해 만들어요.{" "}
+            처방은 이번 측정 결과와 각 카드에 표시한 근거를 함께 사용해
+            만들어요.{" "}
             <a
               className="underline decoration-white/20 hover:text-zinc-300"
               href={`/${locale}/contact`}
@@ -4571,13 +4699,13 @@ function ReportToDashboardGuide({
         </div>
         <div className="rounded-lg border border-[var(--brand-2)]/20 bg-[var(--brand-2)]/5 p-4">
           <p className="font-medium text-sm text-zinc-100">
-            {isKo
-              ? isWorkspaceAudit
-                ? "대시보드에서 이어보기"
-                : "가입 후 대시보드"
-              : isWorkspaceAudit
-                ? "Continue in your dashboard"
-                : "Dashboard after sign-up"}
+            {isWorkspaceAudit
+              ? byLocale(
+                  isKo,
+                  "대시보드에서 이어보기",
+                  "Continue in your dashboard"
+                )
+              : byLocale(isKo, "가입 후 대시보드", "Dashboard after sign-up")}
           </p>
           <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed">
             {isKo
@@ -4610,17 +4738,20 @@ function ReportToDashboardGuide({
 function buildUpsellCopy({
   isKo,
   brandName,
-  sov,
+  aiConfirmedRate,
   mentionedCount,
   measuredCount,
   isSharedView,
+  freeAuditPublic = true,
 }: {
   isKo: boolean;
   brandName: string;
-  sov: number;
+  aiConfirmedRate: number | null;
   mentionedCount: number;
   measuredCount: number;
   isSharedView: boolean;
+  /** 꺼져 있으면 공유뷰 본문에서 「도메인만 넣으면… 무료」 문장(=`/audit` 권유)을 뺀다. */
+  freeAuditPublic?: boolean;
 }): { headline: string; bodyCopy: string } {
   const isInvisible = mentionedCount === 0;
   const isFullCoverage = !isInvisible && mentionedCount === measuredCount;
@@ -4637,46 +4768,56 @@ function buildUpsellCopy({
   //    리드젠 효과는 이미 퍼지고 있는 이 페이지가 같거나 더 크다).
   if (isSharedView) {
     if (isKo) {
+      const measuredSentence = `이 진단은 ChatGPT·Perplexity 등 AI ${measuredCount}곳에 실제로 물어본 결과예요.`;
       return {
         headline: `${brandName}의 AI 검색 성적표예요 — 우리 브랜드는 어떨까요?`,
-        bodyCopy: `이 진단은 ChatGPT·Perplexity·네이버 등 AI ${measuredCount}곳에 실제로 물어본 결과예요. 도메인만 넣으면 3분 만에 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`,
+        bodyCopy: freeAuditPublic
+          ? `${measuredSentence} 도메인만 넣으면 3분 만에 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`
+          : measuredSentence,
       };
     }
+    const measuredSentence = `We asked ${measuredCount} AI engines about this brand and measured what they said.`;
     return {
       headline: `This is ${brandName}'s AI search scorecard — how does yours look?`,
-      bodyCopy: `We asked ${measuredCount} AI engines about this brand and measured what they said. Enter your domain to get the same audit in about 3 minutes — free, no card required.`,
+      bodyCopy: freeAuditPublic
+        ? `${measuredSentence} Enter your domain to get the same audit in about 3 minutes — free, no card required.`
+        : measuredSentence,
     };
   }
 
   if (isKo) {
     if (isInvisible) {
       return {
-        headline: `지금 ${brandName}${objectParticle(brandName)} 아는 AI는 ${measuredCount}곳 중 0곳이에요`,
-        bodyCopy:
-          "지금은 기준점이 0이에요. 개선 작업을 한 뒤 다시 측정하면 올라갔는지 알 수 있어요. 무료 계정을 만들면 이 결과가 그 기준점으로 남아요.",
+        headline: "이번 측정에서 우리 브랜드로 확인된 AI 답변은 없어요",
+        bodyCopy: `AI ${measuredCount}곳의 브랜드 질문에서 확인된 답변은 0건이에요. 모른다는 답변·다른 회사를 설명한 답변·판정보류는 서로 달라요. 판정보류·동명 회사는 아래 원문에서 구분해 보고, 다음 측정에서 변화를 확인하세요.`,
       };
     }
-    const headline = `${brandName}의 AI 답변 등장률은 ${sov}%예요`;
+    const headline =
+      aiConfirmedRate === null
+        ? `${brandName}의 판정 가능한 AI 답변이 없어 등장률을 말할 수 없어요`
+        : `${brandName}의 AI 답변 등장률은 ${aiConfirmedRate}%예요 (판정 완료 답변 기준)`;
     return {
       headline,
       bodyCopy: isFullCoverage
-        ? `이번 측정에서 AI ${measuredCount}곳 모두가 우리를 알아봤어요. 이 상태가 유지되는지는 다음 측정과 비교하세요. 무료 계정에서는 회차별 결과를 관리할 수 있어요.`
-        : `이번 측정에서 AI ${measuredCount}곳 중 ${mentionedCount}곳이 우리를 알아봤어요. 무료 계정에서 회차별 변화를 비교할 수 있어요.`,
+        ? `측정한 AI ${measuredCount}곳 모두에서 이번 회차에 한 번 이상 우리 브랜드로 확인됐어요. 이 상태가 유지되는지는 다음 측정과 비교하세요. 무료 계정에서는 회차별 결과를 관리할 수 있어요.`
+        : `이번 측정에서 AI ${measuredCount}곳 중 ${mentionedCount}곳의 답변에서 한 번 이상 우리 브랜드로 확인됐어요. 무료 계정에서 회차별 변화를 비교할 수 있어요.`,
     };
   }
 
   if (isInvisible) {
     return {
-      headline: `0 of ${measuredCount} AI engines know ${brandName} today`,
-      bodyCopy:
-        "Your baseline is zero. You'll only know if the fixes worked by measuring again. A free account keeps this as that baseline.",
+      headline: `No AI answer in this run was confirmed as ${brandName}`,
+      bodyCopy: `Across ${measuredCount} measured AI engines, no brand-question answer was confirmed. Unknown, namesake and unverified answers need different follow-ups; inspect the answers below before remeasuring.`,
     };
   }
   return {
-    headline: `${brandName} appeared in ${sov}% of successful AI answers`,
+    headline:
+      aiConfirmedRate === null
+        ? `No adjudicated AI answers are available for ${brandName}`
+        : `${brandName} appeared in ${aiConfirmedRate}% of adjudicated AI answers`,
     bodyCopy: isFullCoverage
-      ? `All ${measuredCount} measured engines recognize your brand today. The question is whether that holds — and whether competitors are gaining. Only your next run can tell. A free account keeps today as your baseline.`
-      : `${mentionedCount} of ${measuredCount} engines recognize your brand today. Whether that number is growing only shows against your next run. A free account keeps this result on your dashboard.`,
+      ? `At least one brand-question answer from each of ${measuredCount} measured AI engines matched your brand in this run. Remeasure under the same conditions to see whether that holds.`
+      : `At least one brand-question answer from ${mentionedCount} of ${measuredCount} measured AI engines matched your brand in this run. Remeasure under the same conditions to check for change.`,
   };
 }
 
@@ -4725,28 +4866,31 @@ function UpsellCard({
   // Clerk sign-up 은 email_address_field 프리필을 쿼리로 받는다. 마스킹 값이 아니라
   // 실주소가 필요하므로 여기선 prefill 을 걸지 않고, 대신 "어떤 주소로" 가입해야 하는지
   // 화면에 명시한다(마스킹 노출 원칙 유지). 사용자가 직접 입력 → 오연결 위험 제거.
-  const sov = Math.round(result.metrics.sov);
-  const mentionedCount = new Set(result.metrics.enginesWithMention).size;
+  const aiConfirmedRate = summarizeAnswerBuckets(result.engineResponses).ai
+    .confirmedRate;
   // 🔴 세션N-28 — 여기도 분모를 직접 셌다(`enginesCovered` 고유화 = 오류·stub 안 뺌).
   //   이번 회차엔 우연히 같은 값이 나왔지만, 전부 실패한 엔진이 섞이면 업셀 카피가
   //   "AI 8곳 중 7곳"처럼 **재보지도 못한 엔진을 분모에 넣는다**.
   //   `isFullCoverage` 판정(= 전 엔진 인지)도 이 값으로 갈리므로 문장이 뒤집힌다.
-  const measuredCount = countMeasurementCoverage(
-    result.engineResponses.filter((r) => r.engineId !== "naver-briefing")
-  ).measured;
+  const { measured: measuredCount, mentioned: mentionedCount } =
+    countBrandAiRecognition(result.engineResponses);
 
+  const freeAuditPublic = useFreeAuditPublic();
   const { headline, bodyCopy } = buildUpsellCopy({
     isKo,
     brandName: result.brandName,
-    sov,
+    aiConfirmedRate,
     mentionedCount,
     measuredCount,
     isSharedView,
+    freeAuditPublic,
   });
 
   // 공유받은 사람 ↔ 소유자로 CTA가 갈린다(위 buildUpsellCopy 주석 참조).
   //   중첩 삼항을 JSX 안에 쓰면 lint(noNestedTernary)에 걸리고 읽기도 어렵다 → 여기서 평평하게.
-  const ctaVariant = isSharedView ? "shared" : "owner";
+  // 👤 2026-10-07 — 무료 진단이 닫혀 있으면 공유받은 사람도 「무료 진단」 대신
+  //   기존 가입 CTA(owner 변형: `/sign-up`)를 받는다. 새 문구를 만들지 않는다.
+  const ctaVariant = isSharedView && freeAuditPublic ? "shared" : "owner";
   const primaryCtaLabel = {
     shared: isKo ? "우리 브랜드 무료 진단" : "Audit my brand · Free",
     owner: isKo ? "무료 계정 만들고 추세 보기" : "Create free account",
@@ -4818,7 +4962,11 @@ function UpsellCard({
             남의 결과를 보러 온 사람에게 sign-up 을 첫 버튼으로 주면 이탈한다.
             리서치의 리드젠 사례(Semrush·Ahrefs 무료 체커)가 전부 **가입 없이 바로 측정**이다. */}
         <Button asChild className="gap-2" size="lg">
-          <a href={isSharedView ? `/${locale}/audit` : `${appUrl}/sign-up`}>
+          <a
+            href={
+              ctaVariant === "shared" ? `/${locale}/audit` : `${appUrl}/sign-up`
+            }
+          >
             <Zap className="h-4 w-4" />
             {primaryCtaLabel}
           </a>

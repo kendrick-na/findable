@@ -4,6 +4,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { database } from "@repo/database";
 import { cache } from "react";
 import {
+  hasCurrentPaymentGrant,
   type Plan,
   planFromPublicMetadata,
   resolveEffectivePlan,
@@ -48,18 +49,14 @@ export const getCurrentPlan = cache(async (): Promise<Plan> => {
     return clerkPlan;
   }
 
-  const privateMetadata = user.privateMetadata as Record<
-    string,
-    unknown
-  > | null;
-  const hasCurrentPaymentGrant =
-    typeof privateMetadata?.findablePaymentId === "string";
   return resolveEffectivePlan({
     clerkPlan,
     organizationPlan: organization.plan,
     organizationPlanExpiresAt: organization.planExpiresAt,
     hasInviteRedemption: Boolean(redemption),
-    hasCurrentPaymentGrant,
+    hasCurrentPaymentGrant: hasCurrentPaymentGrant(
+      user.privateMetadata as Record<string, unknown> | null
+    ),
     isApprovedPartner: partner?.status === "approved",
   });
 });

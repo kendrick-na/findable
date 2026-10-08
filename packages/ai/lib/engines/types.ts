@@ -3,7 +3,7 @@
 
 export type EngineId =
   | "chatgpt"
-  | "chatgpt-web" // ChatGPT 웹 UI (Stagehand). 베타. API와 별도 측정.
+  | "chatgpt-web" // ChatGPT 웹 UI (Firecrawl actions · 2026-10-07). 베타. API와 별도 측정.
   | "claude"
   | "perplexity"
   | "gemini"
@@ -102,6 +102,8 @@ export interface EngineQuery {
   engineId: EngineId;
   language: "ko" | "en";
   prompt: string;
+  /** Propagates an invocation deadline without allowing adapters to restart work. */
+  signal?: AbortSignal;
 }
 
 export interface CitedSource {
@@ -113,21 +115,65 @@ export interface CitedSource {
 
 // 엔진 호출당 토큰 사용량(원가 산정용). LLM 엔진만 채워지고, 크롤링/검색형은 null.
 export interface EngineUsage {
-  // 이 엔진이 원가에 잡히는 방식. token=토큰과금 / browser=Browserbase 세션시간 / free=무료티어 / unknown.
-  costModel: "token" | "browser" | "free" | "unknown";
+  /**
+   * ChatGPT 「측정 방식 세트」 키(2026-10-07). `CHATGPT_SOURCE=web` 으로 잰 chatgpt 행에만 붙는다
+   *   (예: `chatgpt-web-v1`). 비교 가드(`search-sampling-version.ts`)가 이 값으로 회차 비교를 막는다.
+   *   ⚠️ 미기재 = 기존 API 방식(legacy) — 이전 기록과 같은 시계열.
+   */
+  chatgptEngineSet?: string;
+  // 이 엔진이 원가에 잡히는 방식. token=토큰과금 / credit=Firecrawl 크레딧 /
+  //   browser=Browserbase 세션시간(구식·하위호환) / free=무료티어 / unknown.
+  costModel: "token" | "credit" | "browser" | "free" | "unknown";
+  /**
+   * Firecrawl 이 이번 호출에 소비한 크레딧 수(naver-briefing). 원가모델 v2(2026-10-07) 신설.
+   * 공식 단가표: scrape 1크레딧/페이지, enhanced 프록시 할증 없음.
+   */
+  creditsUsed?: number | null;
+  /**
+   * Letsur 불가로 Vercel AI Gateway 에 **대신** 보낸 호출이면 `"gateway"`(2026-10-07 신설).
+   * 원래 경로(Letsur·직접 키)로 끝난 호출에는 붙지 않는다.
+   */
+  fallback?: "gateway";
   inputTokens: number | null;
+  /** 실제로 응답한 모델 슬러그(Gateway 경로에서만 채움). cost.ts 가 이 모델 단가로 계산한다. */
+  modelId?: string;
   outputTokens: number | null;
+  /**
+   * 이 응답 앞에 **실패한 웹 수집 시도**가 쓴 Firecrawl 크레딧(웹→API 폴백 시). 원가에 더한다.
+   */
+  priorAttemptCreditsUsed?: number;
+  /**
+   * 실제 청구 경로. `"gateway"` = Vercel AI Gateway(Letsur 폴백 포함). 미기재 = 기존 직접 경로.
+   */
+  provider?: "gateway";
+  /**
+   * provider 가 **응답에 직접 적어 준** 이번 호출 총원가(USD). 있으면 단가표 계산보다 우선한다.
+   * 현재 Perplexity Agent API(`usage.cost.total_cost`)만 채운다. 원가모델 v2 신설.
+   */
+  providerCostUsd?: number | null;
+  /**
+   * claude 웹검색을 원했지만(FINDABLE_CLAUDE_WEB_SEARCH=1) 폴백 경로에서 **검색 없이** 답했다.
+   * → 이 응답의 「출처 0」은 「AI 가 아무것도 안 봤다」가 아니라 **미수집**이다.
+   */
+  searchUnavailable?: boolean;
+  /**
+   * ChatGPT 답변을 **어디서** 받았나(2026-10-07).
+   *   web = chatgpt.com 화면(Firecrawl) · api = API · api_fallback = 웹 실패 후 API+웹검색.
+   *   미기재 = 기존 API 경로(플래그 도입 전과 동일).
+   */
+  source?: "web" | "api" | "api_fallback";
+  /**
+   * 이번 호출에서 provider 가 실행·과금한 웹검색 횟수. 원가모델 v2 신설.
+   *   · claude 웹검색 경로: `usage.server_tool_use.web_search_requests`
+   *   · perplexity Agent: `usage.tool_calls_details.search_web.invocation`
+   * ⚠️ `undefined` = 검색 도구를 **안 붙인** 호출(검색료 없음).
+   *    `null` = 검색 도구를 붙였는데 응답에 횟수가 **없었다**(= 미수집, 0원 아님).
+   */
+  webSearchRequests?: number | null;
 }
 
 export interface EngineResponse {
   brandMentioned: boolean;
-  /** Entity verification could not finish; never interpret as a confirmed absence. */
-  mentionQuality?:
-    | "confirmed"
-    | "different_entity"
-    | "unknown_brand"
-    | "absent"
-    | "unverified";
   citedSources: CitedSource[];
   durationMs: number;
   engineId: EngineId;
@@ -141,10 +187,42 @@ export interface EngineResponse {
    */
   mentionListSize: number | null;
   mentionPosition: number | null; // 1, 2, 3, ... 또는 null
+  /** Entity verification could not finish; never interpret as a confirmed absence. */
+  mentionQuality?:
+    | "confirmed"
+    | "different_entity"
+    | "unknown_brand"
+    | "absent"
+    | "unverified";
   rawResponse: string;
   sentiment: "positive" | "neutral" | "negative" | null;
+  /**
+   * ChatGPT 웹 섀도 수집 결과(`CHATGPT_WEB_SHADOW=true` · 2026-10-07). **chatgpt 행에만** 붙는다.
+   * 🔴 점수·집계·판정에 쓰지 않는다 — API 답과 웹 답의 차이를 재기 위한 저장 전용 값이다.
+   */
+  shadowChatgptWeb?: ChatgptWebShadow;
   shareOfVoice: number | null; // 0.0 ~ 1.0
   usage?: EngineUsage; // 원가계기(유닛이코노믹스). 없으면 미측정.
+}
+
+/** 섀도 웹 수집 1건(저장 전용). 원문은 길이를 제한해 저장한다. */
+export interface ChatgptWebShadow {
+  brandMentioned: boolean | null;
+  citations: CitedSource[];
+  /** 메인(API) 답과의 비교. 섀도가 실패했으면 null. */
+  comparison: {
+    /** 두 답의 출처 도메인 자카드 유사도(0~1). 둘 다 출처가 없으면 null. */
+    citationOverlap: number | null;
+    /** 메인(API) 언급 여부와 같은가. */
+    mentionAgreement: boolean;
+  } | null;
+  /** Firecrawl 이 이번 섀도에 쓴 크레딧(원가 산입용). 미과금이 확실하면 생략. */
+  creditsUsed?: number;
+  durationMs: number;
+  error: string | null;
+  /** `ok` · `failed` · `skipped_budget`(메인 배치가 먼저 끝나 중단) */
+  outcome: "ok" | "failed" | "skipped_budget";
+  text: string;
 }
 
 export type EngineAdapter = (query: EngineQuery) => Promise<EngineResponse>;

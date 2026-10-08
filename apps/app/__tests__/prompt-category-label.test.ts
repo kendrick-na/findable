@@ -41,8 +41,9 @@ const suggestSource = readFileSync(SUGGEST, "utf8");
 /** `enum PromptCategory { ... }` 본문. 스키마가 **단일 진실**이다. */
 const ENUM_BLOCK = /enum PromptCategory\s*\{([^}]*)\}/;
 /** 라벨맵 본문 — 여기 적힌 키가 enum 을 전부 덮어야 한다. */
+// 🔴 2026-10-06 — 라벨 값은 사전(`app.promptList.category*`)에서 온다. 키 목록은 그대로 여기서 본다.
 const LABEL_BLOCK =
-  /const CATEGORY_LABEL: Record<string, string> = \{([^}]*)\}/;
+  /const categoryLabels = \([^)]*\): Record<string, string> => \(\{([^}]*)\}\)/;
 /** 저장 경로가 질문별 유형을 쓰는가(N-42 이후의 진실). */
 const SAVE_USES_NORMALIZE = /category:\s*normalizeTopic\(/;
 /** LLM 이 유형을 못 줬을 때의 기본값 표 — 이 값도 화면이 알아야 한다. */

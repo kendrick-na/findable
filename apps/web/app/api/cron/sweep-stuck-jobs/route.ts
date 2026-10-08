@@ -5,7 +5,9 @@
 //       또는 queued 에 영구 고정된다. 이 cron 이 오래된 것을 failed 로 정리한다.
 //
 // 정리 대상(멱등, updateMany, 스키마 무변경):
-//   1) 빠른 모드: status IN (queued, processing) 이고 createdAt 이 STALE 초과 → status=failed
+//   1) 빠른 모드: `@repo/audit/stale-job` 의 `staleAuditJobsWhere` 단일 기준 → status=failed
+//      (processing = 실행 lease 만료 또는 lease 없는 6분 초과, queued = 30분 초과).
+//      러너·화면의 `isStaleAuditJob` 과 같은 기준이라 cron 만 먼저 죽이는 일이 없다.
 //   2) crew:    crewStatus = processing 이고 crewStartedAt 이 STALE 초과 → crewStatus=failed
 //
 // ⚠️ 배포 위치 = apps/web(findable, 이미 배포·env 세팅됨). apps/api 는 미배포라 web 에 둠.
@@ -16,15 +18,23 @@
 //   🔴 예전엔 `x-vercel-cron` 헤더 폴백이 있었고 그게 **외부에서 스푸핑 가능한 구멍**이었다.
 //      되살리지 말 것 → `packages/security/cron.ts` 주석 참고.
 
+import { continueOldestPendingAudit } from "@repo/audit/audit-continuation";
+import {
+  AUDIT_JOB_QUEUE_STALE_ERROR,
+  staleAuditJobsWhere,
+} from "@repo/audit/stale-job";
+import { sweepAuditTrackingReconciliation } from "@repo/audit/sweep-audit-tracking";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { captureOpsAlert } from "@repo/observability/ops-alert";
 import { denyIfNotCron } from "@repo/security/cron";
 import type { NextRequest } from "next/server";
 
-export const maxDuration = 30;
+// 2026-10-06: 시간창이 지난 이어가기 대기 1건을 잠정 마감한다(새 질문 없음 · 저장된 답의
+//   판정·집계·커밋). 판정 LLM 호출이 있을 수 있어 30초로는 모자라 300초로 올린다.
+export const maxDuration = 300;
 
-// 이 시간 초과한 진행/대기 잡은 죽은 것으로 보고 정리. crew route STALE_AFTER_MS(15분)와 동일.
+// crew 단계 전용 임계값. crew route STALE_AFTER_MS(15분)와 동일.
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export const GET = async (request: NextRequest) => {
@@ -35,19 +45,31 @@ export const GET = async (request: NextRequest) => {
 
   const staleBefore = new Date(Date.now() - STALE_AFTER_MS);
 
-  // 1) 빠른 모드 stuck
-  const fast = await database.auditJob.updateMany({
-    where: {
-      status: { in: ["queued", "processing"] },
-      createdAt: { lt: staleBefore },
-    },
+  // 1) 빠른 모드 stuck — 기준은 stale-job 단일 진실. 문구 "stuck-swept" 는
+  //    measure-one 의 재개 판별(RESUMABLE_TIMEOUT_RE)이 읽으므로 바꾸지 말 것.
+  const now = new Date();
+  const fastProcessing = await database.auditJob.updateMany({
+    where: staleAuditJobsWhere("processing", now),
     data: {
       status: "failed",
       errorMessage:
         "stuck-swept: 백그라운드 처리가 시간 내 완료되지 않았습니다.",
-      completedAt: new Date(),
+      completedAt: now,
+      leaseToken: null,
+      leaseUntil: null,
     },
   });
+  const fastQueued = await database.auditJob.updateMany({
+    where: staleAuditJobsWhere("queued", now),
+    data: {
+      status: "failed",
+      errorMessage: AUDIT_JOB_QUEUE_STALE_ERROR,
+      completedAt: now,
+      leaseToken: null,
+      leaseUntil: null,
+    },
+  });
+  const fast = { count: fastProcessing.count + fastQueued.count };
 
   // 2) crew stuck
   const crew = await database.auditJob.updateMany({
@@ -61,8 +83,31 @@ export const GET = async (request: NextRequest) => {
     },
   });
 
+  // 3) 🔴 시간창이 지난 이어가기 대기(queued + leaseUntil 경과)는 **실패가 아니라 잠정 마감**.
+  //   위 1)의 queued 정리는 leaseUntil 이 있는 행을 건드리지 않는다(stale-job).
+  //   claim 을 거치므로 같은 순간 늦게 온 이어가기·앱 cron 과 두 번 마감되지 않는다.
+  const continuationStartedAtMs = Date.now();
+  let finalizedContinuation: string | null = null;
+  try {
+    const outcome = await continueOldestPendingAudit({
+      invocationStartedAtMs: continuationStartedAtMs,
+      expiredOnly: true,
+    });
+    finalizedContinuation = outcome?.ran ? outcome.jobId : null;
+  } catch (error) {
+    log.error("cron.sweep-stuck-jobs.continuation_finalize_failed", {
+      error: String(error),
+    });
+  }
+
   const swept = { crew: crew.count, fast: fast.count };
-  if (swept.fast > 0 || swept.crew > 0) {
+  const tracking = await sweepAuditTrackingReconciliation(now);
+  if (
+    swept.fast > 0 ||
+    swept.crew > 0 ||
+    tracking.completed > 0 ||
+    tracking.failed > 0
+  ) {
     log.warn("cron.sweep-stuck-jobs.swept", swept);
 
     // 🔴 BL-Day17-02(2026-08-12 세션N-24) — 예전엔 위 `log.warn` 하나로 끝났고
@@ -79,8 +124,18 @@ export const GET = async (request: NextRequest) => {
     //    `packages/audit/crew-runner.ts:28`)로 스스로 정리하므로, 이 스윕이 줍는 건
     //    **1차 가드가 아예 못 돌았을 때(함수 급사)뿐**이다.
     //    즉 `count > 0` 자체가 이미 예외 상황이라 별도 경계선이 필요 없다.
-    captureOpsAlert("cron.sweep-stuck-jobs: stuck 작업을 정리했습니다", swept);
+    captureOpsAlert("cron.sweep-stuck-jobs: stuck 작업을 정리했습니다", {
+      ...swept,
+      trackingCompleted: tracking.completed,
+      trackingSkipped: tracking.skipped,
+      trackingFailed: tracking.failed,
+      trackingBounded: tracking.bounded,
+    });
   }
 
-  return Response.json({ ok: true, swept });
+  return Response.json({
+    ok: true,
+    swept: { ...swept, tracking },
+    finalizedContinuation,
+  });
 };

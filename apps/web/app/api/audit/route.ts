@@ -16,7 +16,9 @@
 // maxDuration: vercel.json에서 300s (Audit 백그라운드 처리 마진).
 
 import { maskEmail } from "@repo/audit/mask";
+import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { runAuditJob } from "@repo/audit/runner";
+import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { resolveTier, type UsageTier } from "@repo/audit/usage-tier";
 import { database, Prisma } from "@repo/database";
 import { parseError } from "@repo/observability/error";
@@ -25,6 +27,14 @@ import { checkBotId } from "botid/server";
 import type { NextRequest } from "next/server";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+// 상대 경로인 이유: `apps/app` 테스트가 이 파일을 직접 import 하면 `@/` 가 app 으로 풀린다.
+import { freeAuditPublicEnabled } from "../../../lib/free-audit";
+import {
+  DEFAULT_DAILY_FREE_BUDGET_KRW,
+  dailyFreeJobCap,
+  FREE_AUDIT_AVG_COST_KRW,
+} from "../../../lib/free-audit-budget";
+import { resolveIsOwner } from "./_lib/owner";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -89,7 +99,6 @@ function toIndustryEnum(value?: string): IndustryEnum | undefined {
 
 // 사용량 티어 (원가전략 2026-07-27 — 파트너 진입 대응). 판정은 공용 usage-tier로 이관:
 //   - admin: 무제한 / 승인 파트너: 이메일 기준 하루 1회 / 일반 리드: 이메일+도메인 24h.
-const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ──────────────────────────────────────────────────────────────────
@@ -112,7 +121,12 @@ const DOMAIN_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — Observatory 준용
 // (차단 429 가 아니라 "기존 결과 보여주기"라서 게이트 결과 타입에 넣지 않았다).
 type GateResult =
   | { blocked: false }
-  | { blocked: true; existingJobId: string; isPartner: boolean };
+  | {
+      blocked: true;
+      existingJobId: string;
+      isPartner: boolean;
+      retryStop?: string;
+    };
 
 // ──────────────────────────────────────────────────────────────────
 // 전역 일일 상한 (리서치 §7-2) — 어뷰저가 로테이션으로 우회할 수 없는 유일한 통제.
@@ -125,15 +139,13 @@ type GateResult =
 //    → 정확한 "원화 합계" 상한은 스키마 변경이 필요하므로, 지금은 **건수 × 실측 평균단가**로
 //      환산해 상한을 건다. 마이그레이션 0으로 오늘 방어를 켜는 게 우선.
 //    → 정밀화(costKrw 컬럼 추가 후 SUM)는 투두_마스터에 남긴다.
-const FREE_AUDIT_AVG_COST_KRW = 250; // 실측 150~300원의 보수적 중앙값(cost.ts 기준)
+// 🔴 평균단가는 원가모델 v2 기준으로 재보정했다(2026-10-07 · 250→1,000원). 산식은
+//   `lib/free-audit-budget.ts` 주석 참조.
 // 무료 진단 일일 예산. 초과 시 신규 무료 측정만 정지(유료·admin·캐시 히트는 계속 동작).
 const DAILY_FREE_BUDGET_KRW = Number(
-  process.env.FINDABLE_DAILY_FREE_BUDGET_KRW ?? 50_000
+  process.env.FINDABLE_DAILY_FREE_BUDGET_KRW ?? DEFAULT_DAILY_FREE_BUDGET_KRW
 );
-const DAILY_FREE_JOB_CAP = Math.max(
-  1,
-  Math.floor(DAILY_FREE_BUDGET_KRW / FREE_AUDIT_AVG_COST_KRW)
-);
+const DAILY_FREE_JOB_CAP = dailyFreeJobCap(DAILY_FREE_BUDGET_KRW);
 
 /**
  * 오늘 실행된 무료 진단 건수가 예산 상한을 넘었는지.
@@ -247,6 +259,12 @@ async function findCachedByDomain(
       // F8 수정 — 언어를 캐시 키에 포함(누락 시 다른 언어 결과가 배급된다).
       language: { in: cacheableLanguages(language) },
       status: "completed",
+      // Workspace results are private. They must never be selected as the
+      // anonymous/free-domain cache hit.
+      organizationId: null,
+      // Organization deletion uses SetNull on the FK, but the legacy
+      // `org:{orgId}` email marker remains. Keep those rows private too.
+      NOT: { email: { startsWith: "org:" } },
       // result 가 실제로 있는 것만(빈 완료 job 을 캐시로 주면 빈 화면이 된다).
       // ⚠️ Prisma Json 필터는 plain null 을 받지 않는다 → DbNull 센티널 사용.
       result: { not: Prisma.DbNull },
@@ -271,6 +289,25 @@ async function checkUsageGate(
     return { blocked: false };
   }
   const isPartner = tier === "partner";
+  const recentFailures = await database.auditJob.findMany({
+    where: {
+      email,
+      ...(isPartner ? {} : { domain }),
+      createdAt: { gte: new Date(Date.now() - DAY_MS) },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 4,
+    select: { id: true, status: true, checkpoint: true },
+  });
+  const retryStop = newAuditAttemptBlockReason(recentFailures);
+  if (retryStop) {
+    return {
+      blocked: true,
+      existingJobId: recentFailures[0].id,
+      isPartner,
+      retryStop,
+    };
+  }
   const recent = await database.auditJob.findFirst({
     where: {
       email,
@@ -283,26 +320,13 @@ async function checkUsageGate(
   if (!recent || recent.status === "failed") {
     return { blocked: false };
   }
-  const isStaleProcessing =
-    (recent.status === "processing" || recent.status === "queued") &&
-    Date.now() - recent.createdAt.getTime() > STALE_THRESHOLD_MS;
-  if (isStaleProcessing) {
-    // 좀비 정리 — 새 audit 생성 흐름으로 통과.
-    await database.auditJob
-      .update({
-        where: { id: recent.id },
-        data: {
-          status: "failed",
-          errorMessage: "측정이 5분 넘게 진행되어 자동 종료됨 (좀비 정리)",
-          completedAt: new Date(),
-        },
-      })
-      .catch((err) => {
-        log.warn("audit.stale.fail_failed", {
-          jobId: recent.id,
-          error: parseError(err),
-        });
-      });
+  if (isStaleAuditJob(recent)) {
+    // The shared lease predicate fences a resumed worker; never overwrite a
+    // newer completion with an unconditional update.
+    const status = await reconcileStaleAuditJob(recent);
+    if (status !== "failed") {
+      return { blocked: true, existingJobId: recent.id, isPartner };
+    }
     log.info("audit.stale.recovered", {
       email: maskEmail(email),
       staleJobId: recent.id,
@@ -312,7 +336,51 @@ async function checkUsageGate(
   return { blocked: true, existingJobId: recent.id, isPartner };
 }
 
+function usageGateError(gate: Extract<GateResult, { blocked: true }>): string {
+  let gateError = "이미 24시간 내 이 도메인의 무료 진단을 받으셨습니다.";
+  if (gate.retryStop) {
+    gateError = gate.isPartner
+      ? "반복 실패로 추가 과금을 멈췄습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요."
+      : "진단이 반복 실패해 재시도를 멈췄습니다. 내일 다시 시도하거나 운영팀에 문의해 주세요.";
+  } else if (gate.isPartner) {
+    gateError =
+      "파트너 계정은 하루 1회 측정할 수 있습니다. 내일 다시 측정하거나 심층 분석을 이용해 주세요.";
+  }
+  return gateError;
+}
+
+function logTierRouting(tier: UsageTier, email: string): void {
+  if (tier === "admin") {
+    log.info("audit.request.admin_bypass", {
+      email: maskEmail(email),
+    });
+  } else if (tier === "partner") {
+    log.info("audit.request.partner_daily", {
+      email: maskEmail(email),
+    });
+  }
+}
+
+/** Stored and queried with the same normalized key (IPv6 /64). */
+function requestIpKey(request: NextRequest): string | null {
+  const rawIp =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    null;
+  return rawIp ? normalizeIpKey(rawIp) : null;
+}
+
 export async function POST(request: NextRequest) {
+  // 👤 2026-10-07 CEO 결정 — 공개 무료 진단 숨김(env `FREE_AUDIT_PUBLIC_ENABLED`, 기본 꺼짐).
+  //   꺼져 있으면 BotID·파싱·DB 조회를 포함해 **아무 일도 하지 않고** 404 를 준다
+  //   (원가 0 · 라우트 존재도 드러내지 않는다). 코드는 재활성화 대비로 그대로 둔다.
+  //   🔬 호출처 전수(2026-10-07): 이 POST 를 부르는 건 www `/audit` 폼 하나뿐이다.
+  //     로그인 앱 측정(start-tracking)·admin 단건 측정(`/api/admin/measure-one`)·cron 은
+  //     `runAuditJob` 을 직접 호출하므로 이 게이트의 영향을 받지 않는다.
+  if (!freeAuditPublicEnabled()) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  const invocationStartedAtMs = Date.now();
   // ⓪ BotID — 방어 4층의 첫 관문. 파싱·DB 조회보다 **먼저** 둔다(봇에 원가 0).
   //   Basic 은 전 플랜 무료, Deep Analysis 는 $1/1000(건당 원가의 0.5~0.8%).
   //   ⚠️ 로컬 dev 는 항상 isBot:false → 라이브 검증은 브라우저 폼 제출로만 가능.
@@ -349,23 +417,11 @@ export async function POST(request: NextRequest) {
     // 무료 측정은 본체 7엔진 × 4프롬프트 = 28 호출(실측 150~300원). CrewAI 심층분석은
     // 버튼(승인/유료)이라, 아래 게이트들이 파트너 동시 사용 시 429(측정 끊김)를 막는다.
     const tier = resolveTier(payload.email);
-    if (tier === "admin") {
-      log.info("audit.request.admin_bypass", {
-        email: maskEmail(payload.email),
-      });
-    } else if (tier === "partner") {
-      log.info("audit.request.partner_daily", {
-        email: maskEmail(payload.email),
-      });
-    }
+    logTierRouting(tier, payload.email);
 
     // IP 는 게이트 판정과 적재에 모두 쓰이므로 여기서 한 번만 구한다.
     // ⚠️ 저장값도 **정규화 키**로 통일해야 쿼터 집계가 맞는다(IPv6 /64).
-    const rawIp =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      request.headers.get("x-real-ip") ??
-      null;
-    const ipKey = rawIp ? normalizeIpKey(rawIp) : null;
+    const ipKey = requestIpKey(request);
 
     // ① 도메인 캐시 — 이메일 우회를 무력화하는 원가 방어 1순위(리서치 §5a).
     //    admin 은 강제 재측정을 위해 우회. 캐시 히트는 예산 검사보다 먼저 처리해야
@@ -449,16 +505,24 @@ export async function POST(request: NextRequest) {
 
     const gate = await checkUsageGate(payload.email, payload.domain, tier);
     if (gate.blocked) {
+      const gateError = usageGateError(gate);
+      // 🔒 P2-3(2026-10-05): 이메일+도메인만 알면 남의 무료 결과 링크를 받던 구멍.
+      //   기존 결과 링크는 그 진단의 소유자(로그인 세션 기준)에게만 돌려준다.
+      //   비소유자는 안내 문구만 받는다(폼은 링크 없이 오류 문구를 보여 준다).
+      const existing = await database.auditJob.findUnique({
+        where: { id: gate.existingJobId },
+        select: { email: true, organizationId: true },
+      });
+      const isOwner = existing ? await resolveIsOwner(existing) : false;
       log.info("audit.request.rate_limited", {
         email: maskEmail(payload.email),
         existingJobId: gate.existingJobId,
+        linkReturned: isOwner,
       });
       return NextResponse.json(
         {
-          error: gate.isPartner
-            ? "파트너 계정은 하루 1회 측정할 수 있습니다. 내일 다시 측정하거나 심층 분석을 이용해 주세요."
-            : "이미 24시간 내 이 도메인의 무료 진단을 받으셨습니다.",
-          existingJobId: gate.existingJobId,
+          error: gateError,
+          ...(isOwner ? { existingJobId: gate.existingJobId } : {}),
         },
         { status: 429 }
       );
@@ -507,6 +571,7 @@ export async function POST(request: NextRequest) {
     after(async () => {
       try {
         await runAuditJob({
+          invocationStartedAtMs,
           jobId: job.id,
           domain: payload.domain,
           language: payload.language,

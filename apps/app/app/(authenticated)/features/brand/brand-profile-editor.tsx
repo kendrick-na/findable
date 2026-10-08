@@ -25,10 +25,14 @@ import { useState } from "react";
 
 export interface BrandProfileEditorProps {
   brandId: string;
+  /** 고객이 넣은 사업자등록번호(저장값). */
+  businessNumber: string | null;
   /** 현재 저장값. 서버가 읽어 내려준다. */
   competitors: string[];
   entityVariants: string[];
   industry: string | null;
+  /** 고객이 넣은 회사 정식 상호(저장값). */
+  legalName: string | null;
   marketScope: string | null;
   name: string;
   onSave: (input: {
@@ -38,7 +42,11 @@ export interface BrandProfileEditorProps {
     marketScope: string;
     competitors: string[];
     entityVariants: string[];
+    legalName: string;
+    businessNumber: string;
   }) => Promise<{ ok: true } | { error: string }>;
+  /** 최근 측정에서 홈페이지 푸터로 찾은 사업자등록번호 — 저장값이 없을 때 제안만 한다. */
+  suggestedBusinessNumber: string | null;
   /** 문구 사전 — 서버가 읽어 내려준다(📕`CLAUDE.md §2` 하드코딩 금지). */
   t: Record<string, string>;
 }
@@ -87,6 +95,9 @@ export const BrandProfileEditor = ({
   marketScope: initialMarketScope,
   competitors: initialCompetitors,
   entityVariants: initialVariants,
+  legalName: initialLegalName,
+  businessNumber: initialBusinessNumber,
+  suggestedBusinessNumber,
   onSave,
   t,
 }: BrandProfileEditorProps) => {
@@ -95,7 +106,13 @@ export const BrandProfileEditor = ({
   const [name, setName] = useState(initialName);
   const [industry, setIndustry] = useState(initialIndustry ?? "");
   const [marketScope, setMarketScope] = useState(initialMarketScope ?? "");
+  const [legalName, setLegalName] = useState(initialLegalName ?? "");
+  const [businessNumber, setBusinessNumber] = useState(
+    initialBusinessNumber ?? ""
+  );
   const [saved, setSaved] = useState({
+    legalName: initialLegalName ?? "",
+    businessNumber: initialBusinessNumber ?? "",
     name: initialName,
     industry: initialIndustry ?? "",
     marketScope: initialMarketScope ?? "",
@@ -111,6 +128,8 @@ export const BrandProfileEditor = ({
     name.trim() !== saved.name ||
     industry !== saved.industry ||
     marketScope !== saved.marketScope ||
+    legalName.trim() !== saved.legalName ||
+    businessNumber.trim() !== saved.businessNumber ||
     JSON.stringify(variants) !== JSON.stringify(saved.variants) ||
     JSON.stringify(competitors) !== JSON.stringify(saved.competitors);
 
@@ -136,6 +155,8 @@ export const BrandProfileEditor = ({
       marketScope,
       competitors,
       entityVariants: variants,
+      legalName: legalName.trim(),
+      businessNumber: businessNumber.trim(),
     });
     setSaving(false);
     if ("error" in result) {
@@ -143,6 +164,8 @@ export const BrandProfileEditor = ({
       return;
     }
     setSaved({
+      legalName: legalName.trim(),
+      businessNumber: businessNumber.trim(),
       name: name.trim(),
       industry,
       marketScope,
@@ -264,6 +287,70 @@ export const BrandProfileEditor = ({
             onRemove={(v) => setVariants((p) => p.filter((x) => x !== v))}
             removeLabel={(i) => (t.removeItem ?? "").replace("{item}", i)}
           />
+        </div>
+
+        {/* 🔴 2026-10-06 운영 실측: 홈페이지가 슬로건뿐인 브랜드(토스)는 판정 근거가 없어
+            정답 답변까지 점수에서 빠졌다. 고객이 상호·사업자번호를 알려 주면 근거가 된다.
+            공개하지 않는 값이라 안내 문구로 그 사실을 먼저 말한다. */}
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+              {t.editorIdentityTitle}
+            </span>
+            <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+              {t.editorIdentityHint}
+            </p>
+          </div>
+          <label
+            className="flex flex-col gap-2 text-sm"
+            htmlFor={`profile-legal-name-${brandId}`}
+          >
+            <span className="text-[color:var(--findable-ink,#f7f8f8)]">
+              {t.editorLegalNameLabel}
+            </span>
+            <Input
+              id={`profile-legal-name-${brandId}`}
+              maxLength={60}
+              onChange={(e) => setLegalName(e.target.value)}
+              placeholder={t.editorLegalNamePlaceholder}
+              value={legalName}
+            />
+          </label>
+          <label
+            className="flex flex-col gap-2 text-sm"
+            htmlFor={`profile-business-number-${brandId}`}
+          >
+            <span className="text-[color:var(--findable-ink,#f7f8f8)]">
+              {t.editorBusinessNumberLabel}
+            </span>
+            <Input
+              id={`profile-business-number-${brandId}`}
+              inputMode="numeric"
+              maxLength={12}
+              onChange={(e) => setBusinessNumber(e.target.value)}
+              placeholder={t.editorBusinessNumberPlaceholder}
+              value={businessNumber}
+            />
+          </label>
+          {suggestedBusinessNumber &&
+            businessNumber.trim() === "" &&
+            saved.businessNumber === "" && (
+              <div className="flex flex-wrap items-center gap-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+                <span>
+                  {(t.editorBusinessNumberSuggested ?? "").replace(
+                    "{number}",
+                    suggestedBusinessNumber
+                  )}
+                </span>
+                <button
+                  className="rounded-md border border-[color:var(--findable-hairline,#23252a)] px-2 py-1 text-[color:var(--findable-ink,#f7f8f8)]"
+                  onClick={() => setBusinessNumber(suggestedBusinessNumber)}
+                  type="button"
+                >
+                  {t.editorUseSuggested}
+                </button>
+              </div>
+            )}
         </div>
 
         <div className="flex flex-col gap-2">

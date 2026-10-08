@@ -17,13 +17,125 @@
 //   보강4(전 렌즈): DB 실재 engineId 집합으로 필터(코드 상수 아님) → 고아 engineId 삽입 차단.
 //   D5(확정): 실패/stub 엔진행은 Tracking에 넣지 않음(진짜 0언급과 인프라 실패 혼동 방지).
 
-import { costOf, type EngineResponse } from "@repo/ai/lib/engines";
+import {
+  costOf,
+  type EngineCost,
+  type EngineResponse,
+} from "@repo/ai/lib/engines";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { isTrackableResponse } from "./tracking-eligibility";
 
+// Postgres stores text as UTF-8: a lone UTF-16 surrogate (e.g. an emoji cut in
+// half by a provider) comes back as U+FFFD, and NUL is rejected outright. Store
+// the value the database will actually keep, so a row always reads back equal
+// to what was written (2026-10-05: the replay guard treated that drift as a
+// payload conflict and rolled back the whole Tracking write).
+const LONE_SURROGATE_RE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+export function toStorableText(value: string): string {
+  return value.replace(LONE_SURROGATE_RE, "\uFFFD").replaceAll("\u0000", "");
+}
+
+const REPLAY_COMPARED_FIELDS = [
+  "rawResponse",
+  "engineId",
+  "promptId",
+  "shareOfVoice",
+  "inputTokens",
+  "outputTokens",
+  "costKrw",
+  "costBasis",
+  "brandId",
+] as const;
+
+function sameStoredValue(a: unknown, b: unknown): boolean {
+  const left = a ?? null;
+  const right = b ?? null;
+  return left === right || (Number.isNaN(left) && Number.isNaN(right));
+}
+
+/** Field names (never values) that differ between a replay and the first write. */
+export function replayPayloadMismatch(
+  written: Record<(typeof REPLAY_COMPARED_FIELDS)[number], unknown> & {
+    trackedAt: Date;
+  },
+  stored: Record<(typeof REPLAY_COMPARED_FIELDS)[number], unknown> & {
+    trackedAt: Date;
+  }
+): string[] {
+  const fields: string[] = REPLAY_COMPARED_FIELDS.filter(
+    (field) => !sameStoredValue(written[field], stored[field])
+  );
+  if (written.trackedAt.getTime() !== stored.trackedAt.getTime()) {
+    fields.push("trackedAt");
+  }
+  return fields;
+}
+
+type ReplayComparable = Record<
+  (typeof REPLAY_COMPARED_FIELDS)[number],
+  unknown
+> & {
+  trackedAt: Date;
+};
+
+async function findExistingRowKeys(
+  tx: {
+    tracking: {
+      findMany(args: {
+        where: { trackingRowKey: { in: string[] } };
+        select: { trackingRowKey: true };
+      }): Promise<{ trackingRowKey: string | null }[]>;
+    };
+  },
+  candidateKeys: (string | null)[]
+): Promise<Set<string | null>> {
+  const keys = candidateKeys.filter(
+    (key): key is string => typeof key === "string"
+  );
+  if (keys.length === 0) {
+    return new Set();
+  }
+  const rows = await tx.tracking.findMany({
+    where: { trackingRowKey: { in: keys } },
+    select: { trackingRowKey: true },
+  });
+  return new Set(rows.map((row) => row.trackingRowKey));
+}
+
+function assertReplaysMatchFirstWrite(
+  stored: (ReplayComparable & {
+    engineId: string;
+    trackingRowKey: string | null;
+  })[],
+  written: Map<string, ReplayComparable>,
+  preexistingKeys: Set<string | null>
+): void {
+  for (const row of stored) {
+    if (!preexistingKeys.has(row.trackingRowKey)) {
+      continue;
+    }
+    const first = written.get(row.trackingRowKey as string);
+    const mismatched = first ? replayPayloadMismatch(first, row) : [];
+    if (mismatched.length > 0) {
+      log.warn("audit.tracking.idempotency_conflict", {
+        trackingRowKey: row.trackingRowKey,
+        engineId: row.engineId,
+        fields: mismatched,
+      });
+      throw new Error(
+        `Tracking idempotency payload conflict for ${row.trackingRowKey}`
+      );
+    }
+  }
+}
+
 /** runner가 flat 이전에 각 응답에 태깅해 넘겨주는 항목. promptText로 promptId를 잇는다. */
 export interface TaggedEngineResponse extends EngineResponse {
+  /** Stable prompt ordinal within the audit axis. */
+  promptIndex?: number;
   /**
    * 브랜드 이름 질문인지, 이름 없는 질문(discovery)인지(2026-09-29).
    * 러너는 discovery 행을 이 함수에 넘기지 않는다(시계열 분모 보호).
@@ -33,9 +145,49 @@ export interface TaggedEngineResponse extends EngineResponse {
   promptLang: "ko" | "en";
   /** 이 응답을 만든 프롬프트 원문. flat() 후 소실되므로 runner가 태깅해 보존. */
   promptText: string;
+  /**
+   * 재생(reconcile) 전용 — 측정 당시 `result.cost.perEngine` 에 굳은 원가(2026-10-07).
+   *   `undefined` = 실시간 기록(지금 `costOf` 로 계산) · 객체 = 그대로 저장(재가격 금지) ·
+   *   `null` = 저장 원가 없음 → costKrw/costBasis 를 null(「미측정」)로 남긴다.
+   */
+  storedCost?: { basis: EngineCost["basis"]; krw: number } | null;
+}
+
+/** Tracking 행에 쓸 원가. 재생 행은 저장 원가를 그대로 쓴다(현재 단가로 소급하지 않는다). */
+function trackingCost(r: TaggedEngineResponse): {
+  costBasis: string | null;
+  costKrw: number | null;
+} {
+  if (r.storedCost === null) {
+    return { costKrw: null, costBasis: null };
+  }
+  const cost = r.storedCost ?? costOf(r);
+  return { costKrw: cost.krw, costBasis: cost.basis };
+}
+
+/** The runner's core path uses the same stable prompt ordinal as the key writer. */
+export function tagCoreResponses(
+  responsesByPrompt: EngineResponse[][],
+  prompts: Array<{
+    text: string;
+    lang: "ko" | "en";
+    kind?: "brand" | "discovery";
+  }>
+): TaggedEngineResponse[] {
+  return responsesByPrompt.flatMap((responses, promptIndex) =>
+    responses.map((response) => ({
+      ...response,
+      promptIndex,
+      promptText: prompts[promptIndex]?.text ?? "",
+      promptLang: prompts[promptIndex]?.lang ?? "ko",
+      promptKind: prompts[promptIndex]?.kind ?? "brand",
+    }))
+  );
 }
 
 export interface PersistAuditTrackingInput {
+  /** Stable AuditJob identity. Required for exactly-once dual-write. */
+  auditJobId?: string;
   brandId: string;
   /** AuditJob 완료 시각. Tracking.trackedAt에 동일 적용(시계열 정합). */
   completedAt: Date;
@@ -55,7 +207,21 @@ export interface PersistAuditTrackingInput {
   promptIsAutoGenerated?: boolean;
   /** flat 이전에 promptText/promptLang로 태깅된 전체 엔진 응답. */
   tagged: TaggedEngineResponse[];
+  /** Distinguishes core prompt rows from the separate briefing axis. */
+  trackingAxis?: "core" | "briefing";
+  /** Reconciler lease token; absent only for the first pending writer. */
+  trackingClaimToken?: string;
 }
+
+/**
+ * - "completed": rows written (or idempotently replayed).
+ * - "not_applicable": nothing trackable to write; terminal, never retried.
+ * - "failed": a real write/dependency problem; the reconciler may retry.
+ */
+export type PersistAuditTrackingStatus =
+  | "completed"
+  | "failed"
+  | "not_applicable";
 
 /**
  * audit 엔진 응답을 Tracking으로 적재. best-effort: 실패해도 throw하지 않는다
@@ -63,7 +229,7 @@ export interface PersistAuditTrackingInput {
  */
 export async function persistAuditTracking(
   input: PersistAuditTrackingInput
-): Promise<void> {
+): Promise<PersistAuditTrackingStatus> {
   const {
     organizationId,
     brandId,
@@ -71,6 +237,9 @@ export async function persistAuditTracking(
     completedAt,
     // 기본 true = 기존 호출부(runner.ts) 동작 완전 보존.
     promptIsAutoGenerated = true,
+    auditJobId,
+    trackingClaimToken,
+    trackingAxis = "core",
   } = input;
 
   try {
@@ -81,24 +250,49 @@ export async function persistAuditTracking(
     });
     if (!org) {
       log.error("audit.tracking.org_missing", { organizationId, brandId });
-      return;
+      return "failed";
     }
 
     // 보강4: DB에 실재하는 Engine id 집합. Tracking.engineId는 Engine FK(Restrict)라
-    //   seed 안 된 engineId를 넣으면 위반 → 여기 없는 id는 skip.
+    //   seed가 없는 성공 응답은 부분 저장하지 않고 전체 write를 재시도한다.
     const engines = await database.engine.findMany({ select: { id: true } });
     const validEngineIds = new Set(engines.map((e) => e.id));
 
-    // D5: 성공 응답만 남긴다. stub(env 미설정)·errorMessage(호출 실패)·미실재 engineId 제외.
-    //   또 rawResponse가 비어 있으면(빈 성공) 의미 없으니 제외.
-    const usable = tagged.filter((r) => isTrackableResponse(r, validEngineIds));
+    // A missing Engine seed is not permission to mark a subset complete.
+    // First establish the full eligible set from the captured responses,
+    // then require every one of those engines to exist before any write.
+    const snapshotEngineIds = new Set(tagged.map((row) => row.engineId));
+    const usable = tagged.filter((row) =>
+      isTrackableResponse(row, snapshotEngineIds)
+    );
     if (usable.length === 0) {
       log.warn("audit.tracking.no_usable_rows", {
         organizationId,
         brandId,
         totalTagged: tagged.length,
       });
-      return;
+      // Nothing to write is not a write error. An immutable snapshot with no
+      // trackable answer (all stub/error/unverified/blank) can never produce
+      // rows on retry, so report the same terminal non-write the reconciler
+      // uses (`classifyTrackingReplay` → "not_applicable"). Dashboards and
+      // the sweep must not read this as a failure or keep retrying it.
+      return "not_applicable";
+    }
+    if (usable.some((row) => !validEngineIds.has(row.engineId))) {
+      log.warn("audit.tracking.engine_seed_missing", {
+        auditJobId,
+        trackingAxis,
+      });
+      return "failed";
+    }
+    // The bounded SQL proof in stale-claim retirement accepts at most 100 keys.
+    // Never commit a manifest that the recovery path cannot verify.
+    if (auditJobId && usable.length > 100) {
+      log.warn("audit.tracking.manifest_too_large", {
+        auditJobId,
+        trackingAxis,
+      });
+      return "failed";
     }
 
     // 적재 대상 프롬프트(중복 제거: 같은 text가 여러 엔진에 걸쳐 반복됨).
@@ -141,13 +335,17 @@ export async function persistAuditTracking(
         //   토큰 수를 안 남기면 나중에 되돌아와 계산할 방법이 없다 —
         //   단가가 바뀌어도 `inputTokens`·`outputTokens` 만 있으면 재계산은 가능하다.
         //   그래서 **산출값(costKrw)과 원재료(토큰)를 같이** 저장한다.
-        const cost = costOf(r);
+        //   🔴 재생(reconcile) 행은 측정 당시 저장 원가를 그대로 쓴다(재가격 금지 · 2026-10-07).
+        const cost = trackingCost(r);
         return {
           brandId,
           promptId: textToPromptId.get(r.promptText) as string,
           engineId: r.engineId,
           // D6[확인필요]: 지금은 full 저장(AuditJob excerpt는 1500자 절단). 용량 실측 후 절단 검토.
-          rawResponse: r.rawResponse,
+          rawResponse:
+            typeof r.rawResponse === "string"
+              ? toStorableText(r.rawResponse)
+              : r.rawResponse,
           brandMentioned: r.brandMentioned,
           mentionPosition: r.mentionPosition,
           // 순위의 분모(세션N-10). 신규 측정부터 채워진다(기존 행은 null).
@@ -161,11 +359,101 @@ export async function persistAuditTracking(
           //   집계에서 null 을 0원으로 세면 "공짜로 돌고 있다"는 착각을 만든다.
           inputTokens: r.usage?.inputTokens ?? null,
           outputTokens: r.usage?.outputTokens ?? null,
-          costKrw: cost.krw,
-          costBasis: cost.basis,
+          costKrw: cost.costKrw,
+          costBasis: cost.costBasis,
+          trackingRowKey:
+            auditJobId && r.promptIndex !== undefined
+              ? `${auditJobId}|${trackingAxis}|${r.promptIndex}|${r.engineId}`
+              : null,
         };
       });
-      await tx.tracking.createMany({ data: rows });
+      // Only keys that already existed are replays; rows inserted by this
+      // createMany are compared against themselves and can never conflict.
+      const preexistingKeys = await findExistingRowKeys(
+        tx,
+        rows.map((row) => row.trackingRowKey)
+      );
+      await tx.tracking.createMany({ data: rows, skipDuplicates: true });
+
+      // A duplicate key is an idempotent replay only if its immutable payload
+      // agrees with the first writer. Never overwrite first-write evidence;
+      // surface a conflict for reconciliation instead.
+      const keyedRows = rows.filter(
+        (row): row is typeof row & { trackingRowKey: string } =>
+          typeof row.trackingRowKey === "string"
+      );
+      if (
+        auditJobId &&
+        (keyedRows.length !== rows.length ||
+          new Set(keyedRows.map((row) => row.trackingRowKey)).size !==
+            rows.length)
+      ) {
+        throw new Error("Tracking manifest requires distinct row keys");
+      }
+      if (keyedRows.length > 0) {
+        const existing = await tx.tracking.findMany({
+          where: {
+            trackingRowKey: { in: keyedRows.map((row) => row.trackingRowKey) },
+          },
+          select: {
+            trackingRowKey: true,
+            rawResponse: true,
+            engineId: true,
+            promptId: true,
+            shareOfVoice: true,
+            inputTokens: true,
+            outputTokens: true,
+            costKrw: true,
+            costBasis: true,
+            brandId: true,
+            trackedAt: true,
+          },
+        });
+        if (existing.length !== keyedRows.length) {
+          throw new Error("Tracking row-key set is incomplete after write");
+        }
+        const expected = new Map(
+          keyedRows.map((row) => [row.trackingRowKey, row])
+        );
+        assertReplaysMatchFirstWrite(existing, expected, preexistingKeys);
+      }
+      if (auditJobId) {
+        const stageKey =
+          trackingAxis === "core" ? "tracking" : "briefingTracking";
+        const manifestKey = `${stageKey}Manifest`;
+        const tokenKey = `${stageKey}ReconcileToken`;
+        const manifest = {
+          v: 1,
+          brandId,
+          trackedAt: completedAt.toISOString(),
+          keys: keyedRows.map((row) => row.trackingRowKey).sort(),
+        };
+        const recorded = await tx.$executeRawUnsafe(
+          `UPDATE "AuditJob"
+           SET "postprocessing" = jsonb_set(
+             COALESCE("postprocessing", '{}'::jsonb),
+             ARRAY[$2::text], $3::jsonb, true)
+           WHERE "id" = $1 AND "status" = 'completed'
+             AND ("postprocessing"->>$2 IS NULL OR "postprocessing"->$2 = $3::jsonb)
+             AND (
+               ($5::text IS NULL AND "postprocessing"->>$4 = 'pending')
+               OR ($5::text IS NOT NULL
+                   AND "postprocessing"->>$4 = 'reconciling'
+                   AND "postprocessing"->>$6 = $5::text)
+               OR ("postprocessing"->>$4 = 'completed'
+                   AND "postprocessing"->$2 = $3::jsonb)
+             )`,
+          auditJobId,
+          manifestKey,
+          JSON.stringify(manifest),
+          stageKey,
+          trackingClaimToken ?? null,
+          tokenKey
+        );
+        if (recorded !== 1) {
+          throw new Error("Tracking manifest claim was lost");
+        }
+      }
     });
 
     log.info("audit.tracking.persisted", {
@@ -174,6 +462,7 @@ export async function persistAuditTracking(
       prompts: promptByText.size,
       trackingRows: usable.length,
     });
+    return "completed";
   } catch (error) {
     // best-effort: audit은 이미 completed. Tracking 실패가 사용자 결과를 깨지 않게 log만.
     log.error("audit.tracking.failed", {
@@ -181,5 +470,6 @@ export async function persistAuditTracking(
       brandId,
       error: error instanceof Error ? error.message : String(error),
     });
+    return "failed";
   }
 }

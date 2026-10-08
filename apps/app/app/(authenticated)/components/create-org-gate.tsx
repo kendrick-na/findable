@@ -1,4 +1,5 @@
 import { CreateOrganization } from "@repo/auth/client";
+import { getAppDictionary } from "@/lib/i18n";
 
 /**
  * 조직 0개 신규 가입자용 온보딩 게이트 (2026-07-30 플로우 감사 🔴1 해소).
@@ -13,24 +14,25 @@ import { CreateOrganization } from "@repo/auth/client";
  *   → `/welcome` 으로 보낸다. 측정 이력이 있으면 그 화면이 알아서 `/` 로 되돌린다
  *     (`hasAnyMeasurement` 게이트) — 여기서 조건 분기를 만들지 않는다.
  */
-export const CreateOrgGate = () => (
-  <div className="flex min-h-svh flex-col items-center justify-center gap-8 bg-[color:var(--findable-canvas,#08090a)] px-6 py-12">
-    <div className="flex max-w-md flex-col gap-3 text-center">
-      <p className="font-semibold text-[color:var(--findable-primary,#ff7a4d)] text-sm tracking-wide">
-        FINDABLE
-      </p>
-      <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-        워크스페이스를 만들어 시작하세요
-      </h1>
-      <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-        측정·브랜드·리포트는 워크스페이스 단위로 저장돼요. 여기에는 회사나 팀
-        이름을 적어주세요. 공개할 브랜드명과 도메인은 다음 단계에서 따로
-        확인합니다.
-      </p>
+export const CreateOrgGate = async () => {
+  const t = (await getAppDictionary()).orgGate;
+  return (
+    <div className="flex min-h-svh flex-col items-center justify-center gap-8 bg-[color:var(--findable-canvas,#08090a)] px-6 py-12">
+      <div className="flex max-w-md flex-col gap-3 text-center">
+        <p className="font-semibold text-[color:var(--findable-primary,#ff7a4d)] text-sm tracking-wide">
+          FINDABLE
+        </p>
+        <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
+          {t.title}
+        </h1>
+        <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
+          {t.body}
+        </p>
+      </div>
+      <CreateOrganization
+        afterCreateOrganizationUrl="/welcome"
+        skipInvitationScreen
+      />
     </div>
-    <CreateOrganization
-      afterCreateOrganizationUrl="/welcome"
-      skipInvitationScreen
-    />
-  </div>
-);
+  );
+};

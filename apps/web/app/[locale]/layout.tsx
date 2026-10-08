@@ -35,11 +35,7 @@ const RootLayout = async ({ children, params }: RootLayoutProperties) => {
     : null;
 
   return (
-    <html
-      className={cn(fonts)}
-      lang={htmlLang}
-      suppressHydrationWarning
-    >
+    <html className={cn(fonts)} lang={htmlLang} suppressHydrationWarning>
       <body>
         <AnalyticsProvider>
           {/* 🔴🔴 세션N-27 — `forcedTheme="dark"`. apps/app 이 세션N-19 에 똑같은 사고를
@@ -52,7 +48,7 @@ const RootLayout = async ({ children, params }: RootLayoutProperties) => {
               ⚠️ <html> 에 클래스만 박으면 프로바이더가 덮어쓴다 → forcedTheme 이어야 한다.
               라이트 테마를 만들지 않는 이유: 브랜드가 Linear형 다크이고 잉크4·표면4·
               헤어라인3 토큰이 전부 다크 전제다(apps/app 과 동일한 판단). */}
-          <DesignSystemProvider forcedTheme="dark">
+          <DesignSystemProvider authLocale={htmlLang} forcedTheme="dark">
             {children}
             <Footer locale={locale} />
           </DesignSystemProvider>

@@ -1,4 +1,3 @@
-import { suggestCompetitors } from "@repo/ai/lib/competitor-suggest";
 import { currentUser } from "@repo/auth/server";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
@@ -10,15 +9,16 @@ import {
 } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 import { hasCompletedSetup } from "@/lib/onboarding";
+import { suggestCompetitorsUnlessPreview } from "@/lib/preview/ai-guards";
 import type { SiteReadinessRunStatus } from "@/lib/site-readiness/types";
 import { AssignBrandForm } from "../features/brand/assign-brand-form";
 import { getPrimaryEmail } from "../lib/user";
 import { WelcomeFlowServer } from "./welcome-flow-server";
 import { WelcomeIntro } from "./welcome-intro";
 
-export const metadata: Metadata = {
-  title: "시작하기 · Findable",
-  description: "도메인 하나만 넣으면 AI가 우리를 뭐라고 말하는지 알려드려요.",
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = (await getAppDictionary()).onboarding;
+  return { title: t.metaTitle, description: t.metaDescription };
 };
 
 /**
@@ -41,8 +41,26 @@ export const metadata: Metadata = {
 /** 1단계 폼이 실어 보내는 측정 결말. 없으면 `started`(정상 경로). */
 type MeasurementOutcome = "failed" | "rate_limited" | "started";
 
-const toOutcome = (value?: string): MeasurementOutcome =>
-  value === "rate_limited" || value === "failed" ? value : "started";
+const toOutcome = (value?: string): MeasurementOutcome | undefined =>
+  value === "rate_limited" || value === "failed" || value === "started"
+    ? value
+    : undefined;
+
+/**
+ * 쿼리가 없을 때(새로고침·직접 진입) 결말을 DB 에서 읽는다.
+ * 🔴 2026-10-05 로컬 E2E: 쿼리가 사라지면 측정이 시작조차 안 됐어도
+ *   "측정은 이미 시작됐어요"라고 말했다. 진행 중·완료 Job 이 있을 때만 started.
+ */
+const outcomeFromJobs = async (
+  brandId: string
+): Promise<MeasurementOutcome> => {
+  const latest = await database.auditJob.findFirst({
+    orderBy: { createdAt: "desc" },
+    select: { status: true },
+    where: { brandId },
+  });
+  return latest && latest.status !== "failed" ? "started" : "failed";
+};
 
 const stringList = (value: unknown): string[] =>
   Array.isArray(value)
@@ -68,6 +86,7 @@ const WelcomePage = async ({
     // 무료 공개 진단에서 가입한 사람은 같은 도메인을 다시 입력하지 않는다.
     const user = await currentUser();
     const email = user ? getPrimaryEmail(user) : null;
+    const dict = await getAppDictionary();
     const priorAudit = email
       ? await database.auditJob.findFirst({
           orderBy: { createdAt: "desc" },
@@ -76,11 +95,12 @@ const WelcomePage = async ({
         })
       : null;
     return (
-      <WelcomeIntro t={(await getAppDictionary()).onboarding}>
+      <WelcomeIntro t={dict.onboarding}>
         <AssignBrandForm
           initialDomain={priorAudit?.domain}
           mode="onboarding"
           nextHref="/welcome"
+          t={dict.brandForm}
         />
       </WelcomeIntro>
     );
@@ -106,7 +126,7 @@ const WelcomePage = async ({
   //   ⚠️ 후보만 만든다 — 기본 선택은 화면(welcome-flow.tsx)이 결정한다.
   const suggestedCompetitors =
     (organization?.onboardingStep ?? 2) < 5
-      ? await suggestCompetitors({
+      ? await suggestCompetitorsUnlessPreview({
           brandName: brand.name,
           domain: brand.domain,
           industry: brand.industry,
@@ -123,7 +143,7 @@ const WelcomePage = async ({
       initialScope={brand.marketScope ?? undefined}
       initialStep={organization?.onboardingStep ?? 2}
       initialVariants={stringList(brand.entityVariants)}
-      measurement={toOutcome(measurement)}
+      measurement={toOutcome(measurement) ?? (await outcomeFromJobs(brand.id))}
       readiness={
         readinessRun
           ? {

@@ -140,20 +140,35 @@ describe("화면 — 세 갈래가 **서로 다른 문구**로 나간다", () =>
     //   있어서 `toContain` 은 **두 갈래를 같은 문구로 바꿔도 통과**했다.
     //   → 주석을 걷어낸 뒤 **그 삼항식 하나만** 꺼내 두 값을 직접 비교한다.
     const code = stripComments(BOARD);
-    const ternary = code.match(/state === "never" \? (".+?") : (".+?")/);
+    // 🔴 2026-10-06 — 문구는 사전(`app.sourcesBoard`)으로 옮겨졌다. 삼항식은 **키**를 고르고,
+    //   두 키의 **값(한·영)** 이 서로 다른지를 사전에서 직접 본다.
+    const ternary = code.match(/state === "never" \? (t\.\w+) : (t\.\w+)/);
     expect(
       ternary,
       "빈 상태 문구를 고르는 삼항식을 찾지 못했다"
     ).not.toBeNull();
     const [, whenNever, whenNotCollected] = ternary as RegExpMatchArray;
-    expect(whenNever).not.toBe(whenNotCollected);
-    expect(whenNever).toBe('"출처 안 밝힘"');
-    expect(whenNotCollected).toBe('"출처 미수집"');
+    expect(whenNever).toBe("t.neverSource");
+    expect(whenNotCollected).toBe("t.notCollected");
+    for (const lang of ["ko", "en"] as const) {
+      const board = JSON.parse(
+        readFileSync(
+          join(
+            process.cwd(),
+            `../../packages/internationalization/dictionaries/${lang}.json`
+          ),
+          "utf8"
+        )
+      ).app.sourcesBoard;
+      expect(board.neverSource).not.toBe(board.notCollected);
+    }
   });
 
   it("🔴 정상 갈래는 여전히 숫자를 말한다 (「인용 N」)", () => {
     const code = stripComments(BOARD);
-    expect(code).toMatch(/인용 \{engine\.citations\}/);
+    expect(code).toMatch(
+      /t\.citations\.replace\("\{n\}", String\(engine\.citations\)\)/
+    );
   });
 
   it("🔴 화면이 **판정 함수로만** 갈린다 (사설 엔진 목록 금지 · N-34)", () => {

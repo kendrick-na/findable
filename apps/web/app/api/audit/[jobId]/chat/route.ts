@@ -16,20 +16,29 @@ import {
   isCopilotConfigured,
   streamCopilotResponse,
 } from "@repo/ai/lib/crew";
+import { topCitedDomainsWithoutSearchRows } from "@repo/ai/lib/search-api-rows";
+import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 // 🔴 분모 단일 진실(세션N-28) — 결과 화면·OG 이미지와 같은 함수를 쓴다.
 import { countMeasurementCoverage } from "@repo/audit/measurement-coverage";
 import {
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { isVercelPreview } from "@repo/audit/preview-guard";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { resolveIsOwner } from "../../_lib/owner";
+import { canExposeAuditResult } from "../../_lib/public-access";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+/** Fixed Preview reply. No job data, no provider call. */
+const PREVIEW_COPILOT_STUB_TEXT =
+  "[미리보기 환경] 이 배포에서는 AI 코파일럿을 호출하지 않습니다. 실제 답변은 운영 환경에서 확인해 주세요.";
 
 interface RouteParams {
   params: Promise<{ jobId: string }>;
@@ -61,6 +70,7 @@ interface StoredResult {
   /** 🔴 분모 계산용(세션N-28). `metrics.enginesCovered` 는 **응답 1건당 1원소**라
    *  `.length` 를 엔진 수로 쓰면 안 된다(실측 29 vs 실제 7곳). */
   engineResponses?: Array<{
+    citedSources?: Array<{ domain?: string | null }> | null;
     engineId: string;
     errorMessage?: string | null;
     isStub?: boolean;
@@ -84,12 +94,15 @@ function buildMetricsSummary(result: StoredResult): string {
     : new Set(m.enginesCovered ?? []).size;
   const mentioned = new Set(m.enginesWithMention ?? []).size;
   const s = m.sentimentDistribution;
+  // 🔴 2026-10-07 👤 대표 결정 — 네이버·다음 검색 API 결과는 LLM 에 넣지 않는다(약관).
+  //   `metrics.topCitedDomains` 는 검색 결과 링크 도메인까지 섞어 센 값이라 쓰지 않고,
+  //   응답 행에서 **검색 행을 뺀 뒤** 다시 센다. 응답 행이 없으면(옛 형식) 도메인을 싣지 않는다.
+  const topDomains = result.engineResponses
+    ? topCitedDomainsWithoutSearchRows(result.engineResponses, 5)
+    : [];
   const domains =
-    m.topCitedDomains && m.topCitedDomains.length > 0
-      ? m.topCitedDomains
-          .slice(0, 5)
-          .map((d) => `${d.domain}(${d.count})`)
-          .join(", ")
+    topDomains.length > 0
+      ? topDomains.map((d) => `${d.domain}(${d.count})`).join(", ")
       : "없음";
   return [
     `SoV(점유율): ${m.sov ?? 0}/100`,
@@ -100,7 +113,7 @@ function buildMetricsSummary(result: StoredResult): string {
     s
       ? `감성: 긍정 ${s.positive} / 중립 ${s.neutral} / 부정 ${s.negative}`
       : "감성: N/A",
-    `상위 인용 도메인: ${domains}`,
+    `상위 인용 도메인(AI 엔진 답변 기준 · 네이버·다음 검색 결과 제외): ${domains}`,
   ].join("\n");
 }
 
@@ -115,7 +128,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (!isCopilotConfigured()) {
+    // Preview answers with a stub below, so it needs no provider key.
+    if (!(isVercelPreview() || isCopilotConfigured())) {
       return NextResponse.json(
         { error: "코파일럿이 아직 설정되지 않았습니다. (AI Gateway 미인증)" },
         { status: 503 }
@@ -154,15 +168,37 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Vercel Preview: streamCopilotResponse is a paid LLM call. Answer with a
+    //   fixed text stream (same content-type as the real one) before any DB or
+    //   provider access, so the chat UI still works end to end.
+    if (isVercelPreview()) {
+      return new Response(PREVIEW_COPILOT_STUB_TEXT, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
     const job = await database.auditJob.findUnique({
       where: { id: jobId },
-      select: { id: true, crewStatus: true, crewResult: true, result: true },
+      select: {
+        id: true,
+        email: true,
+        organizationId: true,
+        crewStatus: true,
+        crewResult: true,
+        result: true,
+      },
     });
 
     if (!job) {
       return NextResponse.json(
         { error: "존재하지 않는 jobId입니다." },
         { status: 404 }
+      );
+    }
+    if (!canExposeAuditResult(job, await resolveIsOwner(job))) {
+      return NextResponse.json(
+        { error: "이 진단 결과를 조회할 권한이 없습니다." },
+        { status: 403 }
       );
     }
     if (job.crewStatus !== "completed" || !job.crewResult) {
@@ -175,7 +211,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const crew = job.crewResult as unknown as StoredCrewReport;
+    const crew = sanitizeStoredCrewResult(
+      job.crewResult
+    ) as unknown as StoredCrewReport;
     const result = withRecomputedAuditMetrics(
       (job.result as unknown as StoredResult) ?? {}
     );

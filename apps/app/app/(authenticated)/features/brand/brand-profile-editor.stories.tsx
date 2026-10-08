@@ -12,6 +12,9 @@ const meta: Meta<typeof BrandProfileEditor> = {
     name: "아모레퍼시픽",
     industry: "beauty",
     marketScope: "both",
+    legalName: null,
+    businessNumber: null,
+    suggestedBusinessNumber: null,
     onSave: () => Promise.resolve({ ok: true } as const),
     // 실제 사전을 쓴다 — 더미 문구면 키 누락을 눈으로 못 잡는다.
     t: koDict.app.onboarding as Record<string, string>,
@@ -34,5 +37,24 @@ export const Filled: Story = {
   args: {
     competitors: ["LG생활건강", "올리브영"],
     entityVariants: ["아모레", "Amorepacific"],
+  },
+};
+
+/** 홈페이지에서 사업자등록번호를 찾았고 아직 저장값이 없는 상태 — "이 번호 쓰기" 제안. */
+export const SuggestedBusinessNumber: Story = {
+  args: {
+    competitors: [],
+    entityVariants: [],
+    suggestedBusinessNumber: "123-45-67890",
+  },
+};
+
+/** 회사 정보까지 저장된 상태. */
+export const WithOfficialIdentity: Story = {
+  args: {
+    competitors: [],
+    entityVariants: ["Amorepacific"],
+    legalName: "아모레퍼시픽",
+    businessNumber: "123-45-67890",
   },
 };

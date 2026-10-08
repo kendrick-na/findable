@@ -157,7 +157,7 @@ function findingGuide(
       why: "title은 검색 결과와 AI가 페이지 주제를 식별하는 가장 기본적인 신호입니다.",
       steps: [
         "이 페이지가 답하는 핵심 주제를 한 문장으로 정합니다.",
-        "핵심 주제와 브랜드를 포함한 고유 title을 70자 이내로 작성합니다.",
+        "핵심 주제와 브랜드를 포함한 고유 title을 간결하게 작성합니다(70자는 Findable 점검 기준이며 Google 공식 길이 제한은 없습니다. 검색 결과에서는 기기 폭에 맞춰 잘릴 수 있습니다).",
         "다른 페이지와 같은 title이 없는지 확인합니다.",
       ],
       snippet: "<title>페이지 핵심 주제 | 브랜드명</title>",
@@ -195,7 +195,7 @@ function findingGuide(
       code,
       title: "짧은 아티클에 직접 답변과 근거 보강",
       location: `${path}의 본문`,
-      why: "근거와 세부 내용이 부족하면 검색 엔진과 AI가 독립적으로 인용할 만한 답을 찾기 어렵습니다.",
+      why: "근거와 세부 내용이 부족하면 독자가 답을 확인하기 어렵습니다. 500단어는 Findable 내부 점검 기준이며, 분량 자체가 검색·AI 인용의 이유라는 근거는 없습니다.",
       steps: [
         "첫 문단에 질문에 대한 직접 답변을 작성합니다.",
         "실제 사례·수치·방법·한계를 소제목별로 보강합니다.",
@@ -237,7 +237,7 @@ function findingGuide(
       code,
       title: "첫 응답 시간을 800ms 이하로 단축",
       location: `${path}의 CDN·캐시·서버 렌더링·DB 쿼리`,
-      why: "느린 TTFB는 사용자와 크롤러 모두가 본문을 받기까지 기다리는 시간을 늘립니다.",
+      why: "느린 TTFB는 사용자와 크롤러 모두가 본문을 받기까지 기다리는 시간을 늘립니다. 800ms(0.8초)는 web.dev가 제시하는 대략적 기준이며, 검색 순위나 AI 인용의 요건은 아닙니다.",
       steps: [
         "서버 로그에서 가장 오래 걸리는 쿼리와 외부 API 호출을 찾습니다.",
         "공개 페이지에 CDN·페이지 캐시를 적용하고 요청마다 반복되는 작업을 줄입니다.",
@@ -252,7 +252,7 @@ function findingGuide(
       code,
       title: "전체 HTML 응답을 2.5초 이하로 단축",
       location: `${path}의 서버 렌더링·HTML 페이로드·외부 호출`,
-      why: "전체 응답이 늦으면 크롤러가 제한된 시간 안에 콘텐츠를 읽지 못하고 사용자 이탈도 늘어납니다.",
+      why: "전체 응답이 늦으면 크롤러가 제한된 시간 안에 콘텐츠를 읽지 못하고 사용자 이탈도 늘어날 수 있습니다. 2.5초는 Findable 내부 점검 기준입니다.",
       steps: [
         "서버 렌더링 중 직렬로 실행되는 데이터 요청을 병렬화합니다.",
         "초기 HTML에 불필요한 데이터와 중복 마크업을 줄입니다.",
@@ -352,7 +352,7 @@ function checkGuide(
       why: "메타 설명은 검색 결과에서 페이지의 답과 가치를 설명하며 클릭 판단을 돕습니다.",
       steps: [
         "대상 고객과 페이지가 제공하는 답을 한 문장으로 정합니다.",
-        "브랜드명과 구체적인 가치를 포함해 약 50~180자로 작성합니다.",
+        "브랜드명과 구체적인 가치를 앞쪽에 두고 간결하게 작성합니다(50~180자는 Findable 점검 기준이며 공식 고정 길이가 아닙니다).",
         "페이지마다 고유한 설명을 사용합니다.",
       ],
       snippet: `<meta name="description" content="누구에게 어떤 문제를 어떻게 해결하는지 구체적으로 설명합니다." />`,
@@ -365,7 +365,7 @@ function checkGuide(
         ? "대표 H1 추가"
         : "대표 H1 하나로 통일",
       location: "홈페이지의 본문 제목 구조",
-      why: "대표 제목이 없거나 여러 개면 페이지의 핵심 주제가 모호해집니다.",
+      why: "대표 제목이 없거나 여러 개면 페이지의 핵심 주제가 모호해질 수 있습니다. H1 1개는 Findable 점검 기준이며 검색엔진의 필수 요건은 아닙니다.",
       steps: [
         "페이지의 핵심 주제를 나타내는 제목 하나를 H1으로 정합니다.",
         "나머지 큰 제목은 H2·H3 또는 일반 요소로 바꿉니다.",
@@ -437,7 +437,7 @@ function checkGuide(
       code: check.id,
       title: "서버 HTML에 핵심 본문 제공",
       location: "초기 서버 응답 HTML",
-      why: "JavaScript 실행 전에도 핵심 설명이 있어야 다양한 크롤러가 안정적으로 내용을 읽습니다.",
+      why: "Google은 JavaScript를 렌더링하지만 모든 크롤러가 그렇다고 확인된 것은 아니어서, 핵심 설명은 서버 HTML에도 두는 편이 안전합니다. 서버 HTML 본문 300자 미만을 주의로 표시하는 것은 Findable 내부 점검 기준입니다.",
       steps: [
         "페이지 소스에서 핵심 제목과 설명이 보이는지 확인합니다.",
         "핵심 콘텐츠를 서버 렌더링 또는 정적 생성으로 제공합니다.",
@@ -557,17 +557,20 @@ function performanceTasks(report: SiteReadinessReport): SiteReadinessTask[] {
     if (!["poor", "needs-improvement"].includes(item.metric.rating)) {
       continue;
     }
+    let evidence = "측정값 없음";
+    if (item.metric.value != null) {
+      if (item.id === "cls") {
+        evidence = item.metric.value.toFixed(3);
+      } else if (item.id === "lcp") {
+        evidence = `${(item.metric.value / 1000).toFixed(1)}초`;
+      } else {
+        evidence = `${Math.round(item.metric.value)}ms`;
+      }
+    }
     tasks.push({
       affectedCount: 1,
       code: item.id,
-      evidence:
-        item.metric.value == null
-          ? "측정값 없음"
-          : item.id === "cls"
-            ? item.metric.value.toFixed(3)
-            : item.id === "lcp"
-              ? `${(item.metric.value / 1000).toFixed(1)}초`
-              : `${Math.round(item.metric.value)}ms`,
+      evidence,
       id: `performance:${item.id}`,
       location: `${originOf(report)}의 모바일 렌더링 경로`,
       sampleUrls: [report.finalUrl],

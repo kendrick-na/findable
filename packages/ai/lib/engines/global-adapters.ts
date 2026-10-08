@@ -13,16 +13,29 @@
 // 모델 슬러그 규칙: 버전은 점(.) 사용, 하이픈 X. 예: anthropic/claude-sonnet-4.6
 
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAI, openai } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
-import { generateText, type LanguageModel } from "ai";
-import { describeProviderError } from "./provider-error";
+import { gateway, generateText, type LanguageModel } from "ai";
+import {
+  classifyLetsurUnavailable,
+  GATEWAY_MESSAGES_URL,
+  isGatewayFallbackAvailable,
+  isLetsurCircuitOpen,
+  type LetsurFallbackReason,
+  letsurUnavailableReasonFromError,
+  logLetsurFallback,
+  readGatewayFallback,
+  tripLetsurCircuit,
+  withLetsurFallback,
+} from "../letsur-fallback";
+import { describeProviderError, isAbortError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type {
   EngineAdapter,
   EngineId,
   EngineQuery,
   EngineResponse,
+  EngineUsage,
 } from "./types";
 import {
   detectBrandMention,
@@ -186,6 +199,36 @@ export function parseAnthropicMessages(body: unknown): {
   return { sources, text: parts.join("\n").trim() };
 }
 
+function finiteNumberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * `/v1/messages` 응답의 `usage` 에서 원가 재료를 뽑는다.
+ * 웹검색 횟수 = `usage.server_tool_use.web_search_requests`
+ *   (공식 문서 https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool 「Usage and pricing」).
+ * ⚠️ 이 경로는 검색 도구를 **항상** 붙이므로, 횟수가 없으면 0 이 아니라 `null`(=미수집)이다.
+ */
+export function parseAnthropicUsage(body: unknown): {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  webSearchRequests: number | null;
+} {
+  const usage =
+    body && typeof body === "object"
+      ? (body as { usage?: Record<string, unknown> }).usage
+      : undefined;
+  const serverToolUse =
+    usage && typeof usage.server_tool_use === "object"
+      ? (usage.server_tool_use as Record<string, unknown> | null)
+      : null;
+  return {
+    inputTokens: finiteNumberOrNull(usage?.input_tokens),
+    outputTokens: finiteNumberOrNull(usage?.output_tokens),
+    webSearchRequests: finiteNumberOrNull(serverToolUse?.web_search_requests),
+  };
+}
+
 const STUB_NOTICE =
   "[STUB] AI Gateway 인증 미설정 (VERCEL_OIDC_TOKEN 권장). 실제 엔진 호출 없이 더미 응답을 반환합니다.";
 
@@ -297,7 +340,12 @@ function resolveModel(engineId: GlobalEngineId): ResolvedModel | null {
   const letsur = LETSUR_ENGINES.has(engineId) ? getLetsurProvider() : null;
   if (letsur && (engineId === "chatgpt" || engineId === "claude")) {
     return {
-      model: letsur(LETSUR_MODEL_IDS[engineId]),
+      // 🔴 Letsur 불가(유닛 소진·만료·인증)면 같은 호출을 Gateway 로 명시적 폴백(letsur-fallback.ts).
+      model: withLetsurFallback(letsur(LETSUR_MODEL_IDS[engineId]), {
+        callSite: "engine",
+        engineId,
+        gatewayModelId: MODEL_DEFAULTS[engineId],
+      }),
       useDirectProvider: true,
     };
   }
@@ -368,6 +416,10 @@ async function runClaudeWithWebSearch(
   if (!apiKey) {
     return null;
   }
+  // 🔴 차단기 열림(최근 Letsur 불가 확인) → Letsur 를 두드리지 않고 Gateway 웹검색으로 간다.
+  if (isLetsurCircuitOpen()) {
+    return await runClaudeSearchViaGateway(query, start, "circuit_open");
+  }
   try {
     const res = await fetch(LETSUR_MESSAGES_URL, {
       method: "POST",
@@ -376,60 +428,129 @@ async function runClaudeWithWebSearch(
         authorization: `Bearer ${apiKey}`,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({
-        model: LETSUR_MODEL_IDS.claude,
-        max_tokens: 1024,
-        messages: [{ role: "user", content: query.prompt }],
-        tools: [
-          {
-            type: "web_search_20250305",
-            name: "web_search",
-            max_uses: CLAUDE_SEARCH_MAX_USES,
-          },
-        ],
-      }),
+      body: claudeSearchRequestBody(LETSUR_MODEL_IDS.claude, query),
+      signal: query.signal,
     });
+    // 🔴 Letsur 불가(유닛 소진·만료·인증) → **같은 웹검색 호출**을 Gateway `/v1/messages` 로.
+    //   본문은 분류에만 쓰고 저장·로그하지 않는다(사용자 데이터가 섞일 수 있다).
+    const unavailable = res.ok
+      ? null
+      : classifyLetsurUnavailable(res.status, await res.text());
+    if (unavailable) {
+      tripLetsurCircuit(unavailable, "engine.claude.web_search");
+      return await runClaudeSearchViaGateway(query, start, unavailable);
+    }
     if (!res.ok) {
       return null;
     }
-    const body = (await res.json()) as {
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
-    const { sources, text: rawText } = parseAnthropicMessages(body);
-    if (rawText.length === 0) {
+    return buildClaudeSearchResponse(await res.json(), query, start, {});
+  } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+function claudeSearchRequestBody(model: string, query: EngineQuery): string {
+  return JSON.stringify({
+    model,
+    max_tokens: 1024,
+    messages: [{ role: "user", content: query.prompt }],
+    tools: [
+      {
+        type: "web_search_20250305",
+        name: "web_search",
+        max_uses: CLAUDE_SEARCH_MAX_USES,
+      },
+    ],
+  });
+}
+
+/**
+ * Letsur 불가 시 claude 웹검색을 **Vercel AI Gateway 의 Anthropic Messages 호환 API** 로 보낸다.
+ *   공식 문서: https://vercel.com/docs/ai-gateway/sdks-and-apis/anthropic-messages-api/advanced
+ *   (같은 `web_search_20250305` 서버툴 지원 · 2026-10-07 확인)
+ * ⚠️ fetch 는 토큰을 직접 넣어야 한다 → AI_GATEWAY_API_KEY 또는 VERCEL_OIDC_TOKEN 이 env 에
+ *   없으면 이 경로는 건너뛰고 `null`(→ 일반 경로 = Gateway 채팅·검색 없음, `searchUnavailable` 표시).
+ */
+async function runClaudeSearchViaGateway(
+  query: EngineQuery,
+  start: number,
+  reason: LetsurFallbackReason
+): Promise<EngineResponse | null> {
+  const token =
+    process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || "";
+  const ctx = { callSite: "engine.claude.web_search", engineId: "claude" };
+  if (!token) {
+    return null;
+  }
+  try {
+    const res = await fetch(GATEWAY_MESSAGES_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        "anthropic-version": "2023-06-01",
+      },
+      body: claudeSearchRequestBody(MODEL_DEFAULTS.claude, query),
+      signal: query.signal,
+    });
+    if (!res.ok) {
+      logLetsurFallback(ctx, reason, "failed");
       return null;
     }
-    const text = sanitizeEngineText(rawText);
-    const mention = detectBrandMention(
+    const response = buildClaudeSearchResponse(await res.json(), query, start, {
+      provider: "gateway",
+      modelId: MODEL_DEFAULTS.claude,
+      fallback: "gateway",
+    });
+    logLetsurFallback(ctx, reason, response ? "ok" : "failed");
+    return response;
+  } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw error;
+    }
+    logLetsurFallback(ctx, reason, "failed");
+    return null;
+  }
+}
+
+function buildClaudeSearchResponse(
+  body: unknown,
+  query: EngineQuery,
+  start: number,
+  route: Pick<EngineUsage, "fallback" | "modelId" | "provider">
+): EngineResponse | null {
+  const { sources, text: rawText } = parseAnthropicMessages(body);
+  if (rawText.length === 0) {
+    return null;
+  }
+  const text = sanitizeEngineText(rawText);
+  const mention = detectBrandMention(
+    text,
+    query.brandName,
+    query.brandVariants
+  );
+  return {
+    engineId: "claude",
+    rawResponse: text,
+    brandMentioned: mention.mentioned,
+    ...mentionPositionFields(text, query.brandName, query.brandVariants),
+    sentiment: estimateSentiment(text, query.brandName),
+    // 🔴 **폴백을 쓰지 않는다** — 웹검색이 준 실제 출처만 신뢰한다(N-48).
+    citedSources: mapProviderSources(sources),
+    shareOfVoice: estimateShareOfVoice(
       text,
       query.brandName,
       query.brandVariants
-    );
-    return {
-      engineId: "claude",
-      rawResponse: text,
-      brandMentioned: mention.mentioned,
-      ...mentionPositionFields(text, query.brandName, query.brandVariants),
-      sentiment: estimateSentiment(text, query.brandName),
-      // 🔴 **폴백을 쓰지 않는다** — 웹검색이 준 실제 출처만 신뢰한다(N-48).
-      citedSources: mapProviderSources(sources),
-      shareOfVoice: estimateShareOfVoice(
-        text,
-        query.brandName,
-        query.brandVariants
-      ),
-      errorMessage: null,
-      durationMs: Date.now() - start,
-      isStub: false,
-      usage: {
-        inputTokens: body.usage?.input_tokens ?? null,
-        outputTokens: body.usage?.output_tokens ?? null,
-        costModel: "token",
-      },
-    };
-  } catch {
-    return null;
-  }
+    ),
+    errorMessage: null,
+    durationMs: Date.now() - start,
+    isStub: false,
+    // 🔴 웹검색 횟수까지 싣는다(원가모델 v2) — 검색료($10/1,000회)가 토큰과 **별도** 청구된다.
+    usage: { ...parseAnthropicUsage(body), costModel: "token", ...route },
+  };
 }
 
 /**
@@ -451,8 +572,55 @@ async function tryClaudeWebSearch(
 interface PerplexityAgentResult {
   inputTokens: number | null;
   outputTokens: number | null;
+  /** provider 가 계산해 준 이번 호출 총원가(USD) — `usage.cost.total_cost`. */
+  providerCostUsd: number | null;
   sources: ReturnType<typeof mapProviderSources>;
   text: string;
+  /** 웹검색 실행 횟수 — `usage.tool_calls_details.search_web.invocation`. 없으면 null. */
+  webSearchRequests: number | null;
+}
+
+// Agent API 문서 예시의 도구 이름은 `search_web` 이다. 표기 흔들림에 대비해 `web_search` 도 본다.
+const PERPLEXITY_SEARCH_TOOL_KEYS = ["search_web", "web_search"] as const;
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Agent API `usage` 에서 원가 재료를 뽑는다.
+ *   `usage.cost.total_cost`(USD) · `usage.tool_calls_details.<tool>.invocation`
+ *   출처: https://docs.perplexity.ai/api-reference/agent-post (ResponsesUsage·ResponsesCost)
+ */
+function perplexityUsageCost(usage: Record<string, unknown> | undefined): {
+  providerCostUsd: number | null;
+  webSearchRequests: number | null;
+} {
+  const cost = asRecord(usage?.cost);
+  const totalCost = cost?.total_cost;
+  const details = asRecord(usage?.tool_calls_details);
+  let webSearchRequests: number | null = null;
+  for (const key of PERPLEXITY_SEARCH_TOOL_KEYS) {
+    const invocation = asRecord(details?.[key])?.invocation;
+    if (typeof invocation === "number" && Number.isFinite(invocation)) {
+      webSearchRequests = (webSearchRequests ?? 0) + invocation;
+    }
+  }
+  // 도구 상세는 왔는데 검색 키가 없으면 = 검색 0회(미수집이 아니다).
+  if (webSearchRequests === null && details) {
+    webSearchRequests = 0;
+  }
+  return {
+    providerCostUsd:
+      typeof totalCost === "number" &&
+      Number.isFinite(totalCost) &&
+      totalCost >= 0
+        ? totalCost
+        : null,
+    webSearchRequests,
+  };
 }
 
 function records(value: unknown): Record<string, unknown>[] {
@@ -497,7 +665,14 @@ export function parsePerplexityAgentResponse(
   body: unknown
 ): PerplexityAgentResult {
   if (!body || typeof body !== "object") {
-    return { text: "", sources: [], inputTokens: null, outputTokens: null };
+    return {
+      text: "",
+      sources: [],
+      inputTokens: null,
+      outputTokens: null,
+      providerCostUsd: null,
+      webSearchRequests: null,
+    };
   }
   const root = body as Record<string, unknown>;
   const output = records(root.output);
@@ -512,6 +687,7 @@ export function parsePerplexityAgentResponse(
       typeof usage?.input_tokens === "number" ? usage.input_tokens : null,
     outputTokens:
       typeof usage?.output_tokens === "number" ? usage.output_tokens : null,
+    ...perplexityUsageCost(usage),
   };
 }
 
@@ -551,6 +727,7 @@ async function runPerplexityAgent(
         "content-type": "application/json",
       },
       body: JSON.stringify({ preset: PERPLEXITY_PRESET, input: query.prompt }),
+      signal: query.signal,
     });
     if (!response.ok) {
       const detail = (await response.text())
@@ -593,10 +770,16 @@ async function runPerplexityAgent(
       usage: {
         inputTokens: parsed.inputTokens,
         outputTokens: parsed.outputTokens,
+        // 원가모델 v2: provider 원가가 있으면 그걸 쓰고, 없으면 토큰+검색료로 계산한다.
+        providerCostUsd: parsed.providerCostUsd,
+        webSearchRequests: parsed.webSearchRequests,
         costModel: "token",
       },
     };
   } catch (error) {
+    if (isAbortError(error) || query.signal?.aborted) {
+      throw error;
+    }
     logProviderFailure("perplexity", true, error);
     return makePerplexityFailure(
       error instanceof Error ? error.message : String(error),
@@ -629,6 +812,7 @@ async function tryDirectEngine(
 }
 
 function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: provider routing and failure handling stay at one adapter boundary.
   return async (query) => {
     const start = Date.now();
 
@@ -644,7 +828,11 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
     const { model, useDirectProvider, tools } = resolved;
 
     try {
+      if (query.signal?.aborted) {
+        throw query.signal.reason ?? new DOMException("Aborted", "AbortError");
+      }
       const {
+        providerMetadata,
         response: providerResponse,
         text: rawText,
         sources,
@@ -658,6 +846,7 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
             ? "당신은 한국어 사용자를 위한 검색 어시스턴트입니다. 사실 기반으로 답하고, 구체적인 브랜드와 출처를 명시하세요."
             : "You are a search assistant. Provide factual, brand-aware answers with concrete recommendations and sources when available.",
         prompt: query.prompt,
+        abortSignal: query.signal,
         // Vercel Gateway 경로에서만 태그 부착(Letsur·Google 직접 호출은 미해당).
         ...(useDirectProvider
           ? {}
@@ -728,10 +917,15 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
           inputTokens: usage?.inputTokens ?? null,
           outputTokens: usage?.outputTokens ?? null,
           // gemini=Google 무료티어, 나머지=토큰 과금.
-          costModel: engineId === "gemini" ? "free" : "token",
+          costModel:
+            engineId === "gemini" && useDirectProvider ? "free" : "token",
+          ...gatewayRoute(engineId, useDirectProvider, providerMetadata),
         },
       };
     } catch (error) {
+      if (isAbortError(error) || query.signal?.aborted) {
+        throw error;
+      }
       logProviderFailure(engineId, useDirectProvider, error);
       return {
         engineId,
@@ -750,6 +944,39 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
   };
 }
 
+/**
+ * 이 호출이 실제로 Vercel AI Gateway 를 탔는지 → 원가(cost.ts)가 **실제 모델 단가**로 계산하게 한다.
+ *   · Letsur→Gateway 폴백: `fallback: "gateway"` + Gateway 모델 슬러그.
+ *     claude 웹검색 플래그가 켜져 있었다면 이 경로는 **검색 없는 채팅**이다 →
+ *     `searchUnavailable: true` 로 남겨 「출처 0」을 「출처 없음」으로 오해하지 않게 한다.
+ *   · 처음부터 Gateway 경로(직접 키 없음): `provider: "gateway"` + 기본 슬러그.
+ *   · Letsur·Google 직접 호출: 아무것도 안 붙인다(기존 기록과 동일).
+ */
+function gatewayRoute(
+  engineId: GlobalEngineId,
+  useDirectProvider: boolean,
+  providerMetadata: unknown
+): Pick<
+  EngineUsage,
+  "fallback" | "modelId" | "provider" | "searchUnavailable"
+> {
+  const fallback = readGatewayFallback(providerMetadata);
+  if (fallback) {
+    return {
+      provider: "gateway",
+      modelId: fallback.modelId,
+      fallback: "gateway",
+      ...(engineId === "claude" && isClaudeWebSearchEnabled()
+        ? { searchUnavailable: true }
+        : {}),
+    };
+  }
+  if (!useDirectProvider) {
+    return { provider: "gateway", modelId: MODEL_DEFAULTS[engineId] };
+  }
+  return {};
+}
+
 function logProviderFailure(
   engineId: GlobalEngineId,
   useDirectProvider: boolean,
@@ -763,6 +990,218 @@ function logProviderFailure(
 }
 
 export const chatgptAdapter: EngineAdapter = makeGatewayAdapter("chatgpt");
+
+// ──────────────────────────────────────────────────────────────────
+// 🔎 ChatGPT API + 웹검색(2026-10-07) — `CHATGPT_SOURCE=web` 일 때 **웹 수집 실패 폴백** 전용.
+//
+// 공식 근거(2026-10-07 확인):
+//   · OpenAI Responses API 웹검색 = `tools: [{ type: "web_search" }]`, 답의 출처는
+//     `output_text.annotations[].type === "url_citation"`.
+//     https://developers.openai.com/api/docs/guides/tools-web-search
+//   · 요금: 웹검색 $10 / 1,000회 + 검색 결과 토큰은 모델 입력 단가.
+//     https://developers.openai.com/api/docs/pricing
+//   · AI SDK `@ai-sdk/openai` 의 기본 모델 = Responses 모델(`createLanguageModel → createResponsesModel`,
+//     설치본 3.0.54 dist 실측) → 기존 chatgpt 호출도 이미 Letsur `/v1/responses` 를 탄다.
+//     웹검색은 `provider.tools.webSearch({})` 하나만 더 붙이면 된다(새 의존성 0).
+//   · Vercel AI Gateway 도 OpenAI provider-executed 도구를 그대로 받는다
+//     (`@ai-sdk/gateway` docs「Provider-Executed Tools」: `web_search: openai.tools.webSearch({})`).
+// ⚠️ [확인필요] Letsur 가 `web_search` 도구를 OpenAI 로 그대로 넘기는지는 라이브로 확인 못 했다.
+//   그래서 Letsur 가 **어떤 이유로든** 실패하면(불가 분류 여부와 무관) Gateway 로 한 번 더 간다.
+// ──────────────────────────────────────────────────────────────────
+
+const CHATGPT_SEARCH_TOOL = "web_search";
+
+interface SearchAttempt {
+  model: LanguageModel;
+  route: Pick<EngineUsage, "fallback" | "modelId" | "provider">;
+  tools: Record<string, unknown>;
+  via: "letsur" | "gateway";
+}
+
+function chatgptSearchAttempts(): SearchAttempt[] {
+  const attempts: SearchAttempt[] = [];
+  const letsur = getLetsurProvider();
+  const letsurUsable = Boolean(letsur) && !isLetsurCircuitOpen();
+  if (letsur && letsurUsable) {
+    attempts.push({
+      via: "letsur",
+      model: letsur(LETSUR_MODEL_IDS.chatgpt),
+      tools: { [CHATGPT_SEARCH_TOOL]: letsur.tools.webSearch({}) },
+      route: {},
+    });
+  }
+  if (isGatewayFallbackAvailable()) {
+    attempts.push({
+      via: "gateway",
+      model: gateway(MODEL_DEFAULTS.chatgpt),
+      tools: { [CHATGPT_SEARCH_TOOL]: openai.tools.webSearch({}) },
+      route: {
+        provider: "gateway",
+        modelId: MODEL_DEFAULTS.chatgpt,
+        // Letsur 를 원래 경로로 쓸 수 있는 환경에서 Gateway 로 갔다면 폴백이다.
+        ...(letsur ? { fallback: "gateway" as const } : {}),
+      },
+    });
+  }
+  return attempts;
+}
+
+/** 결과에서 provider 가 실행한 웹검색 호출 수. 못 세면 null(= 미수집, 0원 아님). */
+export function countChatgptWebSearchCalls(
+  content: unknown,
+  sourceCount: number
+): number | null {
+  const parts = Array.isArray(content) ? content : [];
+  const calls = parts.filter(
+    (part) =>
+      typeof part === "object" &&
+      part !== null &&
+      (part as { type?: unknown }).type === "tool-call" &&
+      (part as { toolName?: unknown }).toolName === CHATGPT_SEARCH_TOOL
+  ).length;
+  if (calls === 0 && sourceCount > 0) {
+    return null; // 출처는 있는데 호출 기록이 없다 → SDK 표현 차이. 횟수를 지어내지 않는다.
+  }
+  return calls;
+}
+
+async function runChatgptSearchAttempt(
+  attempt: SearchAttempt,
+  query: EngineQuery,
+  start: number
+): Promise<EngineResponse> {
+  const result = await generateText({
+    model: attempt.model,
+    tools: attempt.tools as never,
+    prompt: query.prompt,
+    abortSignal: query.signal,
+    ...(attempt.via === "gateway"
+      ? {
+          providerOptions: {
+            gateway: {
+              tags: [
+                "findable",
+                "engine:chatgpt",
+                "chatgpt:api_fallback",
+                `lang:${query.language}`,
+              ],
+            },
+          },
+        }
+      : {}),
+  });
+  const text = sanitizeEngineText(result.text);
+  if (text.length === 0) {
+    throw new Error("chatgpt web_search: empty answer");
+  }
+  const citedSources = mapProviderSources(result.sources);
+  const mention = detectBrandMention(
+    text,
+    query.brandName,
+    query.brandVariants
+  );
+  return {
+    engineId: "chatgpt",
+    rawResponse: text,
+    brandMentioned: mention.mentioned,
+    ...mentionPositionFields(text, query.brandName, query.brandVariants),
+    sentiment: estimateSentiment(text, query.brandName),
+    // 🔴 provider 가 준 url_citation 만 신뢰한다(본문 URL 폴백 금지 — N-48).
+    citedSources,
+    shareOfVoice: estimateShareOfVoice(
+      text,
+      query.brandName,
+      query.brandVariants
+    ),
+    errorMessage: null,
+    durationMs: Date.now() - start,
+    isStub: false,
+    usage: {
+      inputTokens: result.usage?.inputTokens ?? null,
+      outputTokens: result.usage?.outputTokens ?? null,
+      costModel: "token",
+      webSearchRequests: countChatgptWebSearchCalls(
+        result.content,
+        citedSources.length
+      ),
+      ...attempt.route,
+    },
+  };
+}
+
+const CHATGPT_SEARCH_CTX = {
+  callSite: "engine.chatgpt.web_search",
+  engineId: "chatgpt",
+};
+
+/** 실패한 시도를 기록하고 다음 Gateway 시도의 폴백 사유를 돌려준다. */
+function noteSearchAttemptFailure(
+  attempt: SearchAttempt,
+  error: unknown,
+  fallbackReason: LetsurFallbackReason | null
+): LetsurFallbackReason | null {
+  logProviderFailure("chatgpt", attempt.via === "letsur", error);
+  if (attempt.via === "letsur") {
+    const reason = letsurUnavailableReasonFromError(error);
+    if (reason) {
+      tripLetsurCircuit(reason, CHATGPT_SEARCH_CTX.callSite);
+    }
+    // 분류 안 된 실패(예: 도구 미지원 400)도 Gateway 로 한 번 더 간다.
+    //   단 `ai.letsur.fallback` 로그는 「Letsur 불가」로 분류된 경우만 남긴다(사유를 지어내지 않는다).
+    return reason;
+  }
+  if (fallbackReason) {
+    logLetsurFallback(CHATGPT_SEARCH_CTX, fallbackReason, "failed");
+  }
+  return fallbackReason;
+}
+
+/**
+ * ChatGPT 를 **API + 웹검색**으로 부른다. Letsur → (어떤 실패든) Gateway 순.
+ * 절대 throw 하지 않는다(측정 마감 abort 제외) — 전부 실패하면 오류 응답.
+ */
+export const chatgptApiSearchAdapter: EngineAdapter = async (query) => {
+  const start = Date.now();
+  const attempts = chatgptSearchAttempts();
+  if (attempts.length === 0) {
+    return makeStubResponse("chatgpt", query.prompt, Date.now() - start);
+  }
+  let lastError: unknown = null;
+  // Letsur 를 건너뛰었으면(차단기 열림) 그 사실이 폴백 사유다.
+  let fallbackReason: LetsurFallbackReason | null =
+    attempts[0]?.via === "gateway" && getLetsurProvider()
+      ? "circuit_open"
+      : null;
+  for (const attempt of attempts) {
+    try {
+      const response = await runChatgptSearchAttempt(attempt, query, start);
+      if (attempt.via === "gateway" && fallbackReason) {
+        logLetsurFallback(CHATGPT_SEARCH_CTX, fallbackReason, "ok");
+      }
+      return response;
+    } catch (error) {
+      if (isAbortError(error) || query.signal?.aborted) {
+        throw error;
+      }
+      fallbackReason = noteSearchAttemptFailure(attempt, error, fallbackReason);
+      lastError = error;
+    }
+  }
+  return {
+    engineId: "chatgpt",
+    rawResponse: "",
+    brandMentioned: false,
+    mentionPosition: null,
+    mentionListSize: null,
+    sentiment: null,
+    citedSources: [],
+    shareOfVoice: null,
+    errorMessage:
+      lastError instanceof Error ? lastError.message : String(lastError),
+    durationMs: Date.now() - start,
+    isStub: false,
+  };
+};
 export const claudeAdapter: EngineAdapter = makeGatewayAdapter("claude");
 export const perplexityAdapter: EngineAdapter =
   makeGatewayAdapter("perplexity");

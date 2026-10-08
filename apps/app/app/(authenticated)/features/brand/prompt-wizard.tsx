@@ -13,6 +13,7 @@ import {
   saveApprovedPromptsAction,
   suggestPromptsAction,
 } from "@/app/actions/brand/suggest-prompts";
+import type { AppDictionary } from "@/lib/i18n";
 
 /**
  * 프롬프트 자동 제안 마법사 (표준 백로그 1, 2026-07-30) + 직접 추가(2026-08-22).
@@ -43,10 +44,12 @@ type Phase =
 const HANGUL_RE = /[가-힣]/;
 const MAX_CUSTOM_PROMPT_LENGTH = 200;
 
-const CATEGORY_LABEL: Record<SuggestedPrompt["category"], string> = {
-  brand: "브랜드",
-  competitor: "경쟁·카테고리",
-};
+const categoryLabel = (
+  t: AppDictionary["promptWizard"]
+): Record<SuggestedPrompt["category"], string> => ({
+  brand: t.categoryBrand,
+  competitor: t.categoryCompetitor,
+});
 
 const LANG_LABEL: Record<SuggestedPrompt["language"], string> = {
   ko: "KO",
@@ -56,7 +59,14 @@ const LANG_LABEL: Record<SuggestedPrompt["language"], string> = {
 // 제안 프롬프트의 안정 키(텍스트 소문자) — 선택 상태 Set의 원소.
 const promptKey = (p: SuggestedPrompt): string => p.text.toLowerCase();
 
-export const PromptWizard = ({ brandId }: { brandId: string }) => {
+export const PromptWizard = ({
+  brandId,
+  t,
+}: {
+  brandId: string;
+  /** 사전 `app.promptWizard` (client 라 서버가 넘긴다). */
+  t: AppDictionary["promptWizard"];
+}) => {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
   const [prompts, setPrompts] = useState<SuggestedPrompt[]>([]);
@@ -68,11 +78,11 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
   const addCustom = async () => {
     const text = customText.trim();
     if (text.length < 3) {
-      toast.error("질문을 3자 이상 입력해 주세요.");
+      toast.error(t.tooShort);
       return;
     }
     if (text.length > MAX_CUSTOM_PROMPT_LENGTH) {
-      toast.error(`질문은 ${MAX_CUSTOM_PROMPT_LENGTH}자 이내로 입력해 주세요.`);
+      toast.error(t.tooLong.replace("{max}", String(MAX_CUSTOM_PROMPT_LENGTH)));
       return;
     }
     setPhase("addingSaving");
@@ -95,10 +105,10 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
         //   이때만 업그레이드 경로를 함께 준다. 로그인 만료 등 다른 에러는 그대로.
         toast.error(
           result.error,
-          result.error.includes("상한")
+          "code" in result && result.code === "prompt_limit"
             ? {
                 action: {
-                  label: "요금제 보기",
+                  label: t.viewPlans,
                   onClick: () => router.push("/billing"),
                 },
               }
@@ -106,15 +116,13 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
         );
         return;
       }
-      toast.success(
-        "추적 질문을 추가했어요. 다음 측정부터 이 질문으로 측정돼요."
-      );
+      toast.success(t.added);
       setPhase("idle");
       setCustomText("");
       router.refresh();
     } catch {
       setPhase("adding");
-      toast.error("추가하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      toast.error(t.addFailed);
     }
   };
 
@@ -134,7 +142,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
       setPhase("review");
     } catch {
       setPhase("idle");
-      toast.error("제안을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+      toast.error(t.suggestFailed);
     }
   };
 
@@ -154,7 +162,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
   const save = async () => {
     const approved = prompts.filter((p) => selected.has(promptKey(p)));
     if (approved.length === 0) {
-      toast.error("저장할 질문을 하나 이상 선택해 주세요.");
+      toast.error(t.selectOne);
       return;
     }
     setPhase("saving");
@@ -171,18 +179,19 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
       if (result.capped) {
         // 플랜 상한 때문에 일부만 저장됨 — 저장 사실 + 업그레이드 경로를 함께 안내.
         toast.warning(
-          `선택한 ${result.requested}개 중 ${result.saved}개를 저장했어요. 현재 플랜 상한(${result.limit}개)을 넘는 분은 저장되지 않았어요.`,
+          t.savedCapped
+            .replace("{requested}", String(result.requested))
+            .replace("{saved}", String(result.saved))
+            .replace("{limit}", String(result.limit)),
           {
             action: {
-              label: "요금제 보기",
+              label: t.viewPlans,
               onClick: () => router.push("/billing"),
             },
           }
         );
       } else {
-        toast.success(
-          `추적 질문 ${result.saved}개를 저장했어요. 다음 측정부터 이 질문으로 측정돼요.`
-        );
+        toast.success(t.saved.replace("{n}", String(result.saved)));
       }
       setPhase("idle");
       setPrompts([]);
@@ -191,7 +200,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
       router.refresh();
     } catch {
       setPhase("review");
-      toast.error("저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      toast.error(t.saveFailed);
     }
   };
 
@@ -208,10 +217,10 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
         >
           {phase === "suggesting" ? (
             <span className="inline-flex items-center gap-2">
-              <Spinner className="size-3" /> 제안 생성 중…
+              <Spinner className="size-3" /> {t.suggesting}
             </span>
           ) : (
-            "AI 추적 질문 제안받기"
+            t.suggest
           )}
         </Button>
         <Button
@@ -221,7 +230,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
           type="button"
           variant="ghost"
         >
-          직접 추가
+          {t.addManual}
         </Button>
       </div>
     );
@@ -232,7 +241,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
     return (
       <div className="flex w-full flex-col gap-2 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] p-4">
         <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-          추적 질문 직접 추가
+          {t.addManualTitle}
         </span>
         <Input
           disabled={isSaving}
@@ -243,7 +252,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
               addCustom();
             }
           }}
-          placeholder="예: 우리 브랜드 어때?"
+          placeholder={t.placeholder}
           value={customText}
         />
         <span className="text-right text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs tabular-nums">
@@ -260,7 +269,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
             type="button"
             variant="ghost"
           >
-            취소
+            {t.cancel}
           </Button>
           <Button
             className="findable-btn-primary"
@@ -271,10 +280,10 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
           >
             {isSaving ? (
               <span className="inline-flex items-center gap-2">
-                <Spinner className="size-3" /> 추가 중…
+                <Spinner className="size-3" /> {t.adding}
               </span>
             ) : (
-              "추가하기"
+              t.add
             )}
           </Button>
         </div>
@@ -287,11 +296,10 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
     <div className="flex w-full flex-col gap-3 rounded-lg border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-1,#0f1011)] p-4">
       <div className="flex flex-col gap-1">
         <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-          AI가 제안한 추적 질문 ({prompts.length})
+          {t.suggestedTitle.replace("{n}", String(prompts.length))}
         </span>
         <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-          측정에 사용할 질문을 골라 저장하세요. 저장한 질문으로 다음 측정부터
-          ChatGPT·Perplexity 등에 물어봅니다.
+          {t.suggestedLede}
         </span>
       </div>
 
@@ -320,7 +328,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
                       className="border-transparent bg-[color:var(--findable-surface-2,#17181a)] text-[10px] text-[color:var(--findable-ink-subtle,#8a8f98)]"
                       variant="outline"
                     >
-                      {CATEGORY_LABEL[p.category]}
+                      {categoryLabel(t)[p.category]}
                     </Badge>
                     <span className="text-[10px] text-[color:var(--findable-ink-tertiary,#7e8289)]">
                       {LANG_LABEL[p.language]}
@@ -336,8 +344,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
       {competitors.length > 0 && (
         <div className="flex flex-col gap-1.5 border-[color:var(--findable-hairline,#23252a)] border-t pt-2">
           <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-            제안된 경쟁 브랜드 — 경쟁·카테고리 질문의 답변에서 이 브랜드들과의
-            비교가 잡힙니다.
+            {t.competitorsNote}
           </span>
           <div className="flex flex-wrap gap-1.5">
             {competitors.map((name) => (
@@ -355,7 +362,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
 
       <div className="flex items-center justify-between gap-2 pt-1">
         <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-          {selected.size}개 선택됨
+          {t.selectedCount.replace("{n}", String(selected.size))}
         </span>
         <div className="flex items-center gap-2">
           <Button
@@ -370,7 +377,7 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
             type="button"
             variant="ghost"
           >
-            취소
+            {t.cancel}
           </Button>
           <Button
             className="findable-btn-primary"
@@ -381,10 +388,10 @@ export const PromptWizard = ({ brandId }: { brandId: string }) => {
           >
             {phase === "saving" ? (
               <span className="inline-flex items-center gap-2">
-                <Spinner className="size-3" /> 저장 중…
+                <Spinner className="size-3" /> {t.saving}
               </span>
             ) : (
-              `선택한 질문 저장 (${selected.size})`
+              t.saveSelected.replace("{n}", String(selected.size))
             )}
           </Button>
         </div>

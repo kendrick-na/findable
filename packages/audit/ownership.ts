@@ -47,25 +47,28 @@ const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 /*
  * 이 요청자가 이 진단의 **소유자인가**.
  *
- * 판정(하나라도 맞으면 소유자):
- *   1. 로그인 이메일 == 진단 신청 이메일
- *   2. 활성 조직 id == job 의 `organizationId`(FK — 정식 연결)
- *   3. 활성 조직 id 가 레거시 표기 `org:{orgId}` 와 일치(FK backfill 이전 행)
+ * 판정:
+ *   1. job 에 `organizationId`가 있으면 활성 조직 id가 그 FK와 같을 때만 소유자
+ *   2. 조직 FK가 없는 무료 진단은 로그인 이메일 == 진단 신청 이메일이면 소유자
+ *   3. 조직 FK가 없는 레거시 행은 활성 조직 id가 `org:{orgId}`와 같으면 소유자
  *
  * 🔴 **비로그인은 항상 false.** jobId 는 링크만 있으면 누구나 열 수 있으므로
  *   (그게 이 라우트의 설계다 — 무료 진단은 로그인 없이 결과를 본다),
  *   *"링크를 안다"* 를 소유 증거로 쓰면 검사 자체가 무의미해진다.
  */
 export function isAuditOwner(job: AuditJobOwner, viewer: AuditViewer): boolean {
+  // 조직 FK는 개인 이메일보다 강한 테넌트 경계다. 조직이 다른데 이메일만 같다고
+  // 통과시키면, 향후 backfill 또는 비정상 행에서 다른 활성 조직의 결과가 노출된다.
+  if (job.organizationId) {
+    return Boolean(viewer.orgId && job.organizationId === viewer.orgId);
+  }
+
   const viewerEmail = viewer.email ? normalizeEmail(viewer.email) : null;
   if (viewerEmail && normalizeEmail(job.email) === viewerEmail) {
     return true;
   }
   if (!viewer.orgId) {
     return false;
-  }
-  if (job.organizationId && job.organizationId === viewer.orgId) {
-    return true;
   }
   return normalizeEmail(job.email) === `${ORG_EMAIL_PREFIX}${viewer.orgId}`;
 }

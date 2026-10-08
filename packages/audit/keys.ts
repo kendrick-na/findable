@@ -29,10 +29,22 @@ export const keys = () =>
         .string()
         .optional()
         .transform((v) => v === "true"),
+      /**
+       * W1 저장 질문 시도 원장(PromptAttempt) 플래그. **기본 off.**
+       *   off: 러너는 PromptAttempt/PromptAttemptReset 테이블을 한 번도 읽거나 쓰지 않는다
+       *        (migration 20261005_prompt_attempt_ledger 적용 전 배포도 무변화).
+       *   켜는 순서: ① migration 적용 확인(check:migration-baseline) → ② 이 값을 "true".
+       *   값이 정확히 "true" 일 때만 on.
+       */
+      PROMPT_ATTEMPT_LEDGER_ENABLED: z
+        .string()
+        .optional()
+        .transform((v) => v === "true"),
     },
     runtimeEnv: {
       AUDIT_BRIEFING_IN_MAIN_ENABLED:
         process.env.AUDIT_BRIEFING_IN_MAIN_ENABLED,
       AUDIT_DUAL_WRITE_ENABLED: process.env.AUDIT_DUAL_WRITE_ENABLED,
+      PROMPT_ATTEMPT_LEDGER_ENABLED: process.env.PROMPT_ATTEMPT_LEDGER_ENABLED,
     },
   });

@@ -22,6 +22,7 @@
  *   ⛔ `geoScore`·`metrics.recognitionRate` 는 **실측 회차에 없었다**(null) → 쓰지 않는다.
  */
 
+import { filterStoredGeoActions } from "./action-display-filter";
 import { summarizeAnswerBuckets } from "./answer-buckets";
 
 /** 요약에 쓰는 필드만 좁힌 타입. 이 외 필드는 일부러 보지 않는다. */
@@ -97,8 +98,9 @@ export function buildSsrSummary(job: SsrSummaryInput): SsrSummary | null {
   const rawSov = result.metrics?.sov;
   const brandName =
     typeof result.brandName === "string" ? result.brandName.trim() : "";
+  // 근거 없는 저장 카드는 요약에도 싣지 않는다(`action-display-filter.ts`).
   const actionTitles = Array.isArray(result.geoActions)
-    ? result.geoActions
+    ? filterStoredGeoActions(result.geoActions as Record<string, unknown>[])
         .filter((a) => {
           // 🐛 스크린샷 눈확인에서 잡음(2026-08-11): "지금 할 일" 이라는 제목 아래에
           //   **할 일이 아닌 것**이 섞여 있었다 — 실측 `kind` 값:

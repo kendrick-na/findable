@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { aggregateAudit } from "../ai/lib/engines/aggregate";
+import type { EngineResponse } from "../ai/lib/engines/types";
 import { MENTION_VERDICT_VERSION } from "../ai/lib/mention-verdict-version";
+import { answerShareOfVoice, summarizeAnswerBuckets } from "./answer-buckets";
 import { countMeasurementCoverage } from "./measurement-coverage";
 import {
   auditPublicationIssue,
   auditPublicationStatus,
   citationPrescriptionsRestricted,
+  hasFilteredStoredAuditAdvice,
+  hasRecomputedAuditMetricsChanged,
   hasStaleAuditPdf,
+  isCurrentAuditPdfUrl,
   isPublishableAuditResult,
   publicAuditResult,
   withRecomputedAuditMetrics,
@@ -36,6 +42,121 @@ function unverifiedRows(n: number): Record<string, unknown>[] {
 }
 
 describe("saved audit metric normalization", () => {
+  it("does not show a correction for a current runner-shaped brand/discovery cohort", () => {
+    const answer = (
+      engineId: EngineResponse["engineId"],
+      promptKind: "brand" | "discovery",
+      quality: "confirmed" | "absent" | "unverified"
+    ) => ({
+      engineId,
+      promptKind,
+      brandMentioned: quality === "confirmed",
+      mentionQuality: quality,
+      mentionListSize: null,
+      mentionPosition: null,
+      sentiment: null,
+      citedSources: [],
+      rawResponse: "",
+      shareOfVoice: quality === "confirmed" ? 1 : 0,
+      durationMs: 1,
+      isStub: false,
+      errorMessage: null,
+      ...(engineId === "naver" ? { naverSource: "search_results" } : {}),
+    });
+    const tagged = [
+      ...Array.from({ length: 10 }, () =>
+        answer("chatgpt", "brand", "confirmed")
+      ),
+      answer("claude", "brand", "unverified"),
+      answer("naver", "brand", "absent"),
+      answer("gemini", "discovery", "confirmed"),
+      answer("naver", "discovery", "confirmed"),
+    ];
+    const brandFlat = tagged.filter((row) => row.promptKind === "brand");
+    const stored = {
+      domain: "example.test",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: {
+        ...aggregateAudit(brandFlat, "example.test"),
+        answerBuckets: summarizeAnswerBuckets(tagged, {
+          brandDomain: "example.test",
+        }),
+      },
+      engineResponses: tagged.map((row) => ({
+        ...row,
+        sov: answerShareOfVoice(row, row.shareOfVoice),
+      })),
+    };
+    const reread = withRecomputedAuditMetrics(stored);
+    expect(isPublishableAuditResult(reread)).toBe(true);
+    expect(hasRecomputedAuditMetricsChanged(stored, reread)).toBe(false);
+  });
+  it("detects a stored discovery-search metric that changes on read without a PDF", () => {
+    const original = {
+      domain: "example.test",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100, enginesCovered: ["chatgpt", "naver"] },
+      engineResponses: [
+        ...rows(10, 0, { promptKind: "brand" }),
+        {
+          engineId: "naver",
+          promptKind: "discovery",
+          brandMentioned: true,
+          mentionQuality: "confirmed",
+          naverSource: "search_results",
+          isStub: false,
+          errorMessage: null,
+        },
+      ],
+    };
+    const corrected = withRecomputedAuditMetrics(original);
+    expect(isPublishableAuditResult(corrected)).toBe(true);
+    expect(hasRecomputedAuditMetricsChanged(original, corrected)).toBe(true);
+    expect(hasRecomputedAuditMetricsChanged(corrected, corrected)).toBe(false);
+  });
+
+  it("quarantines a PDF when a per-answer SoV changes despite equal aggregate metrics", () => {
+    const corrected = withRecomputedAuditMetrics({
+      domain: "example.test",
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 0 },
+      engineResponses: rows(10, 0, { sov: 0 }),
+    });
+    expect(isPublishableAuditResult(corrected)).toBe(true);
+    const saved = {
+      ...corrected,
+      engineResponses: corrected.engineResponses.map((row, index) =>
+        index === 0 ? { ...row, sov: 1 } : row
+      ),
+    };
+    const reread = withRecomputedAuditMetrics(saved);
+    expect(saved.metrics).toEqual(reread.metrics);
+    expect(saved.engineResponses[0]?.sov).toBe(1);
+    expect(reread.engineResponses[0]?.sov).toBe(0);
+    expect(hasStaleAuditPdf(saved, reread)).toBe(true);
+  });
+  it("recognizes only current versioned audit PDF URLs", () => {
+    expect(
+      isCurrentAuditPdfUrl(
+        "https://blob.test/audits/audit-v3-11111111-1111-4111-8111-111111111111-1.pdf"
+      )
+    ).toBe(true);
+    expect(
+      isCurrentAuditPdfUrl(
+        "https://blob.test/audits/audit-v2-11111111-1111-4111-8111-111111111111-1.pdf"
+      )
+    ).toBe(false);
+  });
+
+  it("refuses current-version metrics-only totals without AI channel evidence", () => {
+    const result = {
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { verifiedCount: 14, unverifiedCount: 0, sov: 50 },
+    };
+    expect(auditPublicationIssue(result)).toBe("brand_verification");
+    expect(publicAuditResult(result).metrics.sov).toBeNull();
+  });
+
   it("withholds scores, cited domains and prescriptions when nothing was adjudicated", () => {
     const result = publicAuditResult({
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
@@ -151,7 +272,7 @@ describe("saved audit metric normalization", () => {
     expect(auditPublicationIssue(ten)).toBeNull();
   });
 
-  it("shows provisional metrics from verified answers but withholds derived advice", () => {
+  it("keeps provisional evidence but withholds its mixed score and derived advice", () => {
     const result = withRecomputedAuditMetrics({
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
       metrics: {},
@@ -164,8 +285,12 @@ describe("saved audit metric normalization", () => {
     expect(isPublishableAuditResult(result)).toBe(false);
     const publicResult = publicAuditResult(result);
     const publicMetrics = publicResult.metrics as Record<string, unknown>;
-    expect(publicMetrics.sov).toBe(Math.round((4 / 15) * 100));
-    expect(publicMetrics.enginesWithMention).toHaveLength(4);
+    expect(publicMetrics.sov).toBeNull();
+    expect(publicMetrics.enginesWithMention).toEqual([]);
+    expect(publicMetrics.answerBuckets).toMatchObject({
+      ai: { adjudicated: 15, unverified: 7 },
+    });
+    expect(publicResult.engineResponses).toHaveLength(22);
     expect(publicResult.geoActions).toEqual([]);
     expect(publicResult.topRecommendations).toEqual([]);
     expect(publicResult.regions).toBeUndefined();
@@ -180,6 +305,42 @@ describe("saved audit metric normalization", () => {
     const publicResult = publicAuditResult(result);
     expect(publicResult.revalidation).toEqual({ recommendRemeasure: true });
     expect(result.revalidation.original).toEqual({ secret: 1 });
+  });
+
+  it("keeps private Tracking replay inputs out of published and provisional API results", () => {
+    for (const published of [true, false]) {
+      const stored = {
+        mentionVerdictVersion: MENTION_VERDICT_VERSION,
+        metrics: {
+          verifiedCount: published ? 10 : 1,
+          unverifiedCount: 0,
+          sov: 10,
+        },
+        engineResponses: [
+          {
+            engineId: "chatgpt",
+            excerpt: "visible answer",
+            sov: 0,
+            shareOfVoice: 0.75,
+            usage: { inputTokens: 11, outputTokens: 7, costModel: "token" },
+            trackingInputCaptured: true,
+          },
+        ],
+      };
+      const publicResult = publicAuditResult(stored);
+      expect(publicResult.engineResponses[0]).toMatchObject({
+        excerpt: "visible answer",
+        sov: 0,
+      });
+      expect(publicResult.engineResponses[0]).not.toHaveProperty(
+        "shareOfVoice"
+      );
+      expect(publicResult.engineResponses[0]).not.toHaveProperty("usage");
+      expect(publicResult.engineResponses[0]).not.toHaveProperty(
+        "trackingInputCaptured"
+      );
+      expect(stored.engineResponses[0].usage.inputTokens).toBe(11);
+    }
   });
 
   it("publishes the score when a confirmed answer mixes official and unattributed citations, restricting only citation advice", () => {
@@ -358,12 +519,119 @@ describe("saved audit metric normalization", () => {
       engineResponses: Array.from({ length: 10 }, () => ({
         engineId: "chatgpt",
         brandMentioned: false,
+        sov: 0,
       })),
     };
     const corrected = withRecomputedAuditMetrics(original);
     expect(hasStaleAuditPdf(original, corrected)).toBe(false);
     expect(corrected.regions).toEqual(original.regions);
     expect(corrected).not.toHaveProperty("regionScoresOutdated");
+  });
+
+  it("marks an old PDF stale when its stored recommendations are removed by the current filter", () => {
+    const corrected = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+      geoActions: [],
+      topRecommendations: ["Safe recommendation"],
+    });
+    const original = {
+      ...corrected,
+      geoActions: [
+        {
+          kind: "rank_strategy",
+          title: "Legacy ranking advice",
+          source: "Princeton Table 2 +115%",
+        },
+      ],
+      topRecommendations: [
+        "질문마다 답하는 페이지를 하나씩 만들고, 질문을 제목·URL에 그대로 넣으세요.",
+        "Safe recommendation",
+      ],
+    };
+
+    expect(hasStaleAuditPdf(original, corrected)).toBe(true);
+  });
+
+  it("keeps an honest PDF fresh when all stored recommendations survive the filter", () => {
+    const result = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+      topRecommendations: ["Safe recommendation"],
+    });
+
+    expect(hasStaleAuditPdf(result, result)).toBe(false);
+  });
+
+  it("quarantines a v3 PDF when its source action has a revised historical claim", () => {
+    const how =
+      "매주(주 1회) 올리면 네이버 AI 브리핑이나 HyperCLOVA X 가 우리를 인용·언급한다는 근거는 없습니다. 인용 272건 한 사례의 분포일 뿐입니다.";
+    const result = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+      geoActions: [{ kind: "naver_blog", title: "네이버 글쓰기", how }],
+      topRecommendations: [`네이버 글쓰기 — ${how}`],
+    });
+
+    expect(hasFilteredStoredAuditAdvice(result)).toBe(true);
+    expect(hasStaleAuditPdf(result, result)).toBe(true);
+  });
+
+  it("distinguishes filtered historical advice from unchanged current advice", () => {
+    expect(
+      hasFilteredStoredAuditAdvice({
+        geoActions: [{ kind: "prompt_gap", title: "Safe recommendation" }],
+        topRecommendations: ["Safe recommendation"],
+      })
+    ).toBe(false);
+    expect(
+      hasFilteredStoredAuditAdvice({
+        geoActions: [
+          {
+            kind: "rank_strategy",
+            title: "Legacy ranking advice",
+            source: "Princeton Table 2 +115%",
+          },
+        ],
+      })
+    ).toBe(true);
+    expect(
+      hasFilteredStoredAuditAdvice({
+        topRecommendations: ["Princeton Table 2 +115% expected lift"],
+      })
+    ).toBe(true);
+  });
+
+  it("preserves the publication decision across the public projection used by client fallback", () => {
+    const complete = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+    });
+    const provisional = withRecomputedAuditMetrics({
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+      metrics: { sov: 70 },
+      engineResponses: [
+        ...rows(7, 7),
+        ...rows(3, 0, { mentionQuality: "unverified" }),
+      ],
+    });
+    const withheld = withRecomputedAuditMetrics({
+      metrics: { sov: 100 },
+      engineResponses: rows(10, 10),
+    });
+
+    expect(auditPublicationStatus(complete)).toBe("published");
+    expect(auditPublicationStatus(provisional)).toBe("provisional");
+    expect(auditPublicationStatus(withheld)).toBe("withheld");
+    for (const result of [complete, provisional, withheld]) {
+      expect(auditPublicationIssue(publicAuditResult(result))).toBe(
+        auditPublicationIssue(result)
+      );
+    }
   });
 
   it("quarantines legacy verdicts instead of exposing their stale scores or actions", () => {

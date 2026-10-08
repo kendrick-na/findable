@@ -7,6 +7,7 @@ import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
 import { ensureOrgExists } from "@/lib/db/ensure-org";
+import { getAppDictionary } from "@/lib/i18n";
 
 /**
  * 초대 코드 사용(redeem) — 프로그램 참가 기업에게 기간제 권한을 준다.
@@ -17,7 +18,8 @@ import { ensureOrgExists } from "@/lib/db/ensure-org";
  *   업계 표준(Vercel·Linear·Notion)은 **코드 입력 → 즉시 사용**이고, 만료가 코드에 내장된다.
  *
  * ⛔ **결제 경로를 건드리지 않는다** — `packages/payments` 무접촉.
- *   카카오페이 심사 중(~9월 초) 「상품명·가격·상세정보」는 유지해야 한다.
+ *   카카오페이 심사 완료(2026-09-22, cf405634). 상품 구성(플랜·가격) 변경 시
+ *   PG 변경 신고 필요 여부 [확인필요].
  *   이 액션은 `Organization.plan` 을 올릴 뿐 요금제 화면·상품 구성을 바꾸지 않는다.
  *
  * 🔒 보안:
@@ -38,48 +40,44 @@ export type RedeemResult =
 export async function redeemInviteCode(input: {
   code: string;
 }): Promise<RedeemResult> {
+  const t = (await getAppDictionary()).invite;
   const { userId, orgId } = await auth();
   if (!(userId && orgId)) {
-    return { error: "로그인 후 조직을 선택해 주세요." };
+    return { error: t.errorSignIn };
   }
 
   // 대소문자·공백을 흡수한다 — 코드는 사람이 손으로 옮겨 적는다(메일·PDF에서 복사).
   const code = input.code.trim().toUpperCase();
   if (!code) {
-    return { error: "초대 코드를 입력해 주세요." };
+    return { error: t.errorEmpty };
   }
 
   // 가입 직후 Clerk 조직 웹훅이 늦어도 해당 조직을 DB에 먼저 만든다.
   // 그렇지 않으면 유효한 초대 코드가 organization.update에서 실패한다.
   if ((await ensureOrgExists()) !== orgId) {
-    return {
-      error: "조직 정보를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.",
-    };
+    return { error: t.errorOrgNotReady };
   }
 
   // grantPlan()은 기존 결제 출처 메타데이터를 교체한다. 유료/파트너/다른 코드
   // 권한 위에 초대 코드를 덮으면 환불·만료 때 잘못 강하될 수 있으므로 막는다.
   if ((await getCurrentPlan()) !== "free") {
-    return {
-      error:
-        "이미 이용 중인 플랜이 있습니다. 초대 코드는 무료 플랜에서만 사용할 수 있어요.",
-    };
+    return { error: t.errorHasPlan };
   }
 
   const invite = await database.inviteCode.findUnique({ where: { code } });
   if (!invite) {
     // ⚠️ "없는 코드"와 "만료된 코드"를 구분해 알린다 — 오타인지 기간이 지난 건지
     //   모르면 사용자가 같은 코드를 계속 다시 넣는다.
-    return { error: "없는 코드예요. 다시 확인해 주세요." };
+    return { error: t.errorNotFound };
   }
   if (invite.validUntil && invite.validUntil.getTime() < Date.now()) {
-    return { error: "기간이 지난 코드예요." };
+    return { error: t.errorExpired };
   }
   if (
     invite.maxRedemptions !== null &&
     invite.redeemedCount >= invite.maxRedemptions
   ) {
-    return { error: "사용 한도에 도달한 코드예요." };
+    return { error: t.errorLimit };
   }
 
   const expiresAt = new Date(
@@ -121,13 +119,13 @@ export async function redeemInviteCode(input: {
     });
   } catch (error) {
     if (error instanceof Error && error.message === "ALREADY_REDEEMED") {
-      return { error: "이미 사용한 코드예요." };
+      return { error: t.errorAlreadyUsed };
     }
     if (error instanceof Error && error.message === "LIMIT_REACHED") {
-      return { error: "사용 한도에 도달한 코드예요." };
+      return { error: t.errorLimit };
     }
     log.error("invite.redeem.failed", { code, orgId, error: String(error) });
-    return { error: "코드를 적용하지 못했어요. 잠시 후 다시 시도해 주세요." };
+    return { error: t.errorFailed };
   }
 
   // Clerk 캐시 push — 실패해도 DB(권위)는 이미 반영됐다.

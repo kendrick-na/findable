@@ -1,3 +1,5 @@
+import enDict from "@repo/internationalization/dictionaries/en.json";
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import type { DashboardData } from "../lib/dashboard-data";
 import { DashboardKpis } from "./dashboard-kpis";
@@ -30,13 +32,24 @@ const base: DashboardData = {
   sovDeltaPoints: 4,
   totalCount: 34,
   trend: [],
+  comparisonBlockedReason: null,
+  previousMeasuredAt: null,
+  searchSamplingVersion: null,
+  trendExcludedRuns: 0,
 };
 
 const meta = {
   title: "dashboard/DashboardKpis",
   component: DashboardKpis,
   parameters: { layout: "padded" },
-  args: { data: base, paid: false },
+  // 문구는 사전에서 온다(`app.kpis`). JSON 직접 import — `getAppDictionary` 는 server-only.
+  args: {
+    data: base,
+    isKo: true,
+    paid: false,
+    relativeTime: koDict.app.relativeTime,
+    t: koDict.app.kpis,
+  },
 } satisfies Meta<typeof DashboardKpis>;
 
 export default meta;
@@ -149,3 +162,12 @@ export const 유료: Story = { args: { paid: true } };
  *   즉 아무것도 검사하지 않으면서 "긴 이름도 괜찮다" 는 **거짓 안심**을 주는 스토리였다.
  *   → 브랜드명 오버플로는 그 값을 실제로 렌더하는 컴포넌트(header·brand-switcher)에서 볼 것.
  */
+
+/** 영어 문구 눈확인 — 사전 `app.kpis` 영문판. ⚠️ 카드 질문(METRICS)은 공용 패키지라 아직 한국어. */
+export const 영어: Story = {
+  args: {
+    isKo: false,
+    relativeTime: enDict.app.relativeTime,
+    t: enDict.app.kpis,
+  },
+};

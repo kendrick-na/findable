@@ -7,7 +7,13 @@ vi.mock("server-only", () => ({}));
 
 const mail = await import("@/lib/ax-mail/google");
 const outreach = await import("@/lib/ax-mail/leads");
+const basisLib = await import("@/lib/ax-mail/contact-basis");
 type Lead = import("@/lib/ax-mail/leads").Lead;
+
+/** 테스트 기준 시각 — 2026-10-06 (KST 정오). */
+const NOW = new Date("2026-10-06T03:00:00Z");
+/** ⚠️ 가짜 리포트 링크(형식만 맞춘 자리표시자) — 실제 발행본 아님. */
+const REPORT_URL = `https://www.findable.co.kr/r/${"A".repeat(43)}`;
 
 function lead(overrides: Partial<Lead> = {}): Lead {
   return {
@@ -25,6 +31,11 @@ function lead(overrides: Partial<Lead> = {}): Lead {
       role: "공식 마케팅 문의",
       sourceUrl: "https://example.com/contact",
       checkedOn: "2026-09-25",
+      contactBasis: {
+        kind: "business_card",
+        detail: "코엑스 뷰티 박람회 부스에서 직접 받음",
+        date: "2026-09-20",
+      },
     },
     measurement: {
       measuredOn: "2026-09-29",
@@ -35,9 +46,28 @@ function lead(overrides: Partial<Lead> = {}): Lead {
       officialCited: 3,
       hook: null,
     },
-    reportUrl: null,
+    reportUrl: REPORT_URL,
     ...overrides,
   };
+}
+
+function measurement() {
+  const base = lead().measurement;
+  if (!base) {
+    throw new Error("fixture");
+  }
+  return base;
+}
+
+function draftOf(l: Lead) {
+  const draft = outreach.composeOutreachDraft(
+    l,
+    outreach.leadReadiness(l, NOW)
+  );
+  if (!draft) {
+    throw new Error("draft expected");
+  }
+  return draft;
 }
 
 describe("Gmail draft-only integration", () => {
@@ -170,9 +200,11 @@ describe("Gmail draft-only integration", () => {
 });
 
 describe("lead readiness gate", () => {
-  test("a measured prospect with an official contact is ready (citation observation)", () => {
-    const r = outreach.leadReadiness(lead());
+  test("a measured prospect with contact basis + report link is ready (citation observation)", () => {
+    const r = outreach.leadReadiness(lead(), NOW);
     expect(r.ready).toBe(true);
+    expect(r.composable).toBe(true);
+    expect(r.blockers).toEqual([]);
     expect(r.observation).toEqual({
       kind: "citation",
       answersWithCitations: 24,
@@ -181,37 +213,131 @@ describe("lead readiness gate", () => {
   });
 
   test("inbound leads (already in contact) are never cold-email ready", () => {
-    const r = outreach.leadReadiness(lead({ track: "inbound" }));
+    const r = outreach.leadReadiness(lead({ track: "inbound" }), NOW);
     expect(r.ready).toBe(false);
+    expect(r.composable).toBe(false);
     expect(r.blockers).toContain("inbound");
   });
 
   test("missing contact / measurement / date block the draft", () => {
-    expect(outreach.leadReadiness(lead({ contact: null })).blockers).toEqual([
-      "no_contact",
-    ]);
     expect(
-      outreach.leadReadiness(lead({ measurement: null })).blockers
+      outreach.leadReadiness(lead({ contact: null }), NOW).blockers
+    ).toEqual(["no_contact", "no_contact_basis"]);
+    expect(
+      outreach.leadReadiness(lead({ measurement: null }), NOW).blockers
     ).toContain("not_measured");
-    const base = lead().measurement;
-    if (!base) {
-      throw new Error("fixture");
-    }
     expect(
       outreach.leadReadiness(
-        lead({ measurement: { ...base, measuredOn: null } })
+        lead({ measurement: { ...measurement(), measuredOn: null } }),
+        NOW
       ).blockers
     ).toContain("no_date");
   });
 
-  test("when the two judges disagree (라운드랩 7 vs 24) the recognition number is not used", () => {
-    const base = lead().measurement;
+  test("no published report link → blocked, no draft (no link, no draft)", () => {
+    for (const reportUrl of [
+      null,
+      "https://findable.co.kr/r/abc",
+      `https://preview.example.com/r/${"A".repeat(43)}`,
+    ]) {
+      const l = lead({ reportUrl });
+      const r = outreach.leadReadiness(l, NOW);
+      expect(r.blockers).toContain("no_report");
+      expect(r.composable).toBe(false);
+      expect(outreach.composeOutreachDraft(l, r)).toBeNull();
+    }
+  });
+
+  test("missing contact basis blocks saving but the draft text is still shown", () => {
+    const base = lead().contact;
     if (!base) {
       throw new Error("fixture");
     }
+    const l = lead({ contact: { ...base, contactBasis: null } });
+    const r = outreach.leadReadiness(l, NOW);
+    expect(r.blockers).toEqual(["no_contact_basis"]);
+    expect(r.ready).toBe(false);
+    expect(r.composable).toBe(true);
+    expect(outreach.composeOutreachDraft(l, r)).not.toBeNull();
+  });
+
+  test("contact basis rules: empty / future → missing, existing customer > 6 months → expired", () => {
+    const ok = (
+      kind:
+        | "business_card"
+        | "requested"
+        | "existing_customer"
+        | "public_contact"
+    ) => ({ kind, detail: "근거", date: "2026-09-01" }) as const;
+    expect(basisLib.contactBasisProblem(null, NOW)).toBe("missing");
+    expect(
+      basisLib.contactBasisProblem({ ...ok("requested"), detail: "  " }, NOW)
+    ).toBe("missing");
+    expect(
+      basisLib.contactBasisProblem(
+        { ...ok("requested"), date: "2026-02-30" },
+        NOW
+      )
+    ).toBe("missing");
+    expect(
+      basisLib.contactBasisProblem(
+        { ...ok("requested"), date: "2026-10-07" },
+        NOW
+      )
+    ).toBe("missing");
+    expect(basisLib.contactBasisProblem(ok("business_card"), NOW)).toBeNull();
+    // 2026-10-07 KISA 구두 확인 — 공개 문의 메일도 근거로 인정, (광고) 표기 없음
+    expect(basisLib.contactBasisProblem(ok("public_contact"), NOW)).toBeNull();
+    expect(basisLib.subjectForBasis("(광고) 제목", "public_contact")).toBe(
+      "제목"
+    );
+    expect(
+      basisLib.contactBasisProblem(ok("existing_customer"), NOW)
+    ).toBeNull();
+    // 거래 2026-04-06 → 6개월 = 2026-10-06 (오늘까지 유효), 2026-04-05 → 만료
+    expect(
+      basisLib.contactBasisProblem(
+        { ...ok("existing_customer"), date: "2026-04-06" },
+        NOW
+      )
+    ).toBeNull();
+    expect(
+      basisLib.contactBasisProblem(
+        { ...ok("existing_customer"), date: "2026-04-05" },
+        NOW
+      )
+    ).toBe("expired");
+    // 명함·요청 근거는 기간 제한이 없다
+    expect(
+      basisLib.contactBasisProblem(
+        { ...ok("business_card"), date: "2025-01-01" },
+        NOW
+      )
+    ).toBeNull();
+
+    const base = lead().contact;
+    if (!base) {
+      throw new Error("fixture");
+    }
+    const expired = lead({
+      contact: {
+        ...base,
+        contactBasis: {
+          kind: "existing_customer",
+          detail: "2026년 3월 진단 계약",
+          date: "2026-03-01",
+        },
+      },
+    });
+    expect(outreach.leadReadiness(expired, NOW).blockers).toEqual([
+      "no_contact_basis",
+    ]);
+  });
+
+  test("when the two judges disagree (라운드랩 7 vs 24) the recognition number is not used", () => {
     const disagree = lead({
       measurement: {
-        ...base,
+        ...measurement(),
         productConfirmed: 7,
         hook: {
           label: "자연원료 기반 브랜드",
@@ -222,23 +348,19 @@ describe("lead readiness gate", () => {
         },
       },
     });
-    const r = outreach.leadReadiness(disagree);
+    const r = outreach.leadReadiness(disagree, NOW);
     expect(r.blockers).toContain("judges_disagree");
     expect(r.observation?.kind).toBe("citation");
     expect(r.ready).toBe(true);
     const draft = outreach.composeOutreachDraft(disagree, r);
-    expect(draft?.body).not.toContain("정확히 설명한 답변은 7개");
+    expect(draft?.body).not.toContain("정확히 소개한 답변은 7번");
     expect(draft?.body).not.toContain("Round Lab is");
   });
 
-  test("agreeing judges allow the recognition line with the verified excerpt", () => {
-    const base = lead().measurement;
-    if (!base) {
-      throw new Error("fixture");
-    }
+  test("agreeing judges allow the recognition line", () => {
     const agree = lead({
       measurement: {
-        ...base,
+        ...measurement(),
         productConfirmed: 12,
         hook: {
           label: "AI 기술 자문",
@@ -249,55 +371,220 @@ describe("lead readiness gate", () => {
         },
       },
     });
-    const draft = outreach.composeOutreachDraft(agree);
-    expect(draft?.body).toContain(
-      "답변 32개 중 예시브랜드를 정확히 설명한 답변은 12개였습니다."
-    );
-    expect(draft?.body).toContain(
-      '"예시브랜드는 AI 기술 자문을 전문으로 하는 브랜드입니다."'
+    expect(draftOf(agree).body).toContain(
+      "- ChatGPT·Gemini·Claude에 예시브랜드를 32번 물었고, 정확히 소개한 답변은 12번이었습니다."
     );
   });
 });
 
-describe("cold email draft", () => {
-  test("uses only measured numbers, ad notice, unsubscribe line, no attachment wording", () => {
-    const draft = outreach.composeOutreachDraft(lead());
-    if (!draft) {
-      throw new Error("draft expected");
-    }
-    expect(draft.recipient).toBe("marketing@example.com");
-    expect(draft.subject.startsWith("(광고) 예시브랜드")).toBe(true);
-    expect(outreach.hasAdNotice(draft.subject, draft.body)).toBe(true);
-    expect(outreach.hasGuaranteeClaim(draft.body)).toBe(false);
-    expect(draft.body).toContain("2026년 9월 29일, ChatGPT·Gemini·Claude");
-    expect(draft.body).toContain(
-      "출처 링크가 달린 답변 24개 중 공식 사이트(example.com)를 출처로 쓴 답변은 3개였습니다."
+/** 프란츠 유사 예시(측정값은 테스트용 가상 수치). */
+function franzLike(overrides: Partial<Lead> = {}): Lead {
+  return lead({
+    id: "franz.example",
+    brand: "프란츠",
+    brandEn: "FRANZ",
+    company: "확인 필요",
+    domain: "franz.example",
+    measurement: {
+      measuredOn: "2026-10-01",
+      answers: 40,
+      engines: ["claude", "Perplexity", "gemini", "ChatGPT"],
+      productConfirmed: 9,
+      answersWithCitations: 30,
+      officialCited: 4,
+      hook: {
+        label: "비건 스킨케어",
+        labelCount: 5,
+        independentCorrect: 10,
+        excerpt: null,
+        excerptEngine: null,
+      },
+      entityConfusion: {
+        query: "Franz",
+        queryLanguage: "en",
+        otherEntity: "같은 이름의 메신저 앱",
+        engines: ["ChatGPT", "Gemini", "Claude", "Perplexity"],
+      },
+    },
+    ...overrides,
+  });
+}
+
+describe("sales email template", () => {
+  test("Franz-like lead: hooked subject, ordered engines, finding sentence", () => {
+    const draft = draftOf(franzLike());
+    expect(draft.subject).toBe(
+      "프란츠 AI 검색 진단 결과 공유드립니다 (ChatGPT 오인식 확인)"
     );
-    expect(draft.body).toContain("contact@findable.co.kr");
-    expect(draft.body).not.toMatch(/첨부/);
-    // 본문 속 모든 숫자는 측정값·날짜·서명에서만 나온다.
-    const allowed = new Set(["2026", "9", "29", "32", "24", "3"]);
-    for (const n of draft.body.match(/\d+/g) ?? []) {
+    expect(draft.body.startsWith("안녕하세요, 프란츠 마케팅 담당자님.\n")).toBe(
+      true
+    );
+    expect(draft.body).toContain(
+      "최근 고객들이 화장품을 고를 때 ChatGPT 같은 AI에 먼저 묻는 경우가 늘고 있어,\n프란츠가 AI에서 어떻게 소개되는지 직접 확인해 보았습니다."
+    );
+    expect(draft.body).toContain(
+      "- ChatGPT·Gemini·Claude·Perplexity에 프란츠를 40번 물었고, 정확히 소개한 답변은 9번이었습니다."
+    );
+    expect(draft.body).toContain(
+      '- 영어로 "Franz"를 물으면 네 곳 모두 같은 이름의 메신저 앱을 소개했습니다.'
+    );
+    expect(draft.body).toContain(
+      `답변 원문과 개선 방향은 아래 링크에 정리해 두었습니다.\n${REPORT_URL}`
+    );
+    expect(draft.body).toContain(
+      "나현덕 드림\nFindable 대표 | www.findable.co.kr"
+    );
+  });
+
+  test("partial confusion names the engines instead of 「모두」", () => {
+    const base = franzLike().measurement;
+    if (!base?.entityConfusion) {
+      throw new Error("fixture");
+    }
+    const draft = draftOf(
+      franzLike({
+        measurement: {
+          ...base,
+          entityConfusion: {
+            ...base.entityConfusion,
+            engines: ["gemini", "openai"],
+          },
+        },
+      })
+    );
+    expect(draft.body).toContain(
+      '- 영어로 "Franz"를 물으면 ChatGPT·Gemini에서는 같은 이름의 메신저 앱을 소개했습니다.'
+    );
+    expect(draft.subject).toContain("(ChatGPT 오인식 확인)");
+  });
+
+  test("category omission → 「AI 답변 누락 확인」 hook + leader impact line", () => {
+    const l = lead({
+      category: {
+        questions: 50,
+        answers: 474,
+        mentioned: 0,
+        leaders: [{ brand: "코스알엑스", mentioned: 183 }],
+      },
+    });
+    const draft = draftOf(l);
+    expect(draft.subject).toBe(
+      "예시브랜드 AI 검색 진단 결과 공유드립니다 (AI 답변 누락 확인)"
+    );
+    expect(draft.body).toContain(
+      "- 브랜드명을 넣지 않은 구매 질문 50개(답변 474개)에서는 예시브랜드가 한 번도 언급되지 않았습니다."
+    );
+    expect(draft.body).toContain(
+      "영향\n- 같은 구매 질문의 답변 474개 중 183개에는 코스알엑스가 언급됐습니다."
+    );
+  });
+
+  test("no hook → subject without parentheses; no data → no finding / impact section", () => {
+    const draft = draftOf(lead());
+    expect(draft.subject).toBe("예시브랜드 AI 검색 진단 결과 공유드립니다");
+    expect(draft.body).toContain(
+      "- ChatGPT·Gemini·Claude에 예시브랜드를 32번 물었고, 출처가 달린 답변 24번 중 공식 사이트(example.com)를 출처로 쓴 답변은 3번이었습니다.\n\n답변 원문과"
+    );
+    expect(draft.body).not.toContain("영향");
+    expect(draft.body).not.toContain("매출");
+  });
+
+  test("revenue line only with a confirmed annual revenue; 72.6억 → 월 약 4천만 원", () => {
+    expect(outreach.readableMonthlyAmount((7_260_000_000 * 0.07) / 12)).toBe(
+      "4천만 원"
+    );
+    expect(outreach.readableMonthlyAmount(135_000_000)).toBe("1억 원");
+    expect(outreach.readableMonthlyAmount(2_600_000_000)).toBe("30억 원");
+    expect(outreach.readableMonthlyAmount(9_600_000)).toBe("1천만 원");
+    expect(outreach.readableMonthlyAmount(3_400_000)).toBe("3백만 원");
+    expect(outreach.readableMonthlyAmount(500_000)).toBeNull();
+
+    expect(outreach.monthlyAiInfluencedRevenue(lead())).toBeNull();
+    expect(
+      outreach.monthlyAiInfluencedRevenue(
+        lead({ annualRevenue: { krw: 7_260_000_000, source: "" } })
+      )
+    ).toBeNull();
+    const withRevenue = franzLike({
+      annualRevenue: { krw: 7_260_000_000, source: "DART 2025 감사보고서" },
+    });
+    expect(draftOf(withRevenue).body).toContain(
+      "영향\n- 저희 추정으로는 프란츠 매출 중 월 약 4천만 원 규모가 AI 추천을 거쳐 결정되고 있습니다."
+    );
+    expect(draftOf(franzLike()).body).not.toContain("매출");
+  });
+
+  test("tone: no emoji, no divider lines, no markdown bold, no attachment, no guarantee", () => {
+    for (const l of [
+      lead(),
+      franzLike({
+        annualRevenue: { krw: 7_260_000_000, source: "DART 2025 감사보고서" },
+      }),
+    ]) {
+      const { subject, body } = draftOf(l);
+      expect(`${subject}\n${body}`).not.toMatch(/\p{Extended_Pictographic}/u);
+      expect(body).not.toMatch(/^\s*[-—─=_*]{2,}\s*$/m);
+      expect(body).not.toContain("**");
+      expect(body).not.toMatch(/첨부/);
+      expect(outreach.hasGuaranteeClaim(`${subject}\n${body}`)).toBe(false);
+    }
+  });
+
+  test("opt-out footer: sender name + contact email + KO/EN opt-out line", () => {
+    const { body } = draftOf(lead());
+    expect(body).toContain(
+      "보낸 사람: Findable(인디고차일드) · contact@findable.co.kr"
+    );
+    expect(body).toContain(
+      "더 이상 연락을 원치 않으시면 이 메일에 '수신거부'라고 회신해 주세요."
+    );
+    expect(body).toContain(outreach.UNSUBSCRIBE_LINE_EN);
+    expect(outreach.hasSenderNotice(body)).toBe(true);
+    expect(outreach.hasReportLink(body)).toBe(true);
+  });
+
+  test("every number in the body comes from the measurement (or the fixed 15-minute ask)", () => {
+    const { body } = draftOf(lead());
+    const allowed = new Set(["32", "24", "3", "15"]);
+    for (const n of body.replace(REPORT_URL, "").match(/\d+/g) ?? []) {
       expect(allowed.has(n)).toBe(true);
     }
   });
 
-  test("report link is used when issued, otherwise the email offers it on reply", () => {
-    expect(outreach.composeOutreachDraft(lead())?.body).toContain(
-      "회신 주시면 보내드리겠습니다"
+  test("existing customer basis keeps the (광고) subject label; others drop it", () => {
+    const base = lead().contact;
+    if (!base) {
+      throw new Error("fixture");
+    }
+    const existing = lead({
+      contact: {
+        ...base,
+        contactBasis: {
+          kind: "existing_customer",
+          detail: "2026년 8월 진단 계약",
+          date: "2026-08-10",
+        },
+      },
+    });
+    expect(draftOf(existing).subject).toBe(
+      "(광고) 예시브랜드 AI 검색 진단 결과 공유드립니다"
     );
-    expect(
-      outreach.composeOutreachDraft(
-        lead({ reportUrl: "https://findable.co.kr/r/abc" })
-      )?.body
-    ).toContain("https://findable.co.kr/r/abc");
+    expect(basisLib.subjectForBasis("(광고) 제목", "requested")).toBe("제목");
+    expect(basisLib.subjectForBasis("제목", "existing_customer")).toBe(
+      "(광고) 제목"
+    );
+    expect(basisLib.hasAdLabel("(광고) 제목")).toBe(true);
   });
 
-  test("guarantee claims and missing ad notices are detected", () => {
+  test("server-side checks detect missing notices / links / guarantee claims", () => {
     expect(outreach.hasGuaranteeClaim("노출되면 매출이 오릅니다")).toBe(true);
     expect(outreach.hasGuaranteeClaim("효과를 보장합니다")).toBe(true);
-    expect(outreach.hasAdNotice("안녕하세요", "수신거부")).toBe(false);
-    expect(outreach.hasAdNotice("(광고) 안녕하세요", "본문")).toBe(false);
+    expect(outreach.hasSenderNotice("수신거부")).toBe(false);
+    expect(outreach.hasSenderNotice("contact@findable.co.kr")).toBe(false);
+    expect(outreach.hasReportLink("https://www.findable.co.kr/r/abc")).toBe(
+      false
+    );
+    expect(outreach.hasReportLink(`링크\n${REPORT_URL}\n`)).toBe(true);
   });
 });
 
@@ -319,25 +606,36 @@ describe("shipped lead snapshot", () => {
       const l = leads.find((x) => x.domain === domain);
       expect(l?.track).toBe("inbound");
       if (l) {
-        expect(outreach.composeOutreachDraft(l)).toBeNull();
+        expect(
+          outreach.composeOutreachDraft({ ...l, reportUrl: REPORT_URL })
+        ).toBeNull();
       }
     }
   });
 
   test("every generated draft passes the server-side checks", () => {
-    for (const l of leads) {
-      const draft = outreach.composeOutreachDraft(l);
+    let drafts = 0;
+    for (const snapshotLead of leads) {
+      const l = { ...snapshotLead, reportUrl: REPORT_URL };
+      const draft = outreach.composeOutreachDraft(
+        l,
+        outreach.leadReadiness(l, NOW)
+      );
       if (draft) {
-        expect(outreach.hasAdNotice(draft.subject, draft.body)).toBe(true);
+        drafts += 1;
+        expect(outreach.hasSenderNotice(draft.body)).toBe(true);
+        expect(outreach.hasReportLink(draft.body)).toBe(true);
         expect(outreach.hasGuaranteeClaim(draft.body)).toBe(false);
+        expect(draft.body).not.toMatch(/\p{Extended_Pictographic}/u);
         expect(draft.recipient).toBe(l.contact?.email);
       }
     }
+    expect(drafts).toBeGreaterThan(0);
   });
 });
 
 describe("workbench renders", () => {
-  test("server render shows the industry chips, a ready lead and no send button", async () => {
+  test("server render shows chips, the contact-basis blocker + inputs, and no send button", async () => {
     const { renderToStaticMarkup } = await import("react-dom/server");
     const { createElement } = await import("react");
     const { LeadWorkbench } = await import(
@@ -352,8 +650,9 @@ describe("workbench renders", () => {
         "utf8"
       )
     ).app.axMail;
-    const leads = outreach.loadLeads().map((l) => {
-      const readiness = outreach.leadReadiness(l);
+    const leads = outreach.loadLeads().map((snapshotLead) => {
+      const l = { ...snapshotLead, reportUrl: REPORT_URL };
+      const readiness = outreach.leadReadiness(l, NOW);
       return {
         lead: l,
         readiness,
@@ -371,7 +670,10 @@ describe("workbench renders", () => {
       })
     );
     expect(html).toContain("뷰티·소비재");
-    expect(html).toContain("초안 가능");
+    expect(html).toContain("수신 근거 입력 필요");
+    expect(html).toContain(ko.blockerNoContactBasis);
+    expect(html).toContain("수신 근거 (필수)");
+    expect(html).toContain("명함을 직접 받음");
     expect(html).toContain("Gmail 초안함에 저장");
     expect(html).toContain("정보통신망법 제50조 제1항");
     expect(html).not.toMatch(/>\s*(보내기|발송|Send)\s*</);

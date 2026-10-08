@@ -1,6 +1,8 @@
+import { sanitizeStoredCrewResult } from "@repo/audit/crew-display-filter";
 import {
   auditPublicationIssue,
   MIN_VERIFIED_ANSWERS,
+  publicationVerifiedAnswerCount,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun } from "@repo/audit/run-quality";
@@ -19,13 +21,22 @@ import {
   scopedLatestRunTracking,
   scopedTracking,
 } from "@/lib/db/scoped";
+import {
+  type AppDictionary,
+  dateLocaleFor,
+  getAppDictionary,
+  getAppLocale,
+} from "@/lib/i18n";
 import { hasCompletedSetup } from "@/lib/onboarding";
+import { publicReportUrl } from "@/lib/public-report";
 import { BrandSwitcher } from "./components/brand-switcher";
 import { DashboardAnswerBuckets } from "./components/dashboard-answer-buckets";
 import { DashboardDeepAnalysis } from "./components/dashboard-deep-analysis";
 import { DashboardEmptyState } from "./components/dashboard-empty-state-server";
-import { DashboardImpactEstimate } from "./components/dashboard-impact-estimate";
-import { DashboardKpis } from "./components/dashboard-kpis";
+import {
+  DashboardKpis,
+  SearchSamplingTrendNote,
+} from "./components/dashboard-kpis";
 import { DashboardRunContext } from "./components/dashboard-run-context";
 import {
   DashboardSystemStatus,
@@ -46,9 +57,15 @@ import {
   buildDashboardData,
   buildTrackingDashboardData,
   invalidTrackingRunTimes,
+  trackingRunSearchSamplingVersions,
 } from "./lib/dashboard-data";
 import { buildTruthMirrorData } from "./lib/truth-mirror-data";
 import { getPrimaryEmail } from "./lib/user";
+
+// 이 화면의 「측정 시작」 서버액션(startOrgTracking)은 after() 로 측정 전체(runAuditJob)를
+//   돌린다. Next.js 문서: 서버액션 시간 상한은 **그 액션을 쓰는 page 의 maxDuration** 을 따른다.
+//   러너 예산(270초)+마무리 여유에 맞춰 명시한다 — 플랫폼 기본값에 기대지 않는다(2026-10-06).
+export const maxDuration = 300;
 
 const title = "Findable Dashboard";
 const description = "Your AI brand visibility hub.";
@@ -68,11 +85,13 @@ const DashboardNoResultState = ({
   failedJobId,
   unavailableJobId,
   signedInEmail,
+  t,
 }: {
   activeJobId?: string;
   failedJobId?: string;
   unavailableJobId?: string;
   signedInEmail: string | null;
+  t: AppDictionary["dashboard"];
 }) => {
   if (activeJobId) {
     return (
@@ -83,18 +102,17 @@ const DashboardNoResultState = ({
         />
         <div>
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-            첫 측정을 진행하고 있어요
+            {t.firstRunTitle}
           </h1>
           <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-            브랜드 설정은 완료됐어요. AI 답변을 수집한 뒤 이 대시보드와 측정
-            이력에 결과가 쌓입니다.
+            {t.firstRunBody}
           </p>
         </div>
         <Link
           className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
           href={`/brand/measuring?job=${activeJobId}`}
         >
-          실시간 상태 보기
+          {t.liveStatus}
         </Link>
       </section>
     );
@@ -105,11 +123,10 @@ const DashboardNoResultState = ({
       <section className="findable-card flex min-h-[360px] flex-col items-center justify-center gap-4 p-8 text-center">
         <div>
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-            브랜드 설정은 완료됐지만 첫 측정에 실패했어요
+            {t.firstRunFailedTitle}
           </h1>
           <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-            브랜드를 다시 입력할 필요는 없어요. 실패 사유를 확인한 뒤 기존
-            브랜드에서 측정만 다시 시작하세요.
+            {t.firstRunFailedBody}
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
@@ -117,13 +134,13 @@ const DashboardNoResultState = ({
             className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
             href="/history"
           >
-            측정 이력 보기
+            {t.viewHistory}
           </Link>
           <Link
             className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
             href="/brand"
           >
-            브랜드에서 다시 측정
+            {t.remeasureFromBrand}
           </Link>
         </div>
       </section>
@@ -135,11 +152,10 @@ const DashboardNoResultState = ({
       <section className="findable-card flex min-h-[360px] flex-col items-center justify-center gap-4 p-8 text-center">
         <div>
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-            측정 요청은 끝났지만 AI 응답을 받지 못했어요
+            {t.noAnswersTitle}
           </h1>
           <p className="mt-2 max-w-md text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-            0점이나 미노출이라는 뜻이 아니에요. 연결된 AI 응답이 없어 이번
-            회차의 점수와 할 일을 만들 수 없습니다.
+            {t.noAnswersBody}
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
@@ -147,13 +163,13 @@ const DashboardNoResultState = ({
             className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
             href="/history"
           >
-            측정 상세 보기
+            {t.viewRunDetail}
           </Link>
           <Link
             className="findable-btn-secondary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
             href="/brand"
           >
-            브랜드에서 다시 측정
+            {t.remeasureFromBrand}
           </Link>
         </div>
       </section>
@@ -163,11 +179,30 @@ const DashboardNoResultState = ({
   return <DashboardEmptyState signedInEmail={signedInEmail} />;
 };
 
+/** Drops Tracking rows of unusable runs for the viewed brand only. */
+function withoutInvalidRuns<T extends { brandId: string; trackedAt: Date }>(
+  rows: T[],
+  brandId: string | null,
+  invalidRunTimes: Set<number>
+): T[] {
+  if (invalidRunTimes.size === 0) {
+    return rows;
+  }
+  return rows.filter(
+    (row) =>
+      row.brandId !== brandId || !invalidRunTimes.has(row.trackedAt.getTime())
+  );
+}
+
 const App = async ({ searchParams }: AppProperties) => {
   const { brand: selectedBrandId } = await searchParams;
   const user = await currentUser();
   const email = user ? getPrimaryEmail(user) : null;
   const { orgId } = await auth();
+  const [dict, locale] = await Promise.all([
+    getAppDictionary(),
+    getAppLocale(),
+  ]);
   if (orgId && !(await hasCompletedSetup())) {
     redirect("/welcome");
   }
@@ -223,43 +258,50 @@ const App = async ({ searchParams }: AppProperties) => {
   // Tracking rows do not carry entity-verification status. A prior run with
   // skipped verdicts must not become a 0% baseline or a false trend point.
   // Read result JSON only for this brand's recent jobs, not all org jobs.
-  const qualityCandidateIds = initialTrackingData?.latestBrandId
+  // W1: the same read also yields each run's Naver search sampling version,
+  // so it includes the latest run (Tracking rows do not carry the version).
+  const brandRunJobIds = initialTrackingData?.latestBrandId
     ? jobsLite
         .filter(
           (job) =>
             job.brandId === initialTrackingData.latestBrandId &&
             job.status === "completed" &&
-            job.completedAt &&
-            job.completedAt.getTime() !==
-              initialTrackingData.latestMeasuredAt?.getTime()
+            job.completedAt
         )
         .map((job) => job.id)
     : [];
-  const qualityJobs = qualityCandidateIds.length
+  const brandRunJobs = brandRunJobIds.length
     ? await database.auditJob.findMany({
-        where: { ...(JOB_WHERE ?? {}), id: { in: qualityCandidateIds } },
+        where: { ...(JOB_WHERE ?? {}), id: { in: brandRunJobIds } },
         select: { id: true, result: true },
       })
     : [];
+  const brandRuns = brandRunJobs.map((job) => ({
+    completedAt:
+      jobsLite.find((candidate) => candidate.id === job.id)?.completedAt ??
+      null,
+    result: job.result,
+  }));
   const invalidRunTimes = invalidTrackingRunTimes(
-    qualityJobs.map((job) => ({
-      completedAt:
-        jobsLite.find((candidate) => candidate.id === job.id)?.completedAt ??
-        null,
-      result: job.result,
-    }))
+    brandRuns.filter(
+      (run) =>
+        run.completedAt?.getTime() !==
+        initialTrackingData?.latestMeasuredAt?.getTime()
+    )
   );
-  const trackingData =
-    initialTrackingData && invalidRunTimes.size > 0
-      ? buildTrackingDashboardData(
-          trackingRows.filter(
-            (row) =>
-              row.brandId !== initialTrackingData.latestBrandId ||
-              !invalidRunTimes.has(row.trackedAt.getTime())
-          ),
-          selectedBrandId
-        )
-      : initialTrackingData;
+  const runSearchSamplingVersions =
+    trackingRunSearchSamplingVersions(brandRuns);
+  const trackingData = initialTrackingData
+    ? buildTrackingDashboardData(
+        withoutInvalidRuns(
+          trackingRows,
+          initialTrackingData.latestBrandId,
+          invalidRunTimes
+        ),
+        selectedBrandId,
+        runSearchSamplingVersions
+      )
+    : null;
   // 🔴 D10(2026-08-07): 여기 있던 `Math.max(trackingData.totalCount, jobs.length)` 를 뺐다.
   //   원래 의도는 "이력 리스트(AuditJob)보다 총 횟수가 적게 보이는 혼란 방지"였는데,
   //   totalCount 가 **보고 있는 브랜드의 측정 횟수**로 바뀐 지금은 그 보정이
@@ -284,7 +326,9 @@ const App = async ({ searchParams }: AppProperties) => {
       latestJobForTracking.completedAt > initialTrackingData.latestMeasuredAt
   );
   const jobsWithResult =
-    (trackingData === null || trackingIsStale) && jobsLite.length > 0 && JOB_WHERE
+    (trackingData === null || trackingIsStale) &&
+    jobsLite.length > 0 &&
+    JOB_WHERE
       ? await database.auditJob.findMany({
           where: JOB_WHERE,
           orderBy: { createdAt: "desc" },
@@ -398,7 +442,7 @@ const App = async ({ searchParams }: AppProperties) => {
   return (
     <>
       <Header
-        page="대시보드"
+        page={dict.dashboard.headerTitle}
         pages={["Findable"]}
         showMetric={
           currentRunPublishable &&
@@ -413,18 +457,17 @@ const App = async ({ searchParams }: AppProperties) => {
           >
             <div>
               <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-                새 측정을 진행하고 있어요
+                {dict.dashboard.newRunTitle}
               </p>
               <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                지금 보이는 값은 이전 완료 결과예요. 새 결과가 끝나면 자동으로
-                이력에 쌓여요.
+                {dict.dashboard.newRunBody}
               </p>
             </div>
             <Link
               className="text-[color:var(--findable-primary,#ff7a4d)] text-sm"
               href={`/brand/measuring?job=${activeJob.id}`}
             >
-              실시간 상태 보기 →
+              {dict.dashboard.liveStatusArrow}
             </Link>
           </section>
         ) : null}
@@ -432,17 +475,16 @@ const App = async ({ searchParams }: AppProperties) => {
         {newerJobWithoutTracking ? (
           <section className="findable-card flex flex-col gap-3 p-6">
             <h1 className="font-semibold text-xl">
-              최신 측정 결과를 확인해 주세요
+              {dict.dashboard.checkLatestTitle}
             </h1>
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              최신 측정은 완료됐지만 대시보드 시계열 반영이 지연됐습니다. 이전
-              회차의 숫자를 최신 결과로 표시하지 않습니다.
+              {dict.dashboard.checkLatestBody}
             </p>
             <Link
               className="text-[color:var(--findable-primary,#ff7a4d)] text-sm"
               href={`/history/${newerJobWithoutTracking.id}`}
             >
-              최신 측정과 리포트 보기 →
+              {dict.dashboard.viewLatestReport}
             </Link>
           </section>
         ) : null}
@@ -452,19 +494,22 @@ const App = async ({ searchParams }: AppProperties) => {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex flex-col gap-1">
                 <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-                  가시성 대시보드
+                  {dict.dashboard.title}
                 </h1>
                 <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
                   {data.latestBrandName
-                    ? `AI가 ‘${data.latestBrandName}’ 브랜드를 어떻게 말하는지 모았어요.`
-                    : "AI가 내 브랜드를 어떻게 말하는지 모았어요."}
+                    ? dict.dashboard.ledeWithBrand.replace(
+                        "{brand}",
+                        data.latestBrandName
+                      )
+                    : dict.dashboard.lede}
                 </p>
               </div>
               <Link
                 className="findable-btn-primary inline-flex items-center rounded-md px-4 py-2 font-medium text-sm"
                 href="/brand"
               >
-                측정 시작
+                {dict.dashboard.startMeasure}
               </Link>
             </div>
 
@@ -473,6 +518,7 @@ const App = async ({ searchParams }: AppProperties) => {
                 선택에 종속되므로, 무엇을 보고 있는지 먼저 알려야 한다. */}
             {data.brandOptions.length > 1 ? (
               <BrandSwitcher
+                label={dict.dashboard.brandSwitcherLabel}
                 options={data.brandOptions}
                 selectedId={data.latestBrandId}
               />
@@ -480,33 +526,69 @@ const App = async ({ searchParams }: AppProperties) => {
 
             <DashboardRunContext
               brandName={data.latestBrandName}
+              dateLocale={dateLocaleFor(locale)}
               jobId={currentRunJob?.id ?? null}
               measuredAt={data.latestMeasuredAt}
               reportUrl={
                 currentRunJob
-                  ? `${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`
+                  ? publicReportUrl(
+                      env.NEXT_PUBLIC_WEB_URL,
+                      currentRunJob.id,
+                      locale
+                    )
                   : null
               }
+              t={dict.runContext}
             />
 
             {/* 헤드라인 4분류(2026-09-29) — 공개 리포트 히어로와 같은 함수·같은 문구.
                 잠정 회차에도 보인다: 판정이 끝난 답변 수는 사실이고, 비율의 분모를 밝힌다. */}
             {correctedCurrentResult ? (
-              <DashboardAnswerBuckets result={correctedCurrentResult} />
+              <DashboardAnswerBuckets
+                isKo={locale === "ko"}
+                result={correctedCurrentResult}
+                t={dict.answerBuckets}
+              />
             ) : null}
 
             {!currentRunPublishable && currentRunJob ? (
               <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-amber-100 text-sm">
+                {currentRunIssue === "incomplete_execution"
+                  ? dict.dashboard.issueIncomplete
+                  : null}
+                {currentRunIssue === "question_plan_unverified"
+                  ? dict.dashboard.issuePlanUnverified
+                  : null}
                 {currentRunIssue === "insufficient_sample"
-                  ? `이번 측정은 브랜드 판별이 끝난 답변이 ${typeof correctedMetrics?.verifiedCount === "number" ? correctedMetrics.verifiedCount : 0}건뿐이라 기준(${MIN_VERIFIED_ANSWERS}건)에 못 미칩니다.`
-                  : `이번 측정은 브랜드 판별 ${currentRunUnverified}회가 완료되지 않았습니다.`}{" "}
-                이번 회차의 점수·등장률·추세·놓치는 유입 추정·개선 처방은
-                확정하지 않습니다.{" "}
+                  ? dict.dashboard.issueInsufficient
+                      .replace(
+                        "{count}",
+                        String(
+                          publicationVerifiedAnswerCount(
+                            correctedCurrentResult
+                          ) ?? 0
+                        )
+                      )
+                      .replace("{min}", String(MIN_VERIFIED_ANSWERS))
+                  : null}
+                {currentRunIssue !== "incomplete_execution" &&
+                currentRunIssue !== "question_plan_unverified" &&
+                currentRunIssue !== "insufficient_sample"
+                  ? dict.dashboard.issueUnverified.replace(
+                      "{count}",
+                      String(currentRunUnverified)
+                    )
+                  : null}{" "}
+                {dict.dashboard.issueNotFinal}{" "}
                 <Link
                   className="underline underline-offset-2"
-                  href={`${env.NEXT_PUBLIC_WEB_URL}/ko/audit/${currentRunJob.id}`}
+                  href={publicReportUrl(
+                    env.NEXT_PUBLIC_WEB_URL,
+                    currentRunJob.id,
+                    locale
+                  )}
                 >
-                  리포트에서 근거 확인 →
+                  {dict.dashboard.checkEvidence}
                 </Link>
               </section>
             ) : null}
@@ -518,22 +600,24 @@ const App = async ({ searchParams }: AppProperties) => {
                 자동으로 건너뛴다(대상 없음 → 스킵, 죽지 않음) — 순서는 자유롭게 바꿔도 된다. */}
             {currentRunPublishable ? (
               <div id="tour-kpis">
-                <DashboardKpis data={data} paid={isPaid(plan)} />
+                <DashboardKpis
+                  data={data}
+                  isKo={locale === "ko"}
+                  paid={isPaid(plan)}
+                  relativeTime={dict.relativeTime}
+                  t={dict.kpis}
+                />
               </div>
             ) : null}
 
-            {currentRunPublishable &&
-            data.coverage &&
-            data.latestSov !== null ? (
-              <DashboardImpactEstimate
-                brandId={data.latestBrandId}
-                coverage={data.coverage}
-                sov={data.latestSov}
-              />
-            ) : null}
-
             {data.latestBrandId && orgId ? (
-              <Suspense fallback={<DashboardSystemStatusSkeleton />}>
+              <Suspense
+                fallback={
+                  <DashboardSystemStatusSkeleton
+                    label={dict.systemStatus.loading}
+                  />
+                }
+              >
                 <DashboardSystemStatus
                   brandId={data.latestBrandId}
                   canAudit={hasPlan(plan, "growth")}
@@ -548,15 +632,22 @@ const App = async ({ searchParams }: AppProperties) => {
                 <NextActionsCard
                   brandId={data.latestBrandId}
                   brandName={data.latestBrandName}
+                  t={dict.nextActions}
                 />
               </div>
             ) : null}
 
             {currentRunPublishable ? (
               <DashboardDeepAnalysis
-                crewResult={(currentRunAnalysis?.crewResult as never) ?? null}
+                crewResult={
+                  // 근거 없는 저장 수치 문장은 표시 직전에 뺀다(`crew-display-filter.ts`).
+                  (sanitizeStoredCrewResult(
+                    currentRunAnalysis?.crewResult
+                  ) as never) ?? null
+                }
                 crewStatus={currentRunAnalysis?.crewStatus ?? "not_requested"}
                 jobId={currentRunJob?.id ?? null}
+                t={dict.deepAnalysis}
               />
             ) : null}
 
@@ -569,6 +660,7 @@ const App = async ({ searchParams }: AppProperties) => {
                       <TrendAnnotations
                         annotations={annotations}
                         brandId={data.latestBrandId}
+                        t={dict.annotations}
                       />
                     ) : null
                   }
@@ -578,10 +670,17 @@ const App = async ({ searchParams }: AppProperties) => {
                       <StartTrackingButton
                         brandName={data.latestBrandName}
                         domain={data.latestBrandDomain}
+                        t={dict.trackButton}
                       />
                     ) : null
                   }
+                  t={dict.trendChart}
                   trend={data.trend}
+                />
+                <SearchSamplingTrendNote
+                  data={data}
+                  isKo={locale === "ko"}
+                  t={dict.kpis}
                 />
               </div>
             ) : null}
@@ -590,7 +689,10 @@ const App = async ({ searchParams }: AppProperties) => {
                 리서치 `01:132` *"업계 1군은 이걸 메인에 둔다"* · 경쟁사 채택률 8/15.
                 위치: 추세(시간) 다음, 이력(원장) 앞 — 요약 → 추세 → **분해** → 원장 순. */}
             {currentRunPublishable ? (
-              <PromptScoreboard scores={data.promptScores} />
+              <PromptScoreboard
+                scores={data.promptScores}
+                t={dict.promptScoreboard}
+              />
             ) : null}
 
             {/* 「진실의 거울」(v4 탭7 · N-37) — 요약 → 추세 → 분해 → **원문** 순.
@@ -601,6 +703,8 @@ const App = async ({ searchParams }: AppProperties) => {
                 <TruthMirrorSection
                   brandName={data.latestBrandName}
                   data={truthMirror}
+                  isKo={locale === "ko"}
+                  t={dict.truthMirror}
                 />
               </div>
             ) : null}
@@ -610,7 +714,16 @@ const App = async ({ searchParams }: AppProperties) => {
                 19번 줄) — 단 Findable은 **실제 측정 결과**(`hasData` 분기 안) 위에서만
                 뜬다. 빈 상태(`DashboardEmptyState`)에는 안 뜬다 — 볼 데이터가 없는
                 화면을 투어할 이유가 없다. */}
-            {currentRunPublishable ? <OnboardingTour /> : null}
+            {currentRunPublishable ? (
+              <OnboardingTour
+                labels={{
+                  ...dict.tour,
+                  next: dict.onboarding.next,
+                  skip: dict.onboarding.skip,
+                  stepOf: dict.onboarding.stepOf,
+                }}
+              />
+            ) : null}
 
             {/* 🔴 「최근 측정 이력」 섹션 제거 (세션N-34 · N-33 확정사항 7번 실행).
                 같은 `AuditHistoryList` 가 여기와 `/history` **두 곳에 렌더**되고 있었다.
@@ -633,8 +746,10 @@ const App = async ({ searchParams }: AppProperties) => {
                 경고할 불일치 자체가 없다 — 남겨두면 **없는 혼란을 설명하는 문장**이 된다.
                 ⚠️ 이력을 다시 이 화면에 붙이면 **그 한 줄도 같이 되살려야 한다.** */}
 
-            <PartnerCTA plan={plan} />
-            {!isPaid(plan) && <UpgradeLadder plan={plan} />}
+            <PartnerCTA plan={plan} t={dict.partnerCta} />
+            {!isPaid(plan) && (
+              <UpgradeLadder plan={plan} t={dict.upgradeLadder} />
+            )}
           </>
         ) : null}
         {newerJobWithoutTracking || (hasData && hasUsableResult) ? null : (
@@ -648,6 +763,7 @@ const App = async ({ searchParams }: AppProperties) => {
             activeJobId={activeJob?.id}
             failedJobId={latestFailedJob?.id}
             signedInEmail={email}
+            t={dict.dashboard}
             unavailableJobId={
               hasData && !hasUsableResult ? latestCompletedJob?.id : undefined
             }

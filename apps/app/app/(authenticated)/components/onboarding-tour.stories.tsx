@@ -1,3 +1,5 @@
+import enDict from "@repo/internationalization/dictionaries/en.json";
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import type { DashboardData } from "../lib/dashboard-data";
 import { DashboardKpis } from "./dashboard-kpis";
@@ -32,13 +34,31 @@ const REAL_DATA: DashboardData = {
   sovDeltaPoints: 4,
   totalCount: 34,
   trend: [],
+  comparisonBlockedReason: null,
+  previousMeasuredAt: null,
+  searchSamplingVersion: null,
+  trendExcludedRuns: 0,
 };
 
 /** 실제 대시보드 레이아웃을 흉내낸다 — `id="tour-kpis"` 등 앵커만 있으면 투어가 찾는다. */
-const DashboardShell = () => (
+// ⚠️ JSON 을 직접 import 한다 — `getAppDictionary` 는 `server-only` 라 스토리 번들이 죽는다.
+const tourLabels = (dict: typeof koDict) => ({
+  ...dict.app.tour,
+  next: dict.app.onboarding.next,
+  skip: dict.app.onboarding.skip,
+  stepOf: dict.app.onboarding.stepOf,
+});
+
+const DashboardShell = ({ lang = "ko" }: { lang?: "ko" | "en" }) => (
   <div className="flex max-w-3xl flex-col gap-6 p-6">
     <div id="tour-kpis">
-      <DashboardKpis data={REAL_DATA} paid={false} />
+      <DashboardKpis
+        data={REAL_DATA}
+        isKo={lang !== "en"}
+        paid={false}
+        relativeTime={(lang === "en" ? enDict : koDict).app.relativeTime}
+        t={(lang === "en" ? enDict : koDict).app.kpis}
+      />
     </div>
     <div
       className="findable-card flex h-24 items-center justify-center text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm"
@@ -58,7 +78,7 @@ const DashboardShell = () => (
     >
       (TruthMirrorSection 자리)
     </div>
-    <OnboardingTour />
+    <OnboardingTour labels={tourLabels(lang === "en" ? enDict : koDict)} />
   </div>
 );
 
@@ -73,3 +93,6 @@ type Story = StoryObj<typeof meta>;
 
 /** 첫 진입 — localStorage에 아직 아무것도 없으므로 1단계부터 자동으로 뜬다. */
 export const 첫진입: Story = {};
+
+/** 영어 문구 눈확인 — 사전 `app.tour` 영문판. */
+export const 첫진입_영어: Story = { args: { lang: "en" } };

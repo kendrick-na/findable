@@ -18,81 +18,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/client";
 
-// 엔진 시드 데이터. @repo/database는 @repo/ai를 의존하지 않으므로(순환·exports 회피)
-//   packages/ai/lib/engines/types.ts의 ENGINES를 이 시드가 소유 사본으로 인라인한다.
-//   ⚠️ ai 쪽 ENGINES 목록(id/name/provider/language/ordering)이 바뀌면 이 배열도 맞출 것.
-//   (근거: types.ts:33 ENGINES 실측 2026-07-29)
-const ENGINES = [
-  {
-    id: "chatgpt",
-    name: "ChatGPT",
-    provider: "openai",
-    language: "both",
-    ordering: 1,
-  },
-  {
-    id: "chatgpt-web",
-    name: "ChatGPT (Web)",
-    provider: "openai",
-    language: "both",
-    ordering: 2,
-  },
-  {
-    id: "claude",
-    name: "Claude",
-    provider: "anthropic",
-    language: "both",
-    ordering: 3,
-  },
-  {
-    id: "perplexity",
-    name: "Perplexity",
-    provider: "perplexity",
-    language: "both",
-    ordering: 4,
-  },
-  {
-    id: "gemini",
-    name: "Gemini",
-    provider: "google",
-    language: "both",
-    ordering: 5,
-  },
-  {
-    id: "hyperclova",
-    name: "HyperCLOVA X",
-    provider: "naver",
-    language: "ko",
-    ordering: 6,
-  },
-  {
-    id: "naver",
-    name: "Naver",
-    provider: "naver",
-    language: "ko",
-    ordering: 7,
-  },
-  {
-    id: "naver-briefing",
-    name: "Naver AI 브리핑",
-    provider: "naver",
-    language: "ko",
-    ordering: 8,
-  },
-  { id: "daum", name: "Daum", provider: "kakao", language: "ko", ordering: 9 },
-] as const;
-
-// 본류 audit이 실제 호출하는 엔진(engines/index.ts DEFAULT_ENGINES와 동일).
-// 이 목록만 isActive=true. chatgpt-web·naver-briefing은 옵션이라 false.
-// ⛔ 2026-09-29: hyperclova 비활성(서비스 종료). 행은 남긴다 — 과거 Tracking 의 FK.
-const ACTIVE_ENGINE_IDS = new Set<string>([
-  "chatgpt",
-  "claude",
-  "perplexity",
-  "gemini",
-  "naver",
-  "daum",
-]);
+import { ACTIVE_ENGINE_IDS, ENGINE_SEED } from "./engine-seed-data";
 
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
@@ -105,7 +31,7 @@ async function main(): Promise<void> {
 
   try {
     let count = 0;
-    for (const e of ENGINES) {
+    for (const e of ENGINE_SEED) {
       const isActive = ACTIVE_ENGINE_IDS.has(e.id);
       await prisma.engine.upsert({
         where: { id: e.id },

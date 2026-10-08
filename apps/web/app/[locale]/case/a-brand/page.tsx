@@ -18,6 +18,7 @@ import { createMetadata } from "@repo/seo/metadata";
 import { ArrowRight, ExternalLink, Info } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { freeAuditPublicEnabled } from "@/lib/free-audit";
 import { FooterCTA } from "../../(home)/components/footer-cta";
 import { PublicLandingHeader } from "../../components/public-landing-header";
 
@@ -144,18 +145,22 @@ const FINDINGS = [
 
 const EN_FINDINGS = [
   {
-    title: "Global engines mentioned Medicube and Round Lab in all four tested prompts",
-    detail: "Across the measured prompts, the four global engines—ChatGPT, Claude, Perplexity, and Gemini—mentioned Medicube and Round Lab in 4/4 answers. This observation does not establish why those brands appeared.",
+    title:
+      "Global engines mentioned Medicube and Round Lab in all four tested prompts",
+    detail:
+      "Across the measured prompts, the four global engines—ChatGPT, Claude, Perplexity, and Gemini—mentioned Medicube and Round Lab in 4/4 answers. This observation does not establish why those brands appeared.",
     severity: "green" as const,
   },
   {
     title: "Daum mentioned Medicube and Round Lab in two of four prompts",
-    detail: "For both brands, Daum mentioned the brand in 2/4 tested prompts. The result shows a gap in this sample, but does not establish that Daum's index caused it.",
+    detail:
+      "For both brands, Daum mentioned the brand in 2/4 tested prompts. The result shows a gap in this sample, but does not establish that Daum's index caused it.",
     severity: "amber" as const,
   },
   {
     title: "HyperCLOVA X mentioned both brands in four of four prompts",
-    detail: "Medicube and Round Lab appeared in all four tested HyperCLOVA X responses. This result is limited to the questions and dates measured; it is not a category-wide claim.",
+    detail:
+      "Medicube and Round Lab appeared in all four tested HyperCLOVA X responses. This result is limited to the questions and dates measured; it is not a category-wide claim.",
     severity: "green" as const,
   },
 ] as const;
@@ -199,14 +204,50 @@ const SIMULATION_STRATEGIES = [
 ];
 
 const EN_SIMULATION_STRATEGIES = [
-  { code: "S1", name: "Cite Sources", impact: "+27%", source: "Mean relative change in Princeton's English-language experiment", body: "Add clear references to original sources on brand pages so claims can be checked." },
-  { code: "S2", name: "Quotation Inclusion", impact: "+41%", source: "Mean relative change in Princeton's English-language experiment", body: "Use attributed expert statements or customer reviews where appropriate and verifiable." },
-  { code: "S3", name: "Statistics & Data", impact: "+31%", source: "Mean relative change in Princeton's English-language experiment", body: "Present sourced statistics and measured data rather than unsupported claims." },
-  { code: "S4", name: "Korean Entity Grounding", impact: "To validate", source: "Findable hypothesis; effect not yet measured", body: "Track Korean, English, and mixed-script brand names together to reduce missed mentions." },
-  { code: "S5", name: "AI Briefing Visibility", impact: "To validate", source: "Findable hypothesis; effect not yet measured", body: "Test changes intended to improve visibility in Naver AI Briefing separately." },
+  {
+    code: "S1",
+    name: "Cite Sources",
+    impact: "+27%",
+    source: "Mean relative change in Princeton's English-language experiment",
+    body: "Add clear references to original sources on brand pages so claims can be checked.",
+  },
+  {
+    code: "S2",
+    name: "Quotation Inclusion",
+    impact: "+41%",
+    source: "Mean relative change in Princeton's English-language experiment",
+    body: "Use attributed expert statements or customer reviews where appropriate and verifiable.",
+  },
+  {
+    code: "S3",
+    name: "Statistics & Data",
+    impact: "+31%",
+    source: "Mean relative change in Princeton's English-language experiment",
+    body: "Present sourced statistics and measured data rather than unsupported claims.",
+  },
+  {
+    code: "S4",
+    name: "Korean Entity Grounding",
+    impact: "To validate",
+    source: "Findable hypothesis; effect not yet measured",
+    body: "Track Korean, English, and mixed-script brand names together to reduce missed mentions.",
+  },
+  {
+    code: "S5",
+    name: "AI Briefing Visibility",
+    impact: "To validate",
+    source: "Findable hypothesis; effect not yet measured",
+    body: "Test changes intended to improve visibility in Naver AI Briefing separately.",
+  },
 ] as const;
 
-const EN_BRAND_NAMES = ["Medicube", "Round Lab", "Anua", "Beauty of Joseon", "d'Alba"] as const;
+const EN_BRAND_NAMES = [
+  "Medicube",
+  "Round Lab",
+  "Anua",
+  "Beauty of Joseon",
+  "d'Alba",
+] as const;
 
 function severityClass(s: "green" | "amber" | "red") {
   if (s === "green") {
@@ -236,6 +277,7 @@ export default async function ABrandCasePage({
   const { locale } = await params;
   const ko = locale.startsWith("ko");
   const prefix = ko ? "/ko" : "/en";
+  const freeAuditPublic = freeAuditPublicEnabled();
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
       <PublicLandingHeader locale={locale} />
@@ -265,7 +307,9 @@ export default async function ABrandCasePage({
             {ko ? "K-뷰티 5사가" : "Five K-beauty brands"}
             <br />
             <span className="text-[var(--findable-primary)]">
-              {ko ? "AI 답변 속 가시성을 재배치하면." : "and their visibility in AI answers."}
+              {ko
+                ? "AI 답변 속 가시성을 재배치하면."
+                : "and their visibility in AI answers."}
             </span>
           </h1>
           <p
@@ -388,7 +432,9 @@ export default async function ABrandCasePage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            {ko ? "지금 K-뷰티 5사는 어디에 있나." : "Where did these brands appear?"}
+            {ko
+              ? "지금 K-뷰티 5사는 어디에 있나."
+              : "Where did these brands appear?"}
           </h2>
           <div className="space-y-4">
             {(ko ? FINDINGS : EN_FINDINGS).map((f) => (
@@ -448,76 +494,86 @@ export default async function ABrandCasePage({
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             <strong className="text-amber-600">
-              {ko ? "⚠ 시뮬레이션 안내." : "⚠ Simulation, not observed results."}
+              {ko
+                ? "⚠ 시뮬레이션 안내."
+                : "⚠ Simulation, not observed results."}
             </strong>{" "}
             {ko
               ? "+27%·+41%·+31%는 Princeton KDD'24 GEO-Bench 영문 실험의 1차 지표 상대 향상 평균입니다. 이 페이지의 5개 브랜드에 적용한 실측 결과가 아니며 한국어 환경 성과를 보장하지 않습니다. 나머지 두 전략은 수치 예측이 아닌 후속 검증 과제입니다."
               : "The +27%, +41%, and +31% figures are mean relative improvements in the primary metric reported by Princeton's English-language KDD '24 GEO-Bench experiments. They are not measured results for these five brands and do not predict outcomes in Korean. The other two methods are questions for future validation, not numerical forecasts."}
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            {(ko ? SIMULATION_STRATEGIES : EN_SIMULATION_STRATEGIES).map((s) => (
-              <article
-                className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6"
-                key={s.code}
-              >
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--findable-primary)]/10 px-2 py-0.5 font-mono text-[10px] text-[var(--findable-primary)] uppercase tracking-[0.12em]">
-                    {s.code}
-                  </span>
-                  <span
-                    className="font-mono text-[14px] text-[var(--findable-ink)]"
-                    style={{ fontFamily: "var(--findable-font-display)" }}
+            {(ko ? SIMULATION_STRATEGIES : EN_SIMULATION_STRATEGIES).map(
+              (s) => (
+                <article
+                  className="rounded-lg border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] p-6"
+                  key={s.code}
+                >
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="rounded-full bg-[var(--findable-primary)]/10 px-2 py-0.5 font-mono text-[10px] text-[var(--findable-primary)] uppercase tracking-[0.12em]">
+                      {s.code}
+                    </span>
+                    <span
+                      className="font-mono text-[14px] text-[var(--findable-ink)]"
+                      style={{ fontFamily: "var(--findable-font-display)" }}
+                    >
+                      {s.impact}
+                    </span>
+                  </div>
+                  <h3
+                    className="mb-2 font-medium text-[18px] leading-snug tracking-tight"
+                    style={{ fontFamily: "var(--findable-font-sans)" }}
                   >
-                    {s.impact}
+                    {s.name}
+                  </h3>
+                  <p
+                    className="mb-3 text-[14px] text-[var(--findable-ink-muted)] leading-relaxed"
+                    style={{ fontFamily: "var(--findable-font-sans)" }}
+                  >
+                    {s.body}
+                  </p>
+                  <span
+                    className="inline-block text-[11px] text-[var(--findable-ink-tertiary)]"
+                    style={{ fontFamily: "var(--findable-font-mono)" }}
+                  >
+                    {s.source}
                   </span>
-                </div>
-                <h3
-                  className="mb-2 font-medium text-[18px] leading-snug tracking-tight"
-                  style={{ fontFamily: "var(--findable-font-sans)" }}
-                >
-                  {s.name}
-                </h3>
-                <p
-                  className="mb-3 text-[14px] text-[var(--findable-ink-muted)] leading-relaxed"
-                  style={{ fontFamily: "var(--findable-font-sans)" }}
-                >
-                  {s.body}
-                </p>
-                <span
-                  className="inline-block text-[11px] text-[var(--findable-ink-tertiary)]"
-                  style={{ fontFamily: "var(--findable-font-mono)" }}
-                >
-                  {s.source}
-                </span>
-              </article>
-            ))}
+                </article>
+              )
+            )}
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section>
-        <div className="mx-auto max-w-5xl px-6 py-20">
-          <div className="flex flex-col items-center gap-6 text-center">
-            <h2
-              className="max-w-2xl font-medium text-[28px] leading-tight tracking-tight md:text-[40px]"
-              style={{ fontFamily: "var(--findable-font-display)" }}
-            >
-              {ko ? "우리 브랜드는 어디에 있을까." : "Where does your brand appear?"}
-              <br />
-              {ko ? "3분이면 측정 끝." : "Check it in three minutes."}
-            </h2>
-            <Link
-              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
-              href={`${prefix}/audit`}
-              style={{ fontFamily: "var(--findable-font-sans)" }}
-            >
-              {ko ? "무료 진단 받기" : "Check your brand"}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+      {/* CTA — 👤 2026-10-07 CEO 결정: 공개 무료 진단(`/audit`)이 꺼져 있으면
+          (`FREE_AUDIT_PUBLIC_ENABLED`, 기본 꺼짐) 이 섹션을 통째로 숨긴다.
+          아래 FooterCTA(가입·상담 예약)가 다음 행동을 대신한다. */}
+      {freeAuditPublic && (
+        <section>
+          <div className="mx-auto max-w-5xl px-6 py-20">
+            <div className="flex flex-col items-center gap-6 text-center">
+              <h2
+                className="max-w-2xl font-medium text-[28px] leading-tight tracking-tight md:text-[40px]"
+                style={{ fontFamily: "var(--findable-font-display)" }}
+              >
+                {ko
+                  ? "우리 브랜드는 어디에 있을까."
+                  : "Where does your brand appear?"}
+                <br />
+                {ko ? "3분이면 측정 끝." : "Check it in three minutes."}
+              </h2>
+              <Link
+                className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
+                href={`${prefix}/audit`}
+                style={{ fontFamily: "var(--findable-font-sans)" }}
+              >
+                {ko ? "무료 진단 받기" : "Check your brand"}
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
       <FooterCTA locale={locale} />
     </div>
   );

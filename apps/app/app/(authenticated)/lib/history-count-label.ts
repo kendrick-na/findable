@@ -11,15 +11,19 @@
  */
 export function historyCountLabel(
   totalCount: number,
-  pageSize: number
+  pageSize: number,
+  /** 사전 `app.historyList` 의 건수 문구. */
+  t: { count: string; countNone: string; countTruncated: string }
 ): string {
   if (totalCount <= 0) {
     // 0건에 "0번 측정했어요"는 잡음이다 — 빈 상태 카드가 이미 안내한다.
-    return "지금까지 측정한 결과를 모아뒀어요.";
+    return t.countNone;
   }
-  const base = `지금까지 ${totalCount}번 측정했어요.`;
+  const base = t.count.replace("{n}", String(totalCount));
   if (totalCount > pageSize) {
-    return `${base} 최근 ${pageSize}건만 보여드려요.`;
+    return t.countTruncated
+      .replace("{base}", base)
+      .replace("{size}", String(pageSize));
   }
   return base;
 }

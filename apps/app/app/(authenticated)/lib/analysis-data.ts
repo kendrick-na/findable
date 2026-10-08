@@ -269,13 +269,7 @@ export type SourceKind =
   | "media"
   | "other";
 
-export const SOURCE_KIND_LABEL: Record<SourceKind, string> = {
-  owned: "자사",
-  community: "커뮤니티·블로그",
-  reference: "위키·지식",
-  media: "언론·매체",
-  other: "기타",
-};
+// 출처 유형 라벨은 사전 `app.sourceKinds` 에 있다(2026-10-06 — 화면 언어를 따른다).
 
 // 도메인 → 유형. 한국 GEO 에서 실제로 자주 등장하는 출처를 우선 담았다.
 const COMMUNITY_DOMAINS = [

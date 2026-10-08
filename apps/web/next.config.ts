@@ -41,6 +41,8 @@ nextConfig.outputFileTracingIncludes = {
   ...nextConfig.outputFileTracingIncludes,
   "/api/audit": [CHROMIUM_BIN],
   "/api/cron/auto-refresh-tracking": [CHROMIUM_BIN],
+  // 고객 웹 리포트 PDF 내려받기(2026-09-30) — 같은 스냅숏을 ?print=1 로 인쇄.
+  "/r/[token]/pdf": [CHROMIUM_BIN],
 };
 
 nextConfig.images?.remotePatterns?.push({

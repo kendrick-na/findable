@@ -10,9 +10,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  crawlAccessAction,
   DONT_LIST,
   EVIDENCE_GRADE_LABEL,
   entityClarityAction,
+  hasCompleteNaverSearchBaseline,
   RULE_THRESHOLDS,
   summarizeVerdicts,
   type VerdictResponseLike,
@@ -49,6 +51,9 @@ function inputOf(f: Fixture): ActionInput {
         .map((r) => r.engineId)
     ).size,
     marketScope: f.marketScope,
+    // Historic public fixtures do not carry promptIndex; their Naver
+    // baseline is unknown, not reconstructed from observed rows.
+    naverSearchMeasured: undefined,
     verdicts: summarizeVerdicts(f.engineResponses, {
       brandDomain: f.domain,
       brandName: f.brandName,
@@ -58,6 +63,41 @@ function inputOf(f: Fixture): ActionInput {
 
 const knowverse = load("audit-knowverse.json");
 const indigo = load("audit-indigochild.json");
+
+describe("네이버 검색 전체 기준선", () => {
+  it("성공 행 없음·일부 오류는 기준선 없음, 전부 성공만 전체 기준선", () => {
+    const ok = {
+      engineId: "naver",
+      errorMessage: null,
+      isStub: false,
+      promptIndex: 0,
+    };
+    const failed = {
+      engineId: "naver",
+      errorMessage: "timeout",
+      isStub: false,
+      promptIndex: 1,
+    };
+    expect(hasCompleteNaverSearchBaseline([], [])).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([failed], [1])).toBe(false);
+    expect(hasCompleteNaverSearchBaseline([ok, failed], [0, 1])).toBe(false);
+    expect(
+      hasCompleteNaverSearchBaseline([ok, { ...ok, promptIndex: 1 }], [0, 1])
+    ).toBe(true);
+    // One successful row is not a complete baseline for two scheduled Korean questions.
+    expect(hasCompleteNaverSearchBaseline([ok], [0, 1])).toBe(false);
+    // A missing question cannot be hidden by a duplicate row for another question.
+    expect(
+      hasCompleteNaverSearchBaseline(
+        [
+          { ...ok, promptIndex: 1 },
+          { ...ok, promptIndex: 1 },
+        ],
+        [0, 1]
+      )
+    ).toBe(false);
+  });
+});
 
 describe("summarizeVerdicts — 공개 진단 실측과 일치", () => {
   it("노우버스: 23건 = 답 22 + 오류 1, 확인 5 · 오인 8", () => {
@@ -141,6 +181,15 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
     expect(naver?.guide?.sources[0]?.url).toBe(
       "https://seonews.co.kr/naver-ai-briefing-geo-202605/"
     );
+    expect(naver?.guide?.engines).toEqual(["naver"]);
+    expect(naver?.verification).not.toContain("HyperCLOVA");
+    expect(naver?.verification).toContain(
+      "네이버 검색 기준선 상태를 확인하지 못했습니다"
+    );
+    expect(naver?.guide?.remeasureMetric).toContain("네이버 검색 노출");
+    expect(naver?.guide?.failCondition).toContain("기준선을 확보");
+    expect(naver?.verification).toContain("표본 방식");
+    expect(naver?.verification).toContain("효과로 해석하지 마세요");
   });
 
   it("해외 시장이면 네이버 카드를 내지 않는다", () => {
@@ -149,6 +198,50 @@ describe("인디고차일드 — 오인은 꺼지고 인지 낮음이 켜진다"
       marketScope: "global",
     });
     expect(global.some((a) => a.kind === "naver_blog")).toBe(false);
+  });
+
+  it("네이버 검색이 미측정이면 재측정 성과를 주장하지 않고 기준선부터 요청한다", () => {
+    const naver = buildGeoActions({
+      ...inputOf(indigo),
+      naverSearchMeasured: false,
+    }).find((a) => a.kind === "naver_blog");
+    expect(naver).toBeDefined();
+    expect(naver?.verification).toContain("이번 회차는 네이버 검색 미측정");
+    expect(naver?.verification).toContain("기준선");
+    expect(naver?.guide?.remeasureMetric).toContain("기준선 없음");
+  });
+
+  it("측정 상태를 전달하지 않는 호출부도 기준선이 있다고 가정하지 않는다", () => {
+    const naver = buildGeoActions({
+      ...inputOf(indigo),
+      naverSearchMeasured: undefined,
+    }).find((a) => a.kind === "naver_blog");
+    expect(naver?.verification).toContain("기준선");
+    expect(naver?.verification).toContain("확인하지 못했습니다");
+    expect(naver?.verification).not.toContain("미측정 또는 일부");
+    expect(naver?.guide?.remeasureMetric).toContain("기준선 확인 전");
+  });
+});
+
+describe("크롤 접근성 카드 — 전제조건과 효과 보장을 분리한다", () => {
+  it("봇 접근성은 인용의 전제조건일 뿐, 다른 처방의 효과를 단정하지 않는다", () => {
+    const action = crawlAccessAction({
+      brandDomain: "example.com",
+      brandName: "예시회사",
+      enginesMeasured: 7,
+      enginesMentioned: 0,
+      marketScope: "global",
+      measuredLabel: "측정한 AI 7곳",
+      ownedCitations: 0,
+    });
+
+    expect(action).toBeTruthy();
+    expect(action?.evidence).toContain("인용의 전제 조건");
+    expect(action?.evidence).not.toContain("다른 처방은 효과가 없습니다");
+    expect(action?.guide?.notGuaranteed).toContain("인용이 생긴다는 보장은 없");
+    expect(action?.guide?.effectLag).toContain("보장되지 않습니다");
+    expect(action?.guide?.failCondition).toContain("다음 측정으로 확인");
+    expect(action?.guide?.failCondition).not.toContain("다른 처방보다 먼저");
   });
 });
 

@@ -1,0 +1,377 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: 쪽마다 독립된 블록(.hero·.rank·.formula·.plan)이라 서로 같은 요소를 겹쳐 꾸미지 않는다 — 원본 CSS 와 같은 쪽 단위 순서를 유지한다 */
+/*
+ * v12 리포트 2026-10-06 개정 — 손으로 쓴 부분. 기본 모양은 report-v12.css(원본에서 기계 변환)를 그대로 쓰고,
+ * 바뀐 쪽 구성(합친 쪽·신규 3쪽·주인공 숫자·행동 1개)에 필요한 것만 여기서 덧씌운다. 화면·인쇄 공통.
+ */
+
+/* 표지: 큰 「F.」가 결론보다 눈에 띄지 않게 */
+.fr12 .cover.rv .fbig {
+  right: -20mm;
+  bottom: -18mm;
+  width: 118mm;
+  opacity: 0.55;
+}
+
+/* 각주: 읽히는 크기로 */
+.fr12 .rv .notes {
+  font-size: 8pt;
+  line-height: 1.6;
+}
+
+/* 2쪽: 이유 + 확인 방법 + 목차를 한 쪽에 */
+.fr12 .rv .why-grid {
+  gap: 4mm;
+  margin-top: 6mm;
+}
+.fr12 .rv .why-item p {
+  font-size: 9.2pt;
+  line-height: 1.68;
+}
+.fr12 .rv .method {
+  margin-top: 0;
+}
+.fr12 .toc2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 8mm;
+  border-top: 1.5px solid var(--ink);
+}
+.fr12 .toc2 .row {
+  display: grid;
+  grid-template-columns: 10mm 1fr;
+  align-items: baseline;
+  padding: 2.4mm 0;
+  border-bottom: 1px solid var(--line);
+}
+.fr12 .toc2 .pg {
+  font-size: 9pt;
+  font-weight: 800;
+  color: var(--or-t);
+}
+.fr12 .toc2 .n {
+  font-size: 10.2pt;
+  font-weight: 700;
+}
+
+/* 쪽마다 주인공 숫자 1개 + 나머지는 문장 */
+.fr12 .hero {
+  display: grid;
+  grid-template-columns: 62mm 1fr;
+  gap: 8mm;
+  align-items: center;
+  margin-top: 7mm;
+  padding: 6mm 0;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.fr12 .hero .big .v {
+  font-size: 46pt;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  color: var(--or-t);
+}
+.fr12 .hero .big .v small {
+  margin-left: 1mm;
+  font-size: 15pt;
+  font-weight: 700;
+  color: var(--ink);
+}
+.fr12 .hero .big .t {
+  margin-top: 2.4mm;
+  font-size: 10pt;
+  font-weight: 800;
+}
+.fr12 .hero .facts {
+  display: grid;
+  gap: 3mm;
+  list-style: none;
+}
+.fr12 .hero .facts li {
+  padding-left: 4mm;
+  font-size: 10pt;
+  line-height: 1.55;
+  color: var(--ink2);
+  border-left: 2px solid var(--or-3);
+}
+.fr12 .hero .facts li span {
+  display: block;
+  margin-top: 0.4mm;
+  font-size: 8.4pt;
+  color: var(--mut);
+}
+
+/* 브랜드 이미지 쪽: 질문 꼬리표 */
+.fr12 .flist .qtag {
+  font-size: 7.4pt;
+  font-weight: 500;
+  color: var(--mut);
+}
+
+/* 신규: 추천 순위 막대 */
+.fr12 .rank {
+  border-top: 1.5px solid var(--ink);
+}
+.fr12 .rank .row {
+  display: grid;
+  grid-template-columns: 8mm 46mm 1fr 14mm;
+  gap: 3mm;
+  align-items: center;
+  padding: 3.6mm 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 10pt;
+}
+.fr12 .rank .i {
+  font-weight: 800;
+  color: var(--mut);
+}
+.fr12 .rank .nm {
+  font-weight: 700;
+}
+.fr12 .rank .track {
+  height: 3mm;
+  overflow: hidden;
+  background: var(--line2);
+  border-radius: 2mm;
+}
+.fr12 .rank .track i {
+  display: block;
+  height: 100%;
+  background: #bfb5ac;
+  border-radius: 2mm;
+}
+.fr12 .rank .p {
+  font-weight: 800;
+  text-align: right;
+}
+.fr12 .rank .row.self {
+  background: var(--or-s);
+}
+.fr12 .rank .row.self .nm,
+.fr12 .rank .row.self .p {
+  color: var(--or-t);
+}
+.fr12 .rank .row.self .track i {
+  background: var(--or);
+}
+
+/* 신규: 주제별 1~3위 */
+.fr12 .tbl.topics td {
+  padding: 4.6mm 2mm;
+}
+.fr12 .tbl.topics .qcell {
+  font-size: 8.4pt;
+  color: var(--ink2);
+}
+.fr12 .tbl.topics .selfc {
+  font-weight: 800;
+  color: var(--or-t);
+  background: var(--or-s);
+}
+
+/* 신규: 매출 기회 */
+.fr12 .formula {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3mm;
+  align-items: center;
+}
+.fr12 .formula > div {
+  padding: 3mm 4mm;
+  background: var(--bg2);
+  border-radius: 2.4mm;
+}
+.fr12 .formula span {
+  display: block;
+  font-size: 8pt;
+  font-weight: 700;
+  color: var(--mut);
+}
+.fr12 .formula b {
+  display: block;
+  font-size: 14pt;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.fr12 .formula em {
+  display: block;
+  font-size: 7.4pt;
+  color: var(--mut);
+}
+.fr12 .formula > i {
+  font-size: 14pt;
+  font-style: normal;
+  font-weight: 800;
+  color: var(--mut);
+}
+.fr12 .support {
+  margin-top: 5mm;
+  padding: 4mm 5mm;
+  border: 1px solid var(--line);
+  border-radius: 3mm;
+}
+.fr12 .support .t {
+  font-size: 8.6pt;
+  font-weight: 700;
+}
+.fr12 .support .v {
+  margin-top: 0.6mm;
+  font-size: 16pt;
+  font-weight: 800;
+}
+.fr12 .support .f {
+  margin-top: 0.8mm;
+  font-size: 8.4pt;
+  color: var(--mut);
+}
+.fr12 .basis {
+  display: grid;
+  gap: 2mm;
+  padding-left: 4.5mm;
+  font-size: 9pt;
+  line-height: 1.6;
+  color: var(--ink2);
+}
+.fr12 .ins.one {
+  grid-template-columns: 1fr;
+}
+
+/* 개선 계획: 체크박스·내부 꼬리표 없이 번호로 */
+.fr12 .plan-cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5mm;
+  margin-top: 8mm;
+}
+.fr12 .plan-col .ph {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-top: 2.6mm;
+  margin-bottom: 1mm;
+  border-top: 3px solid var(--or);
+}
+.fr12 .plan-col.P1 .ph {
+  border-color: var(--or-2);
+}
+.fr12 .plan-col.P2 .ph {
+  border-color: #bfb5ac;
+}
+.fr12 .plan-col .ph b {
+  font-size: 14pt;
+  font-weight: 800;
+}
+.fr12 .plan-col .ph span {
+  font-size: 8.4pt;
+  font-weight: 700;
+  color: var(--mut);
+}
+.fr12 .plan-item {
+  padding: 3.2mm 0 3.4mm;
+  border-bottom: 1px solid var(--line);
+}
+.fr12 .plan-item h4 {
+  display: flex;
+  gap: 2mm;
+  font-size: 10.2pt;
+  font-weight: 800;
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+}
+.fr12 .plan-item h4 .i {
+  flex: none;
+  font-weight: 800;
+  color: var(--or-t);
+}
+.fr12 .plan-item p {
+  margin-top: 1.2mm;
+  font-size: 8.8pt;
+  line-height: 1.66;
+  color: var(--ink2);
+}
+.fr12 .rv .tl {
+  margin-top: 0;
+}
+
+/* 뒷표지: 행동 1개 */
+.fr12 .back.rv h2 {
+  font-size: 26pt;
+}
+.fr12 .back.rv .url {
+  text-decoration: none;
+  font-size: 11pt;
+}
+.fr12 .back.rv .mail {
+  margin-top: 3.4mm;
+  font-size: 9pt;
+  color: #cfc6be;
+}
+
+/* 물어본 구매 질문 전체(투명성) */
+.fr12 .qall {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6mm 8mm;
+  padding-left: 5mm;
+  font-size: 9pt;
+  color: var(--ink2);
+}
+
+/* 표지 결론: 틀린 비율(문장) + 매출(돈) 두 줄 */
+.fr12 .verdict.hook {
+  width: 150mm;
+}
+.fr12 .verdict.hook .s {
+  font-size: 15pt;
+  line-height: 1.42;
+}
+.fr12 .verdict.hook .s em {
+  color: var(--or-t);
+  white-space: nowrap;
+}
+.fr12 .verdict.hook .money {
+  margin-top: 2mm;
+  font-size: 11pt;
+  font-weight: 700;
+  color: var(--ink2);
+}
+.fr12 .verdict.hook .money b {
+  color: var(--ink);
+}
+
+/* 놓치는 매출(2026-10-07): 큰 숫자 = 연, 월은 보조 · 계산식 두 줄 */
+.fr12 .verdict.hook .money small {
+  margin-left: 1mm;
+  font-size: 9pt;
+  font-weight: 600;
+  color: var(--mut);
+}
+.fr12 .hero .big .m {
+  margin-top: 1mm;
+  font-size: 9pt;
+  font-weight: 600;
+  color: var(--mut);
+}
+.fr12 .formula-rows {
+  display: grid;
+  gap: 2.4mm;
+}
+.fr12 .formula > div.res {
+  background: var(--or-s);
+}
+.fr12 .formula > div.res b {
+  color: var(--or-t);
+}
+.fr12 .rsub {
+  margin-top: 4mm;
+  font-size: 10pt;
+  line-height: 1.6;
+  color: var(--ink2);
+}
+.fr12 .hero.rev {
+  grid-template-columns: 1fr;
+  gap: 5mm;
+}
+.fr12 .hero.rev .big .v {
+  white-space: nowrap;
+}

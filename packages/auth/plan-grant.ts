@@ -1,6 +1,7 @@
 import "server-only";
 
 import { clerkClient } from "@clerk/nextjs/server";
+import { database } from "@repo/database";
 import { hasPlan, normalizePlan, type Plan } from "./plan";
 
 /**
@@ -22,33 +23,59 @@ import { hasPlan, normalizePlan, type Plan } from "./plan";
 const MAX_PUSH_RETRIES = 3;
 
 /**
+ * 🔒 P1-4(2026-10-05): Clerk 메타데이터는 읽기→계산→쓰기다. 결제 부여·환불 회수·기간 만료가
+ *   같은 사용자에게 동시에 돌면 둘 다 같은 스냅샷을 읽고, 나중에 쓴 쪽이 먼저 쓴 변경을 지운다
+ *   (방금 결제한 권한이 사라지거나 회수한 권한이 되살아난다).
+ *   → 사용자별 Postgres advisory lock(트랜잭션 범위) 안에서 읽고 쓴다. 다른 사용자는 막지 않는다.
+ *   잠금을 못 잡으면(DB 장애) 쓰지 않고 실패로 돌려준다 — 호출부가 재시도한다(fail-closed).
+ *   ⚠️ 잠금 동안 DB 연결 하나를 쥔 채 Clerk 를 호출한다(보통 수백 ms). 그래서 범위를 이
+ *   읽기→쓰기 구간으로만 좁힌다.
+ */
+const METADATA_LOCK_TX = { maxWait: 10_000, timeout: 60_000 } as const;
+
+function withUserMetadataLock<T>(
+  userId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  return database.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`findable:plan-metadata:${userId}`}, 0))`;
+    return fn();
+  }, METADATA_LOCK_TX);
+}
+
+/**
  * 결제에서 부여된 plan 의 출처를 Clerk privateMetadata에만 남긴다.
  * publicMetadata는 화면·게이팅용 plan만 유지하고, 결제 식별자는 노출하지 않는다.
  */
 const PAYMENT_GRANT_ID_KEY = "findablePaymentId";
 const PAYMENT_GRANT_STACK_KEY = "findablePaymentGrantStack";
 
-type PaymentGrantState = {
+interface PaymentGrantState {
   paymentId: string | null;
   plan: Plan;
-};
+}
 
-type PaymentGrantResult = {
+interface PaymentGrantResult {
   plan: Plan;
   privateMetadata: Record<string, unknown> | null;
-};
+}
 
 function paymentGrantStack(
   privateMetadata: Record<string, unknown> | null | undefined
 ): PaymentGrantState[] {
   const value = privateMetadata?.[PAYMENT_GRANT_STACK_KEY];
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
 
   return value.flatMap((entry) => {
-    if (!entry || typeof entry !== "object") return [];
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
     const candidate = entry as Record<string, unknown>;
     if (
-      (typeof candidate.paymentId !== "string" && candidate.paymentId !== null) ||
+      (typeof candidate.paymentId !== "string" &&
+        candidate.paymentId !== null) ||
       typeof candidate.plan !== "string"
     ) {
       return [];
@@ -65,7 +92,9 @@ function privateMetadataForStack(
 ): Record<string, unknown> | null {
   if (
     stack.length === 0 ||
-    (stack.length === 1 && stack[0]?.plan === "free" && stack[0].paymentId === null)
+    (stack.length === 1 &&
+      stack[0]?.plan === "free" &&
+      stack[0].paymentId === null)
   ) {
     return null;
   }
@@ -96,6 +125,13 @@ export function paymentGrantAfterPayment(
     typeof privateMetadata?.[PAYMENT_GRANT_ID_KEY] === "string"
       ? privateMetadata[PAYMENT_GRANT_ID_KEY]
       : null;
+  // 현재 또는 과거 결제의 늦은 재전송은 기존 권한 출처를 바꾸지 않는다.
+  if (
+    currentPaymentId === paymentId ||
+    existing.some((grant) => grant.paymentId === paymentId)
+  ) {
+    return { plan: currentPlan, privateMetadata: privateMetadata ?? null };
+  }
   const prior =
     existing[0]?.plan === currentPlan &&
     existing[0]?.paymentId === currentPaymentId
@@ -110,18 +146,25 @@ export function paymentGrantAfterPayment(
   };
 }
 
-/** 현재 결제가 전면에 있을 때만 직전 권한으로 되돌린다. */
+/**
+ * 환불된 결제 출처를 제거하고, 현재 결제라면 직전 권한으로 되돌린다.
+ * revoked는 출처 제거 성공을 뜻하며, 아래쪽 결제 환불 때 현재 plan은 그대로다.
+ */
 export function paymentGrantAfterRefund(
   privateMetadata: Record<string, unknown> | null | undefined,
   paymentId: string
 ): PaymentGrantResult & { revoked: boolean } {
-  if (!isCurrentPaymentGrant(privateMetadata, paymentId)) {
+  const stack = paymentGrantStack(privateMetadata);
+  const isCurrent = isCurrentPaymentGrant(privateMetadata, paymentId);
+  const hasPaymentGrant =
+    isCurrent || stack.some((grant) => grant.paymentId === paymentId);
+  if (!hasPaymentGrant) {
     return { plan: "free", privateMetadata: null, revoked: false };
   }
 
-  const remaining = paymentGrantStack(privateMetadata).slice(1);
+  const remaining = stack.filter((grant) => grant.paymentId !== paymentId);
   return {
-    plan: remaining[0]?.plan ?? "free",
+    plan: (isCurrent ? remaining[0] : stack[0])?.plan ?? "free",
     privateMetadata: privateMetadataForStack(remaining),
     revoked: true,
   };
@@ -162,7 +205,13 @@ async function updatePlanMetadata(input: {
 
 export async function grantPlan(userId: string, plan: Plan): Promise<boolean> {
   // 파트너·초대코드·관리자 부여는 결제 취소로 회수하면 안 된다.
-  return updatePlanMetadata({ userId, plan, privateMetadata: null });
+  try {
+    return await withUserMetadataLock(userId, () =>
+      updatePlanMetadata({ userId, plan, privateMetadata: null })
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** 결제로 plan 을 부여하고, 전액 취소 때만 회수할 출처(paymentId)를 비공개로 보관한다. */
@@ -171,18 +220,39 @@ export async function grantPlanFromPayment(
   plan: Plan,
   paymentId: string
 ): Promise<boolean> {
+  try {
+    return await withUserMetadataLock(userId, () =>
+      grantPlanFromPaymentLocked(userId, plan, paymentId)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function grantPlanFromPaymentLocked(
+  userId: string,
+  plan: Plan,
+  paymentId: string
+): Promise<boolean> {
   const clerk = await clerkClient();
   try {
     const user = await clerk.users.getUser(userId);
+    const currentPlan = normalizePlan(user.publicMetadata.plan);
+    const privateMetadata = user.privateMetadata as
+      | Record<string, unknown>
+      | undefined;
     const next = paymentGrantAfterPayment(
-      normalizePlan(user.publicMetadata.plan),
-      user.privateMetadata as Record<string, unknown> | undefined,
+      currentPlan,
+      privateMetadata,
       plan,
       paymentId
     );
-    // 상위 권한 보유자의 하위 결제는 entitlement 변경이 없다. "부여 성공"으로
-    // 처리해 webhook 재시도를 막되, 결제 ID를 권한 출처로 기록하지 않는다.
-    if (next.plan === normalizePlan(user.publicMetadata.plan) && next.privateMetadata === null) {
+    // 변경이 없는 재전송과 상위 권한 보유자의 하위 결제는 쓰지 않는다.
+    if (
+      next.plan === currentPlan &&
+      (next.privateMetadata === privateMetadata ||
+        next.privateMetadata === null)
+    ) {
       return true;
     }
     return updatePlanMetadata({ userId, ...next });
@@ -192,36 +262,144 @@ export async function grantPlanFromPayment(
 }
 
 /**
- * 전액 환불 처리. 현재 권한이 **해당 결제**에서 온 경우에만 Free로 되돌린다.
+ * 전액 환불 처리. 현재 결제면 직전 권한으로 되돌리고, 아래쪽 결제면
+ * 현재 권한을 유지하면서 환불된 출처만 제거한다.
  * 이후 파트너 승인·초대코드·관리자 부여가 덮어쓴 사용자는 절대 내리지 않는다.
  */
+interface RevokeResult {
+  reason: "not_current_payment" | "push_failed" | "revoked";
+  revoked: boolean;
+}
+
 export async function revokePlanFromPayment(
   userId: string,
   paymentId: string
-): Promise<{ revoked: boolean; reason: "not_current_payment" | "push_failed" | "revoked" }> {
+): Promise<RevokeResult> {
+  try {
+    return await withUserMetadataLock(userId, () =>
+      revokePlanFromPaymentLocked(userId, paymentId)
+    );
+  } catch {
+    return { revoked: false, reason: "push_failed" };
+  }
+}
+
+async function revokePlanFromPaymentLocked(
+  userId: string,
+  paymentId: string
+): Promise<RevokeResult> {
   const clerk = await clerkClient();
   let privateMetadata: Record<string, unknown> | undefined;
+  let currentPlan: Plan;
   try {
     const user = await clerk.users.getUser(userId);
-    privateMetadata = user.privateMetadata as Record<string, unknown> | undefined;
-    if (
-      !isCurrentPaymentGrant(
-        privateMetadata,
-        paymentId
-      )
-    ) {
-      return { revoked: false, reason: "not_current_payment" };
-    }
+    privateMetadata = user.privateMetadata as
+      | Record<string, unknown>
+      | undefined;
+    currentPlan = normalizePlan(user.publicMetadata.plan);
   } catch {
     return { revoked: false, reason: "push_failed" };
   }
 
-  const next = paymentGrantAfterRefund(
-    privateMetadata,
-    paymentId
-  );
-  const revoked = next.revoked && (await updatePlanMetadata({ userId, ...next }));
+  const next = paymentGrantAfterRefund(privateMetadata, paymentId);
+  if (!next.revoked) {
+    return { revoked: false, reason: "not_current_payment" };
+  }
+  const plan = isCurrentPaymentGrant(privateMetadata, paymentId)
+    ? next.plan
+    : currentPlan;
+  const revoked = await updatePlanMetadata({ userId, ...next, plan });
   return revoked
     ? { revoked: true, reason: "revoked" }
     : { revoked: false, reason: "push_failed" };
+}
+
+/**
+ * 이용 기간이 끝난 결제 출처를 스택에서 모두 제거한다(갱신 실패 유예 만료용).
+ *
+ * 환불(`paymentGrantAfterRefund`)과 달리 결제 한 건이 아니라 여러 건을 지운다.
+ * 정기결제는 회차마다 같은 plan 출처가 쌓이므로, 마지막 회차만 지우면 직전 회차의
+ * 같은 plan 으로 "복구"되어 권한이 남는다. 그래서 끝난 출처를 한꺼번에 걸러낸다.
+ * 현재 출처가 지워질 때만 plan 을 남은 맨 위 출처(없으면 free)로 내린다.
+ */
+export function paymentGrantAfterExpiry(
+  currentPlan: Plan,
+  privateMetadata: Record<string, unknown> | null | undefined,
+  isExpired: (paymentId: string) => boolean
+): PaymentGrantResult & { expired: boolean } {
+  const stack = paymentGrantStack(privateMetadata);
+  const currentPaymentId =
+    typeof privateMetadata?.[PAYMENT_GRANT_ID_KEY] === "string"
+      ? privateMetadata[PAYMENT_GRANT_ID_KEY]
+      : null;
+  const currentExpired =
+    currentPaymentId !== null && isExpired(currentPaymentId);
+  const remaining = stack.filter(
+    (grant) => grant.paymentId === null || !isExpired(grant.paymentId)
+  );
+  if (!currentExpired && remaining.length === stack.length) {
+    return {
+      plan: currentPlan,
+      privateMetadata: privateMetadata ?? null,
+      expired: false,
+    };
+  }
+  return {
+    plan: currentExpired ? (remaining[0]?.plan ?? "free") : currentPlan,
+    privateMetadata: privateMetadataForStack(remaining),
+    expired: true,
+  };
+}
+
+/**
+ * 갱신 결제 실패 후 유예가 끝난 사용자의 결제 권한을 회수한다(cron 전용).
+ * 결제와 무관한 권한(파트너·초대코드·관리자)은 grantPlan 이 출처를 비우므로 건드리지 않는다.
+ */
+interface ExpireResult {
+  expired: boolean;
+  reason: "nothing_to_expire" | "push_failed" | "expired";
+}
+
+export async function expirePaymentGrants(
+  userId: string,
+  isExpired: (paymentId: string) => boolean
+): Promise<ExpireResult> {
+  try {
+    return await withUserMetadataLock(userId, () =>
+      expirePaymentGrantsLocked(userId, isExpired)
+    );
+  } catch {
+    return { expired: false, reason: "push_failed" };
+  }
+}
+
+async function expirePaymentGrantsLocked(
+  userId: string,
+  isExpired: (paymentId: string) => boolean
+): Promise<ExpireResult> {
+  let privateMetadata: Record<string, unknown> | undefined;
+  let currentPlan: Plan;
+  try {
+    const clerk = await clerkClient();
+    const user = await clerk.users.getUser(userId);
+    privateMetadata = user.privateMetadata as
+      | Record<string, unknown>
+      | undefined;
+    currentPlan = normalizePlan(user.publicMetadata.plan);
+  } catch {
+    return { expired: false, reason: "push_failed" };
+  }
+
+  const next = paymentGrantAfterExpiry(currentPlan, privateMetadata, isExpired);
+  if (!next.expired) {
+    return { expired: false, reason: "nothing_to_expire" };
+  }
+  const pushed = await updatePlanMetadata({
+    userId,
+    plan: next.plan,
+    privateMetadata: next.privateMetadata,
+  });
+  return pushed
+    ? { expired: true, reason: "expired" }
+    : { expired: false, reason: "push_failed" };
 }

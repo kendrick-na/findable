@@ -14,6 +14,7 @@ import type {
   OrgRow,
 } from "@/app/actions/admin/orgs";
 import { OrgDetailPanel } from "./org-detail";
+import { PlanCell } from "./plan-cell";
 
 /**
  * 운영 콘솔 표 — 가입 조직 + 초대 코드.
@@ -394,7 +395,11 @@ export const OrgTable = ({
                           )}
                         </td>
                         <td className="py-2.5">
-                          <Badge variant="outline">{o.plan}</Badge>
+                          <PlanCell
+                            dbPlan={o.dbPlan}
+                            plan={o.plan}
+                            verified={o.planVerified}
+                          />
                         </td>
                         <td className="py-2.5 text-[color:var(--findable-ink-subtle,#8a8f98)]">
                           {left === null ? (

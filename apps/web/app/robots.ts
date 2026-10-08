@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { env } from "@/env";
+import { freeAuditPublicEnabled } from "@/lib/free-audit";
 
 /**
  * robots.txt — 크롤러 규칙 + sitemap 위치 안내.
@@ -50,6 +51,9 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
       ? `https://${requestHost}`
       : origin;
   const publicHost = new URL(publicOrigin).host;
+  // 👤 2026-10-07 CEO 결정 — 공개 무료 진단이 꺼져 있으면(`FREE_AUDIT_PUBLIC_ENABLED`,
+  //   기본 꺼짐) `/audit` 폼은 404 라 명시 허용하지 않는다. 결과 하위 경로 차단은 그대로.
+  const allow = freeAuditPublicEnabled() ? ["/", "/audit", "/ko/audit"] : ["/"];
 
   // 🤖 **AI 크롤러를 이름으로 허용한다**(2026-09-02).
   //   [실측] 이전 robots.txt 에는 `User-Agent: *` 한 벌뿐이었다. 와일드카드로도 허용되지만,
@@ -80,7 +84,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     rules: [
       {
         userAgent: aiCrawlers,
-        allow: ["/", "/audit", "/ko/audit"],
+        allow,
         disallow: [
           "/api/",
           "/audit/*",
@@ -98,7 +102,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         userAgent: "*",
         // `allow` 가 `disallow` 보다 구체적이면 우선한다(표준: 최장 일치 규칙).
         // `/audit` 는 리드 유입 랜딩이라 반드시 허용하고, 그 **하위**만 막는다.
-        allow: ["/", "/audit", "/ko/audit"],
+        allow,
         disallow: [
           "/api/",
           "/audit/*", // 개인 진단 결과(`/audit/<jobId>`) — 위 주석 참고

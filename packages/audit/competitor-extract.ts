@@ -425,3 +425,14 @@ export function isMyBrand(
   const target = normalizeKey(rankName);
   return [brandName, ...brandVariants].some((v) => normalizeKey(v) === target);
 }
+
+/**
+ * 경쟁사 표기 병합 키(한/영 내장 사전 + 등록 경쟁사 별칭). 답변별 집계(category-share)가
+ * 이 파일과 **같은 규칙**으로 브랜드를 합치도록 공개한다(규칙 복제 금지).
+ */
+export function competitorKey(
+  name: string,
+  knownCompetitors: Array<KnownCompetitor | string> = []
+): string {
+  return normalizeKey(name, buildCompetitorAliases(knownCompetitors));
+}

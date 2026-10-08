@@ -1,3 +1,5 @@
+import { isVercelPreview } from "@repo/audit/preview-guard";
+
 type RuntimeEnv = Record<string, string | undefined>;
 
 const present = (value: string | undefined): boolean => Boolean(value?.trim());
@@ -7,7 +9,7 @@ const present = (value: string | undefined): boolean => Boolean(value?.trim());
  *
  * This is intentionally a pure helper: the server action must not create an
  * AuditJob and then discover that the background runner can only return stub
- * responses (or that the optional briefing path cannot run).
+ * responses. On-demand briefing has its own request path and must not gate core.
  */
 export function getAuditRuntimeReadiness(
   env: RuntimeEnv = process.env
@@ -19,6 +21,15 @@ export function getAuditRuntimeReadiness(
   if (!(present(env.DATABASE_URL) || present(env.FINDABLE_DATABASE_URL))) {
     missing.push("DATABASE_URL");
   }
+  // Stub mode (forced on Preview, opt-in "1" locally) never calls a provider,
+  // so provider keys are not required. Production never runs stub mode
+  // (auditStubModeEnabled refuses it), so this cannot loosen the live gate.
+  const stubMode =
+    env.VERCEL_ENV !== "production" &&
+    (isVercelPreview(env) || env.FINDABLE_AUDIT_STUB_MODE === "1");
+  if (stubMode) {
+    return missing.length > 0 ? { ready: false, missing } : { ready: true };
+  }
   if (!(present(env.LETSUR_API_KEY) || gatewayReady)) {
     missing.push("LETSUR_API_KEY 또는 AI Gateway 인증");
   }
@@ -28,12 +39,5 @@ export function getAuditRuntimeReadiness(
   if (!(present(env.PERPLEXITY_API_KEY) || gatewayReady)) {
     missing.push("PERPLEXITY_API_KEY 또는 AI Gateway 인증");
   }
-  if (
-    env.AUDIT_BRIEFING_IN_MAIN_ENABLED === "true" &&
-    !present(env.FIRECRAWL_API_KEY)
-  ) {
-    missing.push("FIRECRAWL_API_KEY");
-  }
-
   return missing.length > 0 ? { ready: false, missing } : { ready: true };
 }

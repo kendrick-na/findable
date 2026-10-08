@@ -3,11 +3,15 @@ import { describe, expect, it } from "vitest";
 import { canShowLatestAnalysis } from "@/lib/content/analysis-publication";
 
 const createdAt = new Date("2026-09-26T00:00:00.000Z");
+const aiEvidence = (verified: number, unverified: number) => ({
+  verifiedCount: verified,
+  unverifiedCount: unverified,
+  answerBuckets: { ai: { adjudicated: verified, unverified } },
+});
 const publishableResult = {
   mentionVerdictVersion: MENTION_VERDICT_VERSION,
   metrics: {
-    unverifiedCount: 0,
-    verifiedCount: 12,
+    ...aiEvidence(12, 0),
     citationAttribution: "none_observed",
   },
 };
@@ -31,7 +35,7 @@ describe("latest analysis publication", () => {
         result: {
           ...publishableResult,
           // 3/12 = 25% > 20% → provisional.
-          metrics: { unverifiedCount: 3, verifiedCount: 9 },
+          metrics: aiEvidence(9, 3),
         },
         status: "completed",
         trackedAt: new Date("2026-09-26T00:01:00.000Z"),
@@ -46,8 +50,7 @@ describe("latest analysis publication", () => {
         result: {
           ...publishableResult,
           metrics: {
-            unverifiedCount: 0,
-            verifiedCount: 12,
+            ...aiEvidence(12, 0),
             citationAttribution: "partial",
             unattributedCitationCount: 1,
           },
@@ -62,8 +65,7 @@ describe("latest analysis publication", () => {
     const partial = {
       ...publishableResult,
       metrics: {
-        unverifiedCount: 0,
-        verifiedCount: 12,
+        ...aiEvidence(12, 0),
         citationAttribution: "partial",
         unattributedCitationCount: 1,
       },

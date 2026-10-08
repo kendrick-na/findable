@@ -12,24 +12,38 @@ import { ExternalLinkIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { env } from "@/env";
 import { requireOrg, scopedBrands } from "@/lib/db/scoped";
+import {
+  type AppDictionary,
+  dateLocaleFor,
+  getAppDictionary,
+  getAppLocale,
+} from "@/lib/i18n";
+import { publicReportUrl } from "@/lib/public-report";
 import { Header } from "../components/header";
 import { AssignBrandForm } from "../features/brand/assign-brand-form";
 import { BrandProfileEditorServer } from "../features/brand/brand-profile-editor-server";
 import { PromptWizard } from "../features/brand/prompt-wizard";
 import { StartTrackingButton } from "../features/brand/start-tracking-button";
 
-export const metadata: Metadata = {
-  title: "브랜드·측정 · Findable",
-  description: "측정할 브랜드를 등록하면, AI가 우리를 말하는지 확인해요.",
+// 이 화면의 「측정 시작」 서버액션(startOrgTracking)은 after() 로 측정 전체(runAuditJob)를
+//   돌린다. Next.js 문서: 서버액션 시간 상한은 **그 액션을 쓰는 page 의 maxDuration** 을 따른다.
+//   러너 예산(270초)+마무리 여유에 맞춰 명시한다 — 플랫폼 기본값에 기대지 않는다(2026-10-06).
+export const maxDuration = 300;
+
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = (await getAppDictionary()).brandPage;
+  return { title: t.metaTitle, description: t.metaDescription };
 };
 
-// audit-history-list와 동일 어휘(측정 상태 배지).
-const STATUS_LABEL: Record<AuditJob["status"], string> = {
-  queued: "대기 중",
-  processing: "측정 중",
-  completed: "완료",
-  failed: "실패",
-};
+// audit-history-list와 동일 어휘(측정 상태 배지) — 사전 `app.jobStatus`.
+const statusLabel = (
+  t: AppDictionary["jobStatus"]
+): Record<AuditJob["status"], string> => ({
+  queued: t.queued,
+  processing: t.processing,
+  completed: t.completed,
+  failed: t.failed,
+});
 
 const STATUS_TONE: Record<AuditJob["status"], string> = {
   queued: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -38,13 +52,17 @@ const STATUS_TONE: Record<AuditJob["status"], string> = {
   failed: "bg-red-500/10 text-red-600 dark:text-red-400",
 };
 
-const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Asia/Seoul",
-});
+const dateFormatterFor = (locale: string) =>
+  new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Seoul",
+  });
 
-function jobView(job: Pick<AuditJob, "status" | "result">) {
+function jobView(
+  job: Pick<AuditJob, "status" | "result">,
+  t: AppDictionary["jobStatus"]
+) {
   const result = withRecomputedAuditMetrics(job.result);
   const responses = (
     result as {
@@ -55,39 +73,59 @@ function jobView(job: Pick<AuditJob, "status" | "result">) {
     } | null
   )?.engineResponses;
   const hasCollectedAnswer =
-    responses?.some((response) => !response.errorMessage && !response.isStub) ??
-    false;
+    responses?.some(
+      (response) => !(response.errorMessage || response.isStub)
+    ) ?? false;
   const isPartial =
     job.status === "completed" &&
     hasCollectedAnswer &&
     !isPublishableAuditResult(result);
   if (isPartial) {
     return {
-      label: "잠정 결과",
-      linkLabel: "잠정 결과 보기",
+      label: t.partial,
+      linkLabel: t.partialLink,
       tone: STATUS_TONE.processing,
       external: true,
     };
   }
   if (job.status === "completed" && !isUsableRun(result)) {
     return {
-      label: "측정 불가",
-      linkLabel: "측정 불가 원인 보기",
+      label: t.unavailable,
+      linkLabel: t.unavailableLink,
       tone: STATUS_TONE.failed,
       external: false,
     };
   }
   return {
-    label: STATUS_LABEL[job.status],
-    linkLabel: "결과 보기",
+    label: statusLabel(t)[job.status],
+    linkLabel: t.viewResult,
     tone: STATUS_TONE[job.status],
     external: true,
   };
 }
 
 // requireOrg 만 통과하면 되는 org 멤버 self 화면(admin 게이트 아님).
+/** 최근 측정이 홈페이지 푸터에서 찾은 사업자등록번호 — 편집기에 "제안"으로만 보여 준다. */
+const footerBusinessNumber = (result: unknown): string | null => {
+  const identity = (
+    result as {
+      measurementContext?: {
+        officialSiteIdentity?: { businessNumber?: unknown } | null;
+      };
+    } | null
+  )?.measurementContext?.officialSiteIdentity;
+  return typeof identity?.businessNumber === "string"
+    ? identity.businessNumber
+    : null;
+};
+
 // scopedBrands 는 내부에서 requireOrg 를 호출하므로 org 미선택 시 throw → 인증 레이아웃이 처리.
 const BrandPage = async () => {
+  const [dict, locale] = await Promise.all([
+    getAppDictionary(),
+    getAppLocale(),
+  ]);
+  const dateFormatter = dateFormatterFor(dateLocaleFor(locale));
   const orgId = await requireOrg();
   const brands = await scopedBrands();
 
@@ -129,28 +167,30 @@ const BrandPage = async () => {
       {/* 🔴 S6-a(2026-08-11) — 이 화면을 부르는 이름이 3개였다(사이드바 "측정 시작" ·
           제목 "브랜드 측정" · 폼 "새 브랜드 등록"). 같은 곳을 세 이름으로 부르면
           사용자는 서로 다른 화면으로 읽는다 → 사이드바·title·h1 을 「브랜드·측정」으로 통일. */}
-      <Header page="브랜드·측정" pages={["Findable"]} showMetric={false} />
+      <Header
+        page={dict.brandPage.title}
+        pages={["Findable"]}
+        showMetric={false}
+      />
       <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
         <section className="flex flex-col gap-2">
           <h1 className="font-semibold text-2xl text-[color:var(--findable-ink,#f7f8f8)]">
-            브랜드·측정
+            {dict.brandPage.title}
           </h1>
           <p className="max-w-2xl text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            측정할 브랜드를 등록하면, ChatGPT·Perplexity 등 주요 AI 엔진이 내
-            브랜드를 어떻게 말하는지 조직 단위로 측정해요. 결과는 대시보드와
-            측정 이력에 쌓여요.
+            {dict.brandPage.lede}
           </p>
         </section>
 
         {brands.length > 0 && (
           <section className="flex flex-col gap-3">
             <h2 className="font-medium text-[color:var(--findable-ink,#f7f8f8)]">
-              내 브랜드 ({brands.length})
+              {dict.brandPage.myBrands.replace("{n}", String(brands.length))}
             </h2>
             <ul className="flex flex-col gap-2">
               {brands.map((brand) => {
                 const lastJob = latestByDomain.get(brand.domain);
-                const view = lastJob ? jobView(lastJob) : null;
+                const view = lastJob ? jobView(lastJob, dict.jobStatus) : null;
                 const identityReady = Boolean(
                   brand.name.trim() && brand.industry && brand.marketScope
                 );
@@ -172,8 +212,10 @@ const BrandPage = async () => {
                         {lastJob ? (
                           <div className="flex flex-wrap items-center gap-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
                             <span>
-                              마지막 측정{" "}
-                              {dateFormatter.format(lastJob.createdAt)}
+                              {dict.brandPage.lastMeasured.replace(
+                                "{date}",
+                                dateFormatter.format(lastJob.createdAt)
+                              )}
                             </span>
                             <Badge
                               className={cn("border-transparent", view?.tone)}
@@ -190,7 +232,11 @@ const BrandPage = async () => {
                                 className="inline-flex items-center gap-1 text-[color:var(--findable-primary,#ff7a4d)]"
                                 href={
                                   view?.external
-                                    ? `${webUrl}/ko/audit/${lastJob.id}`
+                                    ? publicReportUrl(
+                                        webUrl,
+                                        lastJob.id,
+                                        locale
+                                      )
                                     : `/history/${lastJob.id}`
                                 }
                                 rel={
@@ -208,7 +254,7 @@ const BrandPage = async () => {
                                       className="size-3"
                                     />
                                     <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-                                      새 탭
+                                      {dict.jobStatus.newTab}
                                     </span>
                                   </>
                                 )}
@@ -217,8 +263,7 @@ const BrandPage = async () => {
                           </div>
                         ) : (
                           <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-                            아직 측정 전 — 측정 시작을 누르면 1~3분 뒤 결과가
-                            나와요.
+                            {dict.brandPage.notMeasured}
                           </span>
                         )}
                       </div>
@@ -226,25 +271,30 @@ const BrandPage = async () => {
                         brandName={brand.name}
                         domain={brand.domain}
                         identityReady={identityReady}
+                        t={dict.trackButton}
                       />
                     </div>
                     {!identityReady && (
                       <p className="text-amber-600 text-sm dark:text-amber-400">
-                        정확한 측정을 위해 아래에서 브랜드명·업종·타깃 시장을
-                        확인하고 저장해 주세요.
+                        {dict.brandPage.identityMissing}
                       </p>
                     )}
-                    <PromptWizard brandId={brand.id} />
+                    <PromptWizard brandId={brand.id} t={dict.promptWizard} />
                     {/* 🔴 N-44 남은일 1-c — 온보딩을 **건너뛴 사람의 유일한 경로**.
                         `/welcome` 2·4단계는 건너뛸 수 있고, 무료 진단 후 가입자는 온보딩
                         자체를 건너뛴다. 여기가 없으면 별칭·경쟁사를 **영영 못 넣는다**. */}
                     <BrandProfileEditorServer
                       brandId={brand.id}
-                      name={brand.name}
-                      industry={brand.industry}
-                      marketScope={brand.marketScope}
+                      businessNumber={brand.businessNumber}
                       competitors={brand.competitors}
                       entityVariants={brand.entityVariants}
+                      industry={brand.industry}
+                      legalName={brand.legalName}
+                      marketScope={brand.marketScope}
+                      name={brand.name}
+                      suggestedBusinessNumber={footerBusinessNumber(
+                        latestByDomain.get(brand.domain)?.result
+                      )}
                     />
                   </li>
                 );
@@ -256,7 +306,7 @@ const BrandPage = async () => {
         <section className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <h2 className="font-medium text-[color:var(--findable-ink,#f7f8f8)]">
-              브랜드 추가
+              {dict.brandPage.addTitle}
             </h2>
             {/* 🔴 S6-a(2026-08-11) 기록: 예전 문구 「바로 측정을 시작할 수 있어요」는
                 당시 **거짓**이었다 — 폼이 등록만 하고 측정은 트리거하지 않았기 때문이다.
@@ -265,11 +315,11 @@ const BrandPage = async () => {
                 소요 시간을 함께 밝힌다(기다림의 길이를 숨기지 않는다). */}
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
               {brands.length === 0
-                ? "도메인만 넣으면 바로 측정을 시작해요. 1~3분 걸려요."
-                : "여러 브랜드를 등록해 각각 측정할 수 있어요."}
+                ? dict.brandPage.addFirst
+                : dict.brandPage.addMore}
             </p>
           </div>
-          <AssignBrandForm />
+          <AssignBrandForm t={dict.brandForm} />
         </section>
       </div>
     </>

@@ -32,19 +32,31 @@ import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import {
+  buildPaymentId,
+  cancelBillingKeySchedules,
+  checkPaymentIdIntegrity,
+  deleteBillingKey,
   getPortOnePayment,
+  isFailedEvent,
   isFullCancellationEvent,
   isPaidEvent,
-  buildPaymentId,
+  isPartialCancellationEvent,
   nextBillingDate,
   parseWebhookBody,
+  paymentIssuedAtFromPaymentId,
   planForAmount,
+  RENEWAL_FAILURE_GRACE_DAYS,
+  renewalGraceEndsAt,
   schedulePaymentWithBillingKey,
   userIdFromPaymentId,
   verifyWebhookSignature,
 } from "@repo/payments";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+import {
+  readPaymentRefundKind,
+  recordPaymentRefund,
+} from "@/lib/billing/payment-refund-record";
 
 /** 재전송해도 결과가 같은(=재시도 무의미) 종료. PortOne 이 재전송을 멈추도록 200. */
 const done = (reason: string) => NextResponse.json({ ok: true, reason });
@@ -52,6 +64,439 @@ const done = (reason: string) => NextResponse.json({ ok: true, reason });
 /** 일시 장애 — PortOne 이 재전송하도록 5xx. */
 const retryable = (reason: string) =>
   NextResponse.json({ ok: false, reason }, { status: 500 });
+
+/** 예약 회차가 결제되면 다음 회차를 이어 예약할 수 있는 조직 결제 상태. */
+const RENEWABLE_BILLING_STATUSES = new Set<string>([
+  "active",
+  "past_due",
+  "expired",
+]);
+
+/** 환불로 끝난 구독이 가질 수 있는 상태(환불 직후 canceled → 기간 종료 cron 후 expired). */
+const REFUND_FENCE_STATUSES = new Set<string>(["canceled", "expired"]);
+
+/** 갱신 회차 실패 처리를 다시 받아야 하는(최종 상태가 아닌) 결제 상태. */
+const NON_FINAL_PAYMENT_STATUSES = new Set<string>([
+  "READY",
+  "PENDING",
+  "VIRTUAL_ACCOUNT_ISSUED",
+]);
+
+/**
+ * 갱신 결제 실패 — 즉시 회수하지 않고 유예 기간을 시작한다(2026-10-05 컨트롤타워 결정).
+ *
+ * - 조직이 예약해 둔 회차(`billingNextPaymentId`)일 때만 처리한다. 첫 결제·단건 결제 실패는
+ *   아무 권한도 준 적이 없으므로 아무도 내리지 않는다.
+ * - `billingStatus = past_due` 로만 표시하고 권한은 그대로 둔다. 유예 종료 시각은
+ *   `billingNextPaymentAt`(실패한 회차의 청구 예정 시각) + RENEWAL_FAILURE_GRACE_DAYS로 계산하며,
+ *   만료 회수는 auto-refresh cron(`expireLapsedRenewalGrants`)이 한다.
+ * - 멱등: 이미 past_due 면 다시 쓰지 않는다. 조건부 updateMany 라 동시 재전송도 안전하다.
+ */
+async function handleFailedPayment(paymentId: string): Promise<Response> {
+  const userId = userIdFromPaymentId(paymentId);
+  if (!userId) {
+    log.warn("payments.webhook.failed_no_uid_in_payment_id", { paymentId });
+    return done("failed_no_uid_in_payment_id");
+  }
+
+  try {
+    const payment = await getPortOnePayment(paymentId);
+    if (payment.status !== "FAILED") {
+      if (NON_FINAL_PAYMENT_STATUSES.has(payment.status)) {
+        log.warn("payments.webhook.failed_not_final", {
+          paymentId,
+          status: payment.status,
+        });
+        return retryable(`failed_not_final:${payment.status}`);
+      }
+      // PAID·취소 등은 각자의 웹훅이 처리한다. 실패 이벤트로 상태를 바꾸지 않는다.
+      log.info("payments.webhook.failed_status_mismatch", {
+        paymentId,
+        status: payment.status,
+      });
+      return done(`failed_status_mismatch:${payment.status}`);
+    }
+
+    const org = await database.organization.findFirst({
+      where: { billingNextPaymentId: paymentId },
+      select: {
+        id: true,
+        billingStatus: true,
+        billingNextPaymentId: true,
+        billingNextPaymentAt: true,
+      },
+    });
+    if (!org || org.billingNextPaymentId !== paymentId) {
+      // 첫 결제 실패, 해지 후 남은 예약 실패 등 — 예약된 갱신 회차가 아니다.
+      log.info("payments.webhook.failed_not_scheduled_renewal", { paymentId });
+      return done("failed_not_scheduled_renewal");
+    }
+    if (org.billingStatus === "past_due" || org.billingStatus === "expired") {
+      log.info("payments.webhook.renewal_failed_duplicate", {
+        userId,
+        paymentId,
+        billingStatus: org.billingStatus,
+      });
+      return done("renewal_failed_already_recorded");
+    }
+    if (org.billingStatus !== "active") {
+      log.info("payments.webhook.renewal_failed_inactive_org", {
+        paymentId,
+        billingStatus: org.billingStatus,
+      });
+      return done(`renewal_failed_inactive:${org.billingStatus}`);
+    }
+
+    const dueAt = org.billingNextPaymentAt ?? new Date();
+    await database.organization.updateMany({
+      where: {
+        id: org.id,
+        billingNextPaymentId: paymentId,
+        billingStatus: "active",
+      },
+      data: { billingStatus: "past_due", billingNextPaymentAt: dueAt },
+    });
+    log.warn("payments.webhook.renewal_failed", {
+      userId,
+      paymentId,
+      graceDays: RENEWAL_FAILURE_GRACE_DAYS,
+      graceEndsAt: renewalGraceEndsAt(dueAt).toISOString(),
+    });
+    return done("renewal_failed_grace_started");
+  } catch (error) {
+    log.error("payments.webhook.renewal_failed_processing_error", {
+      paymentId,
+      error: parseError(error),
+    });
+    return retryable("renewal_failed_processing_error");
+  }
+}
+
+/**
+ * 전액 환불된 결제가 조직의 **현재 정기결제 회차**(`billingLastPaymentId`)면 구독도 끝낸다
+ * (2026-10-05 컨트롤타워 승인).
+ *
+ * 왜: 권한만 회수하고 예약·빌링키를 남기면 다음 달 예약 결제가 그대로 청구된다(X4).
+ * 순서는 해지(unsubscribe)와 같다 — ① 예약 취소 → ② 빌링키 삭제 → ③ 조직 기록 정리.
+ * 두 PortOne 호출은 "이미 취소/삭제됨"을 성공으로 보므로 재전송에도 멱등이다.
+ * 실패하면 예외를 던져 호출부가 5xx 로 재전송을 받게 한다(반쯤 정리된 채로 200 금지).
+ *
+ * 🔒 P1-2: 이용 기간 끝(`billingNextPaymentAt`)을 **환불 시각**으로 당긴다. 환불된 회차의 권한을
+ *   회수하면 결제 출처 스택이 직전 회차(같은 plan)로 "복구"되어 환불한 달을 계속 쓰게 된다.
+ *   기간 끝을 지금으로 두면 다음 cron(`expireCancelledSubscriptions`)이 끝난 출처를 모두 걷는다.
+ *   이미 지금보다 이른 값이면 그대로 둔다(재전송 멱등).
+ *
+ * 🔒 P1-3: 갱신 회차가 결제됐는데 Paid 웹훅이 끝나지 않으면 그 회차는 아직
+ *   `billingNextPaymentId` 에만 있다. **실제로 결제됐던**(paidAt 있음) 결제의 환불이면 그 경우도
+ *   현재 구독 회차로 본다. 결제된 적 없는 다음 예약의 취소는 구독을 건드리지 않는다.
+ *   조직 갱신은 찾은 필드(last 또는 next)가 그대로일 때만 하는 조건부 updateMany 다.
+ */
+async function cleanupRefundedSubscription(
+  paymentId: string,
+  options: { wasPaid: boolean }
+): Promise<"not_current_subscription" | "cleaned" | "already_clean"> {
+  const select = {
+    id: true,
+    billingCustomerId: true,
+    billingNextPaymentAt: true,
+    billingNextPaymentId: true,
+    billingProvider: true,
+    billingStatus: true,
+  } as const;
+  let guard:
+    | { billingLastPaymentId: string }
+    | { billingNextPaymentId: string } = { billingLastPaymentId: paymentId };
+  let org = await database.organization.findFirst({
+    where: { billingLastPaymentId: paymentId },
+    select,
+  });
+  if (!org && options.wasPaid) {
+    guard = { billingNextPaymentId: paymentId };
+    org = await database.organization.findFirst({
+      where: { billingNextPaymentId: paymentId },
+      select,
+    });
+  }
+  if (!org) {
+    return "not_current_subscription";
+  }
+
+  const now = new Date();
+  const periodEndsLater =
+    !org.billingNextPaymentAt || org.billingNextPaymentAt > now;
+  const billingKey =
+    org.billingProvider === "portone" ? org.billingCustomerId : null;
+  if (
+    !billingKey &&
+    org.billingStatus === "canceled" &&
+    org.billingNextPaymentId === null &&
+    !periodEndsLater
+  ) {
+    return "already_clean";
+  }
+  if (billingKey) {
+    await cancelBillingKeySchedules(billingKey);
+    await deleteBillingKey(billingKey);
+  }
+  await database.organization.updateMany({
+    where: { id: org.id, ...guard },
+    data: {
+      billingStatus: "canceled",
+      billingNextPaymentId: null,
+      ...(periodEndsLater ? { billingNextPaymentAt: now } : {}),
+      ...(billingKey ? { billingCustomerId: null, billingProvider: null } : {}),
+    },
+  });
+  return "cleaned";
+}
+
+type LookedUpPayment = Awaited<ReturnType<typeof getPortOnePayment>>;
+
+function validDate(raw: string | undefined): Date | null {
+  if (!raw) {
+    return null;
+  }
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * 취소(전액·부분)를 PaymentRefund 에 멱등 기록한다. 종류·금액은 PortOne 조회 결과로 정한다.
+ * 실패·테이블 부재는 기록 모듈이 로그만 남기고 삼킨다 — 회수·정리를 막지 않는다.
+ */
+async function recordRefundFact(
+  userId: string,
+  payment: LookedUpPayment,
+  eventAt: Date | null
+): Promise<void> {
+  const kind = payment.status === "CANCELLED" ? "full" : "partial";
+  const user = await database.user
+    .findUnique({ where: { id: userId }, select: { organizationId: true } })
+    .catch(() => null);
+  await recordPaymentRefund({
+    paymentId: payment.id,
+    userId,
+    organizationId: user?.organizationId ?? null,
+    amount:
+      payment.amount.cancelled ?? (kind === "full" ? payment.amount.total : 0),
+    kind,
+    refundedAt: validDate(payment.cancelledAt) ?? eventAt ?? new Date(),
+  });
+}
+
+/** 부분 취소 — 권한·구독은 그대로 두고 환불 기록만 남긴다. */
+async function handlePartialCancelledPayment(
+  paymentId: string,
+  eventAt: Date | null
+): Promise<Response> {
+  const userId = userIdFromPaymentId(paymentId);
+  if (!userId) {
+    log.warn("payments.webhook.partial_cancel_no_uid_in_payment_id", {
+      paymentId,
+    });
+    return done("partial_cancel_no_uid_in_payment_id");
+  }
+  let payment: LookedUpPayment;
+  try {
+    payment = await getPortOnePayment(paymentId);
+  } catch (error) {
+    log.error("payments.webhook.partial_cancel_lookup_failed", {
+      paymentId,
+      error: parseError(error),
+    });
+    return retryable("partial_cancel_lookup_failed");
+  }
+  if (
+    payment.status !== "PARTIAL_CANCELLED" &&
+    payment.status !== "CANCELLED"
+  ) {
+    log.info("payments.webhook.partial_cancel_status_mismatch", {
+      paymentId,
+      status: payment.status,
+    });
+    return done(`partial_cancel_status_mismatch:${payment.status}`);
+  }
+  // 이미 전액 취소로 끝났으면 전액으로 기록한다(회수는 Cancelled 웹훅이 한다).
+  await recordRefundFact(userId, payment, eventAt);
+  log.info("payments.webhook.partial_cancel_recorded", {
+    userId,
+    paymentId,
+    status: payment.status,
+  });
+  return done("partial_cancel_recorded");
+}
+
+/** 전액 취소 — 해당 결제에서 부여한 plan 을 회수하고, 현재 구독 회차면 구독도 끝낸다. */
+async function handleCancelledPayment(
+  paymentId: string,
+  eventAt: Date | null
+): Promise<Response> {
+  const userId = userIdFromPaymentId(paymentId);
+  if (!userId) {
+    log.warn("payments.webhook.cancel_no_uid_in_payment_id", {
+      paymentId,
+    });
+    return done("cancel_no_uid_in_payment_id");
+  }
+  let payment: Awaited<ReturnType<typeof getPortOnePayment>>;
+  try {
+    payment = await getPortOnePayment(paymentId);
+  } catch (error) {
+    log.error("payments.webhook.cancel_lookup_failed", {
+      paymentId,
+      error: parseError(error),
+    });
+    return retryable("cancel_lookup_failed");
+  }
+  if (payment.status !== "CANCELLED") {
+    log.warn("payments.webhook.cancel_not_final", {
+      paymentId,
+      status: payment.status,
+    });
+    return retryable(`cancel_not_final:${payment.status}`);
+  }
+
+  // 환불은 확정된 사실이다 — 회수·정리가 실패해 재전송되더라도 먼저 남긴다.
+  await recordRefundFact(userId, payment, eventAt);
+
+  // 회수와 구독 정리는 서로를 막지 않는다. 한쪽이 실패해도 다른 쪽은 끝내고 5xx 로 재전송을 받는다.
+  const result = await revokePlanFromPayment(userId, paymentId).catch(() => ({
+    revoked: false,
+    reason: "push_failed" as const,
+  }));
+  let cleanup: Awaited<ReturnType<typeof cleanupRefundedSubscription>>;
+  try {
+    cleanup = await cleanupRefundedSubscription(paymentId, {
+      wasPaid: Boolean(payment.paidAt),
+    });
+  } catch (error) {
+    log.error("payments.webhook.refund_cleanup_failed", {
+      userId,
+      paymentId,
+      error: parseError(error),
+    });
+    return retryable("refund_cleanup_failed");
+  }
+  if (result.reason === "push_failed") {
+    log.error("payments.webhook.cancel_revoke_failed", {
+      userId,
+      paymentId,
+    });
+    return retryable("cancel_revoke_failed");
+  }
+  log.info("payments.webhook.cancel_processed", {
+    userId,
+    paymentId,
+    revoked: result.revoked,
+    subscription: cleanup,
+  });
+  return done(result.reason);
+}
+
+/**
+ * 환불 펜스 — 조직에 기록된 환불보다 **먼저 발급된** 결제의 늦은 Paid 는 권한을 주지 않는다(X8).
+ *
+ * "기록된 환불" 판정 순서:
+ *   1) PaymentRefund 에 마지막 결제(billingLastPaymentId)의 전액 환불 기록이 있으면 그것을 믿는다
+ *      (조직 정리가 아직 실패 중이어도, PortOne 조회 없이).
+ *   2) 기록이 없거나 테이블이 없으면 기존 판정: 조직이 canceled·expired 이고 마지막 결제가 PortOne 에서
+ *      CANCELLED. 해지(unsubscribe)만 한 조직은 마지막 결제가 PAID 라 막히지 않는다.
+ */
+async function isOlderThanRecordedRefund(
+  userId: string,
+  paymentId: string
+): Promise<boolean> {
+  const user = await database.user.findUnique({
+    where: { id: userId },
+    select: {
+      organization: {
+        select: { billingLastPaymentId: true, billingStatus: true },
+      },
+    },
+  });
+  const lastPaymentId = user?.organization?.billingLastPaymentId;
+  if (!lastPaymentId || lastPaymentId === paymentId) {
+    return false;
+  }
+  const issuedAt = paymentIssuedAtFromPaymentId(paymentId);
+  const refundedIssuedAt = paymentIssuedAtFromPaymentId(lastPaymentId);
+  if (!(issuedAt && refundedIssuedAt) || issuedAt > refundedIssuedAt) {
+    return false;
+  }
+  if ((await readPaymentRefundKind(lastPaymentId)) === "full") {
+    return true;
+  }
+  // P2-2: 기간 종료 cron 이 환불된 구독을 expired 로 닫은 뒤에도 펜스가 유지돼야 한다.
+  if (!REFUND_FENCE_STATUSES.has(user?.organization?.billingStatus ?? "")) {
+    return false;
+  }
+  const last = await getPortOnePayment(lastPaymentId);
+  return last.status === "CANCELLED";
+}
+
+/**
+ * 부여 직후 재조회 — 부여가 끝나기 전에 전액 환불이 끝났으면 방금 준 권한을 되돌린다(X8).
+ * 환불 웹훅의 회수가 부여보다 먼저 끝나면 회수 대상이 아직 없어 권한이 남기 때문이다.
+ * PaymentRefund 의 전액 환불 기록을 먼저 보고, 없으면 PortOne 을 다시 조회한다.
+ * 부분 취소는 남은 결제 대가가 있으므로 그대로 둔다.
+ * 반환값이 있으면 호출부는 그 응답으로 끝낸다(다음 회차 예약도 하지 않는다).
+ */
+async function undoGrantIfRefunded(
+  userId: string,
+  paymentId: string
+): Promise<Response | null> {
+  const recorded = (await readPaymentRefundKind(paymentId)) === "full";
+  if (!recorded) {
+    const latest = await getPortOnePayment(paymentId);
+    if (latest.status !== "CANCELLED") {
+      return null;
+    }
+  }
+  const undo = await revokePlanFromPayment(userId, paymentId);
+  if (undo.reason === "push_failed") {
+    log.error("payments.webhook.refunded_during_grant_revoke_failed", {
+      userId,
+      paymentId,
+    });
+    return retryable("refunded_during_grant_revoke_failed");
+  }
+  log.warn("payments.webhook.refunded_during_grant", { userId, paymentId });
+  return done("refunded_during_grant");
+}
+
+/**
+ * Paid 웹훅의 paymentId 위변조 검사(P1-1).
+ * 서버가 조직에 기록한 정기결제 회차(billingNextPaymentId·billingLastPaymentId)는 브라우저가 만든
+ * ID가 아니고, 시각 조각이 청구 예정 시각이라 requestedAt 과 다를 수 있다 → 시각 검사만 건너뛴다.
+ */
+async function checkWebhookPaymentId(
+  userId: string,
+  paymentId: string,
+  input: {
+    payment: LookedUpPayment;
+    plan: NonNullable<ReturnType<typeof planForAmount>>;
+  }
+) {
+  const user = await database.user.findUnique({
+    where: { id: userId },
+    select: {
+      organization: {
+        select: { billingLastPaymentId: true, billingNextPaymentId: true },
+      },
+    },
+  });
+  const org = user?.organization;
+  const serverRecorded =
+    org?.billingNextPaymentId === paymentId ||
+    org?.billingLastPaymentId === paymentId;
+  return checkPaymentIdIntegrity(paymentId, {
+    plan: input.plan,
+    userId,
+    requestedAt: input.payment.requestedAt,
+    paidAt: input.payment.paidAt,
+    skipTimeCheck: serverRecorded,
+  });
+}
 
 /**
  * 정기결제는 항상 미래 예약을 정확히 한 건만 둔다.
@@ -86,19 +531,34 @@ async function scheduleFollowingSubscription(input: {
 
   // 단건결제와 최초 정기결제 웹훅은 여기서 끝난다. 최초 정기결제의 다음 예약은
   // subscribe action이 저장한 nextPaymentId와 현재 paymentId가 다르기 때문이다.
+  // 갱신 실패(past_due) 또는 유예 만료(expired) 뒤 같은 회차가 늦게 결제되면
+  // (PortOne 콘솔 재시도 등) 여기서 active 로 되돌리고 다음 회차를 다시 예약한다.
   if (
     !(
       org &&
       org.billingProvider === "portone" &&
-      org.billingStatus === "active" &&
+      RENEWABLE_BILLING_STATUSES.has(org.billingStatus) &&
       org.billingCustomerId &&
       org.billingNextPaymentId === input.paymentId
     )
   ) {
+    if (org?.billingNextPaymentId === input.paymentId) {
+      // subscribe action 이 청구 전에 선점한 첫 결제(빌링키 미기록)가 결제됐다.
+      // 정상 흐름이면 곧 action 이 기록한다. 계속 남아 있으면 조직 기록 복구가 필요하다.
+      log.warn("payments.webhook.subscription_paid_unrecorded", {
+        userId: input.userId,
+        paymentId: input.paymentId,
+        billingStatus: org.billingStatus,
+      });
+    }
     return;
   }
 
-  const paidAt = input.payment.paidAt ? new Date(input.payment.paidAt) : new Date();
+  // paidAt 이 없으면 회차 ID에 새겨진 청구 예정 시각을 쓴다. 현재 시각을 쓰면 웹훅이
+  // 재전송될 때마다 다음 회차 ID가 달라져 예약이 두 건 생긴다(이중 청구).
+  const paidAt = input.payment.paidAt
+    ? new Date(input.payment.paidAt)
+    : (paymentIssuedAtFromPaymentId(input.paymentId) ?? new Date());
   const safePaidAt = Number.isNaN(paidAt.getTime()) ? new Date() : paidAt;
   const nextPaymentAt = nextBillingDate(safePaidAt);
   // 다음 청구 시각으로 ID를 고정한다. 웹훅이 재전송돼도 PortOne에는 같은 예약만 요청한다.
@@ -120,14 +580,41 @@ async function scheduleFollowingSubscription(input: {
     timeToPay: nextPaymentAt,
   });
 
-  await database.organization.update({
-    where: { id: org.id },
+  // 🔒 P2-1: 예약을 만드는 사이 해지·환불·다른 재전송이 조직 기록을 바꿨을 수 있다.
+  //   읽을 때와 같은 회차·같은 빌링키일 때만 기록한다(무조건 update 는 해지를 덮어 active 로 되살렸다).
+  const recorded = await database.organization.updateMany({
+    where: {
+      id: org.id,
+      billingNextPaymentId: input.paymentId,
+      billingCustomerId: org.billingCustomerId,
+    },
     data: {
       billingStatus: "active",
       billingLastPaymentId: input.paymentId,
       billingNextPaymentId: nextPaymentId,
       billingNextPaymentAt: nextPaymentAt,
     },
+  });
+  if (recorded.count === 1) {
+    return;
+  }
+  const latest = await database.organization.findUnique({
+    where: { id: org.id },
+    select: { billingCustomerId: true, billingNextPaymentId: true },
+  });
+  if (
+    latest?.billingNextPaymentId === nextPaymentId &&
+    latest.billingCustomerId === org.billingCustomerId
+  ) {
+    // 같은 Paid 의 동시 재전송이 이미 이 회차를 기록했다 — 방금 만든 예약이 바로 그 예약이다.
+    return;
+  }
+  // 구독이 그사이 끝났거나 바뀌었다. 방금 만든 예약이 고아로 청구되지 않게 이 빌링키의 예약을 취소한다.
+  // 실패하면 예외 → 호출부가 5xx(재전송).
+  await cancelBillingKeySchedules(org.billingCustomerId);
+  log.warn("payments.webhook.renewal_superseded", {
+    userId: input.userId,
+    paymentId: input.paymentId,
   });
 }
 
@@ -158,45 +645,17 @@ export const POST = async (request: Request): Promise<Response> => {
   }
 
   // 전액 취소는 해당 결제에서 부여한 plan만 안전하게 회수한다.
-  // 부분 취소는 남은 결제 대가가 있으므로 권한을 내리지 않는다.
+  // 부분 취소는 남은 결제 대가가 있으므로 권한을 내리지 않고 환불 기록만 남긴다.
+  const eventAt = validDate(body.timestamp);
   if (isFullCancellationEvent(body.type)) {
-    const userId = userIdFromPaymentId(body.data.paymentId);
-    if (!userId) {
-      log.warn("payments.webhook.cancel_no_uid_in_payment_id", {
-        paymentId: body.data.paymentId,
-      });
-      return done("cancel_no_uid_in_payment_id");
-    }
-    try {
-      const payment = await getPortOnePayment(body.data.paymentId);
-      if (payment.status !== "CANCELLED") {
-        log.warn("payments.webhook.cancel_not_final", {
-          paymentId: body.data.paymentId,
-          status: payment.status,
-        });
-        return retryable(`cancel_not_final:${payment.status}`);
-      }
-      const result = await revokePlanFromPayment(userId, body.data.paymentId);
-      if (result.reason === "push_failed") {
-        log.error("payments.webhook.cancel_revoke_failed", {
-          userId,
-          paymentId: body.data.paymentId,
-        });
-        return retryable("cancel_revoke_failed");
-      }
-      log.info("payments.webhook.cancel_processed", {
-        userId,
-        paymentId: body.data.paymentId,
-        revoked: result.revoked,
-      });
-      return done(result.reason);
-    } catch (error) {
-      log.error("payments.webhook.cancel_lookup_failed", {
-        paymentId: body.data.paymentId,
-        error: parseError(error),
-      });
-      return retryable("cancel_lookup_failed");
-    }
+    return handleCancelledPayment(body.data.paymentId, eventAt);
+  }
+  if (isPartialCancellationEvent(body.type)) {
+    return handlePartialCancelledPayment(body.data.paymentId, eventAt);
+  }
+
+  if (isFailedEvent(body.type)) {
+    return handleFailedPayment(body.data.paymentId);
   }
 
   // 결제 완료 이벤트만 plan 을 올린다(가상계좌 발급·부분 취소 등은 해당 없음).
@@ -242,12 +701,39 @@ export const POST = async (request: Request): Promise<Response> => {
       return done("amount_not_in_catalog");
     }
 
+    // 🔒 P1-1: 브라우저가 고친 paymentId 로는 부여하지 않는다(재전송해도 같은 결과 → 200).
+    const integrity = await checkWebhookPaymentId(userId, paymentId, {
+      plan,
+      payment,
+    });
+    if (!integrity.ok) {
+      log.error("payments.webhook.payment_id_mismatch", {
+        userId,
+        paymentId,
+        reason: integrity.reason,
+      });
+      return done(`payment_id_mismatch:${integrity.reason}`);
+    }
+
+    if (await isOlderThanRecordedRefund(userId, paymentId)) {
+      log.warn("payments.webhook.paid_before_recorded_refund", {
+        userId,
+        paymentId,
+      });
+      return done("paid_before_recorded_refund");
+    }
+
     // 3) 부여(멱등). 이미 verify 경로가 올렸어도 같은 값이라 안전하다.
     const granted = await grantPlanFromPayment(userId, plan, paymentId);
     if (!granted) {
       // Clerk push 실패 = 일시 장애일 수 있다 → 재전송으로 복구 기회를 준다.
       log.error("payments.webhook.grant_failed", { userId, paymentId, plan });
       return retryable("grant_failed");
+    }
+
+    const undone = await undoGrantIfRefunded(userId, paymentId);
+    if (undone) {
+      return undone;
     }
 
     try {

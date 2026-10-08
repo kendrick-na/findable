@@ -6,6 +6,7 @@
 // ⚠️ 판정기(LLM) 호출 비용이 든다 — 한 번에 최대 MAX_JOBS 건.
 // ⚠️ 원문이 잘린 행은 「판별 불가」로 두고 응답에 recommendRemeasure=true(재측정 권장).
 
+import { isVercelPreview } from "@repo/audit/preview-guard";
 import { revalidateStoredAuditResult } from "@repo/audit/revalidate-stored-audit";
 import { requireAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
@@ -26,7 +27,95 @@ const BodySchema = z.object({
   includeCurrentVersion: z.boolean().default(false),
 });
 
-export async function POST(request: Request) {
+/**
+ * Writes only the verdict-derived leaves, fenced on the exact stored snapshot.
+ * Returns the affected row count (1 = applied).
+ */
+async function applyRevalidatedResult(
+  jobId: string,
+  storedResult: unknown,
+  next: Record<string, unknown>
+): Promise<number> {
+  const revalidatedCoreRows = Array.isArray(next.engineResponses)
+    ? next.engineResponses.filter(
+        (row) =>
+          !row ||
+          typeof row !== "object" ||
+          (row as { engineId?: unknown }).engineId !== "naver-briefing"
+      )
+    : [];
+  // Revalidation owns only its verdict-derived leaves. A briefing claim
+  // or completion may mutate the same JSON concurrently; replacing the
+  // snapshot would erase that state and can resurrect processing.
+  return await database.$executeRawUnsafe(
+    `UPDATE "AuditJob"
+           SET "result" =
+             jsonb_set(
+               jsonb_set(
+                 jsonb_set(
+                   jsonb_set(
+                     jsonb_set(
+                       jsonb_set(
+                         jsonb_set(
+                           jsonb_set(
+                             (COALESCE("result", '{}'::jsonb)
+                               - 'verificationState' - 'regions'),
+                             '{engineResponses}',
+                             $1::jsonb || (
+                               SELECT COALESCE(jsonb_agg(row ORDER BY ord), '[]'::jsonb)
+                               FROM jsonb_array_elements(
+                                 COALESCE("result"->'engineResponses', '[]'::jsonb)
+                               ) WITH ORDINALITY AS items(row, ord)
+                               WHERE row->>'engineId' = 'naver-briefing'
+                             ),
+                             true
+                           ),
+                           '{metrics}', $2::jsonb, true
+                         ),
+                         '{mentionVerdictVersion}', to_jsonb($3::int), true
+                       ),
+                       '{revalidation}', $4::jsonb, true
+                     ),
+                     '{geoActions}', $5::jsonb, true
+                   ),
+                   '{topRecommendations}', $6::jsonb, true
+                 ),
+                 '{regionScoresOutdated}', to_jsonb($7::boolean), true
+               ),
+               '{actionsOutdated}', to_jsonb($8::boolean), true
+             ),
+             "pdfUrl" = NULL
+           WHERE "id" = $9
+             AND "status" = 'completed'
+             AND COALESCE("result"->>'briefingStatus', 'not_requested')
+               IS DISTINCT FROM 'processing'
+             AND "result" = $10::jsonb
+             AND jsonb_typeof(COALESCE("result"->'engineResponses', '[]'::jsonb)) = 'array'`,
+    JSON.stringify(revalidatedCoreRows),
+    JSON.stringify(next.metrics ?? {}),
+    next.mentionVerdictVersion,
+    JSON.stringify(next.revalidation ?? null),
+    JSON.stringify(next.geoActions ?? []),
+    JSON.stringify(next.topRecommendations ?? []),
+    next.regionScoresOutdated === true,
+    next.actionsOutdated === true,
+    jobId,
+    JSON.stringify(storedResult)
+  );
+}
+
+export function POST(request: Request) {
+  // Vercel Preview: even a dry-run calls the paid mention-verdict LLM, and a
+  //   stubbed verdict must never be written over a stored result. Refuse.
+  if (isVercelPreview()) {
+    return Promise.resolve(
+      NextResponse.json({ error: "disabled_on_preview" }, { status: 403 })
+    );
+  }
+  return revalidate(request);
+}
+
+async function revalidate(request: Request) {
   let adminId: string;
   try {
     adminId = await requireAdmin();
@@ -64,10 +153,16 @@ export async function POST(request: Request) {
         continue;
       }
       if (apply) {
-        await database.auditJob.update({
-          where: { id: jobId },
-          data: { result: outcome.result as never },
-        });
+        const next = outcome.result as Record<string, unknown>;
+        const applied = await applyRevalidatedResult(jobId, job.result, next);
+        if (applied !== 1) {
+          outcomes.push({
+            jobId,
+            status: "skipped",
+            reason: "briefing_in_progress",
+          });
+          continue;
+        }
       }
       const metrics = outcome.result.metrics as
         | Record<string, unknown>

@@ -3,6 +3,9 @@
 import { getDictionary } from "@repo/internationalization";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+// 상대 경로인 이유: `apps/app` 테스트가 이 파일을 직접 import 하면 `@/` 가 app 으로 풀린다.
+import { freeAuditPublicEnabled } from "../../../lib/free-audit";
 import { PublicLandingHeader } from "../components/public-landing-header";
 import { AuditForm } from "./components/audit-form";
 
@@ -17,6 +20,12 @@ interface AuditPageProps {
 export const generateMetadata = async ({
   params,
 }: AuditPageProps): Promise<Metadata> => {
+  // 👤 2026-10-07 CEO 결정 — 공개 무료 진단을 숨긴다(env `FREE_AUDIT_PUBLIC_ENABLED`, 기본 꺼짐).
+  //   폼(이 페이지)만 404 로 닫는다. 결과 페이지(`/audit/<jobId>`)는 로그인 대시보드·
+  //   admin·발송된 메일이 링크하므로 그대로 둔다. 코드는 지우지 않는다(재활성화 대비).
+  if (!freeAuditPublicEnabled()) {
+    notFound();
+  }
   const { locale } = await params;
   const isKo = locale.startsWith("ko");
   return createMetadata({
@@ -32,6 +41,9 @@ export const generateMetadata = async ({
 };
 
 const AuditPage = async ({ params }: AuditPageProps) => {
+  if (!freeAuditPublicEnabled()) {
+    notFound();
+  }
   const { locale } = await params;
   const dictionary = await getDictionary(locale);
   const isKo = locale.startsWith("ko");

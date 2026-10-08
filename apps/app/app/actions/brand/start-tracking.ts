@@ -1,9 +1,10 @@
 "use server";
 
+import { auditLanguageForMarketScope } from "@repo/audit/market-scope";
+import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { isUsableRun } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
-import { AUDIT_JOB_STALE_AFTER_MS } from "@repo/audit/stale-job";
-import { auditLanguageForMarketScope } from "@repo/audit/market-scope";
+import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { hasPlan } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { auth, clerkClient } from "@repo/auth/server";
@@ -14,6 +15,10 @@ import { after } from "next/server";
 import { getAuditRuntimeReadiness } from "@/lib/audit/runtime-readiness";
 import { requireOrg } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
+import { getAppDictionary } from "@/lib/i18n";
+
+/** 오류 문구 — 사전 `app.brandErrors`(요청 밖이면 기본 로케일 ko). */
+const brandErrors = async () => (await getAppDictionary()).brandErrors;
 
 /**
  * "측정 시작" 서버 액션 — 로그인 org 사용자가 브랜드의 AI 인용 audit을 트리거 (20번, P2).
@@ -40,7 +45,6 @@ import { isValidDomain, normalizeDomain } from "@/lib/domain";
 //   **동기 함수를 export 할 수 없다** — 하면 tsc·lint 는 통과하고 빌드에서만 터진다).
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const STALE_THRESHOLD_MS = AUDIT_JOB_STALE_AFTER_MS;
 
 /** DB JSON 필드에 저장된 별칭만 안전하게 러너 입력으로 넘긴다. */
 const stringList = (value: unknown): string[] =>
@@ -112,6 +116,17 @@ export async function ensureOrgBrand(
     return null;
   }
   try {
+    // 🔴 2026-10-06 운영 실측: 측정 3개가 동시에 돌 때 이미 등록된 브랜드의 재측정이
+    //   「브랜드 준비 중 문제가 발생했습니다」로 실패했다(DB 오류 로그 0 — 대화형
+    //   트랜잭션이 연결 대기 상한을 넘긴 것으로 추정). 재측정은 거의 항상 기존 브랜드라
+    //   트랜잭션 없이 먼저 찾고, 없을 때만 트랜잭션으로 만든다.
+    const found = await database.brand.findFirst({
+      where: { organizationId, domain },
+      select: { id: true },
+    });
+    if (found) {
+      return found.id;
+    }
     return await database.$transaction(async (tx) => {
       const existing = await tx.brand.findFirst({
         where: { organizationId, domain },
@@ -171,6 +186,26 @@ async function checkRemeasurePolicy(
   orgId: string,
   domain: string
 ): Promise<StartTrackingResult | null> {
+  const recentFailures = await database.auditJob.findMany({
+    where: {
+      email: `org:${orgId}`,
+      domain,
+      createdAt: { gte: new Date(Date.now() - DAY_MS) },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 4,
+    select: { status: true, checkpoint: true },
+  });
+  const retryBlock = newAuditAttemptBlockReason(recentFailures);
+  if (retryBlock) {
+    return {
+      error:
+        retryBlock === "no_progress"
+          ? (await brandErrors()).retryStoppedSaveFailures
+          : (await brandErrors()).retryStoppedDailyFailures,
+      code: "rate_limited",
+    };
+  }
   const recent = await database.auditJob.findFirst({
     where: {
       email: `org:${orgId}`,
@@ -187,18 +222,23 @@ async function checkRemeasurePolicy(
     return null;
   }
 
-  const age = Date.now() - recent.createdAt.getTime();
   const isRunning =
     recent.status === "processing" || recent.status === "queued";
-  if (isRunning && age <= STALE_THRESHOLD_MS) {
+  if (isRunning && !isStaleAuditJob(recent)) {
     return {
-      error:
-        "이 도메인은 지금 측정이 진행 중이에요. 1~3분 뒤 대시보드에서 결과를 확인해 주세요.",
+      error: (await brandErrors()).alreadyRunning,
       code: "rate_limited",
     };
   }
   if (isRunning) {
-    // stale → 재측정 허용.
+    // Atomically mark the abandoned attempt failed before a fresh explicit run.
+    const status = await reconcileStaleAuditJob(recent);
+    if (status !== "failed") {
+      return {
+        error: (await brandErrors()).statusChanged,
+        code: "rate_limited",
+      };
+    }
     return null;
   }
 
@@ -207,8 +247,7 @@ async function checkRemeasurePolicy(
     return null;
   }
   return {
-    error:
-      "무료 플랜은 같은 도메인을 24시간에 1회 측정할 수 있어요. 유료 플랜에서는 언제든 다시 측정할 수 있습니다.",
+    error: (await brandErrors()).freeDailyLimit,
     code: "rate_limited",
     upgrade: true,
   };
@@ -221,22 +260,23 @@ async function checkRemeasurePolicy(
 export const startOrgTracking = async (
   input: StartTrackingInput
 ): Promise<StartTrackingResult> => {
+  const invocationStartedAtMs = Date.now();
   // 1) 인증 — orgId·userId를 app 자기 세션에서 재도출(입력 아님). 없으면 unauthorized.
   const { userId } = await auth();
   let orgId: string;
   try {
     orgId = await requireOrg();
   } catch {
-    return { error: "로그인 후 조직을 선택해 주세요.", code: "unauthorized" };
+    return { error: (await brandErrors()).signInOrg, code: "unauthorized" };
   }
   if (!userId) {
-    return { error: "로그인 후 조직을 선택해 주세요.", code: "unauthorized" };
+    return { error: (await brandErrors()).signInOrg, code: "unauthorized" };
   }
 
   // 2) 입력 검증(감사 대상만).
   const domain = normalizeDomain(input.domain ?? "");
   if (!(domain && isValidDomain(domain))) {
-    return { error: "도메인 형식이 올바르지 않습니다. 예: example.com" };
+    return { error: (await brandErrors()).domainInvalidExample };
   }
   const brandName = input.brandName?.trim() || undefined;
 
@@ -251,8 +291,7 @@ export const startOrgTracking = async (
         missing: readiness.missing,
       });
       return {
-        error:
-          "측정 서버 설정이 준비되지 않았어요. 잠시 후 다시 시도하거나 운영팀에 문의해 주세요.",
+        error: (await brandErrors()).runnerNotConfigured,
         code: "not_configured",
       };
     }
@@ -261,15 +300,14 @@ export const startOrgTracking = async (
     const orgReady = await ensureOrgExists(orgId, userId);
     if (!orgReady) {
       return {
-        error:
-          "조직 정보 동기화 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+        error: (await brandErrors()).orgSyncFailed,
       };
     }
 
     // 5) org 스코프 brand 도출/생성.
     const brandId = await ensureOrgBrand(orgId, domain, brandName);
     if (!brandId) {
-      return { error: "브랜드 준비 중 문제가 발생했습니다." };
+      return { error: (await brandErrors()).brandPrepareFailed };
     }
 
     // 6) 브랜드에 저장된 업종을 job 으로 승계한다(2026-08-02).
@@ -286,8 +324,7 @@ export const startOrgTracking = async (
     // "정확한 측정"을 시작하지 못하게 한다.
     if (!(brandName && brandRecord?.industry && brandRecord.marketScope)) {
       return {
-        error:
-          "측정 기준을 먼저 확인해 주세요. 브랜드명·업종·타깃 시장을 저장하면 정확한 질문과 판별 기준으로 측정합니다.",
+        error: (await brandErrors()).identityRequired,
         code: "identity_incomplete",
       };
     }
@@ -330,6 +367,7 @@ export const startOrgTracking = async (
     after(async () => {
       try {
         await runAuditJob({
+          invocationStartedAtMs,
           jobId: job.id,
           domain,
           language,
@@ -343,6 +381,9 @@ export const startOrgTracking = async (
           industry: brandRecord?.industry ?? undefined,
           // 점수 분모를 정하는 타깃 시장. 없으면 러너가 자동 추정.
           marketScope: brandRecord?.marketScope ?? undefined,
+          // 마감으로 질문이 남으면 「이어가기 대기」로 멈춘다(2026-10-06).
+          //   측정 화면 폴링(continueOrgTracking)·30분 cron 이 남은 질문만 이어서 잰다.
+          continueWhenTruncated: true,
         });
       } catch (jobError) {
         log.error("audit.org.job_uncaught", {
@@ -355,6 +396,6 @@ export const startOrgTracking = async (
     return { ok: true, jobId: job.id };
   } catch (error) {
     log.error("audit.org.request_unhandled", { error: parseError(error) });
-    return { error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
+    return { error: (await brandErrors()).serverError };
   }
 };

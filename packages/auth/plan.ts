@@ -57,8 +57,11 @@ export const PLAN_META: Record<Plan, PlanMeta> = {
   growth: {
     label: "Growth",
     tone: "gradient",
+    // 🔴 2026-10-06(👤 승인) — 「리포트 Export」 를 뺐다: 리포트 내보내기(Notion·Docs)는 아직 없고,
+    //   데이터 내보내기(CSV)는 Starter 부터 열린다. 「자동 추적」 은 Starter 도 주간으로 있어
+    //   Growth 의 실제 차이인 「매일」 로 적는다. 화면 문구는 사전 `app.billing.blurbGrowth`.
     blurb:
-      "경쟁사 비교·자동 추적·리포트 Export가 열리는 성장 플랜입니다. 추적 프롬프트 150개·5 브랜드.",
+      "경쟁사 비교·매일 자동 측정이 열리는 성장 플랜입니다. 추적 질문 150개·5 브랜드.",
   },
   scale: {
     label: "Scale",
@@ -131,6 +134,154 @@ export function resolveEffectivePlan(input: {
     (best, plan) => (hasPlan(plan, best) ? plan : best),
     "free"
   );
+}
+
+/**
+ * 결제로 부여된 권한이 현재 살아 있는가 — Clerk privateMetadata 의 현재 결제 출처.
+ * 유예 만료·환불은 이 값을 비우므로(plan-grant) 같은 판정을 화면과 cron 이 공유한다.
+ */
+export function hasCurrentPaymentGrant(
+  privateMetadata: Record<string, unknown> | null | undefined
+): boolean {
+  return typeof privateMetadata?.findablePaymentId === "string";
+}
+
+/** 조직 구성원 한 명의 사용자별 권한 신호(resolveEffectivePlan 입력과 같은 뜻). */
+export interface MemberPlanSignal {
+  clerkPlan: Plan;
+  hasCurrentPaymentGrant: boolean;
+  hasInviteRedemption: boolean;
+  isApprovedPartner: boolean;
+}
+
+/**
+ * 세션 없는 서버 작업(자동 재측정 cron)용 조직 플랜.
+ *
+ * 화면 게이트는 "보고 있는 구성원" 기준으로 resolveEffectivePlan 을 부른다. cron 은 보는
+ * 사람이 없으므로 구성원 각각을 같은 함수로 판정한 뒤 가장 높은 값을 쓴다 — 즉 어떤
+ * 구성원이 대시보드에서 유료로 보이면 그 조직은 유료다. 구성원 정보가 없으면 조직 DB 권한만.
+ */
+export function resolveOrganizationPlan(input: {
+  members: readonly MemberPlanSignal[];
+  now?: Date;
+  organizationPlan: Plan;
+  organizationPlanExpiresAt: Date | null;
+}): Plan {
+  const base = {
+    organizationPlan: input.organizationPlan,
+    organizationPlanExpiresAt: input.organizationPlanExpiresAt,
+    now: input.now,
+  };
+  return input.members.reduce<Plan>(
+    (best, member) => {
+      const plan = resolveEffectivePlan({ ...base, ...member });
+      return hasPlan(plan, best) ? plan : best;
+    },
+    resolveEffectivePlan({ ...base, clerkPlan: "free" })
+  );
+}
+
+/**
+ * 실효 플랜이 어디서 왔나(2026-10-05 · 자동 측정은 "실제 결제" 출처만).
+ *   - payment: Clerk 결제 출처(findablePaymentId)가 있는 구성원의 Clerk plan
+ *   - partner: 승인 파트너(DB PartnerApplication approved → growth)
+ *   - invite: 초대 코드로 쓰인 조직 DB 기간 부여(초대 이력 있는 구성원이 있을 때)
+ *   - admin: 관리자 기간 부여(조직 DB plan + 만료일) 또는 결제 출처 없는 Clerk plan
+ *   - db: 만료일 없는 조직 DB plan(수동 기록)
+ *   - none: free
+ */
+export type PlanSource =
+  | "payment"
+  | "partner"
+  | "invite"
+  | "admin"
+  | "db"
+  | "none";
+
+// 같은 플랜이 여러 출처에서 오면 앞쪽을 출처로 표기한다(결제 우선).
+const SOURCE_PRIORITY: readonly PlanSource[] = [
+  "payment",
+  "partner",
+  "invite",
+  "admin",
+  "db",
+  "none",
+];
+
+interface PlanCandidate {
+  plan: Plan;
+  source: PlanSource;
+}
+
+function organizationPlanCandidates(input: {
+  members: readonly MemberPlanSignal[];
+  now?: Date;
+  organizationPlan: Plan;
+  organizationPlanExpiresAt: Date | null;
+}): PlanCandidate[] {
+  const nowMs = (input.now ?? new Date()).getTime();
+  const expiresAt = input.organizationPlanExpiresAt;
+  const expiredOrgGrant = Boolean(expiresAt && expiresAt.getTime() <= nowMs);
+  const invited = input.members.some((m) => m.hasInviteRedemption);
+  let orgSource: PlanSource = "db";
+  if (invited) {
+    orgSource = "invite";
+  } else if (expiresAt) {
+    orgSource = "admin";
+  }
+  const candidates: PlanCandidate[] = [
+    {
+      plan: expiredOrgGrant ? "free" : input.organizationPlan,
+      source: orgSource,
+    },
+  ];
+  // resolveEffectivePlan 의 userPlan·partnerPlan 과 같은 규칙(값이 어긋나면 테스트가 잡는다).
+  for (const member of input.members) {
+    if (member.hasCurrentPaymentGrant) {
+      candidates.push({ plan: member.clerkPlan, source: "payment" });
+    } else if (member.isApprovedPartner) {
+      candidates.push({ plan: member.clerkPlan, source: "partner" });
+    } else if (!(member.hasInviteRedemption || expiredOrgGrant)) {
+      candidates.push({ plan: member.clerkPlan, source: "admin" });
+    }
+    if (member.isApprovedPartner) {
+      candidates.push({ plan: "growth", source: "partner" });
+    }
+  }
+  return candidates.filter((c) => c.plan !== "free");
+}
+
+/**
+ * `resolveOrganizationPlan` 과 같은 실효 플랜 + 그 출처 + 결제로만 얻은 플랜.
+ * `paymentPlan` 은 결제 출처가 있는 구성원 플랜 중 가장 높은 값(없으면 free) —
+ * 관리자·초대·파트너 부여가 위에 얹혀도 결제 몫만 따로 본다.
+ */
+export function resolveOrganizationPlanWithSource(input: {
+  members: readonly MemberPlanSignal[];
+  now?: Date;
+  organizationPlan: Plan;
+  organizationPlanExpiresAt: Date | null;
+}): { paymentPlan: Plan; plan: Plan; source: PlanSource } {
+  const candidates = organizationPlanCandidates(input);
+  let best: PlanCandidate = { plan: "free", source: "none" };
+  let paymentPlan: Plan = "free";
+  for (const candidate of candidates) {
+    const higher =
+      PLAN_RANK[candidate.plan] > PLAN_RANK[best.plan] ||
+      (candidate.plan === best.plan &&
+        SOURCE_PRIORITY.indexOf(candidate.source) <
+          SOURCE_PRIORITY.indexOf(best.source));
+    if (higher) {
+      best = candidate;
+    }
+    if (
+      candidate.source === "payment" &&
+      PLAN_RANK[candidate.plan] > PLAN_RANK[paymentPlan]
+    ) {
+      paymentPlan = candidate.plan;
+    }
+  }
+  return { plan: best.plan, source: best.source, paymentPlan };
 }
 
 // ──────────────────────────────────────────────────

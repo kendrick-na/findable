@@ -8,6 +8,11 @@ import { ArrowRight, Check, Clock } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { env } from "@/env";
+import {
+  freeAuditPublicEnabled,
+  visibleFaq,
+  visiblePricingTiers,
+} from "../../../lib/free-audit";
 import { FooterCTA } from "../(home)/components/footer-cta";
 import { PublicLandingHeader } from "../components/public-landing-header";
 
@@ -24,11 +29,16 @@ export const generateMetadata = async ({
 }: PricingPageProps): Promise<Metadata> => {
   const { locale } = await params;
   const isKo = locale.startsWith("ko");
+  const freeAuditDescription = isKo
+    ? "Findable 요금제. 무료 진단부터 엔터프라이즈까지, 우리 브랜드 규모에 맞는 플랜을 제공합니다."
+    : "Findable pricing. From free audit to enterprise, a plan that fits your brand's scale.";
   return createMetadata({
     title: isKo ? "요금제" : "Pricing",
-    description: isKo
-      ? "Findable 요금제. 무료 진단부터 엔터프라이즈까지, 우리 브랜드 규모에 맞는 플랜을 제공합니다."
-      : "Findable pricing. From free audit to enterprise, a plan that fits your brand's scale.",
+    // 👤 2026-10-07 CEO 결정 — 공개 무료 진단이 꺼져 있으면 설명에서도 뺀다.
+    description: freeAuditPublicEnabled()
+      ? freeAuditDescription
+      : (await getDictionary(locale)).web.pricing.meta
+          .descriptionWithoutFreeAudit,
     locale,
     pathname: "/pricing",
   });
@@ -70,12 +80,12 @@ const TIERS_KO: Tier[] = [
     name: "Free Audit",
     price: "₩0",
     period: "1회 무료",
-    desc: "도메인 입력 한 번으로 7개 AI 진단 결과를 받아보세요.",
+    desc: "도메인 입력 한 번으로 AI 답변 4곳과 네이버·다음 검색 노출을 진단해 보세요.",
     cta: "무료로 진단받기",
     href: "/audit",
     featured: false,
     features: [
-      "7개 AI 답변 1회 진단",
+      "AI 답변 4곳 + 네이버·다음 검색 1회 진단",
       "1페이지 PDF 리포트",
       "이메일 발송",
       "카드 등록 불필요",
@@ -155,12 +165,12 @@ const TIERS_EN: Tier[] = [
     name: "Free Audit",
     price: "₩0",
     period: "1 free run",
-    desc: "Drop in your domain once and get a diagnosis across 7 AI engines.",
+    desc: "Drop in your domain once to check 4 AI engines plus Naver and Daum search.",
     cta: "Get a free audit",
     href: "/audit",
     featured: false,
     features: [
-      "1 audit across 7 AI answers",
+      "1 audit: 4 AI engines + Naver/Daum search",
       "1-page PDF report",
       "Emailed to you",
       "No card required",
@@ -177,7 +187,7 @@ const TIERS_EN: Tier[] = [
     featured: false,
     features: [
       "30 tracked prompts / month",
-      "1 brand monitored",
+      "3 brands monitored",
       // ⭐ 2026-08-10 — KO 표와 동일 사실. 재측정은 작동 중, 리포트 메일은 아직 꺼짐.
       "Weekly automatic re-measurement",
       "Weekly automated report (coming soon)",
@@ -260,8 +270,14 @@ const PricingPage = async ({ params }: PricingPageProps) => {
   const dictionary = await getDictionary(locale);
   const isKo = locale.startsWith("ko");
   const lp = isKo ? "/ko" : "";
-  const tiers = isKo ? TIERS_KO : TIERS_EN;
-  const faq = isKo ? FAQ_KO : FAQ_EN;
+  // 👤 2026-10-07 CEO 결정 — 무료 진단 숨김 시 Free Audit 등급·FAQ 첫 문항·부제를 뺀다.
+  //   (부제는 "무료 진단으로 시작해서…" 라 대체 문구 없이 숨긴다.)
+  const freeAuditPublic = freeAuditPublicEnabled();
+  const tiers = visiblePricingTiers(
+    isKo ? TIERS_KO : TIERS_EN,
+    freeAuditPublic
+  );
+  const faq = visibleFaq(isKo ? FAQ_KO : FAQ_EN, freeAuditPublic);
   const displayFont = isKo
     ? "var(--findable-font-display-kr)"
     : "var(--findable-font-display)";
@@ -323,17 +339,24 @@ const PricingPage = async ({ params }: PricingPageProps) => {
         >
           {copy.h1}
         </h1>
-        <p
-          className="mx-auto mt-5 max-w-[560px] text-[16px] text-[var(--findable-ink-muted)] leading-[1.6]"
-          style={{ fontFamily: "var(--findable-font-sans)" }}
-        >
-          {copy.sub}
-        </p>
+        {freeAuditPublic && (
+          <p
+            className="mx-auto mt-5 max-w-[560px] text-[16px] text-[var(--findable-ink-muted)] leading-[1.6]"
+            style={{ fontFamily: "var(--findable-font-sans)" }}
+          >
+            {copy.sub}
+          </p>
+        )}
       </section>
 
       {/* 4-tier 그리드 */}
       <section className="px-8 pb-16">
-        <div className="mx-auto grid max-w-[1280px] gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div
+          className={cn(
+            "mx-auto grid max-w-[1280px] gap-6 md:grid-cols-2",
+            tiers.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-4"
+          )}
+        >
           {tiers.map((tier) => (
             <article
               className={`relative flex flex-col rounded-xl p-6 ${

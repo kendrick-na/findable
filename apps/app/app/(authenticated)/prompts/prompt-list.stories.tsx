@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/nextjs";
 import { PromptList } from "./prompt-list";
 
@@ -34,6 +35,8 @@ const meta = {
     // RICE#8 — 서버 없이 성공만 반환하는 스텁. 모든 기존 스토리에도 자동으로
     //   편집 버튼이 나타나 시각 검증이 된다.
     onEdit: () => Promise.resolve({ ok: true as const }),
+    // 문구는 사전에서 온다(`app.promptList`). JSON 직접 import — `getAppDictionary` 는 server-only.
+    t: koDict.app.promptList,
   },
 } satisfies Meta<typeof PromptList>;
 

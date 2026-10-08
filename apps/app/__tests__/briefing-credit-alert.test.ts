@@ -37,7 +37,8 @@ const DIGEST = stripComments(
 );
 const CRON = stripComments(
   readFileSync(
-    join(ROOT, "apps/web/app/api/cron/auto-refresh-tracking/route.ts"),
+    // The scheduled auto-refresh cron is the apps/app one; the web copy is retired.
+    join(ROOT, "apps/app/app/api/cron/auto-refresh-tracking/route.ts"),
     "utf8"
   )
 );

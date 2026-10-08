@@ -33,6 +33,16 @@
           }
         }
       }
+    },
+    {
+      // 🔴 v12 영업 리포트 CSS 는 승인된 PDF 템플릿(`_v12_v4_minimal/fix/template.html`)을
+      //   `scripts/client-report/port-v12-css.py` 로 **기계 변환**한 사본이다.
+      //   PDF 와 쪽별 픽셀 차 ≤0.09% 로 대조를 마쳤다. 속성 정렬·재포맷은 축약/개별 속성 순서를
+      //   바꿔 렌더를 조용히 바꾼다(정렬 미리보기에서 `line-height:1.45color:` 처럼 깨지기도 했다).
+      //   고치려면 템플릿을 고치고 다시 변환 → v12-parity.py 재대조.
+      "includes": ["apps/web/components/client-report-v12/**/*.css"],
+      "formatter": { "enabled": false },
+      "assist": { "actions": { "source": { "useSortedProperties": "off" } } }
     }
   ],
   "files": {

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { MENTION_VERDICT_VERSION } from "../ai/lib/mention-verdict-version";
-import { isPublishableAuditResult } from "./normalize-stored-metrics";
+import {
+  auditPublicationIssue,
+  auditPublicationStatus,
+  isPublishableAuditResult,
+  publicAuditResult,
+} from "./normalize-stored-metrics";
 import {
   proposeAuditRevalidation,
   revalidateStoredAuditResult,
@@ -38,6 +43,37 @@ it("rechecks rejected matches from immutable text and never publishes a proposal
   expect(proposal).not.toHaveProperty("metrics");
   expect(proposal).not.toHaveProperty("mentionVerdictVersion");
   expect(JSON.stringify(original)).toBe(before);
+});
+
+it("rechecks naver/daum search rows by rules only — the injected LLM judge is never called", async () => {
+  const verify = vi.fn();
+  const proposal = await proposeAuditRevalidation(
+    {
+      brandName: "TechDD",
+      domain: "dd.knowverse.net",
+      engineResponses: [
+        {
+          engineId: "naver",
+          rawResponse: "[1] TechDD 소개\n출처: https://dd.knowverse.net/",
+          citedSources: [{ url: "https://dd.knowverse.net/" }],
+        },
+        {
+          engineId: "daum",
+          rawResponse: "[1] TechDD 후기\n출처: https://blog.example.com/1",
+        },
+      ],
+    },
+    { title: "TechDD" },
+    verify
+  );
+  expect(verify).not.toHaveBeenCalled();
+  expect(proposal.rows.map((row) => row.verdict.quality)).toEqual([
+    "confirmed",
+    "unverified",
+  ]);
+  expect(
+    proposal.rows.every((row) => row.verdict.via === "rules_search_terms")
+  ).toBe(true);
 });
 
 it("does not turn missing or truncated text into a verified absence", async () => {
@@ -128,13 +164,27 @@ describe("stored audit revalidation backfill", () => {
       sov: Math.round((3 / 11) * 100),
     });
     expect(outcome.result.geoActions).toEqual([]);
-    expect(isPublishableAuditResult(outcome.result)).toBe(true);
+    // Entity revalidation cannot reconstruct an absent question plan. The
+    // verdict is updated, but publication still requires a new measurement.
+    expect(auditPublicationIssue(outcome.result)).toBe(
+      "question_plan_unverified"
+    );
+    expect(auditPublicationStatus(outcome.result)).toBe("provisional");
+    expect(isPublishableAuditResult(outcome.result)).toBe(false);
+    const publicMetrics = publicAuditResult(outcome.result).metrics as Record<
+      string,
+      unknown
+    >;
+    expect(publicMetrics.sov).toBeNull();
     expect(JSON.stringify(original)).toBe(before);
   });
 
   it("skips current results and asks for re-measurement when no official identity was stored", async () => {
     const verify = vi.fn();
-    const current = { ...legacy(), mentionVerdictVersion: MENTION_VERDICT_VERSION };
+    const current = {
+      ...legacy(),
+      mentionVerdictVersion: MENTION_VERDICT_VERSION,
+    };
     expect(
       await revalidateStoredAuditResult(current, { verify })
     ).toMatchObject({ status: "skipped", reason: "already_current" });

@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import { SourcesBoard } from "./sources-board";
 
@@ -21,6 +22,13 @@ import { SourcesBoard } from "./sources-board";
  *   ④ `네이버 AI 브리핑` 이 슬러그(`naver-briefing`)가 아닌 한국어로 나온다
  */
 const meta = {
+  // 상대 시간 문구는 사전에서 온다(`app.relativeTime`).
+  args: {
+    kindLabels: koDict.app.sourceKinds,
+    relativeTime: koDict.app.relativeTime,
+    // 문구는 사전에서 온다(`app.sourcesBoard`). JSON 직접 import — `getAppDictionary` 는 server-only.
+    t: koDict.app.sourcesBoard,
+  },
   component: SourcesBoard,
   parameters: { layout: "padded" },
   title: "대시보드/출처 · AI별(권역 분리)",

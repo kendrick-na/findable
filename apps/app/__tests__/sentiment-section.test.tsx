@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * 감성 섹션 회귀 테스트 (2026-08-16 세션N-34 · G-2).
  *
@@ -27,7 +28,12 @@ const REAL = { positive: 5, neutral: 28, negative: 0, total: 33 };
 describe("감성 섹션 — 0건과 0%를 구분한다", () => {
   it("🔴 판정할 답변이 없으면 `0%` 를 그리지 않는다", () => {
     const { container } = render(
-      <SentimentSection byEngine={[]} byPrompt={[]} summary={null} />
+      <SentimentSection
+        byEngine={[]}
+        byPrompt={[]}
+        summary={null}
+        t={koDict.app.sentimentSection}
+      />
     );
     const el = within(container);
     expect(el.getByText(/판정할 답변이 없어요/)).toBeTruthy();
@@ -37,7 +43,12 @@ describe("감성 섹션 — 0건과 0%를 구분한다", () => {
 
   it("0건이면 밋밋함을 지적하지 않는다 — 근거가 없다", () => {
     const { container } = render(
-      <SentimentSection byEngine={[]} byPrompt={[]} summary={null} />
+      <SentimentSection
+        byEngine={[]}
+        byPrompt={[]}
+        summary={null}
+        t={koDict.app.sentimentSection}
+      />
     );
     expect(container.textContent).not.toMatch(/밋밋/);
   });
@@ -46,7 +57,12 @@ describe("감성 섹션 — 0건과 0%를 구분한다", () => {
 describe("감성 섹션 — 중립이 주인공", () => {
   it("중립 비중을 주 숫자로 말한다 (실측 85%)", () => {
     const { container } = render(
-      <SentimentSection byEngine={[]} byPrompt={[]} summary={REAL} />
+      <SentimentSection
+        byEngine={[]}
+        byPrompt={[]}
+        summary={REAL}
+        t={koDict.app.sentimentSection}
+      />
     );
     const el = within(container);
     expect(el.getByText("85%")).toBeTruthy();
@@ -55,7 +71,12 @@ describe("감성 섹션 — 중립이 주인공", () => {
 
   it("🔴 분모를 항상 함께 밝힌다", () => {
     const { container } = render(
-      <SentimentSection byEngine={[]} byPrompt={[]} summary={REAL} />
+      <SentimentSection
+        byEngine={[]}
+        byPrompt={[]}
+        summary={REAL}
+        t={koDict.app.sentimentSection}
+      />
     );
     // 긍정·중립·부정 + 총계가 전부 보여야 "나머지는 부정인가?" 오독을 막는다.
     expect(container.textContent).toMatch(/긍정 5/);
@@ -66,7 +87,12 @@ describe("감성 섹션 — 중립이 주인공", () => {
 
   it("🔴 부정 0건을 성과로 팔지 않는다", () => {
     const { container } = render(
-      <SentimentSection byEngine={[]} byPrompt={[]} summary={REAL} />
+      <SentimentSection
+        byEngine={[]}
+        byPrompt={[]}
+        summary={REAL}
+        t={koDict.app.sentimentSection}
+      />
     );
     // 분류기가 못 잡는 것이지 "문제 없음"이 아니다 — 그 한계를 화면이 밝혀야 한다.
     expect(container.textContent).toMatch(
@@ -77,7 +103,12 @@ describe("감성 섹션 — 중립이 주인공", () => {
   it("긍정이 지배적이면 밋밋하다고 하지 않는다", () => {
     const positive = { positive: 20, neutral: 10, negative: 0, total: 30 };
     const { container } = render(
-      <SentimentSection byEngine={[]} byPrompt={[]} summary={positive} />
+      <SentimentSection
+        byEngine={[]}
+        byPrompt={[]}
+        summary={positive}
+        t={koDict.app.sentimentSection}
+      />
     );
     expect(container.textContent).not.toMatch(/고를 이유를 못 주는/);
   });
@@ -85,7 +116,12 @@ describe("감성 섹션 — 중립이 주인공", () => {
   it("부정이 있으면 밋밋함 대신 그걸 말한다", () => {
     const negative = { positive: 2, neutral: 20, negative: 5, total: 27 };
     const { container } = render(
-      <SentimentSection byEngine={[]} byPrompt={[]} summary={negative} />
+      <SentimentSection
+        byEngine={[]}
+        byPrompt={[]}
+        summary={negative}
+        t={koDict.app.sentimentSection}
+      />
     );
     // 부정이 실재하면 "밋밋" 프레임은 틀린 진단이 된다.
     expect(container.textContent).not.toMatch(/고를 이유를 못 주는/);
@@ -111,6 +147,7 @@ describe("감성 섹션 — 분해 목록", () => {
           },
         ]}
         summary={REAL}
+        t={koDict.app.sentimentSection}
       />
     );
     const el = within(container);
@@ -122,7 +159,12 @@ describe("감성 섹션 — 분해 목록", () => {
 
   it("분해가 비면 그 목록을 통째로 그리지 않는다 (빈 제목 금지)", () => {
     const { container } = render(
-      <SentimentSection byEngine={[]} byPrompt={[]} summary={REAL} />
+      <SentimentSection
+        byEngine={[]}
+        byPrompt={[]}
+        summary={REAL}
+        t={koDict.app.sentimentSection}
+      />
     );
     expect(container.textContent).not.toMatch(/질문별/);
     expect(container.textContent).not.toMatch(/AI별/);

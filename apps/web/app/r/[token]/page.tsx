@@ -1,9 +1,15 @@
-import { clientReportPdfFilename } from "@repo/audit/client-report/report-data";
+import {
+  clientReportDisclosure,
+  clientReportPdfFilename,
+  isClientReportSendApproved,
+} from "@repo/audit/client-report/report-data";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { ClientReport } from "@/components/client-report/client-report";
+import { ClientReportDisclosureNotice } from "@/components/client-report/client-report-disclosure";
+import { ClientReportV12 } from "@/components/client-report-v12/report-v12";
 import {
   loadClientReport,
   recordClientReportView,
@@ -51,6 +57,19 @@ export async function generateMetadata({
 const SCALE_SCRIPT =
   "(function(){var r=document.documentElement;function f(){var w=r.clientWidth;r.style.setProperty('--fr-scale',String(Math.min(1,(w-24)/794)))}f();addEventListener('resize',f)})();";
 
+function PdfReviewHold({ visible }: { readonly visible: boolean }) {
+  if (!visible) {
+    return null;
+  }
+  return (
+    <aside className="fr-review-hold">
+      저장 PDF는 발행 근거와 파일 일치 여부를 재검수하는 동안 다운로드를
+      중지했습니다.
+    </aside>
+  );
+}
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: v1(기존)·v2(v12) 두 템플릿 분기 + 화면/인쇄 분기를 한곳에 둔다
 export default async function ClientReportPage({
   params,
   searchParams,
@@ -70,6 +89,42 @@ export default async function ClientReportPage({
   }
   const webUrl = reportId ? `${SITE_URL}/r/${token}` : `${SITE_URL}/r/…`;
 
+  // v2(측정 원본 + 사람 판별 승인) = v12 11쪽 템플릿. v1(9/28 import) = 기존 템플릿 그대로.
+  if (data.schemaVersion === 2) {
+    const sendApproved = isClientReportSendApproved(data);
+    const fixture = first(sp.fixture);
+    const pdfHref = `/r/${token}/pdf${reportId || !fixture ? "" : `?fixture=${encodeURIComponent(fixture)}`}`;
+    return (
+      <div className={`fr12-root ${print ? "fr12-print" : "fr12-screen"}`}>
+        {print ? null : (
+          <script
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: 고정 문자열(사용자 값 없음)
+            dangerouslySetInnerHTML={{ __html: SCALE_SCRIPT }}
+          />
+        )}
+        {print ? null : (
+          <div className="fr12-bar">
+            {sendApproved ? null : (
+              <div className="internal" role="alert">
+                내부 시안 — 대표 고객 발송 최종 승인 전입니다. 이 링크·PDF 를
+                고객에게 보내지 마세요. (판별 검토: {data.review.reviewer}{" "}
+                {data.review.reviewedAt?.slice(0, 10)})
+              </div>
+            )}
+            <a download={clientReportPdfFilename(data)} href={pdfHref}>
+              PDF 내려받기
+            </a>
+          </div>
+        )}
+        <main className="fr12">
+          <ClientReportV12 data={data} sendApproved={sendApproved} />
+        </main>
+      </div>
+    );
+  }
+
+  // v1 은 공개 전 격리 판정(W0-2)을 거친다. v2 는 발행 때 승인·원본 지문이 이미 묶여 있다.
+  const disclosure = clientReportDisclosure(data, pdfUrl);
   return (
     <div className={`fr-root ${print ? "fr-print" : "fr-screen"}`}>
       {print ? null : (
@@ -78,15 +133,57 @@ export default async function ClientReportPage({
           dangerouslySetInnerHTML={{ __html: SCALE_SCRIPT }}
         />
       )}
-      {!print && pdfUrl ? (
+      {!print && pdfUrl && disclosure.pdfDownloadAttested ? (
         <div className="fr-toolbar">
           <a download={clientReportPdfFilename(data)} href={pdfUrl}>
-            PDF 내려받기
+            PDF 내려받기 (발행 당시 파일)
           </a>
+          <p className="fr-pdf-notice">
+            저장된 PDF는 발행 당시 파일입니다. 현재 웹 화면의 고지·표시 보정이
+            반영됐는지 확인되지 않았으며, PDF 내용의 현재 유효성을 보증하지
+            않습니다.
+          </p>
+          {disclosure.legacySyntheticEngineIds.includes("naver") ? (
+            <p className="fr-pdf-notice">
+              현재 웹 리포트의 저장 측정에는 네이버 Cue 재현(Findable 합성)
+              결과가 포함됩니다.
+            </p>
+          ) : null}
+          {disclosure.retiredEngineIds.length > 0 ? (
+            <p className="fr-pdf-notice">
+              현재 웹 리포트의 저장 측정에는 종료된 엔진 결과가 포함됩니다.
+            </p>
+          ) : null}
+          {disclosure.measurementMix.directAiAnswers > 0 &&
+          disclosure.measurementMix.searchExposureAnswers > 0 ? (
+            <p className="fr-pdf-notice">
+              현재 웹 리포트의 저장 측정에는 AI 답변과 검색 노출이 함께
+              포함됩니다.
+            </p>
+          ) : null}
         </div>
       ) : null}
+      {!print && disclosure.isFrozenSnapshot ? (
+        <>
+          <ClientReportDisclosureNotice
+            legacySyntheticEngineIds={disclosure.legacySyntheticEngineIds}
+            measurementMix={disclosure.measurementMix}
+            print={print}
+            retiredEngineIds={disclosure.retiredEngineIds}
+          />
+          <PdfReviewHold
+            visible={Boolean(pdfUrl) && !disclosure.pdfDownloadAttested}
+          />
+        </>
+      ) : null}
       <main className="fr fr-stack">
-        <ClientReport data={data} webUrl={webUrl} />
+        <ClientReport
+          data={data}
+          legacySyntheticEngineIds={disclosure.legacySyntheticEngineIds}
+          narrativeAttested={disclosure.narrativeAttested}
+          printDisclosure={print ? disclosure : undefined}
+          webUrl={webUrl}
+        />
       </main>
     </div>
   );

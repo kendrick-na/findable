@@ -24,6 +24,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import Link from "next/link";
+import { freeAuditPublicEnabled } from "@/lib/free-audit";
 import { FooterCTA } from "../../(home)/components/footer-cta";
 import { PublicLandingHeader } from "../../components/public-landing-header";
 
@@ -163,6 +164,7 @@ export default async function KGeoBenchPage({
   const { locale } = await params;
   const ko = locale.startsWith("ko");
   const prefix = ko ? "/ko" : "/en";
+  const freeAuditPublic = freeAuditPublicEnabled();
   const CANONICAL = canonicalFor(locale);
   return (
     <div className="min-h-screen bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
@@ -367,9 +369,7 @@ export default async function KGeoBenchPage({
                     className="text-[12px] text-[var(--findable-ink-tertiary)]"
                     style={{ fontFamily: "var(--findable-font-mono)" }}
                   >
-                    {ko
-                      ? b.category
-                      : EN_BRAND_SUMMARY[index].category}
+                    {ko ? b.category : EN_BRAND_SUMMARY[index].category}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -488,29 +488,35 @@ export default async function KGeoBenchPage({
         </div>
       </section>
 
-      {/* CTA */}
-      <section>
-        <div className="mx-auto max-w-5xl px-6 py-20">
-          <div className="flex flex-col items-center gap-6 text-center">
-            <h2
-              className="max-w-2xl font-medium text-[28px] leading-tight tracking-tight md:text-[40px]"
-              style={{ fontFamily: "var(--findable-font-display)" }}
-            >
-              {ko ? "한국어 GEO의 출발선," : "A starting point for Korean-language GEO."}
-              <br />
-              {ko ? "지금 같이 만듭니다." : "Help build the next dataset."}
-            </h2>
-            <Link
-              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
-              href={`${prefix}/audit`}
-              style={{ fontFamily: "var(--findable-font-sans)" }}
-            >
-              {ko ? "우리 브랜드 측정 추가" : "Measure your brand"}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+      {/* CTA — 👤 2026-10-07 CEO 결정: 공개 무료 진단(`/audit`)이 꺼져 있으면
+          (`FREE_AUDIT_PUBLIC_ENABLED`, 기본 꺼짐) 이 섹션을 통째로 숨긴다.
+          아래 FooterCTA(가입·상담 예약)가 다음 행동을 대신한다. */}
+      {freeAuditPublic && (
+        <section>
+          <div className="mx-auto max-w-5xl px-6 py-20">
+            <div className="flex flex-col items-center gap-6 text-center">
+              <h2
+                className="max-w-2xl font-medium text-[28px] leading-tight tracking-tight md:text-[40px]"
+                style={{ fontFamily: "var(--findable-font-display)" }}
+              >
+                {ko
+                  ? "한국어 GEO의 출발선,"
+                  : "A starting point for Korean-language GEO."}
+                <br />
+                {ko ? "지금 같이 만듭니다." : "Help build the next dataset."}
+              </h2>
+              <Link
+                className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
+                href={`${prefix}/audit`}
+                style={{ fontFamily: "var(--findable-font-sans)" }}
+              >
+                {ko ? "우리 브랜드 측정 추가" : "Measure your brand"}
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
       <FooterCTA locale={locale} />
     </div>
   );

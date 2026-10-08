@@ -30,6 +30,7 @@ import { after } from "next/server";
  *   화면은 `pollMeasureOne()` 으로 진행을 따라간다.
  */
 export async function runMeasureOne(brandId: string) {
+  const invocationStartedAtMs = Date.now();
   const adminId = await requireAdmin();
   log.info("admin.action.measure_one", { adminId, brandId });
 
@@ -39,6 +40,7 @@ export async function runMeasureOne(brandId: string) {
       after(async () => {
         try {
           await runAuditJob({
+            invocationStartedAtMs,
             brandId: started.brandId,
             brandName: started.brandName,
             domain: started.domain,

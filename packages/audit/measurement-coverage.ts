@@ -69,3 +69,14 @@ export function countMeasurementCoverage(
 export function isMeasurementFailure(coverage: MeasurementCoverage): boolean {
   return coverage.measured === 0 && coverage.attempted > 0;
 }
+
+/** A new runner invocation with no completed prompt batch must fail closed. */
+export function assertPromptExecutionStarted(
+  executedPromptCount: number
+): void {
+  if (!Number.isInteger(executedPromptCount) || executedPromptCount < 1) {
+    throw new Error(
+      "질문 측정을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요."
+    );
+  }
+}

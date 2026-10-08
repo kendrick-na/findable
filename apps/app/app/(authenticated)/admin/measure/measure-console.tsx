@@ -30,8 +30,14 @@ import {
   updateBrand,
 } from "@/app/actions/admin/measure";
 
-/** 측정 1건 원가(실측 평균, `reference_findable_traps` §8). 화면에 그대로 고지한다. */
-const COST_KRW = 87;
+/**
+ * 측정 1건 원가 — 운영 DB 최근 14일 완료 측정 156회 평균 ₩621(질문 평균 4.5개, 2026-10-07 집계).
+ * 근거: docs/_적용/측정질문체계_설계안_20261007.md §5-1 [확인사실]. 예전 값 87원은 근거를 찾지 못해 바꿨다.
+ * 한 건은 질문 최대 8개(RUNNER_PROMPT_LIMIT) × 기본 엔진 6곳(DEFAULT_ENGINES)이라 질문이 많으면 더 든다.
+ */
+const COST_KRW = 621;
+/** 질문 8개를 다 쓸 때 — 질문 1개(엔진 6곳)당 약 ₩138(같은 문서 §5-1) × 8 = 약 ₩1,100 [추정]. */
+const COST_KRW_MAX_ESTIMATE = "1,100";
 
 interface BrandRow {
   domain: string;
@@ -101,7 +107,7 @@ export const MeasureConsole = ({ brands }: { brands: BrandRow[] }) => {
       //   새로 만드는 것보다 브라우저 기본 확인창이 오히려 확실하다.
       // biome-ignore lint/suspicious/noAlert: 위 주석 참고
       !window.confirm(
-        `「${brand.name}」 측정을 1건 돌릴까요?\n\n약 ${COST_KRW}원이 들고 3~5분 걸려요.`
+        `「${brand.name}」 측정을 1건 돌릴까요?\n\n최근 운영 평균 약 ${COST_KRW}원(질문 수에 따라 최대 약 ${COST_KRW_MAX_ESTIMATE}원 추정)이 들고 3~5분 걸려요.`
       )
     ) {
       return;
@@ -313,8 +319,10 @@ export const MeasureConsole = ({ brands }: { brands: BrandRow[] }) => {
       </div>
 
       <p className="text-muted-foreground text-xs">
-        측정 1건에 약 {COST_KRW}원이 들어요. 「질문」이나 「시계열」이 빨간
-        0이면 그 브랜드는 추세를 그릴 수 없는 상태예요.
+        측정 1건은 질문 최대 8개를 기본 엔진 6곳에 물어요. 최근 14일 운영 평균
+        원가는 약 {COST_KRW}원(질문 평균 4.5개, 2026-10-07 집계)이고, 질문 8개를
+        다 쓰면 약 {COST_KRW_MAX_ESTIMATE}원으로 추정돼요. 「질문」이나
+        「시계열」이 빨간 0이면 그 브랜드는 추세를 그릴 수 없는 상태예요.
       </p>
 
       {/* 수정 */}

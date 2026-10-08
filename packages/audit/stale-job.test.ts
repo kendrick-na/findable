@@ -9,6 +9,8 @@ vi.mock("@repo/database", () => ({
 }));
 
 import {
+  AUDIT_JOB_QUEUE_STALE_AFTER_MS,
+  AUDIT_JOB_QUEUE_STALE_ERROR,
   AUDIT_JOB_STALE_AFTER_MS,
   AUDIT_JOB_STALE_ERROR,
   isStaleAuditJob,
@@ -34,6 +36,81 @@ describe("serverless audit timeout recovery", () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 
+  it("uses the resumed attempt instead of the original job creation time", async () => {
+    const resumed = {
+      ...oldJob,
+      attemptStartedAt: new Date(),
+      leaseUntil: null,
+    };
+    expect(isStaleAuditJob(resumed)).toBe(false);
+    expect(await reconcileStaleAuditJob({ ...resumed, email: "org:one" })).toBe(
+      "processing"
+    );
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+  it("does not kill a delayed but unclaimed job on the execution timeout", () => {
+    const queued = { ...oldJob, status: "queued" as const };
+    expect(isStaleAuditJob(queued)).toBe(false);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+  it("expires a queue entry only after its separate thirty-minute limit", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+    const queued = {
+      ...oldJob,
+      status: "queued" as const,
+      createdAt: new Date(Date.now() - AUDIT_JOB_QUEUE_STALE_AFTER_MS - 60_000),
+    };
+    expect(isStaleAuditJob(queued)).toBe(true);
+    expect(await reconcileStaleAuditJob(queued)).toBe("failed");
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: "queued" }),
+        data: expect.objectContaining({
+          errorMessage: AUDIT_JOB_QUEUE_STALE_ERROR,
+        }),
+      })
+    );
+  });
+
+  it("never fails a continuation wait, even after its window ends (it is finalized as provisional instead)", async () => {
+    const pending = {
+      ...oldJob,
+      status: "queued" as const,
+      createdAt: new Date(Date.now() - AUDIT_JOB_QUEUE_STALE_AFTER_MS - 60_000),
+      attemptStartedAt: new Date(
+        Date.now() - AUDIT_JOB_QUEUE_STALE_AFTER_MS - 60_000
+      ),
+      leaseUntil: new Date(Date.now() + 60_000),
+    };
+    expect(isStaleAuditJob(pending)).toBe(false);
+    expect(await reconcileStaleAuditJob(pending)).toBe("queued");
+
+    const expired = { ...pending, leaseUntil: new Date(Date.now() - 1000) };
+    expect(isStaleAuditJob(expired)).toBe(false);
+    expect(await reconcileStaleAuditJob(expired)).toBe("queued");
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("expires an abandoned execution lease", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+    const expired = {
+      ...oldJob,
+      attemptStartedAt: new Date(),
+      leaseUntil: new Date(Date.now() - 1000),
+    };
+    expect(isStaleAuditJob(expired)).toBe(true);
+    expect(await reconcileStaleAuditJob({ ...expired, email: "org:one" })).toBe(
+      "failed"
+    );
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          leaseUntil: { lt: expect.any(Date) },
+        }),
+      })
+    );
+  });
+
   it("atomically fails a timed-out measurement under its original owner", async () => {
     updateMany.mockResolvedValue({ count: 1 });
     expect(await reconcileStaleAuditJob(oldJob)).toBe("failed");
@@ -42,7 +119,7 @@ describe("serverless audit timeout recovery", () => {
         where: expect.objectContaining({
           id: "job-1",
           email: "org:one",
-          status: { in: ["queued", "processing"] },
+          status: "processing",
         }),
         data: expect.objectContaining({
           status: "failed",

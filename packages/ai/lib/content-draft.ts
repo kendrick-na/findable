@@ -66,7 +66,9 @@ Rules:
 - Prefer precise sentences and concrete claims. Avoid keyword repetition, hype, filler, and claims about ranking guarantees.
 - Do not output HTML or MDX. Plain Markdown only.`;
 
-const fallbackDraft = (input: ContentDraftInput): GeneratedContentDraft => {
+export const fallbackDraft = (
+  input: ContentDraftInput
+): GeneratedContentDraft => {
   const ko = input.locale === "ko";
   const rate =
     input.measurement.enginesMeasured > 0

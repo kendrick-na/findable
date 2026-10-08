@@ -16,6 +16,10 @@
 
 import { BRIEFING_FAIL_PREFIX } from "@repo/ai/lib/engines/briefing-failure";
 import { database, Prisma } from "@repo/database";
+import {
+  auditJobInternal,
+  auditJobNotInternal,
+} from "@repo/database/internal-orgs";
 import { log } from "@repo/observability/log";
 import { denyIfNotCron } from "@repo/security/cron";
 import type { NextRequest } from "next/server";
@@ -37,22 +41,31 @@ export const GET = async (request: NextRequest) => {
   const staleBefore = new Date(now - STALE_AFTER_MS);
 
   // 직전 24h 창(멱등, 읽기 전용). 병렬 집계.
-  const [created, statusGroups, crewGroups, stuckCount, briefingJobs] =
-    await Promise.all([
-    // 어제 생성된 진단 수
+  // 고객 측정 수·분포 — 내부 조직(영업 전용) 측정은 뺀다(2026-10-07 검수). 영업은 sales 줄로 따로.
+  const customerSince = { ...auditJobNotInternal, createdAt: { gte: since } };
+  const [
+    created,
+    statusGroups,
+    crewGroups,
+    stuckCount,
+    briefingJobs,
+    salesCreated,
+    salesCost,
+  ] = await Promise.all([
+    // 어제 생성된 진단 수(고객)
     database.auditJob.count({
-      where: { createdAt: { gte: since } },
+      where: customerSince,
     }),
-    // 어제 생성분의 status 분포
+    // 어제 생성분의 status 분포(고객)
     database.auditJob.groupBy({
       by: ["status"],
-      where: { createdAt: { gte: since } },
+      where: customerSince,
       _count: { _all: true },
     }),
-    // 어제 생성분의 crewStatus 분포(강화 요청·완료 추적)
+    // 어제 생성분의 crewStatus 분포(강화 요청·완료 추적, 고객)
     database.auditJob.groupBy({
       by: ["crewStatus"],
-      where: { createdAt: { gte: since } },
+      where: customerSince,
       _count: { _all: true },
     }),
     // 현재 stuck 상태(창 무관·전체 기준): 15분 초과 queued/processing
@@ -76,6 +89,18 @@ export const GET = async (request: NextRequest) => {
     database.auditJob.findMany({
       select: { result: true },
       where: { createdAt: { gte: since }, result: { not: Prisma.DbNull } },
+    }),
+    // 영업 측정(내부 조직) 수·원가 — 실제로 쓴 돈이라 따로 보인다.
+    database.auditJob.count({
+      where: { ...auditJobInternal, createdAt: { gte: since } },
+    }),
+    database.tracking.aggregate({
+      _sum: { costKrw: true },
+      where: {
+        brand: { organizationId: auditJobInternal.organizationId },
+        costKrw: { not: null },
+        trackedAt: { gte: since },
+      },
     }),
   ]);
 
@@ -147,6 +172,10 @@ export const GET = async (request: NextRequest) => {
     crewCompleted,
     stuck: stuckCount,
     briefing,
+    sales: {
+      created: salesCreated,
+      costKrw: Math.round(salesCost._sum.costKrw ?? 0),
+    },
   };
 
   log.info("cron.daily-ops-digest.summary", digest);

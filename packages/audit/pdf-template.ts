@@ -1,9 +1,19 @@
 // 무료 Audit 1페이지 PDF의 HTML 템플릿
 // Pretendard CDN 폰트 사용. Puppeteer가 페이지 로드 후 PDF로 변환.
 
-import type { AuditMetrics, EngineId } from "@repo/ai/lib/engines";
-import { ANSWER_BUCKET_COPY_KO, classifyAnswer } from "./answer-buckets";
+import type { AuditMetrics } from "@repo/ai/lib/engines";
+import {
+  ANSWER_BUCKET_COPY_KO,
+  answerGroup,
+  classifyAnswer,
+  isDiscoveryAnswer,
+  type PromptKind,
+} from "./answer-buckets";
 import { engineDisplayName } from "./engine-labels";
+import {
+  searchSamplingLabel,
+  searchSamplingVersionOf,
+} from "./search-sampling-version";
 
 export interface AuditPdfData {
   brandName: string;
@@ -20,6 +30,10 @@ export interface AuditPdfData {
     excerpt: string;
     /** 판정(2026-09-29) — 배지를 4분류로 그린다. 구 회차엔 없다. */
     mentionQuality?: string | null;
+    promptKind?: PromptKind | null;
+    /** Naver search sampling marker (W1). Read via `searchSamplingVersionOf`. */
+    naverSamplingVersion?: string | null;
+    naverSource?: string | null;
   }>;
   generatedAt: string;
   language: "ko" | "en" | "both";
@@ -75,8 +89,49 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
   const sov = data.metrics.sov;
   // 결함감사(2026-07-30) §10: enginesCovered는 응답 단위(엔진×프롬프트=중복)라
   // raw 길이를 쓰면 "28개 AI 엔진 = 112회 호출"로 부풀었음 → 고유화 + 오류 제외.
-  const uniqueCovered = new Set(data.metrics.enginesCovered).size;
-  const uniqueMention = new Set(data.metrics.enginesWithMention).size;
+  const successfulRows = data.engineResponses.filter(
+    (row) =>
+      !(isDiscoveryAnswer(row) || row.errorMessage || row.isStub) &&
+      answerGroup(row.engineId) !== "briefing" &&
+      answerGroup(row.engineId) !== "retired"
+  );
+  const successfulIds = new Set(successfulRows.map((row) => row.engineId));
+  const uniqueCovered = successfulIds.size;
+  const uniqueMention = new Set(
+    data.metrics.enginesWithMention.filter((id) => successfulIds.has(id))
+  ).size;
+  const aiCount = new Set(
+    successfulRows
+      .filter((row) => answerGroup(row.engineId) === "ai")
+      .map((row) => row.engineId)
+  ).size;
+  const searchCount = new Set(
+    successfulRows
+      .filter((row) => answerGroup(row.engineId) === "search")
+      .map((row) => row.engineId)
+  ).size;
+  const attemptedIds = new Set(
+    data.engineResponses
+      .filter(
+        (row) =>
+          !isDiscoveryAnswer(row) &&
+          answerGroup(row.engineId) !== "briefing" &&
+          answerGroup(row.engineId) !== "retired"
+      )
+      .map((row) => row.engineId)
+  );
+  const failedEngineCount = [...attemptedIds].filter(
+    (id) => !successfulIds.has(id)
+  ).length;
+  // W1: same label as web/app/email, from the same source of truth. Null when
+  //   the run has no Naver search row (nothing to label).
+  const samplingLabel = searchSamplingLabel(
+    searchSamplingVersionOf(data),
+    true
+  );
+  const samplingNote = samplingLabel
+    ? `<p class="sampling-note" data-testid="search-sampling-label">${escapeHtml(samplingLabel)} — 표본 방식이 다른 회차와는 검색 노출을 비교하지 않습니다.</p>`
+    : "";
 
   return `<!doctype html>
 <html lang="ko">
@@ -98,6 +153,7 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
 
   .title { margin-top: 14px; font-size: 16pt; font-weight: 800; letter-spacing: -0.03em; }
   .subtitle { margin-top: 4px; font-size: 9.5pt; color: #4b5563; }
+  .sampling-note { margin-top: 2px; font-size: 8pt; color: #6b7280; }
 
   .scorecard { margin-top: 14px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
   .card { padding: 10px 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; }
@@ -152,15 +208,16 @@ export function renderAuditPdfHtml(data: AuditPdfData): string {
 </div>
 
 <h1 class="title">${escapeHtml(data.brandName)}의 AI 가시성 진단 (${escapeHtml(data.domain)})</h1>
-<p class="subtitle">질문 ${data.promptsCount}개 · 대상 AI 엔진 ${uniqueCovered}개 · 실제 ${data.metrics.enginesCovered.length}회 호출 분석 · 측정 언어 ${LANGUAGE_LABEL[data.language]}</p>
+<p class="subtitle">질문 ${data.promptsCount}개 · 브랜드 질문 기준 AI 답변 ${aiCount}곳 · 검색 노출 ${searchCount}곳 · 미측정 ${failedEngineCount}곳 · 실제 ${data.metrics.enginesCovered.length}회 시도 · 측정 언어 ${LANGUAGE_LABEL[data.language]}</p>
+${samplingNote}
 
 <div class="scorecard">
   <div class="card primary">
-    <div class="label">Share of Voice</div>
+    <div class="label">등장률 (검색 노출 포함)</div>
     <div class="value">${sov}<span class="unit">/100</span></div>
   </div>
   <div class="card">
-    <div class="label">언급 엔진</div>
+    <div class="label">언급 엔진 (AI·검색)</div>
     <div class="value">${uniqueMention}<span class="unit">/${uniqueCovered}</span></div>
   </div>
   <div class="card">
@@ -217,7 +274,7 @@ ${
 </div>
 
 <div class="section">
-  <h2>Top 3 개선 추천 (Princeton GEO 알고리즘 기반)</h2>
+  <h2>Top 3 개선 추천 (이번 측정 결과 기반 · 효과는 재측정으로 확인)</h2>
   <div class="recs">
     ${data.topRecommendations
       .map(
@@ -262,27 +319,26 @@ ${
   <h2>Why Findable</h2>
   <div class="why-grid">
     <div class="why-col">
-      <div class="why-label">Why Now</div>
-      <ul class="why-list">
-        <li>2024.11 ChatGPT Search 출시로 검색의 정의가 답변으로 바뀜</li>
-        <li>2026.02 Profound, $96M Series C / $1B 유니콘 (Lightspeed)</li>
-        <li>GEO 시장 CAGR 45.5%, $1.48B(2026) → $17.02B(2034)</li>
-      </ul>
+    <div class="why-label">Why Now</div>
+    <ul class="why-list">
+        <li>AI 답변에서 브랜드가 어떻게 설명되는지 직접 확인할 수 있습니다.</li>
+        <li>같은 질문을 다시 측정해 관찰된 변화를 비교할 수 있습니다.</li>
+    </ul>
     </div>
     <div class="why-col">
       <div class="why-label">Why Findable</div>
       <ul class="why-list">
-        <li>한국 AI 엔진 독점 추적: HyperCLOVA X · Naver · Daum 직접 통합</li>
-        <li>Korean Entity Grounding: 한국어 표기 변형 통합 추적 (Ahrefs 한국어판)</li>
-        <li>Princeton KDD'24 GEO + ICLR'26 AutoGEO 알고리즘 한국어 적용</li>
+        <li>AI 답변과 검색 노출은 서로 다른 채널로 구분해 표시합니다.</li>
+        <li>측정 언어는 이 리포트 하단에 표시합니다.</li>
+        <li>GEO 연구(Princeton KDD'24 등)는 참고 근거로만 쓰고, 효과는 같은 조건의 재측정으로 확인</li>
       </ul>
     </div>
     <div class="why-col">
       <div class="why-label">Why Now (Team)</div>
       <ul class="why-list">
-        <li>인디고차일드: 6년 K-콘텐츠·IP 마케팅 (서울시 · 남양주시 · 워터밤)</li>
-        <li>2024 노동부 생성형 AI 활용 경진대회 최우수상</li>
-        <li>대표 나현덕: 동국대 핀테크블록체인학과 대학원생</li>
+        <li>이 리포트의 수치와 권고는 입력한 브랜드의 측정 결과에 한정됩니다.</li>
+        <li>권고의 효과는 같은 조건의 후속 측정으로 확인해야 합니다.</li>
+        <li>측정되지 않은 시장 규모나 성과를 이 리포트가 보증하지 않습니다.</li>
       </ul>
     </div>
   </div>
@@ -290,7 +346,7 @@ ${
 
 <div class="footer">
   <span>Findable · AI 답변 가시성 추적 플랫폼 (이 리포트 측정 언어: ${LANGUAGE_LABEL[data.language]})</span>
-  <span><a href="https://findable.co.kr">findable.co.kr</a> · 무료 진단 무제한</span>
+  <span><a href="https://findable.co.kr">findable.co.kr</a></span>
 </div>
 </body>
 </html>`;
@@ -319,7 +375,3 @@ function dedupeByEngine<T extends { engineId: string }>(rows: T[]): T[] {
   }
   return result;
 }
-
-// EngineId 사용 — 컴파일러 의존성 유지용 (안 쓰면 import 제거됨)
-const _typeAnchor: EngineId = "chatgpt";
-void _typeAnchor;

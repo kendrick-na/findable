@@ -77,7 +77,9 @@ describe("claude 웹검색 — 경로와 계약", () => {
     expect(fn.length).toBeGreaterThan(200);
     // 응답이 나쁘면 null(→ 일반 경로로 내려간다)
     expect(fn).toMatch(/if\s*\(!res\.ok\)\s*\{\s*return null/);
-    expect(fn).toMatch(/catch\s*\{\s*return null/);
+    // Abort는 상위 deadline이 처리해야 하므로 throw하고, 그 밖의 provider
+    // 오류만 기존처럼 null로 일반 경로에 폴백한다.
+    expect(fn).toMatch(/catch\s*\(error\)[\s\S]*?return null/);
     // 🔴 폴백 경로가 **일반 경로로 이어지는지**(그냥 죽으면 안 된다)
     //   ⚠️ 조건은 `tryClaudeWebSearch` 헬퍼로 빠졌다(복잡도 한도) → 두 고리를 각각 본다.
     const gate = CODE.slice(

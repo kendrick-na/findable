@@ -11,10 +11,13 @@
 // 패턴: brand-identity.ts와 동일 — generateObject + zod + Letsur haiku 라우팅 + confident
 //   게이트 + 실패 시 정적 폴백(환각·조용한 실패 방지).
 
-import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
+import {
+  HELPER_GATEWAY_MODEL_ID,
+  letsurModelWithFallback,
+} from "./letsur-fallback";
 import { models } from "./models";
 
 // brand-identity.ts와 동일 모델 라우팅(Letsur haiku 우선, 구조화 출력 라이브 검증됨).
@@ -22,13 +25,13 @@ const LETSUR_SUGGEST_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
 
 function suggestModel() {
-  const letsurKey = process.env.LETSUR_API_KEY;
-  if (letsurKey) {
-    const letsur = createOpenAI({
-      baseURL: "https://gw.letsur.ai/v1",
-      apiKey: letsurKey,
-    });
-    return letsur(LETSUR_SUGGEST_MODEL_ID);
+  // 🔴 Letsur 불가(유닛 소진·만료·인증)면 같은 호출을 Gateway 로 명시적 폴백(letsur-fallback.ts).
+  const letsur = letsurModelWithFallback(LETSUR_SUGGEST_MODEL_ID, {
+    callSite: "prompt-suggestions",
+    gatewayModelId: HELPER_GATEWAY_MODEL_ID,
+  });
+  if (letsur) {
+    return letsur;
   }
   return models.chat;
 }
@@ -234,7 +237,7 @@ function interleave(
  * 정적 폴백 — LLM 실패·비확신 시 generateAuditPrompts와 같은 골격을 제안으로 낸다.
  *   최소한 고정 4개 수준은 항상 보장(마법사가 빈 화면이 되지 않게).
  */
-function staticFallback(brandName: string): PromptSuggestions {
+export function staticFallback(brandName: string): PromptSuggestions {
   // ⚠️ 폴백도 유형을 갖는다 — LLM 이 실패해도 묶음 화면이 「직접 추가」 한 덩어리가 되지 않게.
   //   유형은 문장의 실제 의도에 맞춘다(추측 라벨을 붙이면 처방이 어긋난다).
   const prompts: SuggestedPrompt[] = [

@@ -6,12 +6,17 @@ import type {
 } from "@repo/ai/lib/engines/types";
 import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
 import {
+  filterStoredGeoActions,
+  filterStoredTopRecommendations,
+} from "./action-display-filter";
+import {
   answerShareOfVoice,
   type BucketableAnswer,
   isDiscoveryAnswer,
   summarizeAnswerBuckets,
 } from "./answer-buckets";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
+import { questionCoverage } from "./question-coverage";
 
 const CORE_ENGINES = new Set<EngineId>([
   "chatgpt",
@@ -82,11 +87,69 @@ export type AuditPublicationIssue =
   /** More than 20% of successful answers could not be adjudicated. */
   | "unverified_share"
   /** Fewer than 10 adjudicated answers — too small a sample to publish. */
-  | "insufficient_sample";
+  | "insufficient_sample"
+  /** Some planned brand questions received no successful AI answer. */
+  | "incomplete_execution"
+  /** Stored evidence has no reconstructable question plan. */
+  | "question_plan_unverified";
 
 function countOf(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
+    : null;
+}
+
+/** Publication is about brand-question AI answers, not search exposure or discovery. */
+function publicationAnswerCounts(
+  result: Record<string, unknown>
+): { verified: number; unverified: number } | null {
+  const metrics = result.metrics;
+  if (!isRecord(metrics)) {
+    return null;
+  }
+  const buckets = metrics.answerBuckets;
+  if (isRecord(buckets)) {
+    const ai = buckets.ai;
+    if (!isRecord(ai)) {
+      return null;
+    }
+    const verified = countOf(ai.adjudicated);
+    const unverified = countOf(ai.unverified);
+    return verified === null || unverified === null
+      ? null
+      : { verified, unverified };
+  }
+  // Some stored snapshots predate answerBuckets. Prefer their immutable rows
+  // over the mixed AI/search aggregate whenever those rows are available.
+  if (Array.isArray(result.engineResponses)) {
+    // Incomplete legacy rows cannot prove a successful answer. In particular,
+    // an excerpt alone must not override stored zero-verdict counters.
+    if (
+      result.engineResponses.some(
+        (row) =>
+          !isRecord(row) ||
+          typeof row.engineId !== "string" ||
+          !("errorMessage" in row) ||
+          !("isStub" in row)
+      )
+    ) {
+      return null;
+    }
+    const rows = result.engineResponses as Array<
+      Record<string, unknown> & BucketableAnswer
+    >;
+    const ai = summarizeAnswerBuckets(rows).ai;
+    return { verified: ai.adjudicated, unverified: ai.unverified };
+  }
+  // A version stamp and mixed totals are not proof of any brand AI answer.
+  // Current product runs carry rows; metrics-only snapshots fail closed.
+  return null;
+}
+
+/** Brand-question AI verdicts only; search/discovery rows never inflate the label. */
+export function publicationVerifiedAnswerCount(result: unknown): number | null {
+  return isRecord(result)
+    ? (publicationAnswerCounts(result)?.verified ?? null)
     : null;
 }
 
@@ -103,12 +166,33 @@ export function auditPublicationIssue(
   ) {
     return "brand_verification";
   }
-  const unverified = countOf(result.metrics.unverifiedCount);
-  const verified = countOf(result.metrics.verifiedCount);
-  // Metrics without the counters predate verification accounting: we cannot
-  // tell how many answers were adjudicated, so do not guess (fail closed).
-  if (unverified === null || verified === null) {
+  const counts = publicationAnswerCounts(result);
+  // Without a trustworthy AI bucket or complete rows, mixed counters cannot
+  // prove how many brand AI answers were adjudicated (fail closed).
+  if (counts === null) {
     return "brand_verification";
+  }
+  const { unverified, verified } = counts;
+  const coverage = questionCoverage(result);
+  if (
+    coverage === null &&
+    (result.promptsCount !== undefined ||
+      result.measurementContext !== undefined ||
+      (Array.isArray(result.engineResponses) &&
+        result.engineResponses.some(
+          (row) => isRecord(row) && row.promptIndex !== undefined
+        )))
+  ) {
+    // A stored question plan with unidentifiable core rows cannot prove that
+    // every planned question was measured. Keep metrics-only legacy fixtures
+    // on their existing version gate, but fail closed for plan-bearing runs.
+    return "question_plan_unverified";
+  }
+  if (
+    coverage !== null &&
+    coverage.brand.withSuccessfulAiAnswer < coverage.brand.planned
+  ) {
+    return "incomplete_execution";
   }
   const answers = verified + unverified;
   if (answers > 0 && unverified / answers > PROVISIONAL_MAX_UNVERIFIED_SHARE) {
@@ -126,9 +210,9 @@ export function auditPublicationIssue(
 
 /**
  * published   — authoritative score, prescriptions, PDF, sharing.
- * provisional — score/metrics computed from adjudicated answers only, shown
- *               with a warning; derivatives (prescriptions, missed-visit
- *               estimate, PDF, trends, alerts) are withheld.
+ * provisional — some brand AI answers were adjudicated, but the run is not
+ *               publishable. Evidence remains visible; mixed aggregate score
+ *               and derivatives are withheld.
  * withheld    — nothing adjudicated (legacy run or zero verified answers).
  */
 export type AuditPublicationStatus = "published" | "provisional" | "withheld";
@@ -141,10 +225,12 @@ export function auditPublicationStatus(
     return "published";
   }
   if (
-    (issue === "unverified_share" || issue === "insufficient_sample") &&
+    (issue === "unverified_share" ||
+      issue === "insufficient_sample" ||
+      issue === "incomplete_execution" ||
+      issue === "question_plan_unverified") &&
     isRecord(result) &&
-    isRecord(result.metrics) &&
-    (countOf(result.metrics.verifiedCount) ?? 0) > 0
+    (publicationAnswerCounts(result)?.verified ?? 0) > 0
   ) {
     return "provisional";
   }
@@ -175,16 +261,37 @@ export function publicAuditResult<T>(input: T): T {
   }
   // A revalidated run keeps its pre-revalidation result for audit purposes.
   // That copy carries superseded verdicts and must never leave the server.
-  const result: Record<string, unknown> = isRecord(input.revalidation)
-    ? {
-        ...input,
-        revalidation: Object.fromEntries(
-          Object.entries(input.revalidation).filter(
-            ([key]) => key !== "original"
-          )
-        ),
-      }
-    : input;
+  // AEO 시범(구글 AI 개요 · 제3자 측정 서비스 수집)은 내부 측정 전용 — 본문이 구글 콘텐츠라
+  // 공개 응답으로 내보내지 않는다(aeo-google-aio-pilot.ts).
+  const { aeoPilotRuns: _internalAeoPilot, ...withoutInternal } = input;
+  const result: Record<string, unknown> = {
+    ...withoutInternal,
+    ...(isRecord(input.revalidation)
+      ? {
+          revalidation: Object.fromEntries(
+            Object.entries(input.revalidation).filter(
+              ([key]) => key !== "original"
+            )
+          ),
+        }
+      : {}),
+    ...(Array.isArray(input.engineResponses)
+      ? {
+          engineResponses: input.engineResponses.map((row) =>
+            isRecord(row)
+              ? Object.fromEntries(
+                  Object.entries(row).filter(
+                    ([key]) =>
+                      key !== "usage" &&
+                      key !== "shareOfVoice" &&
+                      key !== "trackingInputCaptured"
+                  )
+                )
+              : row
+          ),
+        }
+      : {}),
+  };
   const status = auditPublicationStatus(result);
   if (status === "published") {
     return result as T;
@@ -194,11 +301,9 @@ export function publicAuditResult<T>(input: T): T {
     topRecommendations: [],
     regions: undefined,
   };
-  if (status === "provisional") {
-    // Metrics already exclude unverified answers from the denominator. They
-    // are shown labelled 잠정; advice built on them is not.
-    return { ...result, ...withheldDerivatives } as T;
-  }
+  // Provisional runs can have a brand-AI sample but their aggregate may still
+  // blend search exposure. Never offer that number as a provisional AI score.
+  // Keep answerBuckets and raw rows so AI verdicts and search remain distinct.
   const metrics = isRecord(result.metrics) ? result.metrics : {};
   return {
     ...result,
@@ -312,6 +417,7 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
     (row): row is Record<string, unknown> & BucketableAnswer =>
       isRecord(row) && typeof row.engineId === "string"
   );
+  const coverage = questionCoverage(storedResult);
   const measurementContext = isRecord(storedResult.measurementContext)
     ? storedResult.measurementContext
     : null;
@@ -351,6 +457,7 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
         brandDomain:
           typeof storedResult.domain === "string" ? storedResult.domain : null,
       }),
+      ...(coverage ? { questionCoverage: coverage } : {}),
     },
     ...(requiresRevalidation
       ? {
@@ -381,6 +488,94 @@ export function withRecomputedAuditMetrics<T>(result: T): T {
   return corrected as T;
 }
 
+/**
+ * Stored figures can differ from the current read-time projection even when no
+ * PDF was ever generated. Let every public surface disclose that correction.
+ * This is a disclosure signal, not proof that an old email or Blob was recalled.
+ */
+export function hasRecomputedAuditMetricsChanged(
+  original: unknown,
+  corrected: unknown
+): boolean {
+  if (!(isRecord(original) && isRecord(corrected))) {
+    return false;
+  }
+  const stored = original.metrics;
+  const current = corrected.metrics;
+  if (!(isRecord(stored) && isRecord(current))) {
+    return false;
+  }
+  const displayed = [
+    "sov",
+    "averageMentionPosition",
+    "enginesCovered",
+    "enginesWithMention",
+    "sentimentDistribution",
+    "stubCount",
+    "topCitedDomains",
+    "answerBuckets",
+    "verifiedCount",
+    "unverifiedCount",
+  ];
+  return (
+    displayed.some(
+      (key) => semanticJson(stored[key]) !== semanticJson(current[key])
+    ) || hasChangedAnswerDisplay(original, corrected)
+  );
+}
+
+/** Fields corrected on read that the one-page PDF renders per answer. */
+function hasChangedAnswerDisplay(
+  original: unknown,
+  corrected: unknown
+): boolean {
+  if (!(isRecord(original) && isRecord(corrected))) {
+    return false;
+  }
+  const savedRows = original.engineResponses;
+  const currentRows = corrected.engineResponses;
+  if (!(Array.isArray(savedRows) && Array.isArray(currentRows))) {
+    return false;
+  }
+  const projection = (rows: unknown[]) =>
+    rows.map((row) => {
+      if (!isRecord(row)) {
+        return row;
+      }
+      return {
+        brandMentioned: row.brandMentioned,
+        mentionQuality: row.mentionQuality,
+        mentionPosition: row.mentionPosition,
+        sov: row.sov,
+      };
+    });
+  return (
+    semanticJson(projection(savedRows)) !==
+    semanticJson(projection(currentRows))
+  );
+}
+
+/** Report when previously saved advice is suppressed or revised at display time. */
+export function hasFilteredStoredAuditAdvice(original: unknown): boolean {
+  if (!isRecord(original)) {
+    return false;
+  }
+  if (
+    Array.isArray(original.geoActions) &&
+    semanticJson(
+      filterStoredGeoActions(original.geoActions as Record<string, unknown>[])
+    ) !== semanticJson(original.geoActions)
+  ) {
+    return true;
+  }
+  return (
+    Array.isArray(original.topRecommendations) &&
+    semanticJson(
+      filterStoredTopRecommendations(original.topRecommendations)
+    ) !== semanticJson(original.topRecommendations)
+  );
+}
+
 /** A generated PDF is immutable; don't offer it when its displayed metrics are stale. */
 export function hasStaleAuditPdf(
   original: unknown,
@@ -390,6 +585,14 @@ export function hasStaleAuditPdf(
     return false;
   }
   if (!isPublishableAuditResult(corrected)) {
+    return true;
+  }
+  // The PDF renders topRecommendations derived from the saved actions. An
+  // action may be revised even when the string-only filter misses its claim.
+  if (hasFilteredStoredAuditAdvice(original)) {
+    return true;
+  }
+  if (hasChangedAnswerDisplay(original, corrected)) {
     return true;
   }
   const oldMetrics = original.metrics;
@@ -418,4 +621,13 @@ export function hasStaleAuditPdf(
   return displayed.some(
     (key) => semanticJson(oldMetrics[key]) !== semanticJson(newMetrics[key])
   );
+}
+
+const CURRENT_AUDIT_PDF_URL_RE = /\/audits\/audit-v3-[^/?#]+\.pdf(?:[?#]|$)/;
+
+/** Only PDFs generated by the current versioned writer are linkable. */
+export function isCurrentAuditPdfUrl(
+  pdfUrl: string | null | undefined
+): boolean {
+  return typeof pdfUrl === "string" && CURRENT_AUDIT_PDF_URL_RE.test(pdfUrl);
 }

@@ -1,5 +1,4 @@
 import { isAdmin } from "@repo/auth/admin";
-import { Badge } from "@repo/design-system/components/ui/badge";
 import { ArrowLeftIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -9,6 +8,7 @@ import {
   getConsultingWorkspace,
 } from "@/app/actions/admin/consulting";
 import { Header } from "../../../components/header";
+import { PlanCell } from "../plan-cell";
 import { ConsultationNoteForm } from "./consultation-note-form";
 import { CustomerDataPanel } from "./customer-data-panel";
 
@@ -53,10 +53,15 @@ const ConsultingWorkspacePage = async ({
               {workspace.organization.name}
             </h1>
             <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)]">
-              원본 측정·사이트 준비도·검색 연동 현황을 확인하고 컨설팅 이력을 남깁니다.
+              원본 측정·사이트 준비도·검색 연동 현황을 확인하고 컨설팅 이력을
+              남깁니다.
             </p>
           </div>
-          <Badge variant="outline">{workspace.organization.plan}</Badge>
+          <PlanCell
+            dbPlan={workspace.organization.dbPlan}
+            plan={workspace.organization.plan}
+            verified={workspace.organization.planVerified}
+          />
         </div>
 
         {workspace.brands.length === 0 ? (

@@ -1,3 +1,4 @@
+import { filterStoredGeoActions } from "@repo/audit/action-display-filter";
 import {
   actionTargetKey,
   buildGeoActions,
@@ -14,6 +15,7 @@ import { ListChecksIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { scopedBrands, scopedLatestRunTracking } from "@/lib/db/scoped";
+import { type AppDictionary, getAppDictionary, getAppLocale } from "@/lib/i18n";
 import { AnalysisBrandPicker } from "../components/analysis-brand-picker";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
@@ -28,19 +30,27 @@ import { buildSourcesAnalysis } from "../lib/analysis-data";
 import { summarizeSentiment } from "../lib/dashboard-data";
 import { getPrimaryEmail } from "../lib/user";
 
-export const metadata: Metadata = {
-  title: "지금 할 일 · Findable",
-  description:
-    "측정 결과를 바탕으로 지금 해야 할 일을 우선순위로 알려드립니다.",
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = (await getAppDictionary()).actionsPage;
+  return { title: t.metaTitle, description: t.metaDescription };
 };
+
+type ActionsLabels = AppDictionary["actionsPage"];
 
 // S2'(2026-08-11) — 공용 `EmptyState` 로 교체. 문구는 그대로 유지한다
 // (이 화면 것은 이미 4요소를 충족했다 — 바뀐 건 마크업 출처뿐).
-const ActionsEmptyState = () => (
+const ActionsEmptyState = ({
+  common,
+  t,
+}: {
+  common: AppDictionary["common"];
+  t: ActionsLabels;
+}) => (
   <EmptyState
-    description="측정을 한 번 실행하면, 그 결과를 바탕으로 지금 무엇부터 해야 하는지 우선순위로 정리해 드립니다."
+    description={t.emptyBody}
     icon={<ListChecksIcon className="size-5" />}
-    title="아직 측정한 적이 없어요"
+    t={common}
+    title={t.emptyTitle}
   />
 );
 
@@ -86,19 +96,18 @@ async function findEmailAuditActions(): Promise<{
     geoActions?: GeoAction[];
     metrics?: { sov?: number; unverifiedCount?: number };
   } | null;
-  if (!(isPublishableAuditResult(result) && result?.geoActions?.length)) {
+  // 저장된 과거 처방 중 근거 없는 카드는 표시 시점에 뺀다(`action-display-filter.ts`).
+  const actions = filterStoredGeoActions(result?.geoActions);
+  if (!(result && isPublishableAuditResult(result) && actions.length)) {
     return null;
   }
   return {
-    actions: result.geoActions,
+    actions,
     brandLabel: result.brandName || job?.domain || "",
     brandName: result.brandName,
     domain: job?.domain ?? null,
-    // 🔴 2차 교차검증에서 잡음: 예전엔 `null` 을 넘겨 **완료 시점 SoV 가 안 남았다**.
-    //   그러면 `ActionCompletion.sovAtCompletion` 이 비어 "완료 후 몇 점 올랐나"를
-    //   영영 계산할 수 없다 — 이 기능을 만든 목적 자체가 사라진다.
-    //   ⚠️ 정의가 같은지 확인함: 진단 `metrics.sov` 와 대시보드 `currentSov` 는
-    //     둘 다 "언급된 응답 / 성공 응답 × 100"(0~100)이라 **같은 축에서 비교 가능**하다.
+    // 완료 시점의 0~100 스냅샷은 원장 구축을 위해 보존한다. 무료 진단과
+    // 조직 추적은 질문·엔진·판정 버전이 다를 수 있으므로 이 값만으로 변화 배지를 만들지 않는다.
     sov: typeof result.metrics?.sov === "number" ? result.metrics.sov : null,
   };
 }
@@ -161,10 +170,16 @@ const AuditActions = ({
   brandLabel,
   brandName,
   completions,
+  dict,
   domain,
+  isKo,
   sov,
+  t,
 }: {
   actions: GeoAction[];
+  dict: AppDictionary;
+  isKo: boolean;
+  t: ActionsLabels;
   brandLabel: string;
   brandName?: string;
   completions: Map<string, { sovAtCompletion: number | null }>;
@@ -196,21 +211,22 @@ const AuditActions = ({
     <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
       <div className="flex flex-col gap-1">
         <h1 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-xl">
-          {brandLabel} — 지금 할 일 (무료 진단 기준)
+          {t.auditTitle.replace("{brand}", brandLabel)}
         </h1>
         <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-          {domain
-            ? "무료 진단에서 나온 처방 전체예요. 완료로 표시하면 이 브랜드가 내 목록에 등록돼요. 추적을 시작하면 다음 측정에서 점수 변화까지 이어집니다."
-            : "무료 진단에서 나온 처방 전체예요. 브랜드를 등록하고 추적을 시작하면 완료 체크와 다음 측정에서의 점수 변화까지 이어집니다."}
+          {domain ? t.auditBodyWithDomain : t.auditBody}
         </p>
         <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-          다른 브랜드의 과거 처방은 섞지 않아요.
+          {t.noMixing}
         </p>
       </div>
       {domain ? (
         <ActionList
           actions={items}
           currentSov={sov}
+          evidence={dict.actionEvidence}
+          isKo={isKo}
+          t={dict.actionList}
           target={{ kind: "audit", domain, brandName }}
         />
       ) : (
@@ -232,7 +248,7 @@ const AuditActions = ({
                     {a.how}
                   </p>
                   <p className="mt-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs leading-relaxed">
-                    근거: {a.evidence}
+                    {t.evidence.replace("{evidence}", a.evidence)}
                     {a.source ? ` · ${a.source}` : ""}
                   </p>
                 </div>
@@ -245,7 +261,7 @@ const AuditActions = ({
         className="self-start rounded-md bg-[color:var(--findable-primary,#ff7a4d)] px-4 py-2 font-medium text-black text-sm transition-opacity hover:opacity-90"
         href="/brand"
       >
-        브랜드 등록하고 추적 시작하기
+        {t.registerAndTrack}
       </Link>
     </div>
   );
@@ -258,6 +274,11 @@ async function ActionsPage({
   searchParams: Promise<{ brand?: string }>;
 }) {
   const brands = await scopedBrands();
+  const [dict, locale] = await Promise.all([
+    getAppDictionary(),
+    getAppLocale(),
+  ]);
+  const t = dict.actionsPage;
   const requestedBrandId = (await searchParams).brand;
   const validRequestedBrandId =
     requestedBrandId && brands.some((brand) => brand.id === requestedBrandId)
@@ -275,6 +296,7 @@ async function ActionsPage({
         brands={brands}
         path="/actions"
         selectedBrandId={selectedBrandId}
+        t={dict.brandPicker}
       />
     ) : null;
   const sources = buildSourcesAnalysis(rows);
@@ -292,7 +314,7 @@ async function ActionsPage({
     );
     return (
       <>
-        <Header page="지금 할 일" pages={["Findable"]} />
+        <Header page={t.title} pages={["Findable"]} />
         <div className="px-6 pt-2">{brandPicker}</div>
         {emailAudit ? (
           <AuditActions
@@ -300,12 +322,15 @@ async function ActionsPage({
             brandLabel={emailAudit.brandLabel}
             brandName={emailAudit.brandName}
             completions={auditCompletions}
+            dict={dict}
             domain={emailAudit.domain}
+            isKo={locale === "ko"}
             sov={emailAudit.sov}
+            t={t}
           />
         ) : (
           <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
-            <ActionsEmptyState />
+            <ActionsEmptyState common={dict.common} t={t} />
           </div>
         )}
       </>
@@ -332,22 +357,36 @@ async function ActionsPage({
   if (publicationIssue !== null) {
     return (
       <>
-        <Header page="지금 할 일" pages={["Findable"]} showMetric={false} />
+        <Header page={t.title} pages={["Findable"]} showMetric={false} />
         <main className="flex flex-1 flex-col gap-4 p-6 pt-2">
           {brandPicker}
           <h1 className="font-semibold text-xl">
-            {first.brand.name || first.brand.domain} · 지금 할 일 · 잠정 결과
+            {t.heldTitle.replace(
+              "{brand}",
+              first.brand.name || first.brand.domain
+            )}
           </h1>
           <p className="text-muted-foreground text-sm">
+            {publicationIssue === "incomplete_execution"
+              ? t.heldIncomplete
+              : null}
+            {publicationIssue === "question_plan_unverified"
+              ? t.heldPlanUnverified
+              : null}
             {publicationIssue === "insufficient_sample"
-              ? "이번 측정은 브랜드 판별이 끝난 답변이 너무 적어 자동 개선 처방을 확정할 수 없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요."
-              : "이번 측정은 브랜드 판별이 완료되지 않아 자동 개선 처방을 확정할 수 없습니다. 이를 브랜드 미노출의 근거로 해석하지 마세요."}
+              ? t.heldInsufficient
+              : null}
+            {publicationIssue !== "incomplete_execution" &&
+            publicationIssue !== "question_plan_unverified" &&
+            publicationIssue !== "insufficient_sample"
+              ? t.heldUnverified
+              : null}
           </p>
           <Link
             className="text-sm underline"
             href={latestAudit ? `/history/${latestAudit.id}` : "/history"}
           >
-            이번 회차와 수집된 답변 확인하기
+            {t.checkRun}
           </Link>
         </main>
       </>
@@ -357,8 +396,10 @@ async function ActionsPage({
   // 리포트와 대시보드가 서로 다른 처방을 만들면 고객은 어느 쪽을 믿어야 할지
   // 알 수 없다. 확정된 최신 측정은 러너가 순위·시장·실패 엔진 범위까지 반영해
   // 저장한 geoActions를 그대로 사용한다. Tracking 재계산은 구버전 데이터 폴백만 맡긴다.
-  const storedActions = (latestResult as { geoActions?: GeoAction[] } | null)
-    ?.geoActions;
+  // 단, 근거 없는 저장 카드(순위별 효과·자사 100% 단정·논문 효과 수치)는 뺀다.
+  const storedActions = filterStoredGeoActions(
+    (latestResult as { geoActions?: GeoAction[] } | null)?.geoActions
+  );
 
   // 프롬프트별 언급 여부 — 갭 액션의 핵심 입력. Tracking 행을 프롬프트 단위로 접는다.
   const byPrompt = new Map<string, { hit: number; total: number }>();
@@ -404,7 +445,7 @@ async function ActionsPage({
   );
 
   const geoActions =
-    storedActions && storedActions.length > 0
+    storedActions.length > 0
       ? storedActions
       : buildGeoActions({
           brandName: first.brand.name || first.brand.domain,
@@ -469,11 +510,11 @@ async function ActionsPage({
 
   const sentimentByPrompt = groupSentiment(
     (r) => r.promptId,
-    (id) => promptTextById.get(id) ?? "(질문 원문 없음)"
+    (id) => promptTextById.get(id) ?? t.noPromptText
   );
   const sentimentByEngine = groupSentiment(
     (r) => r.engineId,
-    (id) => engineLabel(id)
+    (id) => engineLabel(id, locale === "ko")
   );
 
   // 완료 기록 병합 — 액션은 매 측정 재생성되지만 완료 표시는 영속(루프 닫기).
@@ -509,21 +550,26 @@ async function ActionsPage({
 
   return (
     <>
-      <Header page="지금 할 일" pages={["Findable"]} />
+      <Header page={t.title} pages={["Findable"]} />
       <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
         {brandPicker}
         <div className="flex flex-col gap-1">
           <h1 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-xl">
-            {first.brand.name || first.brand.domain} — 지금 할 일
+            {t.trackedTitle.replace(
+              "{brand}",
+              first.brand.name || first.brand.domain
+            )}
           </h1>
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-            최근 측정 결과를 바탕으로 효과가 큰 순서로 정리했어요. 완료로
-            표시하면 다음 측정에서 점수 변화를 함께 보여드립니다.
+            {t.trackedBody}
           </p>
         </div>
         <ActionList
           actions={items}
           currentSov={currentSov}
+          evidence={dict.actionEvidence}
+          isKo={locale === "ko"}
+          t={dict.actionList}
           target={{ kind: "tracked", brandId: first.brandId }}
         />
         {/* 🔴 감성 섹션은 처방 **아래** — 이 화면의 주인공은 "지금 할 일"이다.
@@ -534,6 +580,7 @@ async function ActionsPage({
           byEngine={sentimentByEngine}
           byPrompt={sentimentByPrompt}
           summary={sentimentSummary}
+          t={dict.sentimentSection}
         />
       </div>
     </>

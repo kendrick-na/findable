@@ -8,8 +8,18 @@ import {
   securityMiddleware,
 } from "@repo/security/proxy";
 import { createNEMO } from "@rescale/nemo";
-import { type NextProxy, type NextRequest, NextResponse } from "next/server";
+import {
+  type NextFetchEvent,
+  type NextProxy,
+  type NextRequest,
+  NextResponse,
+} from "next/server";
 import { env } from "@/env";
+import {
+  isClientReportLocaleNeutralPath,
+  isClientReportPagePath,
+} from "./lib/client-report-path";
+import { isPreviewStubPublicRequest } from "./lib/preview-audit-stub-proxy";
 
 const SEARCH_CRAWLER_USER_AGENT =
   /Googlebot|Google-InspectionTool|AdsBot-Google|Bingbot|NaverBot|Yeti|Daumoa/i;
@@ -36,14 +46,10 @@ const EXPLICIT_LOCALE_PATH_RE = /^\/(?:ko|en)(?:\/|$)/;
  */
 const LOCALE_NEUTRAL_PATHS = new Set(["/ai-instructions"]);
 
-/**
- * 고객 웹 리포트 `/r/<공유토큰>`(2026-09-28). 로케일 없는 전용 루트 레이아웃(`app/r/`)이라
- * 접두사를 붙이면 `/ko/r/...` 로 튕겨 404 가 난다. 또 PDF 생성기(headless Chrome)가 이 주소를
- * 인쇄하므로 봇 판정(Arcjet)에서도 빼야 한다 — 공개 랜딩과 같은 취급(링크 소유자만 아는 주소).
- */
-const CLIENT_REPORT_PATH_RE = /^\/r\/[A-Za-z0-9_-]+\/?$/;
+// 고객 웹 리포트 `/r/<토큰>`·`/r/<토큰>/pdf` 규칙은 `lib/client-report-path.ts`.
 const isLocaleNeutralPath = (pathname: string): boolean =>
-  LOCALE_NEUTRAL_PATHS.has(pathname) || CLIENT_REPORT_PATH_RE.test(pathname);
+  LOCALE_NEUTRAL_PATHS.has(pathname) ||
+  isClientReportLocaleNeutralPath(pathname);
 
 /**
  * Public landing pages are the first unauthenticated entry point. A bot
@@ -53,7 +59,7 @@ const isLocaleNeutralPath = (pathname: string): boolean =>
 const isPublicLandingPath = (pathname: string): boolean =>
   pathname === "/" ||
   EXPLICIT_LOCALE_PATH_RE.test(pathname) ||
-  CLIENT_REPORT_PATH_RE.test(pathname) ||
+  isClientReportPagePath(pathname) ||
   LOCALE_NEUTRAL_PATHS.has(pathname);
 
 export const config = {
@@ -184,8 +190,8 @@ export function customDomainRewrite(request: NextRequest) {
   return null;
 }
 
-// Clerk middleware wraps other middleware in its callback
-export default authMiddleware(async (_auth, request, event) => {
+// Clerk middleware wraps other middleware in its callback.
+const clerkProxy = authMiddleware(async (_auth, request, event) => {
   // Run security headers first
   const headersResponse = await securityHeaders();
 
@@ -216,3 +222,20 @@ export default authMiddleware(async (_auth, request, event) => {
     ? withSecurityHeaders(middlewareResponse, headersResponse)
     : headersResponse;
 }) as unknown as NextProxy;
+
+/**
+ * The free audit creation/status APIs and the capability-URL report are
+ * intentionally public. A Preview may have no Clerk server secret; running the
+ * Clerk wrapper first would turn that public smoke test into a 500. Keep this
+ * before Clerk and restricted to Vercel Preview (where the runner is stubbed).
+ */
+export default function previewAwareProxy(
+  request: NextRequest,
+  event: NextFetchEvent
+) {
+  if (isPreviewStubPublicRequest(request.nextUrl.pathname)) {
+    return securityHeaders();
+  }
+
+  return clerkProxy(request, event);
+}

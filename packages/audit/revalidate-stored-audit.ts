@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { detectBrandMention } from "@repo/ai/lib/engines/utils";
 import {
+  isSearchResultEngine,
   type MentionVerdict,
   verifyMention,
+  verifySearchRowByRules,
 } from "@repo/ai/lib/mention-verdict";
 import { MENTION_VERDICT_VERSION } from "@repo/ai/lib/mention-verdict-version";
 import { withRecomputedAuditMetrics } from "./normalize-stored-metrics";
@@ -56,7 +58,12 @@ export async function proposeAuditRevalidation(
       (row.rawResponse !== undefined || !text.trimEnd().endsWith("…"))
     ) {
       try {
-        verdict = await verify({
+        // 🔴 네이버·다음 검색 결과는 약관상 AI 입력 금지(2026-10-07) → 규칙 전용 판정.
+        const judge = isSearchResultEngine(row.engineId)
+          ? (input: Parameters<typeof verifyMention>[0]) =>
+              Promise.resolve(verifySearchRowByRules(input))
+          : verify;
+        verdict = await judge({
           brandName: original.brandName,
           brandDomain: original.domain,
           officialSite,

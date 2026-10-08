@@ -6,10 +6,14 @@
 // 판정(detectBrandMention)은 [brandName, ...variants] 전부를 substring 매칭하므로
 // variants에 "설화수"가 들어가기만 하면 됨. 프롬프트에는 대표명(한글 우선) 사용.
 
-import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { isAbortError } from "./engines/provider-error";
+import {
+  HELPER_GATEWAY_MODEL_ID,
+  letsurModelWithFallback,
+} from "./letsur-fallback";
 import { models } from "./models";
 
 // LLM 추론 모델 — Letsur 키 우선(결함감사 §20-보강, 2026-07-30).
@@ -20,13 +24,13 @@ const LETSUR_BRAND_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
 
 function brandInferModel() {
-  const letsurKey = process.env.LETSUR_API_KEY;
-  if (letsurKey) {
-    const letsur = createOpenAI({
-      baseURL: "https://gw.letsur.ai/v1",
-      apiKey: letsurKey,
-    });
-    return letsur(LETSUR_BRAND_MODEL_ID);
+  // 🔴 Letsur 불가(유닛 소진·만료·인증)면 같은 호출을 Gateway 로 명시적 폴백(letsur-fallback.ts).
+  const letsur = letsurModelWithFallback(LETSUR_BRAND_MODEL_ID, {
+    callSite: "brand-identity",
+    gatewayModelId: HELPER_GATEWAY_MODEL_ID,
+  });
+  if (letsur) {
+    return letsur;
   }
   return models.chat;
 }
@@ -131,7 +135,8 @@ const brandLlmSchema = z.object({
  * confident=false거나 콜 실패 시 null 반환 (폴백에 맡김) — 환각 방지.
  */
 async function inferBrandViaLlm(
-  domain: string
+  domain: string,
+  signal?: AbortSignal
 ): Promise<{ brandName: string; variants: string[] } | null> {
   try {
     const host = normalizeHost(domain);
@@ -139,6 +144,7 @@ async function inferBrandViaLlm(
       model: brandInferModel(),
       schema: brandLlmSchema,
       prompt: `다음 웹사이트 도메인의 브랜드명을 한국어와 영어로 알려줘. 실제로 아는 브랜드일 때만 답하고, 모르면 confident=false로 표시해. 도메인: ${host}`,
+      abortSignal: signal,
     });
     if (!out.confident) {
       return null;
@@ -156,6 +162,9 @@ async function inferBrandViaLlm(
       .filter((v) => v !== brandName);
     return { brandName, variants: dedupe(variants) };
   } catch (error) {
+    if (signal?.aborted || isAbortError(error)) {
+      throw signal?.reason ?? error;
+    }
     log.warn("brand.llm_infer.failed", { domain, error: String(error) });
     return null;
   }
@@ -183,8 +192,12 @@ function dedupe(items: string[]): string[] {
  */
 export async function resolveBrandIdentity(
   domain: string,
-  formBrandName?: string
+  formBrandName?: string,
+  signal?: AbortSignal
 ): Promise<BrandIdentity> {
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException("Aborted", "AbortError");
+  }
   const host = normalizeHost(domain);
   const dict = STATIC_BRAND_DICTIONARY[host];
 
@@ -202,7 +215,7 @@ export async function resolveBrandIdentity(
         ),
       };
     }
-    const llm = await inferBrandViaLlm(domain);
+    const llm = await inferBrandViaLlm(domain, signal);
     const merged = llm
       ? dedupe([llm.brandName, ...llm.variants].filter((v) => v !== formName))
       : [];
@@ -215,7 +228,7 @@ export async function resolveBrandIdentity(
   }
 
   // 3. LLM 추론.
-  const llm = await inferBrandViaLlm(domain);
+  const llm = await inferBrandViaLlm(domain, signal);
   if (llm) {
     return { brandName: llm.brandName, brandVariants: llm.variants };
   }

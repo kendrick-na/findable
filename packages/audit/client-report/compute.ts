@@ -15,7 +15,7 @@ export const ENGINE_NAMES = {
   perplexity: "Perplexity",
   gemini: "Gemini",
   hyperclova: "HyperCLOVA X",
-  naver: "네이버 AI",
+  naver: "네이버 검색 노출",
   daum: "다음 검색",
 } as const;
 export type EngineId = keyof typeof ENGINE_NAMES;
@@ -29,6 +29,31 @@ export const ENGINE_MONO: Record<EngineId, string> = {
   naver: "N",
   daum: "D",
 };
+
+/** Current display labels also normalize labels stored by older snapshots. */
+export function currentEngineDisplayName(
+  engineId: string,
+  fallback?: string,
+  legacySyntheticEngineIds: readonly string[] = []
+): string {
+  if (engineId === "naver" && legacySyntheticEngineIds.includes("naver")) {
+    return "네이버 Cue 재현 (Findable 합성)";
+  }
+  return ENGINE_NAMES[engineId as EngineId] ?? fallback ?? engineId;
+}
+
+export function currentEngineDisplayText(
+  text: string,
+  legacySyntheticEngineIds: readonly string[] = []
+): string {
+  if (!legacySyntheticEngineIds.includes("naver")) {
+    return text;
+  }
+  return text.replace(
+    /(^|[·,]\s*)네이버 AI(?=\s*(?:$|[·,]))/g,
+    "$1네이버 Cue 재현 (Findable 합성)"
+  );
+}
 
 export const LABELS = {
   ok: { name: "정확", desc: "실제 브랜드와 서비스를 맞게 설명" },
@@ -185,6 +210,8 @@ export interface ReportTopDomain {
 
 export interface ReportStats {
   bad_n: number;
+  /** v12 문장용(발행 v2 에서만 채움) — 「다른 회사로 착각 5 · 지어낸 설명 3 · 모른다 3」. */
+  bad_parts?: string;
   bad_rate: number;
   bad_with_official: number;
   cites_total: number;
@@ -196,6 +223,8 @@ export interface ReportStats {
   made_n: number;
   n: number;
   nq: number;
+  /** v12 — 출처에 공식 사이트가 있던 답변 수(v2 에서만 채움). */
+  off_ans?: number;
   official_cites: number;
   /** 파이썬에서 인용이 있으면 소수 1자리 실수, 없으면 정수 0. 표시는 formatOfficialPct. */
   official_pct: number;

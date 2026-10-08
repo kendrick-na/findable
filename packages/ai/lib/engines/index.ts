@@ -1,8 +1,14 @@
 // Findable 7 엔진 라우터 + 병렬 호출 오케스트레이터
 
-import { chatgptWebAdapter } from "./chatgpt-web-adapter";
 import {
-  chatgptAdapter,
+  chatgptRoutedAdapter,
+  isChatgptWebShadowEnabled,
+  type ShadowHandle,
+  startChatgptWebShadow,
+} from "./chatgpt-source";
+import { chatgptWebAdapter } from "./chatgpt-web-adapter";
+import { engineTimeoutMessage } from "./engine-timeout";
+import {
   claudeAdapter,
   geminiAdapter,
   perplexityAdapter,
@@ -20,12 +26,20 @@ import type {
   EngineResponse,
 } from "./types";
 
-export * from "./cost";
 export * from "./aggregate";
+export {
+  CHATGPT_WEB_ENGINE_SET,
+  chatgptEngineSetKey,
+  isChatgptWebShadowEnabled,
+  readChatgptSource,
+} from "./chatgpt-source";
+export * from "./cost";
+export { NAVER_SEARCH_SAMPLING_VERSION } from "./korean-adapters";
 export * from "./types";
 
 const ADAPTERS: Record<EngineId, EngineAdapter> = {
-  chatgpt: chatgptAdapter,
+  // 경로 스위치(2026-10-07): CHATGPT_SOURCE=api(기본)면 기존 API 어댑터 그대로.
+  chatgpt: chatgptRoutedAdapter,
   "chatgpt-web": chatgptWebAdapter,
   claude: claudeAdapter,
   perplexity: perplexityAdapter,
@@ -39,7 +53,7 @@ const ADAPTERS: Record<EngineId, EngineAdapter> = {
 // 기본 엔진 (PRD §F2). chatgpt-web·naver-briefing은 옵션 (Stagehand 가능 환경에서만).
 // ⛔ 2026-09-29: hyperclova 제외 — 네이버 클로바X·Cue: 서비스 종료(2026-04-09) · 👤 대표 결정.
 //   어댑터·EngineId 는 과거 측정 표시 호환을 위해 남긴다(신규 측정엔 안 돈다).
-const DEFAULT_ENGINES: EngineId[] = [
+export const DEFAULT_ENGINES: readonly EngineId[] = [
   "chatgpt",
   "claude",
   "perplexity",
@@ -85,6 +99,79 @@ export async function queryEngine(query: EngineQuery): Promise<EngineResponse> {
 }
 
 /**
+ * LLM 엔진 1회 호출 상한(2026-10-06). 운영 실측: Claude 한 번이 114.8초·161초 걸려
+ *   측정 전체가 285초가 되거나 판정 단계에서 시간 초과로 실패했다.
+ *   최근 14일 정상 응답 2,700여 건 중 60초 초과는 7건(약 0.3%)뿐이다.
+ *   넘으면 그 응답만 기존 엔진 오류와 똑같이 errorMessage 로 남기고 측정은 계속한다.
+ *   검색 엔진(naver·daum)·브라우저 엔진(chatgpt-web·naver-briefing)은 자체 상한을 쓴다.
+ */
+export const ENGINE_CALL_TIMEOUT_MS: Partial<Record<EngineId, number>> = {
+  chatgpt: 60_000,
+  claude: 60_000,
+  gemini: 60_000,
+  perplexity: 60_000,
+};
+
+// 늦은 칸 다시 묻기 상한·상한 오류 판별은 의존성 없는 작은 파일에 둔다(측정 패키지가
+//   엔진 모듈을 통째로 mock 하는 테스트에서도 같은 판별을 쓰게).
+export {
+  engineTimeoutMessage,
+  isEngineTimeoutMessage,
+  LATE_CELL_REASK_TIMEOUT_MS,
+} from "./engine-timeout";
+
+export class EngineTimeoutError extends Error {
+  readonly elapsedMs: number;
+  constructor(engineId: EngineId, timeoutMs: number, elapsedMs: number) {
+    super(engineTimeoutMessage(engineId, timeoutMs));
+    this.name = "TimeoutError";
+    this.elapsedMs = elapsedMs;
+  }
+}
+
+/**
+ * 엔진 1회 호출에 개별 상한을 건다. 상한이 되면 어댑터에 넘긴 signal 을 끊어(실제 호출 취소)
+ * EngineTimeoutError 로 거절한다. 바깥 signal(측정 마감)이 끊기면 그 사유를 그대로 따른다.
+ */
+function queryEngineWithTimeout(
+  query: EngineQuery,
+  timeoutMs: number | undefined
+): Promise<EngineResponse> {
+  if (!timeoutMs) {
+    return queryEngine(query);
+  }
+  const started = Date.now();
+  const controller = new AbortController();
+  const parent = query.signal;
+  const onParentAbort = () => controller.abort(parent?.reason);
+  if (parent?.aborted) {
+    controller.abort(parent.reason);
+  } else {
+    parent?.addEventListener("abort", onParentAbort, { once: true });
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new EngineTimeoutError(
+        query.engineId,
+        timeoutMs,
+        Date.now() - started
+      );
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  return Promise.race([
+    queryEngine({ ...query, signal: controller.signal }),
+    timeout,
+  ]).finally(() => {
+    clearTimeout(timer);
+    parent?.removeEventListener("abort", onParentAbort);
+  });
+}
+
+/**
  * N개 엔진 병렬 호출. Promise.allSettled로 한 엔진 실패가 다른 엔진 막지 않게.
  *
  * 사용 예:
@@ -97,12 +184,59 @@ export async function queryEngine(query: EngineQuery): Promise<EngineResponse> {
  */
 export async function queryAllEngines(
   base: Omit<EngineQuery, "engineId">,
-  engineIds: EngineId[] = DEFAULT_ENGINES
+  engineIds: readonly EngineId[] = DEFAULT_ENGINES,
+  onEngineEvent?: (event: {
+    engineId: EngineId;
+    phase: "started" | "finished";
+    status?: "fulfilled" | "rejected";
+  }) => void,
+  /**
+   * 상한이 있는 엔진(ENGINE_CALL_TIMEOUT_MS)의 1회 상한을 이 값으로 바꾼다.
+   * 늦은 칸 다시 묻기(LATE_CELL_REASK_TIMEOUT_MS) 전용. 상한이 없는 엔진은 그대로 둔다.
+   */
+  options?: { timeoutMs?: number }
 ): Promise<EngineResponse[]> {
+  const observe = (event: {
+    engineId: EngineId;
+    phase: "started" | "finished";
+    status?: "fulfilled" | "rejected";
+  }) => {
+    try {
+      onEngineEvent?.(event);
+    } catch {
+      /* logging is best-effort */
+    }
+  };
+  // 🔎 ChatGPT 웹 섀도(CHATGPT_WEB_SHADOW=true) — 메인과 **동시에** 시작하고, 메인 배치가
+  //   끝나면 grace 만큼만 기다린다. 결과는 chatgpt 행의 `shadowChatgptWeb` 에만 붙는다.
+  let shadow: ShadowHandle | null = null;
+  try {
+    shadow =
+      engineIds.includes("chatgpt") && isChatgptWebShadowEnabled()
+        ? startChatgptWebShadow(base)
+        : null;
+  } catch {
+    shadow = null; // 섀도는 어떤 경우에도 메인을 깨지 않는다.
+  }
   const settled = await Promise.allSettled(
-    engineIds.map((engineId) => queryEngine({ ...base, engineId }))
+    engineIds.map(async (engineId) => {
+      observe({ engineId, phase: "started" });
+      try {
+        const response = await queryEngineWithTimeout(
+          { ...base, engineId },
+          ENGINE_CALL_TIMEOUT_MS[engineId] && options?.timeoutMs
+            ? options.timeoutMs
+            : ENGINE_CALL_TIMEOUT_MS[engineId]
+        );
+        observe({ engineId, phase: "finished", status: "fulfilled" });
+        return response;
+      } catch (error) {
+        observe({ engineId, phase: "finished", status: "rejected" });
+        throw error;
+      }
+    })
   );
-  return settled.map((result, i) => {
+  const responses = settled.map((result, i): EngineResponse => {
     if (result.status === "fulfilled") {
       return result.value;
     }
@@ -119,8 +253,32 @@ export async function queryAllEngines(
         result.reason instanceof Error
           ? result.reason.message
           : String(result.reason),
-      durationMs: 0,
+      // 개별 상한으로 끊긴 호출은 실제 대기 시간을 남긴다(운영 지연 진단용).
+      durationMs:
+        result.reason instanceof EngineTimeoutError
+          ? result.reason.elapsedMs
+          : 0,
       isStub: false,
     };
   });
+  if (shadow) {
+    await attachChatgptWebShadow(responses, shadow);
+  }
+  return responses;
+}
+
+async function attachChatgptWebShadow(
+  responses: EngineResponse[],
+  shadow: ShadowHandle
+): Promise<void> {
+  const index = responses.findIndex((r) => r.engineId === "chatgpt");
+  try {
+    const result = await shadow.finish(responses[index]);
+    const main = responses[index];
+    if (main) {
+      responses[index] = { ...main, shadowChatgptWeb: result };
+    }
+  } catch {
+    /* 섀도 실패는 메인 결과에 아무 영향도 주지 않는다. */
+  }
 }

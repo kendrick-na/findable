@@ -1,19 +1,25 @@
-import { auth, currentUser } from "@repo/auth/server";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
+import { auth, currentUser } from "@repo/auth/server";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
+import { getAppDictionary, getAppLocale } from "@/lib/i18n";
 import { AuditHistoryList } from "../components/audit-history-list";
 import { Header } from "../components/header";
 import { HistoryAutoRefresh } from "../components/history-auto-refresh";
 import { historyCountLabel } from "../lib/history-count-label";
 import { getPrimaryEmail } from "../lib/user";
 
-export const metadata: Metadata = {
-  title: "측정 이력 — Findable",
-  description: "지금까지 실행한 AI 브랜드 가시성 측정 결과 모음.",
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = (await getAppDictionary()).historyList;
+  return { title: t.metaTitle, description: t.metaDescription };
 };
 
 const HistoryPage = async () => {
+  const [dict, locale] = await Promise.all([
+    getAppDictionary(),
+    getAppLocale(),
+  ]);
+  const t = dict.historyList;
   const user = await currentUser();
   const email = user ? getPrimaryEmail(user) : null;
   const { orgId } = await auth();
@@ -57,21 +63,28 @@ const HistoryPage = async () => {
   ).length;
   return (
     <>
-      <Header page="측정 이력" pages={["Findable"]} showMetric={false} />
+      <Header page={t.title} pages={["Findable"]} showMetric={false} />
       <div className="flex flex-1 flex-col gap-4 p-6 pt-2">
-        <h1 className="font-semibold text-2xl">측정 이력</h1>
+        <h1 className="font-semibold text-2xl">{t.title}</h1>
         {/* 🔴 S7-4차(2026-08-12) — 예전에는 총 건수도, `take: 50` 상한도 화면에
             없었다. 51번째부터는 **오래된 기록이 말없이 잘려** 고객은 사라진 줄 안다.
             판정은 `historyCountLabel` 이 한다(서버 컴포넌트 안에 두면 테스트가 안 되고,
             QA 계정은 0건이라 잘림 경로를 눈으로도 못 본다 → 테스트로 고정). */}
         <p className="text-muted-foreground">
-          {historyCountLabel(totalCount, PAGE_SIZE)}
+          {historyCountLabel(totalCount, PAGE_SIZE, t)}
         </p>
         <HistoryAutoRefresh
           hasPending={pendingCount > 0}
           pendingCount={pendingCount}
+          t={t}
         />
-        <AuditHistoryList jobs={jobs} />
+        <AuditHistoryList
+          common={dict.common}
+          jobs={jobs}
+          locale={locale}
+          status={dict.jobStatus}
+          t={t}
+        />
       </div>
     </>
   );

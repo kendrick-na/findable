@@ -10,6 +10,12 @@ const metrics = {
   sov: 50,
   verifiedCount: 20,
 };
+const metricsWithAiEvidence = (verified: number, unverified: number) => ({
+  ...metrics,
+  verifiedCount: verified,
+  unverifiedCount: unverified,
+  answerBuckets: { ai: { adjudicated: verified, unverified } },
+});
 
 describe("run quality", () => {
   it("does not publish a score when entity verification is incomplete", () => {
@@ -21,7 +27,7 @@ describe("run quality", () => {
   it("keeps a run usable when a few unverified answers are excluded (<= 20%)", () => {
     const result = {
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
-      metrics: { ...metrics, verifiedCount: 21, unverifiedCount: 1 },
+      metrics: metricsWithAiEvidence(21, 1),
     };
     expect(isUsableRun(result)).toBe(true);
     expect(scoreOf(result)).toBeTypeOf("number");
@@ -30,11 +36,11 @@ describe("run quality", () => {
   it("keeps provisional runs out of trends and alerts", () => {
     const tooManyUnverified = {
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
-      metrics: { ...metrics, verifiedCount: 15, unverifiedCount: 7 },
+      metrics: metricsWithAiEvidence(15, 7),
     };
     const tooFewVerified = {
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
-      metrics: { ...metrics, verifiedCount: 9, unverifiedCount: 0 },
+      metrics: metricsWithAiEvidence(9, 0),
     };
     for (const result of [tooManyUnverified, tooFewVerified]) {
       expect(isUsableRun(result)).toBe(false);
@@ -45,7 +51,7 @@ describe("run quality", () => {
   it("keeps fully verified measurements usable", () => {
     const result = {
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
-      metrics: { ...metrics, unverifiedCount: 0 },
+      metrics: metricsWithAiEvidence(20, 0),
     };
     expect(isUsableRun(result)).toBe(true);
     expect(scoreOf(result)).toBeTypeOf("number");
@@ -55,8 +61,7 @@ describe("run quality", () => {
     const result = {
       mentionVerdictVersion: MENTION_VERDICT_VERSION,
       metrics: {
-        ...metrics,
-        unverifiedCount: 0,
+        ...metricsWithAiEvidence(20, 0),
         citationAttribution: "partial",
         unattributedCitationCount: 1,
       },

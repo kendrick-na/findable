@@ -9,18 +9,21 @@ import {
   scopedLatestOrgAudit,
   scopedLatestRunTracking,
 } from "@/lib/db/scoped";
+import { type AppDictionary, getAppDictionary, getAppLocale } from "@/lib/i18n";
 import { AnalysisBrandPicker } from "../components/analysis-brand-picker";
 import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { LockedSurface } from "../components/locked-surface";
 import { SourcesBoard } from "../features/analysis/sources-board";
-import { buildSourcesAnalysis } from "../lib/analysis-data";
 import { selectAnalysisBrandId } from "../lib/analysis-brand-selection";
+import { buildSourcesAnalysis } from "../lib/analysis-data";
 
-export const metadata: Metadata = {
-  title: "출처 링크 · Findable",
-  description: "AI가 우리를 설명할 때 어떤 문서를 근거로 거는지 알려드려요.",
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = (await getAppDictionary()).sourcesPage;
+  return { title: t.metaTitle, description: t.metaDescription };
 };
+
+type SourcesLabels = AppDictionary["sourcesPage"];
 
 // 🔴 2026-08-10 세션N-16 — **지어낸 숫자를 지웠다.**
 //   예전엔 `blog.naver.com 47 · 내 도메인 9 · namu.wiki 4` 라는 **실재하지 않는 수치**를
@@ -29,14 +32,13 @@ export const metadata: Metadata = {
 //   → 실제 측정 회차 링크로 대체(compare 와 동일 방침).
 const SAMPLE_AUDIT_URL = `${env.NEXT_PUBLIC_WEB_URL}/audit/d732a13a-9c3b-48ad-a9a0-7ea80f69e328?shared=1`;
 
-const SourcesPreview = () => (
+const SourcesPreview = ({ t }: { t: SourcesLabels }) => (
   <div className="findable-card flex flex-col gap-3 p-6">
     <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)]">
-      AI가 우리를 설명할 때 어떤 문서를 근거로 거는지 보여줘요
+      {t.previewTitle}
     </p>
     <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-      자사 페이지인지, 뉴스인지, 커뮤니티·위키인지까지 나눠서 정리해요. 어디를
-      고쳐야 인용이 늘어나는지가 여기서 보입니다. 숫자는 측정을 해야 나와요.
+      {t.previewBody}
     </p>
   </div>
 );
@@ -44,12 +46,19 @@ const SourcesPreview = () => (
 // S2'(2026-08-11) — 공용 `EmptyState` 로 교체 + **실제 회차 링크를 여기에도 붙였다**
 //   (잠금 프리뷰에만 있고 이 화면엔 없었다 — 유료 결제자가 측정 전에 보는 화면인데
 //    "무엇이 보일지"를 글로만 설명하고 있었다. 같은 `SAMPLE_AUDIT_URL` 재사용 · 원가 0).
-const NeedsMeasurement = () => (
+const NeedsMeasurement = ({
+  common,
+  t,
+}: {
+  common: AppDictionary["common"];
+  t: SourcesLabels;
+}) => (
   <EmptyState
-    description="측정을 한 번 실행하면, AI가 내 브랜드를 설명할 때 근거로 삼은 문서들을 여기에 출처별로 정리해드려요."
+    description={t.noRunBody}
     icon={<LinkIcon className="size-5" />}
     sampleHref={SAMPLE_AUDIT_URL}
-    title="아직 측정한 적이 없어요"
+    t={common}
+    title={t.noRunTitle}
   />
 );
 
@@ -59,11 +68,13 @@ const SourcesPage = async ({
   searchParams: Promise<{ brand?: string }>;
 }) => {
   const plan = await getCurrentPlan();
+  const dict = await getAppDictionary();
+  const t = dict.sourcesPage;
 
   if (!isPaid(plan)) {
     return (
       <>
-        <Header page="출처 링크" pages={["Findable"]} />
+        <Header page={t.title} pages={["Findable"]} />
         <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
           {/* 🔴 S4(2026-08-11) — 내부 용어 제거. 예전 첫 불릿이
               「언급(Mention)과 인용(Citation)을 **분리 집계**」였다 —
@@ -72,15 +83,12 @@ const SourcesPage = async ({
               불릿만 딱딱해서 **한 카드 안에서 말투가 갈라져 있었다**(진단 §원인④·NN/g 4).
               ⚠️ JSX 는 **속성 사이에 중괄호 주석을 넣을 수 없다**(TS1005) → 요소 위로. */}
           <LockedSurface
-            bullets={[
-              "이름만 나온 경우와, 우리 링크까지 걸린 경우를 따로 세요",
-              "네이버 블로그·뉴스·나무위키 중 어디가 근거로 쓰였는지",
-              "ChatGPT·Perplexity 별로 어떤 사이트를 걸었는지",
-            ]}
-            desc="AI가 우리를 설명할 때 무엇을 근거로 삼는지 — 우리 사이트인지, 남의 블로그인지 알려드려요."
-            preview={<SourcesPreview />}
+            bullets={[t.lockedBullet1, t.lockedBullet2, t.lockedBullet3]}
+            desc={t.lockedDesc}
+            preview={<SourcesPreview t={t} />}
             sampleUrl={SAMPLE_AUDIT_URL}
-            title="출처 링크"
+            t={dict.lockedSurface}
+            title={t.title}
             unlockPlan="Growth"
           />
         </div>
@@ -112,30 +120,40 @@ const SourcesPage = async ({
       })
     : false;
   const analysis = isReady ? buildSourcesAnalysis(rows) : null;
-  let content = <NeedsMeasurement />;
+  let content = <NeedsMeasurement common={dict.common} t={t} />;
   if (analysis) {
-    content = <SourcesBoard data={analysis} />;
+    content = (
+      <SourcesBoard
+        data={analysis}
+        isKo={(await getAppLocale()) === "ko"}
+        kindLabels={dict.sourceKinds}
+        relativeTime={dict.relativeTime}
+        t={dict.sourcesBoard}
+      />
+    );
   }
   if (latest && !isReady) {
     content = (
       <EmptyState
         ctaHref={`/history/${latest.id}`}
-        ctaLabel="이번 회차 확인하기"
-        description="최신 측정의 브랜드 판별·외부 출처 귀속 또는 데이터 반영이 완료되지 않았습니다. 답변에 나온 링크를 우리 브랜드의 확정 인용으로 세지 않습니다."
+        ctaLabel={t.checkRun}
+        description={t.provisionalBody}
         icon={<LinkIcon className="size-5" />}
-        title="출처 분석은 아직 잠정입니다"
+        t={dict.common}
+        title={t.provisionalTitle}
       />
     );
   }
 
   return (
     <>
-      <Header page="출처 링크" pages={["Findable"]} showMetric={false} />
+      <Header page={t.title} pages={["Findable"]} showMetric={false} />
       <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
         <AnalysisBrandPicker
           brands={brands}
           path="/sources"
           selectedBrandId={selectedBrandId}
+          t={dict.brandPicker}
         />
         {content}
       </div>

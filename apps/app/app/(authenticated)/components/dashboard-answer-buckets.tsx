@@ -8,6 +8,7 @@ import {
 } from "@repo/audit/answer-buckets";
 import type { BrandNameCheck } from "@repo/audit/brand-name-check";
 import { engineDisplayName } from "@repo/audit/engine-labels";
+import type { AppDictionary } from "@/lib/i18n";
 
 /**
  * 대시보드 헤드라인 4분류 (2026-09-29) — 공개 리포트 히어로와 **같은 함수·같은 문구**.
@@ -57,7 +58,16 @@ const TONE: Record<(typeof HEADLINE_BUCKETS)[number], string> = {
   engine_error: "text-[color:var(--findable-ink-subtle,#8a8f98)]",
 };
 
-export function DashboardAnswerBuckets({ result }: { result: unknown }) {
+export function DashboardAnswerBuckets({
+  isKo = true,
+  result,
+  t,
+}: {
+  /** 공용 패키지 문구(`answerBucketCopy`·엔진 이름)의 언어. */
+  isKo?: boolean;
+  result: unknown;
+  t: AppDictionary["answerBuckets"];
+}) {
   const summary = readSummary(result);
   const nameCheck = readBrandNameCheck(result);
   if (!summary || summary.ai.total === 0) {
@@ -74,18 +84,19 @@ export function DashboardAnswerBuckets({ result }: { result: unknown }) {
           className="mb-4 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-amber-100 text-sm"
           role="alert"
         >
-          측정한 브랜드명 「{nameCheck.inputName}」이 공식 사이트 표기
-          {nameCheck.siteNames[0] ? ` 「${nameCheck.siteNames[0]}」` : ""}와
-          달라요. AI는 입력한 이름 그대로 질문받았어요 — 브랜드명을 고친 뒤 다시
-          측정해 주세요.
+          {nameCheck.siteNames[0]
+            ? t.nameMismatchWithSite
+                .replace("{input}", nameCheck.inputName)
+                .replace("{site}", nameCheck.siteNames[0])
+            : t.nameMismatch.replace("{input}", nameCheck.inputName)}
         </p>
       ) : null}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-semibold text-[color:var(--findable-ink,#f7f8f8)] text-base">
-          AI가 우리를 어떻게 알고 있나
+          {t.title}
         </h2>
         <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-          답변 기준 · 브랜드 이름으로 물은 AI 답변 {ai.total}개
+          {t.basis.replace("{n}", String(ai.total))}
         </span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -95,7 +106,7 @@ export function DashboardAnswerBuckets({ result }: { result: unknown }) {
           const rate = failure
             ? bucketRate(count, ai.total)
             : bucketRate(count, ai.adjudicated);
-          const copy = answerBucketCopy(bucket, true);
+          const copy = answerBucketCopy(bucket, isKo);
           return (
             <div
               className="rounded-lg border border-[color:var(--findable-hairline,#2d3035)] p-3"
@@ -110,7 +121,7 @@ export function DashboardAnswerBuckets({ result }: { result: unknown }) {
                   {count}
                 </span>
                 <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-                  개
+                  {t.countUnit}
                 </span>
                 <span className="ml-auto text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm tabular-nums">
                   {rate === null ? "—" : `${rate}%`}
@@ -118,8 +129,8 @@ export function DashboardAnswerBuckets({ result }: { result: unknown }) {
               </div>
               <p className="mt-1 break-keep text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
                 {failure
-                  ? `시도 ${ai.total}개 중 · 비율 계산 제외`
-                  : `판정 끝난 ${ai.adjudicated}개 중`}
+                  ? t.ofAttempts.replace("{n}", String(ai.total))
+                  : t.ofJudged.replace("{n}", String(ai.adjudicated))}
                 {" · "}
                 {copy.explain}
               </p>
@@ -130,15 +141,15 @@ export function DashboardAnswerBuckets({ result }: { result: unknown }) {
       <ul className="mt-3 space-y-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
         {ai.unverified > 0 ? (
           <li>
-            판정 보류 {ai.unverified}개 —{" "}
-            {answerBucketCopy("unverified", true).explain}
+            {t.pending.replace("{n}", String(ai.unverified))}{" "}
+            {answerBucketCopy("unverified", isKo).explain}
           </li>
         ) : null}
         {summary.discovery ? (
           <li>
-            이름 없이 물었을 때 추천됨 {summary.discovery.recommended}/
-            {summary.discovery.adjudicated} — 업종·문제로만 물었을 때 우리를
-            추천한 답변 수예요.
+            {t.discovery
+              .replace("{recommended}", String(summary.discovery.recommended))
+              .replace("{adjudicated}", String(summary.discovery.adjudicated))}
           </li>
         ) : null}
         {Object.entries(summary.searchByEngine ?? {}).length > 0 ? (
@@ -146,16 +157,16 @@ export function DashboardAnswerBuckets({ result }: { result: unknown }) {
             {Object.entries(summary.searchByEngine ?? {})
               .map(
                 ([id, g]) =>
-                  `${engineDisplayName(id)} ${g.confirmed}/${g.adjudicated}`
+                  `${engineDisplayName(id, isKo)} ${g.confirmed}/${g.adjudicated}`
               )
               .join(" · ")}{" "}
-            — AI 답변이 아니라 검색 결과에 우리가 나왔는지 본 값이라 따로
-            셌어요.
+            {t.searchNote}
           </li>
         ) : null}
         <li>
-          엔진 기준 · 우리를 제대로 안 AI {summary.engines.confirmed}/
-          {summary.engines.measured}곳
+          {t.engines
+            .replace("{confirmed}", String(summary.engines.confirmed))
+            .replace("{measured}", String(summary.engines.measured))}
         </li>
       </ul>
     </section>

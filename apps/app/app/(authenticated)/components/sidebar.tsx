@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { env } from "@/env";
 import { ExportDialog, type ExportDialogLabels } from "./export-dialog";
 import { MobileTabBar, type MobileTabBarLabels } from "./mobile-tab-bar";
@@ -120,12 +120,14 @@ interface NavGroup {
 export interface SidebarLabels {
   adminAudits: string;
   adminContent: string;
+  adminDiscover: string;
   adminEvidence: string;
   adminMail: string;
   adminMeasure: string;
   adminOps: string;
   adminOrgs: string;
   adminPartners: string;
+  adminReports: string;
   alerts: string;
   billing: string;
   brandMeasure: string;
@@ -143,6 +145,7 @@ export interface SidebarLabels {
   groupMeasure: string;
   history: string;
   lockedHint: string;
+  partnerBadge: string;
   prompts: string;
   publicInsights: string;
   siteAudit: string;
@@ -268,6 +271,17 @@ const accountNav = (t: SidebarLabels): NavItem[] => [
 const adminNav = (t: SidebarLabels): NavItem[] => [
   { title: t.adminOps, url: "/admin/ops", icon: ActivityIcon },
   { title: t.adminMail, url: "/admin/ax-mail", icon: MailIcon },
+  // 🆕 2026-10-07: 공공 원천 회사 발굴(세그먼트·회사 카드). 플래그 꺼짐이면 화면이 안내만 띄운다.
+  {
+    title: t.adminDiscover,
+    url: "/admin/ax-mail/discover",
+    icon: ScanSearchIcon,
+  },
+  {
+    title: t.adminReports,
+    url: "/admin/client-reports",
+    icon: FileTextIcon,
+  },
   { title: t.adminContent, url: "/admin/content", icon: PenLineIcon },
   // 🆕 세션N-42: 가입 조직·초대 코드. 오버엣지 참여 기업이 코드로 들어오는데
   //   **누가 가입했는지 앱에서 볼 화면이 0곳**이었다(운영자가 SQL 을 돌려야 했다).
@@ -277,9 +291,8 @@ const adminNav = (t: SidebarLabels): NavItem[] => [
   { title: t.adminPartners, url: "/admin/partners", icon: ShieldCheckIcon },
   // 🔴 세션N-34: admin 화면 4개 중 **이것만 링크가 없었다**(실측 인바운드 0건).
   //   바로 위 주석이 말한 그대로 — 링크가 없어서 **있어도 없는 것**이었다.
-  //   ⚠️ 죽은 코드가 아니다: 212줄짜리 실제 기능(조치 전후 근거)이고
-  //   `@repo/audit/before-after` 를 쓰는 우리 코드다. 투자·영업 자리에서 쓰라고 만들었다.
-  { title: t.adminEvidence, url: "/admin/evidence", icon: TrendingUpIcon },
+  //   완료 기록은 열어 두되 실행 원장 검증 전에는 효과 수치를 표시하지 않는다.
+  { title: t.adminEvidence, url: "/admin/evidence", icon: ListChecksIcon },
   // 🆕 세션N-37: 브랜드 1건 측정·수정·삭제. cron 이 한 번에 5건(435원)을 집는 탓에
   //   1건(87원)만 돌릴 방법이 없어 N-36 의 Tracking 유실 수정을 확인 못 하고 있었다.
   { title: t.adminMeasure, url: "/admin/measure", icon: PlayIcon },
@@ -308,11 +321,12 @@ const NavRow = ({
     "/sources",
     "/site-audit",
   ].includes(item.url);
-  const href = locked
-    ? "/billing"
-    : brandAwarePath && selectedBrandId
-      ? `${item.url}?brand=${encodeURIComponent(selectedBrandId)}`
-      : item.url;
+  let href = item.url;
+  if (locked) {
+    href = "/billing";
+  } else if (brandAwarePath && selectedBrandId) {
+    href = `${item.url}?brand=${encodeURIComponent(selectedBrandId)}`;
+  }
 
   const inner = (
     <>
@@ -353,7 +367,9 @@ const NavRow = ({
         {item.external && !locked ? (
           <a href={href}>{inner}</a>
         ) : (
-          <Link href={href} prefetch={false}>{inner}</Link>
+          <Link href={href} prefetch={false}>
+            {inner}
+          </Link>
         )}
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -374,6 +390,11 @@ export const GlobalSidebar = ({
   const pathname = usePathname();
   const selectedBrandId = useSearchParams().get("brand") ?? undefined;
   const [exportOpen, setExportOpen] = useState(false);
+  // Clerk 조직 선택기·사용자 버튼은 서버 HTML 과 브라우저 첫 렌더가 달라 hydration 오류를 낸다
+  //   (2026-10-05 로컬 E2E, 로그인 후 모든 화면). 마운트 뒤에만 그리고, 그 전엔
+  //   같은 높이의 빈 칸을 둬 레이아웃이 흔들리지 않게 한다.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const isActive = (item: NavItem) =>
     !item.external &&
@@ -396,10 +417,12 @@ export const GlobalSidebar = ({
                   sidebar.open ? "" : "-mx-1"
                 )}
               >
-                <OrganizationSwitcher
-                  afterSelectOrganizationUrl="/"
-                  hidePersonal
-                />
+                {mounted ? (
+                  <OrganizationSwitcher
+                    afterSelectOrganizationUrl="/"
+                    hidePersonal
+                  />
+                ) : null}
               </div>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -478,21 +501,25 @@ export const GlobalSidebar = ({
                 {labels.currentPlan}
               </span>
               <span className="flex items-center gap-1">
-                {isPartner && <PartnerBadge />}
+                {isPartner && <PartnerBadge label={labels.partnerBadge} />}
                 <PlanBadge plan={plan} />
               </span>
             </SidebarMenuItem>
             <SidebarMenuItem className="flex items-center gap-2">
-              <UserButton
-                appearance={{
-                  elements: {
-                    rootBox: "flex overflow-hidden w-full",
-                    userButtonBox: "flex-row-reverse",
-                    userButtonOuterIdentifier: "truncate pl-0",
-                  },
-                }}
-                showName
-              />
+              {mounted ? (
+                <UserButton
+                  appearance={{
+                    elements: {
+                      rootBox: "flex overflow-hidden w-full",
+                      userButtonBox: "flex-row-reverse",
+                      userButtonOuterIdentifier: "truncate pl-0",
+                    },
+                  }}
+                  showName
+                />
+              ) : (
+                <div className="w-full" />
+              )}
               <div className="flex shrink-0 items-center gap-px">
                 <ModeToggle />
                 <Button

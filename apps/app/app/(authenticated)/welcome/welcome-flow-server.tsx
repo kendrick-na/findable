@@ -1,6 +1,7 @@
 import { inferMarketScope } from "@repo/audit/market-scope";
 import { updateBrandProfile } from "@/app/actions/brand/update-profile";
 import { getAppDictionary } from "@/lib/i18n";
+import { marketScopeReason } from "@/lib/market-scope-reason";
 import { WelcomeFlow } from "./welcome-flow";
 
 /**
@@ -38,7 +39,8 @@ export const WelcomeFlowServer = async ({
 }) => {
   // 🔴 사전은 **서버에서만** 읽는다(`server-only`) — 뷰에 문자열만 내려보낸다.
   //   📕 `CLAUDE.md §2`: 다국어 문자열은 dictionary 경유(하드코딩 금지).
-  const t = (await getAppDictionary()).onboarding;
+  const dict = await getAppDictionary();
+  const t = dict.onboarding;
   const detected = inferMarketScope({
     domain: brandDomain,
     industry: brandIndustry ?? null,
@@ -48,7 +50,7 @@ export const WelcomeFlowServer = async ({
       {...props}
       detected={{
         confidence: detected.confidence,
-        reason: detected.reason,
+        reason: marketScopeReason(detected.reasonCode, dict.brandForm),
         scope: detected.scope,
       }}
       onSave={updateBrandProfile}

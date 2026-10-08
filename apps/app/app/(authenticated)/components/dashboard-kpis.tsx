@@ -1,5 +1,9 @@
 import type { MetricKey } from "@repo/audit/metric-dictionary";
-import { directionHint, METRICS } from "@repo/audit/metric-dictionary";
+import { directionHint, metricCopy } from "@repo/audit/metric-dictionary";
+import {
+  searchSamplingBlockedCopy,
+  searchSamplingLabel,
+} from "@repo/audit/search-sampling-version";
 import { cn } from "@repo/design-system/lib/utils";
 import {
   ArrowDownRight,
@@ -10,16 +14,54 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import type { AppDictionary } from "@/lib/i18n";
 import type { DashboardData, SentimentSummary } from "../lib/dashboard-data";
 import { formatMeasuredAt, positiveRateOf } from "../lib/dashboard-data";
 import { KpiSparkline } from "./kpi-sparkline";
+
+/** 이 카드 묶음의 문구 — 서버(`page.tsx`)가 `app.kpis` 사전에서 넘긴다. */
+export type KpiLabels = AppDictionary["kpis"];
+
+export function measurementCoverageHint(
+  coverage: DashboardData["coverage"],
+  latestSov: number | null,
+  t: Pick<KpiLabels, "coverageEmpty" | "coverageHint" | "coverageNoBreakdown">
+): string {
+  if (coverage) {
+    return t.coverageHint
+      .replace("{total}", String(coverage.total))
+      .replace("{mentioned}", String(coverage.mentioned));
+  }
+  return latestSov === null ? t.coverageEmpty : t.coverageNoBreakdown;
+}
+
+function MeasurementComparisonCaveat({
+  caveat,
+  totalCount,
+}: {
+  caveat: string;
+  totalCount: number;
+}) {
+  if (totalCount < 2) {
+    return null;
+  }
+  return (
+    <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+      {caveat}
+    </p>
+  );
+}
 
 // `export` 인 이유: 스토리(`.stories.tsx`)가 `Meta<typeof DashboardKpis>` 로 이 타입을
 //   참조한다. 안 내보내면 tsc 가 TS4023("이름을 지을 수 없다")로 막는다.
 export interface DashboardKpisProps {
   data: DashboardData;
+  /** 공용 패키지(`@repo/audit`) 문구의 언어 — 그 함수들이 `isKo` 를 받는다. */
+  isKo: boolean;
   /** Growth 이상인가(=isPaid). 잠긴 카드를 "클릭 전에" 표시하는 데만 쓴다. */
   paid: boolean;
+  relativeTime: AppDictionary["relativeTime"];
+  t: KpiLabels;
 }
 
 // ──────────────────────────────────────────────────
@@ -191,29 +233,36 @@ const KpiCard = ({
 
 // 등장률 티어. 임계값은 www 결과페이지 scoreTierLabel(audit-result.tsx:266)과 달리
 //   **등장률(0~100%) 눈금**이다 — GEO 총점과 혼동 금지(세션N-2 sovLabel 사고).
-function visibilityTier(sov: number): string {
+function visibilityTier(sov: number, t: KpiLabels): string {
   if (sov >= 60) {
-    return "잘 보이는 편";
+    return t.tierHigh;
   }
   if (sov >= 30) {
-    return "보통";
+    return t.tierMid;
   }
   if (sov > 0) {
-    return "거의 안 보임";
+    return t.tierLow;
   }
-  return "아직 안 보임";
+  return t.tierNone;
 }
 
 // 순위 티어. 1에 가까울수록 좋다(낮을수록 상위).
-function positionTier(position: number): string {
+function positionTier(position: number, t: KpiLabels): string {
   if (position <= 1.5) {
-    return "가장 먼저";
+    return t.positionFirst;
   }
   if (position <= 3) {
-    return "앞쪽";
+    return t.positionFront;
   }
-  return "뒤쪽";
+  return t.positionBack;
 }
+
+const fillSentiment = (template: string, summary: SentimentSummary) =>
+  template
+    .replace("{positive}", String(summary.positive))
+    .replace("{neutral}", String(summary.neutral))
+    .replace("{negative}", String(summary.negative))
+    .replace("{total}", String(summary.total));
 
 // ──────────────────────────────────────────────────
 // D8 (2026-08-07 세션N-9) — 감성 3분할 스택바.
@@ -230,7 +279,13 @@ function positionTier(position: number): string {
 //   §9 색 규율 — 같은 지표가 두 화면 요소에서 다른 색이면 색이 의미를 잃는다.
 //   ⚠️ 부정에 danger(빨강)를 쓰는 건 "하락에 빨강 금지"(GSC 안티패닉)와 다른 사안이다.
 //   여기서 빨강은 **변화의 방향**이 아니라 **범주 이름**이다(부정 감성 그 자체).
-const SentimentBar = ({ summary }: { summary: SentimentSummary }) => {
+const SentimentBar = ({
+  ariaTemplate,
+  summary,
+}: {
+  ariaTemplate: string;
+  summary: SentimentSummary;
+}) => {
   const segments = [
     {
       color: "var(--findable-dancheong, oklch(0.58 0.110 195))",
@@ -253,7 +308,7 @@ const SentimentBar = ({ summary }: { summary: SentimentSummary }) => {
 
   return (
     <div
-      aria-label={`긍정 ${summary.positive}, 보통 ${summary.neutral}, 부정 ${summary.negative} (총 ${summary.total}건)`}
+      aria-label={fillSentiment(ariaTemplate, summary)}
       className="flex h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--findable-surface-2,#141516)]"
       role="img"
     >
@@ -277,17 +332,26 @@ const SentimentBar = ({ summary }: { summary: SentimentSummary }) => {
 //   ⚠️ 라벨은 사실 서술에 그친다(§9 안티패닉 — 겁주는 말로 확대하지 않는다).
 // 🔴 `export` 인 이유: 테스트가 **이 함수 자체**를 검사하게 하려고.
 //   테스트에 판정 로직을 복제하면 둘이 조용히 갈라진다(같은 수치 2벌 금지).
-export function sentimentTier(summary: SentimentSummary): string {
+export function sentimentTier(
+  summary: SentimentSummary,
+  t: Pick<
+    KpiLabels,
+    | "sentimentFavorable"
+    | "sentimentMostlyNegative"
+    | "sentimentNeutral"
+    | "sentimentSomeNegative"
+  >
+): string {
   if (summary.total === 0) {
     return "—";
   }
   const negativeRate = summary.negative / summary.total;
   const positiveRate = summary.positive / summary.total;
   if (negativeRate >= 0.3) {
-    return "부정 많음";
+    return t.sentimentMostlyNegative;
   }
   if (summary.negative > 0) {
-    return "부정 섞임";
+    return t.sentimentSomeNegative;
   }
   // 🔴 세션N-34: 여기가 **부정 쪽과 대칭이 아니었다.** 부정은 위에서 이미
   //   *"1건이든 전부든 똑같이 섞임"* 이라는 이유로 비중 판정으로 고쳐졌는데,
@@ -296,12 +360,12 @@ export function sentimentTier(summary: SentimentSummary): string {
   //   실제로는 **85% 이상이 중립**이다 — 화면이 상태를 좋게 반올림하고 있었다.
   //   → 같은 3할 경계를 긍정에도 적용한다(새 임계값을 발명하지 않는다).
   if (positiveRate >= 0.3) {
-    return "우호적";
+    return t.sentimentFavorable;
   }
   // ⚠️ 긍정이 있어도 소수면 **중립이 지배적**이라고 말한다.
   //   AI 답변에서 중립은 "나쁘지 않다"가 아니라 **"밋밋해서 안 골라진다"** 이고
   //   그게 개선 대상이다(web `sentimentHint` 가 S7-4차에 정한 해석과 같은 방향).
-  return "중립적";
+  return t.sentimentNeutral;
 }
 
 // 히어로 3장 + 운영지표 한 줄(A안). 값이 없으면 "—" 로 안전 표기.
@@ -323,14 +387,20 @@ export function sentimentTier(summary: SentimentSummary): string {
  * ⚠️ 폴백 경로는 이 수를 **모른다**(`null`) → 표기를 **생략**한다.
  *   0 으로 깔면 「0개 응답 평균」이라는 거짓이 된다 — 지어내지 않는다.
  */
-function rankBasisNote(sampleCount: number | null): string {
+function rankBasisNote(sampleCount: number | null, t: KpiLabels): string {
   if (sampleCount === null || sampleCount <= 0) {
     return "";
   }
-  return ` · 순위는 ${sampleCount}개 응답 평균`;
+  return t.rankBasis.replace("{n}", String(sampleCount));
 }
 
-export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
+export const DashboardKpis = ({
+  data,
+  isKo,
+  paid,
+  relativeTime,
+  t,
+}: DashboardKpisProps) => {
   const {
     latestSov,
     sovDeltaPoints,
@@ -348,6 +418,9 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
     sentiment,
     trend,
   } = data;
+  // W1 정책: 직전 회차와 네이버 검색 표본 방식이 달라 비교를 막았는가.
+  const comparisonBlocked = data.comparisonBlockedReason !== null;
+  const samplingLabel = searchSamplingLabel(data.searchSamplingVersion, isKo);
 
   /*
    * 측정 기록은 있는데(`totalCount > 0`) **히어로 3장이 전부 값이 없는** 경우.
@@ -389,36 +462,21 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
   if (averageMentionPosition !== null) {
     positionValue =
       averageMentionListSize === null
-        ? `${averageMentionPosition}번째`
-        : `${averageMentionListSize}개 중 ${averageMentionPosition}번째`;
+        ? t.positionOnly.replace("{position}", String(averageMentionPosition))
+        : t.positionOf
+            .replace("{size}", String(averageMentionListSize))
+            .replace("{position}", String(averageMentionPosition));
   }
 
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
-          badge={
-            sovDeltaPoints !== null && sovDeltaPoints !== 0 ? (
-              <SovDeltaBadge delta={sovDeltaPoints} />
-            ) : undefined
-          }
-          hint={
-            coverage
-              ? // 🔴 2026-08-16 — `N곳에 물어` 는 **시도(attempted)** 처럼 읽힌다.
-                //   실제 `coverage.total` 은 Tracking 행이 **실제로 쌓인 엔진 수**(=measured)다
-                //   (dashboard-data.ts:556 `new Set(group.map(r=>r.engineId))`).
-                //   응답 못 받은 엔진은 애초에 행이 없어서 이 수에 안 들어간다.
-                //   web 은 이미 `측정한 AI N곳` 이라고 쓴다 → 같은 값을 두 앱이 다르게 부르던 것.
-                `측정한 AI ${coverage.total}곳 중 ${coverage.mentioned}곳이 우리를 말했어요`
-              : // 🔴 **값이 있으면 빈 상태 문구를 쓰지 않는다** (N-46 · 스크린샷이 잡음).
-                //   값(`latestSov` ← `metrics.sov`)과 힌트(`coverage` ← `metrics.enginesCovered`)가
-                //   **서로 다른 필드**를 본다. `enginesCovered` 만 비면 `coverage=null` 이 되어
-                //   **「62%」 옆에 「측정하면 …보여드려요」** 가 떴다.
-                //   📕 N-45 온보딩 4단계와 같은 유형(조건부 값 + 무조건 설명).
-                latestSov === null
-                ? "측정하면 AI가 우리를 아는지 보여드려요"
-                : "이번 회차는 AI별 집계가 없어 비율만 보여드려요"
-          }
+          badge={sovBadge(sovDeltaPoints, comparisonBlocked, isKo)}
+          hint={withSamplingLabel(
+            measurementCoverageHint(coverage, latestSov, t),
+            samplingLabel
+          )}
           // 🔴 **라벨을 값의 축에 맞춘다** (N-46 · 👤 Ⓐ안 · 라이브 실측으로 확정).
           //   라벨은 `recognition`(엔진 축 · **곳**)인데 값은 `sov`(응답 축 · **%**)였다.
           //   라이브에서 *"AI가 우리를 아나? **95%**"* 밑에 *"7곳 중 **7곳**"*(=100%)이 붙어
@@ -426,14 +484,14 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
           //   검산하려 든다"*. 두 숫자 다 맞고, **한 카드에 둔 것**이 틀렸다.
           //   → 큰 숫자를 `sov` 로 유지하고 **질문을 sov 의 질문으로** 바꾼다.
           //     밑줄(7곳 중 7곳)은 엔진 축 그대로 두어 **서로 보완**하게 만든다.
-          label={METRICS.sov.question}
+          label={metricCopy("sov", isKo).question}
           sparkline={
             <KpiSparkline
               color="var(--findable-primary, #ff7a4d)"
               values={sovSeries}
             />
           }
-          tier={latestSov === null ? undefined : visibilityTier(latestSov)}
+          tier={latestSov === null ? undefined : visibilityTier(latestSov, t)}
           value={latestSov === null ? "—" : `${latestSov}%`}
         />
 
@@ -442,16 +500,22 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
         <KpiCard
           // 🔴 방향은 지표 사전이 단독으로 정한다 — 화면이 "낮을수록 좋음"을
           //   직접 써넣으면 사전과 갈라질 수 있다(같은 수치 2벌 금지와 같은 규율).
-          directionNote={directionHint("rank")}
-          hint={positionHint(averageMentionPosition, previousMentionPosition)}
+          directionNote={directionHint("rank", isKo)}
+          hint={positionHint(
+            averageMentionPosition,
+            previousMentionPosition,
+            t,
+            isKo,
+            comparisonBlocked
+          )}
           href={
             data.latestBrandId
               ? `/compare?brand=${data.latestBrandId}`
               : "/compare"
           }
-          label={METRICS.rank.question}
+          label={metricCopy("rank", isKo).question}
           locked={!paid}
-          lockedNote="경쟁사 비교는 Growth부터 열려요"
+          lockedNote={t.rankLocked}
           sparkline={
             <KpiSparkline
               // 중립색(ink-subtle). §9 색 규율 — 등장률=primary·긍정=dancheong 은
@@ -467,7 +531,7 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
           tier={
             averageMentionPosition === null
               ? undefined
-              : positionTier(averageMentionPosition)
+              : positionTier(averageMentionPosition, t)
           }
           value={positionValue}
         />
@@ -482,22 +546,33 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
         <KpiCard
           comparison={
             sentiment
-              ? sentimentComparison(sentiment, previousSentiment)
+              ? sentimentComparison(
+                  sentiment,
+                  previousSentiment,
+                  t,
+                  isKo,
+                  comparisonBlocked
+                )
               : undefined
           }
-          hint={sentimentHint(sentiment)}
+          hint={sentimentHint(sentiment, t)}
           href={
             data.latestBrandId
               ? `/actions?brand=${data.latestBrandId}`
               : "/actions"
           }
-          label={METRICS.sentiment.question}
+          label={metricCopy("sentiment", isKo).question}
           sparkline={
             <div className="flex flex-col gap-2">
               {/* D8: 스택바가 스파크라인 **위**. 스파크라인은 "시간에 따른 변화"고
                   스택바는 "지금의 구성"이다 — 힌트(긍정 5 · 보통 28)가 방금 말한
                   분해를 바로 아래에서 그림으로 받는 편이 읽는 순서에 맞다. */}
-              {sentiment ? <SentimentBar summary={sentiment} /> : null}
+              {sentiment ? (
+                <SentimentBar
+                  ariaTemplate={t.sentimentAria}
+                  summary={sentiment}
+                />
+              ) : null}
               <KpiSparkline
                 // 단청(teal) — 추세 차트의 긍정 비율 계열과 **같은 색**을 쓴다.
                 // 같은 지표가 두 화면 요소에서 다른 색이면 색이 의미를 잃는다(§9 색 규율).
@@ -506,14 +581,21 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
               />
             </div>
           }
-          tier={sentiment ? sentimentTier(sentiment) : undefined}
+          tier={sentiment ? sentimentTier(sentiment, t) : undefined}
           // 🔴 비율 계산은 `positiveRateOf`(단일 진실) — 여기서 다시 나누지 않는다.
           //   같은 식이 3벌이면 한쪽 반올림만 바뀌어도 **카드 값과 추세선이 갈린다**.
           value={
-            sentiment === null ? "—" : `긍정 ${positiveRateOf(sentiment)}%`
+            sentiment === null
+              ? "—"
+              : t.positiveRate.replace("{n}", String(positiveRateOf(sentiment)))
           }
         />
       </div>
+
+      <MeasurementComparisonCaveat
+        caveat={t.comparisonCaveat}
+        totalCount={totalCount}
+      />
 
       {/* A안 — 운영지표는 성과와 같은 자리를 차지하지 않는다(Apple Deference:
           "UI는 콘텐츠와 경쟁하지 않는다"). 정보는 유지하고 위계만 내린다.
@@ -535,19 +617,23 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
             → 횟수를 **숨기지 않는다**(측정을 돌린 건 사실이다). 대신 **값이 없다는 사실을
               그 자리에서 말한다** — 없는 성과를 좋게 포장하지 않는 것과 같은 규율이다. */}
       <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm">
-        측정 {totalCount}회
-        {latestMeasuredAt ? ` · ${formatMeasuredAt(latestMeasuredAt)}` : ""}
+        {t.summaryRuns.replace("{n}", String(totalCount))}
+        {latestMeasuredAt
+          ? ` · ${formatMeasuredAt(latestMeasuredAt, relativeTime)}`
+          : ""}
         {coverage
-          ? ` · 측정한 AI ${coverage.total}곳 중 ${coverage.mentioned}곳에서 등장`
+          ? t.summaryCoverage
+              .replace("{total}", String(coverage.total))
+              .replace("{mentioned}", String(coverage.mentioned))
           : ""}
-        {promptScores.length > 0 ? ` · 질문 ${promptScores.length}개 기준` : ""}
-        {rankBasisNote(positionSampleCount)}
-        {hasNoUsableResult
-          ? " · 아직 볼 수 있는 결과가 없어요(측정이 완료되지 않았거나 결과를 읽지 못했어요)"
+        {promptScores.length > 0
+          ? t.summaryQuestions.replace("{n}", String(promptScores.length))
           : ""}
+        {rankBasisNote(positionSampleCount, t)}
+        {hasNoUsableResult ? t.summaryNoResult : ""}
       </p>
 
-      <MetricGlossary />
+      <MetricGlossary isKo={isKo} toggle={t.glossaryToggle} />
     </div>
   );
 };
@@ -574,13 +660,17 @@ export const DashboardKpis = ({ data, paid }: DashboardKpisProps) => {
  *
  * ⚠️ 정의 문장을 여기 복제하지 않는다 — 사전이 단일 진실이다(같은 값 2벌 금지).
  */
-const MetricGlossary = () => (
+const MetricGlossary = ({
+  isKo,
+  toggle,
+}: {
+  isKo: boolean;
+  toggle: string;
+}) => (
   <details className="group">
     <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs hover:text-[color:var(--findable-ink-subtle,#8a8f98)]">
       {/* marker 제거는 list-none + ::-webkit-details-marker 양쪽이 필요하다 */}
-      <span className="[&::-webkit-details-marker]:hidden">
-        이 숫자들, 무슨 뜻인가요?
-      </span>
+      <span className="[&::-webkit-details-marker]:hidden">{toggle}</span>
       <ChevronDown
         aria-hidden="true"
         className="size-3 transition-transform group-open:rotate-180"
@@ -590,16 +680,16 @@ const MetricGlossary = () => (
       {GLOSSARY_KEYS.map((key) => (
         <div className="flex flex-col gap-0.5" key={key}>
           <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-            {METRICS[key].label}
+            {metricCopy(key, isKo).label}
             {/* 방향은 사전이 단독으로 정한다 — 화면이 "낮을수록 좋음"을 직접 쓰지 않는다 */}
-            {directionHint(key) ? (
+            {directionHint(key, isKo) ? (
               <span className="ml-1.5 text-[color:var(--findable-ink-tertiary,#7e8289)]">
-                {directionHint(key)}
+                {directionHint(key, isKo)}
               </span>
             ) : null}
           </dt>
           <dd className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-            {METRICS[key].description}
+            {metricCopy(key, isKo).description}
           </dd>
         </div>
       ))}
@@ -627,22 +717,28 @@ const GLOSSARY_KEYS = [
 //   1단계(경쟁사 평균)는 /compare 가 이미 렌더링 중.
 function positionHint(
   position: number | null,
-  previous: number | null
+  previous: number | null,
+  t: KpiLabels,
+  isKo: boolean,
+  comparisonBlocked = false
 ): string {
   if (position === null) {
-    return "AI가 우리를 언급하면 순위를 알려드려요";
+    return t.positionEmpty;
+  }
+  if (comparisonBlocked) {
+    return searchSamplingBlockedCopy(isKo);
   }
   if (previous === null) {
-    return "비교는 2회차 측정부터 보여드려요";
+    return t.compareFromSecond;
   }
   const diff = Math.round((previous - position) * 10) / 10;
   if (diff === 0) {
-    return `지난 측정과 같아요 (${previous}번째)`;
+    return t.positionSame.replace("{previous}", String(previous));
   }
   // 순위는 낮을수록 좋다 — diff>0 이면 개선.
-  return diff > 0
-    ? `지난 측정 ${previous}번째에서 ${diff} 올랐어요`
-    : `지난 측정 ${previous}번째에서 ${Math.abs(diff)} 내렸어요`;
+  return (diff > 0 ? t.positionUp : t.positionDown)
+    .replace("{previous}", String(previous))
+    .replace("{diff}", String(Math.abs(diff)));
 }
 
 // D5(2026-08-07): 감성만 이전 기간 비교가 없었다(SoV=델타 배지 · 순위=힌트 문장).
@@ -653,57 +749,113 @@ function positionHint(
 // `export` — 테스트가 **실제 함수**를 검사하게 한다(복제하면 갈라진다).
 export function sentimentComparison(
   current: SentimentSummary,
-  previous: SentimentSummary | null
+  previous: SentimentSummary | null,
+  t: Pick<
+    KpiLabels,
+    "compareFromSecond" | "sentimentDown" | "sentimentSame" | "sentimentUp"
+  >,
+  isKo: boolean,
+  comparisonBlocked = false
 ): string {
+  if (comparisonBlocked) {
+    // W1 정책: 검색 표본 방식이 바뀐 직전 회차와는 비교하지 않는다(「2회차부터」도 아니다).
+    return searchSamplingBlockedCopy(isKo);
+  }
   if (!previous) {
     // 순위 카드와 같은 안내(positionHint) — 3장의 어투를 맞춘다.
-    return "비교는 2회차 측정부터 보여드려요";
+    return t.compareFromSecond;
   }
   // 🔴 카드 값과 **같은 함수**로 낸다 — 여기만 따로 계산하면
   //   "긍정 40%" 옆에 "지난번보다 +3%p" 가 서로 안 맞는 날이 온다.
   const previousRate = positiveRateOf(previous) ?? 0;
   const diff = (positiveRateOf(current) ?? 0) - previousRate;
   if (diff === 0) {
-    return `지난 측정과 같아요 (긍정 ${previousRate}%)`;
+    return t.sentimentSame.replace("{previous}", String(previousRate));
   }
-  return diff > 0
-    ? `지난 측정 긍정 ${previousRate}%에서 ${diff}%p 올랐어요`
-    : `지난 측정 긍정 ${previousRate}%에서 ${Math.abs(diff)}%p 내렸어요`;
+  return (diff > 0 ? t.sentimentUp : t.sentimentDown)
+    .replace("{previous}", String(previousRate))
+    .replace("{diff}", String(Math.abs(diff)));
 }
 
-function sentimentHint(summary: SentimentSummary | null): string {
+function sentimentHint(summary: SentimentSummary | null, t: KpiLabels): string {
   if (!summary) {
-    return "측정하면 AI가 우리를 어떻게 말하는지 보여드려요";
+    return t.sentimentEmpty;
   }
   // D8: 부정이 0이어도 **적는다**. 주 숫자가 `긍정 15%` 하나뿐이면
   //   "나머지 85%는 부정인가?"로 읽히는데 실제로는 전부 중립인 경우가 있다
   //   (실측: 중립 28 · 긍정 5 · 부정 0). 0을 생략하면 그 오독을 못 막는다.
   //   총 건수까지 붙여 분모를 명시한다 — 감사 D8 *"분모가 보여야 임의적이지 않다"*.
-  const parts = [
-    `긍정 ${summary.positive}`,
-    `보통 ${summary.neutral}`,
-    `부정 ${summary.negative}`,
-  ];
-  return `${parts.join(" · ")} · 총 ${summary.total}건`;
+  return fillSentiment(t.sentimentParts, summary);
 }
 
-// 델타 배지. §9-2 + 리서치: 하락에 빨강을 쓰지 않는다.
-//   🎯 GSC는 하락에 색상 경고를 **아예 안 쓴다**(의도적 안티패닉 설계). 0점 고객이 많은
-//   제품에서 온통 빨강이면 재방문하지 않는다. 색맹의 99%가 적녹이라 접근성 문제도 겹친다.
-//   → 상승만 초록으로 강조하고, 하락은 **중립 회색 + 화살표 + 텍스트**로 사실만 전달.
-//   (Atlassian: 상태색은 비색상 신호 병기 필수 — 화살표·부호가 색 없이도 방향을 말한다)
+/** 등장률 카드 배지 — 비교가 막혔으면 숫자 대신 「비교 불가(측정 방식 변경)」. */
+function sovBadge(
+  delta: number | null,
+  comparisonBlocked: boolean,
+  isKo: boolean
+) {
+  if (comparisonBlocked) {
+    return (
+      <span
+        className="mb-1 inline-flex items-center rounded-full border border-transparent bg-[color:var(--findable-surface-3,#18191a)] px-2 py-0.5 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs"
+        data-testid="sov-comparison-blocked"
+      >
+        {searchSamplingBlockedCopy(isKo)}
+      </span>
+    );
+  }
+  return delta !== null && delta !== 0 ? (
+    <SovDeltaBadge delta={delta} />
+  ) : undefined;
+}
+
+/** 등장률에는 네이버 검색 노출이 섞인다 → 이번 회차의 검색 표본 방식을 함께 적는다. */
+function withSamplingLabel(hint: string, label: string | null): string {
+  return label ? `${hint} · ${label}` : hint;
+}
+
+/**
+ * 추세선 아래 한 줄 — 검색 표본 방식이 다른 회차를 선에서 뺐다면 그 사실을 말한다.
+ * 조용히 짧아진 선은 「측정을 덜 했나?」로 읽힌다.
+ */
+export const SearchSamplingTrendNote = ({
+  data,
+  isKo,
+  t,
+}: {
+  data: DashboardData;
+  isKo: boolean;
+  t: Pick<KpiLabels, "trendExcluded">;
+}) => {
+  const label = searchSamplingLabel(data.searchSamplingVersion, isKo);
+  if (data.trendExcludedRuns === 0 && !label) {
+    return null;
+  }
+  return (
+    <p
+      className="mt-2 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs"
+      data-testid="search-sampling-trend-note"
+    >
+      {[
+        label,
+        data.trendExcludedRuns > 0
+          ? t.trendExcluded
+              .replace("{n}", String(data.trendExcludedRuns))
+              .replace("{reason}", searchSamplingBlockedCopy(isKo))
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
+    </p>
+  );
+};
+
+// 델타는 측정 간 차이이며 조치 효과가 아니다. 상승/하락 모두 중립색으로 표시한다.
 const SovDeltaBadge = ({ delta }: { delta: number }) => {
   const positive = delta > 0;
   const rounded = Math.abs(Math.round(delta * 10) / 10);
   return (
-    <span
-      className={cn(
-        "mb-1 inline-flex items-center gap-0.5 rounded-full border border-transparent px-2 py-0.5 font-medium text-xs",
-        positive
-          ? "bg-emerald-500/12 text-emerald-400"
-          : "bg-[color:var(--findable-surface-3,#18191a)] text-[color:var(--findable-ink-subtle,#8a8f98)]"
-      )}
-    >
+    <span className="mb-1 inline-flex items-center gap-0.5 rounded-full border border-transparent bg-[color:var(--findable-surface-3,#18191a)] px-2 py-0.5 font-medium text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
       {positive ? (
         <ArrowUpRight aria-hidden="true" className="size-3" />
       ) : (

@@ -14,23 +14,26 @@
 // `brand-identity.ts` 의 4층 체인과 같은 패턴(Letsur haiku · generateObject+zod ·
 //   confident 게이트로 환각 방지)을 재사용한다. 새 모델 라우팅을 만들지 않는다.
 
-import { createOpenAI } from "@ai-sdk/openai";
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
+import {
+  HELPER_GATEWAY_MODEL_ID,
+  letsurModelWithFallback,
+} from "./letsur-fallback";
 import { models } from "./models";
 
 const LETSUR_COMPETITOR_MODEL_ID =
   process.env.FINDABLE_CREW_LETSUR_MODEL ?? "claude-haiku-4-5-20251001";
 
 function competitorSuggestModel() {
-  const letsurKey = process.env.LETSUR_API_KEY;
-  if (letsurKey) {
-    const letsur = createOpenAI({
-      baseURL: "https://gw.letsur.ai/v1",
-      apiKey: letsurKey,
-    });
-    return letsur(LETSUR_COMPETITOR_MODEL_ID);
+  // 🔴 Letsur 불가(유닛 소진·만료·인증)면 같은 호출을 Gateway 로 명시적 폴백(letsur-fallback.ts).
+  const letsur = letsurModelWithFallback(LETSUR_COMPETITOR_MODEL_ID, {
+    callSite: "competitor-suggest",
+    gatewayModelId: HELPER_GATEWAY_MODEL_ID,
+  });
+  if (letsur) {
+    return letsur;
   }
   return models.chat;
 }
@@ -38,9 +41,7 @@ function competitorSuggestModel() {
 const suggestSchema = z.object({
   competitors: z
     .array(z.string())
-    .describe(
-      "실제로 아는 경쟁사 브랜드명 3~5개(한국어 우선). 모르면 빈 배열."
-    )
+    .describe("실제로 아는 경쟁사 브랜드명 3~5개(한국어 우선). 모르면 빈 배열.")
     .default([]),
   confident: z
     .boolean()

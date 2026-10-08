@@ -24,7 +24,12 @@ const meta = {
   component: DashboardEmptyStateView,
   parameters: { layout: "padded" },
   // 🔴 `sampleUrl` 을 주입한다 — 뷰가 `env` 를 타면 스토리가 통째로 죽는다(위 주석).
-  args: { t, sampleUrl: "https://findable.co.kr/audit/example?shared=1" },
+  args: {
+    t,
+    sampleUrl: "https://findable.co.kr/audit/example?shared=1",
+    // 회수 안내가 보이는 상태(공개 무료 진단 ON)를 기본으로 그린다.
+    showFreeAuditReclaim: true,
+  },
 } satisfies Meta<typeof DashboardEmptyStateView>;
 
 export default meta;
@@ -54,4 +59,9 @@ export const 영어: Story = {
     signedInEmail: "nayoy2@gmail.com",
     t: en.app.emptyState as EmptyStateDictionary,
   },
+};
+
+/** 👤 2026-10-07 — 공개 무료 진단 OFF(기본)일 때: 회수 안내가 사라진다. */
+export const 무료진단숨김: Story = {
+  args: { showFreeAuditReclaim: false, signedInEmail: null },
 };

@@ -1,22 +1,28 @@
 import { CalendarClock, ExternalLink, FileText } from "lucide-react";
+import type { AppDictionary } from "@/lib/i18n";
 
 export function DashboardRunContext({
   brandName,
+  dateLocale,
   jobId,
   measuredAt,
   reportUrl,
+  t,
 }: {
   brandName: string | null;
+  /** 측정 시각 표기 로케일(`dateLocaleFor`). */
+  dateLocale: string;
   jobId: string | null;
   measuredAt: Date | null;
   /** 완료 회차의 정식 결과 화면은 공개 리포트다. */
   reportUrl: string | null;
+  t: AppDictionary["runContext"];
 }) {
   if (!measuredAt) {
     return null;
   }
 
-  const label = new Intl.DateTimeFormat("ko-KR", {
+  const label = new Intl.DateTimeFormat(dateLocale, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Seoul",
@@ -31,9 +37,9 @@ export function DashboardRunContext({
         />
         <p className="truncate text-[color:var(--findable-ink-subtle,#8a8f98)]">
           <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)]">
-            {brandName ?? "이 브랜드"}
+            {brandName ?? t.thisBrand}
           </span>
-          {` · ${label} 측정 결과`}
+          {t.measuredAt.replace("{date}", label)}
         </p>
       </div>
       {jobId && reportUrl ? (
@@ -43,13 +49,14 @@ export function DashboardRunContext({
           rel="noopener noreferrer"
           target="_blank"
         >
-          <FileText aria-hidden="true" className="size-4" />이 회차 리포트 보기
+          <FileText aria-hidden="true" className="size-4" />
+          {t.viewReport}
           <ExternalLink aria-hidden="true" className="size-3.5" />
-          <span className="sr-only">새 탭</span>
+          <span className="sr-only">{t.newTab}</span>
         </a>
       ) : (
         <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-          이 회차의 상세 결과는 측정 이력에서 확인할 수 있어요
+          {t.seeHistory}
         </span>
       )}
     </section>

@@ -163,9 +163,9 @@ export function PageSpeedPanel({
           ) : null}
           {pageSpeed.fieldDataPeriod ? (
             <p className="border-[color:var(--findable-hairline,#23252a)] border-t px-5 py-3 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-              CrUX 실제 사용자 데이터 기간:{" "}
-              {pageSpeed.fieldDataPeriod.firstDate}–
-              {pageSpeed.fieldDataPeriod.lastDate} · 모바일 p75
+              {labels.cruxPeriod
+                .replace("{start}", pageSpeed.fieldDataPeriod.firstDate)
+                .replace("{end}", pageSpeed.fieldDataPeriod.lastDate)}
             </p>
           ) : null}
         </>

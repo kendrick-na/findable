@@ -355,8 +355,20 @@ export interface InferredMarketScope {
   confidence: "high" | "low";
   /** 추정 근거(화면에 "왜 이렇게 잡혔는지" 설명하고 수정 유도). */
   reason: string;
+  /**
+   * 근거 종류(2026-10-06). 화면 언어가 영어일 때 앱 사전이 이 코드로 문장을 고른다.
+   *   `reason` 은 한국어 원문 그대로 둔다(기존 호출부·테스트 호환).
+   */
+  reasonCode: MarketScopeReasonCode;
   scope: MarketScope;
 }
+
+export type MarketScopeReasonCode =
+  | "korea_domain"
+  | "domestic_industry"
+  | "korean_only"
+  | "english_only"
+  | "both";
 
 /**
  * 타깃 시장 추정 — 도메인 TLD · 업종 · 측정 언어 순으로 본다.
@@ -373,6 +385,7 @@ export function inferMarketScope(
     return {
       scope: "korea",
       reason: "한국 도메인(.kr)이라 국내 중심으로 잡았습니다.",
+      reasonCode: "korea_domain",
       confidence: "high",
     };
   }
@@ -382,6 +395,7 @@ export function inferMarketScope(
       scope: "korea",
       reason:
         "국내 고객을 주로 상대하는 업종이라 국내 중심으로 잡았습니다. 해외 진출 중이라면 바꿔주세요.",
+      reasonCode: "domestic_industry",
       confidence: "low",
     };
   }
@@ -390,6 +404,7 @@ export function inferMarketScope(
     return {
       scope: "korea",
       reason: "한국어로만 측정해 국내 중심으로 잡았습니다.",
+      reasonCode: "korean_only",
       confidence: "low",
     };
   }
@@ -398,6 +413,7 @@ export function inferMarketScope(
     return {
       scope: "global",
       reason: "영어로만 측정해 해외 중심으로 잡았습니다.",
+      reasonCode: "english_only",
       confidence: "low",
     };
   }
@@ -405,6 +421,7 @@ export function inferMarketScope(
   return {
     scope: "both",
     reason: "국내·해외를 함께 봅니다. 한쪽만 보시려면 바꿔주세요.",
+    reasonCode: "both",
     confidence: "low",
   };
 }

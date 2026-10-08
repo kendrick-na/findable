@@ -6,14 +6,15 @@ export function isTrackableResponse(
     isStub: boolean;
     mentionQuality?: string;
     promptText: string;
+    rawResponse: string;
   },
   validEngineIds: ReadonlySet<string>
 ): boolean {
   return (
-    !response.isStub &&
-    !response.errorMessage &&
+    !(response.isStub || response.errorMessage) &&
     response.mentionQuality !== "unverified" &&
     validEngineIds.has(response.engineId) &&
-    response.promptText.trim().length > 0
+    response.promptText.trim().length > 0 &&
+    response.rawResponse.trim().length > 0
   );
 }

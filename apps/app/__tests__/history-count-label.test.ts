@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 /**
  * `/history` 건수 문구 회귀 테스트 (S7-4차 · 2026-08-12).
  *
@@ -13,24 +14,31 @@
 import { describe, expect, test } from "vitest";
 import { historyCountLabel } from "../app/(authenticated)/lib/history-count-label";
 
+/** 문구는 사전에서 온다(2026-10-06) — 한국어 화면 기준으로 검사. */
+const KO_HISTORY = koDict.app.historyList;
+
 // biome: 정규식은 최상위에 둔다(함수 안에 두면 호출마다 재생성).
 const ANY_DIGIT = /\d/;
 
 describe("historyCountLabel", () => {
   test("0건이면 숫자를 말하지 않는다 (빈 상태 안내가 그 일을 한다)", () => {
-    const label = historyCountLabel(0, 50);
+    const label = historyCountLabel(0, 50, KO_HISTORY);
     expect(label).toBe("지금까지 측정한 결과를 모아뒀어요.");
     expect(label).not.toMatch(ANY_DIGIT);
   });
 
   test("상한 이하면 총 건수만 말한다", () => {
-    expect(historyCountLabel(7, 50)).toBe("지금까지 7번 측정했어요.");
+    expect(historyCountLabel(7, 50, KO_HISTORY)).toBe(
+      "지금까지 7번 측정했어요."
+    );
     // 딱 상한이면 잘린 게 없으므로 잘림 문구가 붙으면 안 된다.
-    expect(historyCountLabel(50, 50)).toBe("지금까지 50번 측정했어요.");
+    expect(historyCountLabel(50, 50, KO_HISTORY)).toBe(
+      "지금까지 50번 측정했어요."
+    );
   });
 
   test("🔴 상한을 넘으면 **잘렸다고 말한다** (조용한 잘림 금지)", () => {
-    const label = historyCountLabel(51, 50);
+    const label = historyCountLabel(51, 50, KO_HISTORY);
     expect(label).toContain("51번");
     expect(label).toContain("최근 50건만");
   });

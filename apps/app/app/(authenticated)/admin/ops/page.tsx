@@ -1,6 +1,12 @@
 import { isAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
+import {
+  auditJobInternal,
+  auditJobNotInternal,
+  brandNotInInternalOrg,
+} from "@repo/database/internal-orgs";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "../../components/header";
 import { summarizeAuditEngineFailures } from "./audit-engine-failures";
@@ -20,6 +26,7 @@ const STALE_AFTER_MS = 15 * 60 * 1000;
  */
 const COST_BASIS_LABEL: Record<string, string> = {
   token: "토큰 과금",
+  credit: "Firecrawl 크레딧",
   browser: "브라우저 세션",
   free: "무료 티어",
   unknown: "미측정",
@@ -87,10 +94,17 @@ const AdminOpsPage = async () => {
     recentEngineAttempts,
     recentEngineFailures,
     recentAuditResults,
+    salesAuditTotal,
+    salesCostAgg,
   ] = await Promise.all([
-    database.auditJob.count({ where: { createdAt: { gte: startOfToday } } }),
-    database.auditJob.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
-    database.auditJob.count(),
+    // 고객 측정 수 — 내부 조직(영업 전용) 측정은 뺀다. 원가 합계(아래)에는 그대로 들어간다(실제로 쓴 돈).
+    database.auditJob.count({
+      where: { ...auditJobNotInternal, createdAt: { gte: startOfToday } },
+    }),
+    database.auditJob.count({
+      where: { ...auditJobNotInternal, createdAt: { gte: sevenDaysAgo } },
+    }),
+    database.auditJob.count({ where: auditJobNotInternal }),
     database.auditJob.groupBy({ by: ["status"], _count: true }),
     database.auditJob.groupBy({ by: ["crewStatus"], _count: true }),
     database.auditJob.count({
@@ -103,7 +117,8 @@ const AdminOpsPage = async () => {
     database.lead.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
     database.lead.count(),
     database.partnerApplication.groupBy({ by: ["status"], _count: true }),
-    database.brand.count(),
+    // 고객 브랜드 수 — 내부 조직(영업 전용) 브랜드는 뺀다.
+    database.brand.count({ where: brandNotInInternalOrg }),
     database.tracking.count(),
     // 🔴 **원가 계기**(세션N-47). 여기 오기 전엔 측정 1건 원가를 **아무도 몰랐다**
     //   (`cost.ts` 는 있었는데 프로덕션 호출 0곳 · 토큰을 저장조차 안 했다).
@@ -136,11 +151,19 @@ const AdminOpsPage = async () => {
       where: { createdAt: { gte: oneDayAgo } },
       select: { result: true },
     }),
+    // 영업 측정(내부 조직) — 고객 숫자와 따로 한 줄로 보인다.
+    database.auditJob.count({ where: auditJobInternal }),
+    database.tracking.aggregate({
+      _sum: { costKrw: true },
+      where: {
+        brand: { organizationId: auditJobInternal.organizationId },
+        costKrw: { not: null },
+      },
+    }),
   ]);
 
-  const recentAuditEngineFailures = summarizeAuditEngineFailures(
-    recentAuditResults
-  );
+  const recentAuditEngineFailures =
+    summarizeAuditEngineFailures(recentAuditResults);
   const recentAuditFailureCount = recentAuditEngineFailures.reduce(
     (sum, row) => sum + row.failures,
     0
@@ -196,6 +219,12 @@ const AdminOpsPage = async () => {
           <p className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
             audit·리드·파트너 신청을 한눈에 보는 읽기전용 운영 대시보드입니다.
           </p>
+          <Link
+            className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm underline underline-offset-4"
+            href="/admin/billing"
+          >
+            결제 선점 점검 →
+          </Link>
         </div>
 
         {/* 🔴 원가 — 요금제 설계의 분모. 측정 1건이 얼마인지 여기서만 알 수 있다. */}
@@ -252,6 +281,19 @@ const AdminOpsPage = async () => {
               ))}
             </div>
           )}
+          {/* 🔴 이 합계가 빠뜨리는 것(2026-10-07): Tracking 은 성공 응답만 적재한다.
+                ① 네이버 브리핑 실패(렌더는 됐는데 블록 없음 등)도 Firecrawl 1크레딧이 나가고
+                   진단 결과 원가(result.cost)에는 잡히지만, 여기 합계에는 없다.
+                ② Tracking 행에는 원가 규칙 버전이 없다 — v2(웹검색료·gpt-5.4 정가) 배포
+                   이전 행은 v1 단가(과소)로 남아 있다(소급하지 않음). */}
+          {costMeasured > 0 && (
+            <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+              ※ 네이버 브리핑 실패 호출의 Firecrawl 크레딧(회당 1)은 진단 결과
+              원가에는 포함되지만 이 합계에는 빠져 있어요. 원가모델
+              v2(2026-10-07 배포) 이전 행은 v1 단가(웹검색료 미포함)로 남아
+              있어요.
+            </p>
+          )}
         </Section>
 
         {/* audit 현황 */}
@@ -266,6 +308,15 @@ const AdminOpsPage = async () => {
               value={fmt(stuckCount)}
             />
           </CardGrid>
+          <p
+            className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs"
+            data-testid="ops-sales-audits"
+          >
+            위 숫자는 고객 측정만입니다. 영업 측정(내부 조직): 누적{" "}
+            {fmt(salesAuditTotal)}회 · 원가 ₩
+            {fmt(Math.round(salesCostAgg._sum.costKrw ?? 0))} (원가 합계에는
+            포함)
+          </p>
         </Section>
 
         {/* audit status 분포 */}
@@ -388,14 +439,8 @@ const AdminOpsPage = async () => {
           title="브랜드 · 엔진 응답"
         >
           <CardGrid>
-            <StatCard
-              label="브랜드"
-              value={fmt(brandCount)}
-            />
-            <StatCard
-              label="엔진 응답"
-              value={fmt(trackingCount)}
-            />
+            <StatCard label="브랜드" value={fmt(brandCount)} />
+            <StatCard label="엔진 응답" value={fmt(trackingCount)} />
           </CardGrid>
         </Section>
       </div>

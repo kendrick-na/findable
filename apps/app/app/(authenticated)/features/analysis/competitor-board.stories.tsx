@@ -1,3 +1,4 @@
+import koDict from "@repo/internationalization/dictionaries/ko.json";
 import type { Meta, StoryObj } from "@storybook/react";
 import { CompetitorBoard } from "./competitor-board";
 
@@ -11,6 +12,12 @@ import { CompetitorBoard } from "./competitor-board";
  *   "1위인데 왜 평균이 더 나쁘지?"로 혼동됐던 화면.
  */
 const meta = {
+  // 상대 시간 문구는 사전에서 온다(`app.relativeTime`).
+  args: {
+    relativeTime: koDict.app.relativeTime,
+    // 문구는 사전에서 온다(`app.competitorBoard`). JSON 직접 import — `getAppDictionary` 는 server-only.
+    t: koDict.app.competitorBoard,
+  },
   component: CompetitorBoard,
   parameters: { layout: "padded" },
   title: "대시보드/경쟁사 비교",

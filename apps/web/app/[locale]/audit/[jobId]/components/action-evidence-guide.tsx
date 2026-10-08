@@ -11,9 +11,16 @@ import {
   type DontItem,
   EVIDENCE_GRADE_LABEL,
   type EvidenceGrade,
-  engineDisplayName,
 } from "@repo/audit/action-rules";
+import { engineDisplayName } from "@repo/audit/engine-labels";
 
+const GRADE_MEANING_EN: Record<EvidenceGrade, string> = {
+  strong: "An official platform document confirms this prerequisite.",
+  medium:
+    "A large observation or official document exists; this does not guarantee an effect.",
+  weak: "Only a small experiment or limited replication supports this.",
+  none: "No effect is established, or there is a policy or downside risk.",
+};
 const GRADE_TONE: Record<EvidenceGrade, string> = {
   strong: "border-[var(--brand-3)]/40 text-[var(--brand-3)]",
   medium: "border-sky-300/30 text-sky-300",
@@ -21,26 +28,59 @@ const GRADE_TONE: Record<EvidenceGrade, string> = {
   none: "border-red-300/30 text-red-300",
 };
 
-function GradeBadge({ grade }: { grade: EvidenceGrade }) {
+function GradeBadge({
+  grade,
+  isKo = true,
+}: {
+  grade: EvidenceGrade;
+  isKo?: boolean;
+}) {
   return (
     <span
       className={`rounded-full border px-2 py-0.5 font-medium text-xs ${GRADE_TONE[grade]}`}
-      title={EVIDENCE_GRADE_LABEL[grade].meaning}
+      title={
+        isKo ? EVIDENCE_GRADE_LABEL[grade].meaning : GRADE_MEANING_EN[grade]
+      }
     >
-      {EVIDENCE_GRADE_LABEL[grade].label}
+      {isKo ? EVIDENCE_GRADE_LABEL[grade].label : `Evidence: ${grade}`}
     </span>
   );
 }
 
-function effortLabel(effort: ActionGuide["effortHours"]): string {
-  const range =
-    effort.min === effort.max
-      ? `${effort.min}시간`
-      : `${effort.min}~${effort.max}시간`;
-  return effort.per === "week" ? `매주 약 ${range}` : `약 ${range}`;
+function effortLabel(
+  effort: ActionGuide["effortHours"],
+  isKo: boolean
+): string {
+  const range = effortRange(effort, isKo);
+  if (effort.per === "week") {
+    return isKo ? `매주 약 ${range}` : `about ${range} per week`;
+  }
+  return isKo ? `약 ${range}` : `about ${range}`;
 }
 
-function Sources({ sources }: { sources: ActionGuide["sources"] }) {
+function effortRange(
+  effort: ActionGuide["effortHours"],
+  isKo: boolean
+): string {
+  if (effort.min === effort.max) {
+    return isKo ? `${effort.min}시간` : `${effort.min} hours`;
+  }
+  return isKo
+    ? `${effort.min}~${effort.max}시간`
+    : `${effort.min}-${effort.max} hours`;
+}
+
+function allChannelsLabel(isKo: boolean): string {
+  return isKo ? "측정 채널 전체" : "All measured channels";
+}
+
+function Sources({
+  sources,
+  isKo = true,
+}: {
+  sources: ActionGuide["sources"];
+  isKo?: boolean;
+}) {
   return (
     <ul className="space-y-1">
       {sources.map((s) => (
@@ -51,7 +91,8 @@ function Sources({ sources }: { sources: ActionGuide["sources"] }) {
             rel="noopener noreferrer"
             target="_blank"
           >
-            출처: {s.label}
+            {isKo ? "출처: " : "Source: "}
+            {s.label}
           </a>
         </li>
       ))}
@@ -59,25 +100,48 @@ function Sources({ sources }: { sources: ActionGuide["sources"] }) {
   );
 }
 
-export function ActionEvidenceGuide({ guide }: { guide: ActionGuide }) {
+export function ActionEvidenceGuide({
+  guide,
+  isKo = true,
+}: {
+  guide: ActionGuide;
+  isKo?: boolean;
+}) {
+  const engineLabel = (engine: string) => engineDisplayName(engine, isKo);
+  const storedRuleValue = (value: string) =>
+    isKo ? value : `Stored Korean rule: ${value}`;
   const rows: [string, string][] = [
     [
-      "적용되는 AI",
+      isKo ? "적용 채널" : "Measurement channels",
       guide.engines.length === 0
-        ? "측정한 AI 전체"
-        : guide.engines.map(engineDisplayName).join(", "),
+        ? allChannelsLabel(isKo)
+        : guide.engines.map(engineLabel).join(", "),
     ],
-    ["작업 시간", effortLabel(guide.effortHours)],
-    ["효과가 보이기까지", guide.effectLag],
-    ["다시 잴 숫자", guide.remeasureMetric],
-    ["실패로 볼 조건", guide.failCondition],
+    [
+      isKo ? "예상 작업 시간" : "Estimated work time",
+      effortLabel(guide.effortHours, isKo),
+    ],
+    [
+      isKo ? "재측정 권장 시점" : "Suggested remeasurement timing",
+      storedRuleValue(guide.effectLag),
+    ],
+    [
+      isKo ? "다시 잴 숫자" : "Metric to remeasure",
+      storedRuleValue(guide.remeasureMetric),
+    ],
+    [
+      isKo ? "재점검 조건" : "Recheck condition",
+      storedRuleValue(guide.failCondition),
+    ],
   ];
   return (
     <div className="mt-4 space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <GradeBadge grade={guide.evidenceGrade} />
+        <GradeBadge grade={guide.evidenceGrade} isKo={isKo} />
         <span className="text-xs text-zinc-400">
-          {EVIDENCE_GRADE_LABEL[guide.evidenceGrade].meaning}
+          {isKo
+            ? EVIDENCE_GRADE_LABEL[guide.evidenceGrade].meaning
+            : GRADE_MEANING_EN[guide.evidenceGrade]}
         </span>
       </div>
       <dl className="space-y-2">
@@ -91,10 +155,17 @@ export function ActionEvidenceGuide({ guide }: { guide: ActionGuide }) {
           </div>
         ))}
       </dl>
+      <p className="text-xs text-zinc-500 leading-relaxed">
+        {isKo
+          ? "작업 시간·재측정 시점·재점검 조건은 Findable 내부 운영 기준·추정이며 효과를 입증하지 않습니다."
+          : "Work time, remeasurement timing, and recheck conditions are Findable operating estimates; they do not prove an effect."}
+      </p>
       {guide.quotes && guide.quotes.length > 0 && (
         <div className="space-y-2">
           <p className="font-medium text-xs text-zinc-400">
-            AI가 실제로 이렇게 답했습니다
+            {isKo
+              ? "AI가 실제로 이렇게 답했습니다"
+              : "Measured response excerpt"}
           </p>
           {guide.quotes.map((q) => (
             <blockquote
@@ -102,14 +173,14 @@ export function ActionEvidenceGuide({ guide }: { guide: ActionGuide }) {
               key={`${q.engineId}:${q.excerpt.slice(0, 24)}`}
             >
               <span className="font-medium text-zinc-200">
-                {engineDisplayName(q.engineId)}
+                {engineLabel(q.engineId)}
               </span>{" "}
               {q.excerpt}
             </blockquote>
           ))}
         </div>
       )}
-      <Sources sources={guide.sources} />
+      <Sources isKo={isKo} sources={guide.sources} />
     </div>
   );
 }
