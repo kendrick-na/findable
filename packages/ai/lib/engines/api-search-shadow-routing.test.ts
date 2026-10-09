@@ -91,14 +91,14 @@ describe("api-search shadow routing in queryAllEngines", () => {
     expect(mocks.shadow).not.toHaveBeenCalled();
   });
 
-  it("allowed domain -> attached to chatgpt and gemini rows only; main fields unchanged", async () => {
+  it("allowed domain -> attached to chatgpt, gemini and claude rows; main fields unchanged", async () => {
     vi.stubEnv("API_SEARCH_SHADOW", "true");
     vi.stubEnv("API_SEARCH_SHADOW_BRANDS", "www.laneige.com");
     const rows = await queryAllEngines(base, engines);
     const byId = Object.fromEntries(rows.map((r) => [r.engineId, r]));
     expect(byId.chatgpt.shadowApiSearch?.candidate).toBe("chatgpt-search-v1");
     expect(byId.gemini.shadowApiSearch?.candidate).toBe("gemini-search-v1");
-    expect(byId.claude.shadowApiSearch).toBeUndefined();
+    expect(byId.claude.shadowApiSearch?.candidate).toBe("claude-search-v1");
     const { shadowApiSearch: _omit, ...chatgptMain } = byId.chatgpt;
     expect(chatgptMain).toEqual(resp("chatgpt"));
   });
@@ -106,8 +106,11 @@ describe("api-search shadow routing in queryAllEngines", () => {
   it("only starts candidates for engines actually requested", async () => {
     vi.stubEnv("API_SEARCH_SHADOW", "true");
     vi.stubEnv("API_SEARCH_SHADOW_BRANDS", "laneige.com");
-    await queryAllEngines(base, ["claude"]);
+    await queryAllEngines(base, ["perplexity"]);
     expect(mocks.shadow).not.toHaveBeenCalled();
+    await queryAllEngines(base, ["claude"]);
+    expect(mocks.shadow).toHaveBeenCalledTimes(1);
+    expect(mocks.shadow.mock.calls[0]?.[1]).toBe("claude-search-v1");
   });
 
   it("skips the shadow on a late-cell re-ask (options.timeoutMs)", async () => {

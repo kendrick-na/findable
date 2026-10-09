@@ -149,7 +149,9 @@ const PERPLEXITY_PRESET = process.env.FINDABLE_PERPLEXITY_PRESET ?? "fast";
  *   끄고 예전 동작으로 돌아갈 수 있어야 한다(엔진을 잃지 않는다 — 📕 N-47 perplexity 교훈).
  */
 const LETSUR_MESSAGES_URL = `${LETSUR_BASE_URL}/messages`;
-const CLAUDE_SEARCH_MAX_USES = 3;
+export const CLAUDE_SEARCH_MAX_USES = 3;
+// 🔴 운영 claude 요청의 max_tokens (아래 claudeSearchRequestBody 기본값과 같다).
+export const CLAUDE_SEARCH_PROD_MAX_TOKENS = 1024;
 
 function isClaudeWebSearchEnabled(): boolean {
   return process.env.FINDABLE_CLAUDE_WEB_SEARCH === "1";
@@ -227,6 +229,40 @@ export function parseAnthropicUsage(body: unknown): {
     outputTokens: finiteNumberOrNull(usage?.output_tokens),
     webSearchRequests: finiteNumberOrNull(serverToolUse?.web_search_requests),
   };
+}
+
+/**
+ * `/v1/messages` 응답의 `stop_reason`(문자열). 없거나 문자열이 아니면 null.
+ * `"max_tokens"` = 답이 토큰 상한에서 잘렸다는 뜻.
+ */
+export function parseAnthropicStopReason(body: unknown): string | null {
+  const reason =
+    body && typeof body === "object"
+      ? (body as { stop_reason?: unknown }).stop_reason
+      : undefined;
+  return typeof reason === "string" ? reason : null;
+}
+
+/**
+ * 웹검색 횟수 폴백 계산용: `content[]` 의 `server_tool_use` 블록 수.
+ * content 가 배열이 아니면 null(미수집 — 0 으로 지어내지 않는다).
+ */
+export function countAnthropicServerToolUseBlocks(
+  body: unknown
+): number | null {
+  const content =
+    body && typeof body === "object"
+      ? (body as { content?: unknown }).content
+      : undefined;
+  if (!Array.isArray(content)) {
+    return null;
+  }
+  return content.filter(
+    (b) =>
+      typeof b === "object" &&
+      b !== null &&
+      (b as { type?: unknown }).type === "server_tool_use"
+  ).length;
 }
 
 const STUB_NOTICE =
@@ -452,16 +488,24 @@ async function runClaudeWithWebSearch(
   }
 }
 
-function claudeSearchRequestBody(model: string, query: EngineQuery): string {
+// ⚠️ 알려진 문제(2026-10-09 시험): 운영 claude 요청은 max_tokens 1024 라 답의 67%(8/12)가
+//   max_tokens 로 **잘린다**. 본문이 비어 있지 않아 빈 본문 폴백(buildClaudeSearchResponse null)도
+//   작동하지 않는다. 이 요청을 바꾸면 점수가 바뀌므로 **운영 값은 건드리지 않는다**(새 엔진 세트에서 처리).
+//   섀도 후보 claude-search-v1(api-search-v1.ts)이 같은 빌더를 4096 토큰으로 호출해 비교한다.
+export function claudeSearchRequestBody(
+  model: string,
+  query: EngineQuery,
+  options: { maxTokens?: number; maxUses?: number } = {}
+): string {
   return JSON.stringify({
     model,
-    max_tokens: 1024,
+    max_tokens: options.maxTokens ?? CLAUDE_SEARCH_PROD_MAX_TOKENS,
     messages: [{ role: "user", content: query.prompt }],
     tools: [
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: CLAUDE_SEARCH_MAX_USES,
+        max_uses: options.maxUses ?? CLAUDE_SEARCH_MAX_USES,
       },
     ],
   });

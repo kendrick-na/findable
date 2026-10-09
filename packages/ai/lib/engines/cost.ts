@@ -73,6 +73,9 @@ export const UI_VENDOR_USD_PER_RECORD = 1.5 / 1000;
  */
 const SHADOW_MODEL_TOKEN_PRICES: Record<string, TokenPrice> = {
   "gemini-3.5-flash-lite": { inputPerM: 0.3, outputPerM: 2.5 },
+  // claude-sonnet-5-5: LETSUR 카탈로그 in $2 / out $10 (LETSUR catalog [확인필요] — 공식 단가표 대조 전).
+  //   LETSUR 는 웹검색을 토큰과 별도로 청구하지 않는다(OpenAI 경로 estimated_cost 로 확인 · Anthropic 경로 [확인필요]).
+  "claude-sonnet-5-5": { inputPerM: 2, outputPerM: 10 },
 };
 
 // 모델별 USD/1M tokens (input, output). 슬러그는 global/korean adapter 기본값 기준.
@@ -471,6 +474,19 @@ export function apiSearchShadowCostOf(res: EngineResponse): EngineCost | null {
     (usage.inputTokens / 1_000_000) * price.inputPerM +
     (usage.outputTokens / 1_000_000) * price.outputPerM +
     searchUsd;
+  if (shadow.candidate === "claude-search-v1") {
+    // LETSUR unit 청구 = 정가 USD 동액, 원화 환산은 1,525원/unit. 검색료 별도 없음. [확인필요]
+    return {
+      engineId,
+      krw: usd * LETSUR_KRW_PER_UNIT,
+      basis: "token",
+      note: `${label} · 토큰 단가표×${LETSUR_KRW_PER_UNIT}원/unit · 검색 ${
+        isFiniteNonNegative(queries)
+          ? `${queries}회(별도 과금 없음)`
+          : "횟수 미수집"
+      } [확인필요]`,
+    };
+  }
   return {
     engineId,
     krw: usd * USD_TO_KRW,
