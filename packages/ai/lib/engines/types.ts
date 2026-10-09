@@ -164,6 +164,11 @@ export interface EngineUsage {
    */
   providerCostUsd?: number | null;
   /**
+   * gemini api-search-v1 행의 호출 경로(2026-10-10). `letsur` 행은 검색료가 LETSUR 청구(estimated_cost)에
+   * 이미 들어 있으므로 cost.ts 가 Google 쿼리당 단가를 더하지 않는다. 미기재 = google 또는 비해당.
+   */
+  searchRoute?: "letsur" | "google";
+  /**
    * claude 웹검색을 원했지만(FINDABLE_CLAUDE_WEB_SEARCH=1) 폴백 경로에서 **검색 없이** 답했다.
    * → 이 응답의 「출처 0」은 「AI 가 아무것도 안 봤다」가 아니라 **미수집**이다.
    */
@@ -252,6 +257,8 @@ export interface ApiSearchShadow {
   model: string;
   /** `ok` · `failed` · `skipped_budget`(메인 배치가 먼저 끝나 중단) */
   outcome: "ok" | "failed" | "skipped_budget";
+  /** gemini-search-v1 전용: 호출 경로(`letsur` | `google`). 감사용. */
+  route?: "letsur" | "google";
   /** claude-search-v1 전용: provider 가 준 stop_reason. 실패·미수집이면 생략. */
   stopReason?: string | null;
   text: string;

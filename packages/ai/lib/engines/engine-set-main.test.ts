@@ -138,6 +138,8 @@ describe("FINDABLE_ENGINE_SET=api-search-v1 main routing", () => {
     resetLetsurCircuit();
     vi.stubEnv("LETSUR_API_KEY", "test-letsur");
     vi.stubEnv("GOOGLE_API_KEY_SEARCH", "test-google");
+    // 이 파일의 gemini 시나리오는 Google 직접 경로다. LETSUR 경로는 gemini-letsur-route.test.ts 에서 시험한다.
+    vi.stubEnv("FINDABLE_GEMINI_ROUTE", "google");
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -248,6 +250,7 @@ describe("api-search-v1 main rows — cost", () => {
     resetLetsurCircuit();
     vi.stubEnv("LETSUR_API_KEY", "test-letsur");
     vi.stubEnv("GOOGLE_API_KEY_SEARCH", "test-google");
+    vi.stubEnv("FINDABLE_GEMINI_ROUTE", "google");
     vi.stubEnv("FINDABLE_ENGINE_SET", "api-search-v1");
     vi.stubGlobal("fetch", fakeFetch());
   });
@@ -323,6 +326,7 @@ describe("aggregate / verdict path accepts candidate-style main rows", () => {
     resetLetsurCircuit();
     vi.stubEnv("LETSUR_API_KEY", "test-letsur");
     vi.stubEnv("GOOGLE_API_KEY_SEARCH", "test-google");
+    vi.stubEnv("FINDABLE_GEMINI_ROUTE", "google");
     vi.stubEnv("FINDABLE_ENGINE_SET", "api-search-v1");
     vi.stubGlobal("fetch", fakeFetch());
   });

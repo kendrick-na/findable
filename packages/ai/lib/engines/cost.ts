@@ -463,6 +463,19 @@ function apiSearchTokenCost(
     };
   }
   const queries = usage.webSearchRequests;
+  if (engineId === "gemini" && usage.searchRoute === "letsur") {
+    // LETSUR 경로: 검색료는 estimated_cost(provider 보고 원가)에 들어 있다. 그 값이 없는 예외 상황에서도
+    // Google 쿼리당 단가($14/1000)를 얹지 않는다 → 토큰료만 ×1,525원/unit(그라운딩료 누락 · 과소 추정).
+    const tokenUsd =
+      (usage.inputTokens / 1_000_000) * price.inputPerM +
+      (usage.outputTokens / 1_000_000) * price.outputPerM;
+    return {
+      engineId,
+      krw: tokenUsd * LETSUR_KRW_PER_UNIT,
+      basis: "token",
+      note: `${label} · LETSUR 경로 · 원가 미보고 → 토큰료만(그라운딩료 미포함·과소) [확인필요]`,
+    };
+  }
   const searchUsd =
     engineId === "gemini" && isFiniteNonNegative(queries)
       ? queries * GEMINI_SEARCH_USD_PER_QUERY

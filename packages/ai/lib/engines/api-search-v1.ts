@@ -1,7 +1,9 @@
 // api-search-v1 — 소비자 화면에 가까운 API 후보 엔진 2종 (섀도 전용 · 2026-10-09 · 1단계)
 //
 //   (A) ChatGPT-search 후보: LETSUR `/v1/responses` + `web_search` 도구 (모델 기본 gpt-6-luna)
-//   (B) Gemini-search 후보 : Google `generateContent` + `google_search` 도구 **항상 on**
+//   (B) Gemini-search 후보 : `google_search` 도구 **항상 on**. 경로는 FINDABLE_GEMINI_ROUTE 로 고른다(2026-10-10):
+//       letsur(LETSUR `/v1/chat/completions` · LETSUR_API_KEY 가 있으면 기본) | google(Google `generateContent` 직접)
+//       🔴 경로 실패 시 다른 경로로 조용히 폴백하지 않는다(오류 행으로 기록).
 //   (C) Claude-search 후보 : LETSUR `/v1/messages` + `web_search_20250305` (모델 기본 claude-sonnet-5-5 · max_tokens 4096)
 //       env FINDABLE_CLAUDE_MODEL_SEARCH · FINDABLE_CLAUDE_SEARCH_MAX_TOKENS(기본 4096, 1024~8192)
 //
@@ -340,6 +342,98 @@ export function parseGeminiGenerate(body: unknown): ParsedGeminiGenerate {
   };
 }
 
+export interface ParsedGeminiLetsurChat {
+  /** `estimated_cost` 가 `{amount, currency:"unit"}` 일 때의 amount. 못 읽으면 null. */
+  estimatedCostUnits: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  sources: ProviderSource[];
+  text: string;
+  /** usage.prompt_tokens_details.web_search_requests → 없으면 grounding webSearchQueries 길이 → 둘 다 없으면 null(미수집). */
+  webSearchRequests: number | null;
+}
+
+/** `vertex_ai_grounding_metadata`(배열 또는 객체) → 첫 번째로 쓸 만한 메타데이터 객체. */
+function groundingMetaOf(value: unknown): Rec | undefined {
+  if (Array.isArray(value)) {
+    return recs(value).find(
+      (r) =>
+        Array.isArray(r.webSearchQueries) || Array.isArray(r.groundingChunks)
+    );
+  }
+  return asRec(value);
+}
+
+function groundingChunkSources(grounding: Rec | undefined): ProviderSource[] {
+  const out: ProviderSource[] = [];
+  for (const chunk of recs(grounding?.groundingChunks)) {
+    const web = asRec(chunk.web);
+    if (web && typeof web.uri === "string") {
+      out.push({
+        sourceType: "url",
+        url: web.uri,
+        title: typeof web.title === "string" ? web.title : undefined,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * LETSUR `/v1/chat/completions`(Gemini + google_search) 응답 → 텍스트·출처·검색 횟수·토큰·원가.
+ * 출처는 `message.annotations[url_citation]` 만(없을 때만 grounding 메타데이터의 groundingChunks — 둘 다 provider 가 준 값).
+ * 본문 URL 폴백 없음(N-48). 절대 throw 하지 않는다.
+ */
+export function parseGeminiLetsurChat(body: unknown): ParsedGeminiLetsurChat {
+  const root = asRec(body);
+  const message = asRec(recs(root?.choices)[0]?.message);
+  const content = message?.content;
+  const text = typeof content === "string" ? content.trim() : "";
+  const sources: ProviderSource[] = [];
+  for (const ann of recs(message?.annotations)) {
+    const cite = asRec(ann.url_citation);
+    if (ann.type === "url_citation" && cite && typeof cite.url === "string") {
+      sources.push({
+        sourceType: "url",
+        url: cite.url,
+        title: typeof cite.title === "string" ? cite.title : undefined,
+      });
+    }
+  }
+  const grounding = groundingMetaOf(root?.vertex_ai_grounding_metadata);
+  if (sources.length === 0) {
+    sources.push(...groundingChunkSources(grounding));
+  }
+  const usage = asRec(root?.usage);
+  const fromUsage = finiteOrNull(
+    asRec(usage?.prompt_tokens_details)?.web_search_requests
+  );
+  const queries = grounding?.webSearchQueries;
+  return {
+    text,
+    sources,
+    webSearchRequests:
+      fromUsage ?? (Array.isArray(queries) ? queries.length : null),
+    inputTokens: finiteOrNull(usage?.prompt_tokens),
+    outputTokens: finiteOrNull(usage?.completion_tokens),
+    estimatedCostUnits: readEstimatedCostUnits(root?.estimated_cost),
+  };
+}
+
+export type GeminiRoute = "letsur" | "google";
+
+/**
+ * Gemini 그라운딩 경로. FINDABLE_GEMINI_ROUTE=letsur|google 이 우선, 없거나 알 수 없는 값이면
+ * LETSUR_API_KEY 가 있을 때 letsur, 아니면 google.
+ */
+export function geminiSearchRoute(env: Env = process.env): GeminiRoute {
+  const raw = env.FINDABLE_GEMINI_ROUTE?.trim().toLowerCase();
+  if (raw === "letsur" || raw === "google") {
+    return raw;
+  }
+  return env.LETSUR_API_KEY?.trim() ? "letsur" : "google";
+}
+
 // ──────────────────────────────────────────────────────────────────
 // 호출 (fetch 직접 · 절대 throw 하지 않는다)
 // ──────────────────────────────────────────────────────────────────
@@ -538,10 +632,105 @@ export async function runChatgptSearchCandidate(
 }
 
 /**
- * (B) Gemini-search 후보 1회 호출. Google 직접 generateContent + google_search **항상 on**
- * (FINDABLE_ENGINE_GROUNDING 과 무관).
+ * (B) Gemini-search 후보 1회 호출 — 경로 분기(FINDABLE_GEMINI_ROUTE). 어느 경로든 실패는 오류 행이며
+ * 다른 경로로 폴백하지 않는다(과금 경로가 조용히 바뀌는 것을 막는다).
  */
-export async function runGeminiSearchCandidate(
+export function runGeminiSearchCandidate(
+  query: EngineQuery,
+  options: { timeoutMs?: number } = {}
+): Promise<EngineResponse> {
+  return geminiSearchRoute() === "letsur"
+    ? runGeminiSearchViaLetsur(query, options)
+    : runGeminiSearchViaGoogle(query, options);
+}
+
+/**
+ * (B-1) Gemini-search — LETSUR `/v1/chat/completions` + `tools:[{google_search:{}}]`(2026-10-10 라이브 검증).
+ * `web_search_options`는 그라운딩이 안 되고 `extra_body`는 400 이라 쓰지 않는다. max_tokens 는 보내지 않는다.
+ * 오류는 `[api-search:*]`(본문·키 미포함). LETSUR 회로 차단기를 존중하고, 불가 응답이면 회로를 연다.
+ */
+export async function runGeminiSearchViaLetsur(
+  query: EngineQuery,
+  options: { timeoutMs?: number } = {}
+): Promise<EngineResponse> {
+  const start = Date.now();
+  const apiKey = process.env.LETSUR_API_KEY;
+  if (!apiKey) {
+    return failure("gemini", "[api-search:not_configured]", start);
+  }
+  if (isLetsurCircuitOpen()) {
+    return failure("gemini", "[api-search:circuit_open]", start);
+  }
+  const model = geminiSearchModel();
+  const timed = timedSignal(
+    query.signal,
+    options.timeoutMs ??
+      envMs("API_SEARCH_TIMEOUT_MS", DEFAULT_API_SEARCH_TIMEOUT_MS)
+  );
+  try {
+    const res = await fetch(`${LETSUR_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: query.prompt }],
+        tools: [{ google_search: {} }],
+      }),
+      signal: timed.signal,
+    });
+    if (!res.ok) {
+      const unavailable = classifyLetsurUnavailable(
+        res.status,
+        await res.text()
+      );
+      if (unavailable) {
+        tripLetsurCircuit(unavailable, "engine.api_search.gemini");
+      }
+      return failure("gemini", `[api-search:http_${res.status}]`, start);
+    }
+    const parsed = parseGeminiLetsurChat(await res.json());
+    if (parsed.text.length === 0) {
+      return failure("gemini", "[api-search:empty_answer]", start);
+    }
+    const units = parsed.estimatedCostUnits;
+    return success("gemini", parsed.text, parsed.sources, query, start, {
+      costModel: "token",
+      modelId: model,
+      searchRoute: "letsur",
+      inputTokens: parsed.inputTokens,
+      outputTokens: parsed.outputTokens,
+      webSearchRequests: parsed.webSearchRequests,
+      ...(units === null
+        ? {}
+        : {
+            providerCostUsd: units,
+            providerCostKrw: units * LETSUR_KRW_PER_UNIT,
+          }),
+    });
+  } catch (error) {
+    if (timed.timedOut()) {
+      return failure("gemini", "[api-search:timeout]", start);
+    }
+    if (query.signal?.aborted) {
+      return failure("gemini", "[api-search:aborted]", start);
+    }
+    log.warn("engine.api_search.gemini_letsur_failure", {
+      kind: error instanceof Error ? error.name : "unknown",
+    });
+    return failure("gemini", "[api-search:network]", start);
+  } finally {
+    timed.cleanup();
+  }
+}
+
+/**
+ * (B-2) Gemini-search — Google 직접 generateContent + google_search **항상 on**
+ * (FINDABLE_ENGINE_GROUNDING 과 무관). FINDABLE_GEMINI_ROUTE=google 일 때(또는 LETSUR 키가 없을 때).
+ */
+export async function runGeminiSearchViaGoogle(
   query: EngineQuery,
   options: { timeoutMs?: number } = {}
 ): Promise<EngineResponse> {
@@ -585,6 +774,7 @@ export async function runGeminiSearchCandidate(
     return success("gemini", parsed.text, parsed.sources, query, start, {
       costModel: "token",
       modelId: model,
+      searchRoute: "google",
       inputTokens: parsed.inputTokens,
       outputTokens: parsed.outputTokens,
       webSearchRequests: parsed.webSearchRequests,
@@ -721,6 +911,17 @@ const CANDIDATE_MODEL: Record<ApiSearchCandidate, () => string> = {
   "claude-search-v1": claudeSearchModel,
 };
 
+/** 섀도 payload 의 경로 표식(gemini 전용). 성공 행은 실제 경로, 실패 행은 지금 설정된 경로. */
+function routeField(
+  candidate: ApiSearchCandidate,
+  result: EngineResponse
+): { route?: GeminiRoute } {
+  if (candidate !== "gemini-search-v1") {
+    return {};
+  }
+  return { route: result.usage?.searchRoute ?? geminiSearchRoute() };
+}
+
 function toApiSearchShadow(
   candidate: ApiSearchCandidate,
   result: EngineResponse,
@@ -731,6 +932,7 @@ function toApiSearchShadow(
   return {
     candidate,
     model: result.usage?.modelId ?? CANDIDATE_MODEL[candidate](),
+    ...routeField(candidate, result),
     outcome: ok ? "ok" : "failed",
     text: ok ? result.rawResponse.slice(0, SHADOW_TEXT_LIMIT) : "",
     citations: ok ? result.citedSources : [],
