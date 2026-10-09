@@ -168,6 +168,8 @@ export interface EngineUsage {
    *   미기재 = 기존 API 경로(플래그 도입 전과 동일).
    */
   source?: "web" | "api" | "api_fallback";
+  /** claude-search-v1 후보 전용: provider stop_reason(`max_tokens` = 잘림). 기존 엔진은 채우지 않는다. */
+  stopReason?: string | null;
   /**
    * 이번 호출에서 provider 가 실행·과금한 웹검색 횟수. 원가모델 v2 신설.
    *   · claude 웹검색 경로: `usage.server_tool_use.web_search_requests`
@@ -223,7 +225,10 @@ export interface EngineResponse {
 }
 
 /** api-search-v1 섀도 후보 식별자(저장 전용). */
-export type ApiSearchCandidate = "chatgpt-search-v1" | "gemini-search-v1";
+export type ApiSearchCandidate =
+  | "chatgpt-search-v1"
+  | "gemini-search-v1"
+  | "claude-search-v1";
 
 /** api-search-v1 섀도 1건(저장 전용). 원문은 길이를 제한해 저장한다. */
 export interface ApiSearchShadow {
@@ -241,7 +246,11 @@ export interface ApiSearchShadow {
   model: string;
   /** `ok` · `failed` · `skipped_budget`(메인 배치가 먼저 끝나 중단) */
   outcome: "ok" | "failed" | "skipped_budget";
+  /** claude-search-v1 전용: provider 가 준 stop_reason. 실패·미수집이면 생략. */
+  stopReason?: string | null;
   text: string;
+  /** claude-search-v1 전용: stop_reason 이 max_tokens 이면 true(답이 토큰 상한에서 잘림). 판단 불가·실패면 null. */
+  truncated?: boolean | null;
   /** 원가 산정 재료. 실패·중단이면 생략(과금 여부 [확인필요]). */
   usage?: EngineUsage;
 }

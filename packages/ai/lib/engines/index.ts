@@ -358,6 +358,7 @@ const API_SEARCH_ROWS: ReadonlyArray<{
 }> = [
   { engineId: "chatgpt", candidate: "chatgpt-search-v1" },
   { engineId: "gemini", candidate: "gemini-search-v1" },
+  { engineId: "claude", candidate: "claude-search-v1" },
 ];
 
 /**

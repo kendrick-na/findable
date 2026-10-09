@@ -645,6 +645,46 @@ describe("runAuditJob offline lifecycle contracts", () => {
     expect(result.cost).not.toHaveProperty("apiSearchShadowKrw");
   });
 
+  it("stores the claude-search-v1 shadow (truncated flag) without touching scored fields", async () => {
+    const shadowApiSearch = {
+      candidate: "claude-search-v1",
+      model: "claude-sonnet-5-5",
+      outcome: "ok",
+      text: "claude candidate answer",
+      citations: [],
+      brandMentioned: false,
+      durationMs: 11_500,
+      error: null,
+      stopReason: "end_turn",
+      truncated: false,
+      comparison: { mentionAgreement: false, citationOverlap: null },
+      usage: {
+        inputTokens: 9000,
+        outputTokens: 1500,
+        costModel: "token",
+        stopReason: "end_turn",
+        webSearchRequests: 1,
+      },
+    };
+    queryPromptsSequentially.mockResolvedValue([
+      [{ ...response(), engineId: "claude", shadowApiSearch }],
+      [response()],
+    ]);
+    const runAuditJob = await loadRunner();
+
+    await runAuditJob(input);
+
+    const result = terminalCalls()[0].data.result;
+    const rows = result.engineResponses;
+    expect(rows[0]).toMatchObject({
+      engineId: "claude",
+      brandMentioned: true,
+      shadowApiSearch,
+    });
+    expect(rows[0].shadowApiSearch.truncated).toBe(false);
+    expect(result.cost).not.toHaveProperty("apiSearchShadowKrw");
+  });
+
   it("stores the ui-vendor shadow without touching scored fields", async () => {
     const shadowUiVendor = {
       candidate: "chatgpt-ui-vendor-v1",

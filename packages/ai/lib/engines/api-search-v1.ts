@@ -2,6 +2,8 @@
 //
 //   (A) ChatGPT-search 후보: LETSUR `/v1/responses` + `web_search` 도구 (모델 기본 gpt-6-luna)
 //   (B) Gemini-search 후보 : Google `generateContent` + `google_search` 도구 **항상 on**
+//   (C) Claude-search 후보 : LETSUR `/v1/messages` + `web_search_20250305` (모델 기본 claude-sonnet-5-5 · max_tokens 4096)
+//       env FINDABLE_CLAUDE_MODEL_SEARCH · FINDABLE_CLAUDE_SEARCH_MAX_TOKENS(기본 4096, 1024~8192)
 //
 // 🔴 전부 기본 off. 아무 플래그도 안 켜면 이 파일의 코드는 **한 줄도 실행되지 않는다**(운영 동작 불변).
 //   API_SEARCH_SHADOW=true  → chatgpt·gemini 질문마다 후보를 **메인과 동시에** 돌려 비교만 저장한다.
@@ -24,6 +26,14 @@ import {
   tripLetsurCircuit,
 } from "../letsur-fallback";
 import { LETSUR_KRW_PER_UNIT } from "./cost";
+import {
+  CLAUDE_SEARCH_MAX_USES,
+  claudeSearchRequestBody,
+  countAnthropicServerToolUseBlocks,
+  parseAnthropicMessages,
+  parseAnthropicStopReason,
+  parseAnthropicUsage,
+} from "./global-adapters";
 import { sanitizeEngineText } from "./sanitize";
 import type {
   ApiSearchCandidate,
@@ -100,6 +110,10 @@ const DEFAULT_API_SEARCH_TIMEOUT_MS = 90_000;
 const SHADOW_TEXT_LIMIT = 8000;
 const CHATGPT_SEARCH_DEFAULT_MODEL = "gpt-6-luna";
 const GEMINI_SEARCH_DEFAULT_MODEL = "gemini-3.5-flash-lite";
+const CLAUDE_SEARCH_DEFAULT_MODEL = "claude-sonnet-5-5";
+const CLAUDE_SEARCH_DEFAULT_MAX_TOKENS = 4096;
+const CLAUDE_SEARCH_MIN_MAX_TOKENS = 1024;
+const CLAUDE_SEARCH_MAX_MAX_TOKENS = 8192;
 const GOOGLE_GENERATE_BASE =
   "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -115,6 +129,27 @@ export function geminiSearchModel(): string {
   return (
     process.env.FINDABLE_GEMINI_MODEL_SEARCH?.trim() ||
     GEMINI_SEARCH_DEFAULT_MODEL
+  );
+}
+
+// 🔴 운영 claude 엔진이 읽는 FINDABLE_LETSUR_MODEL_CLAUDE 와 **별개** 변수다.
+export function claudeSearchModel(): string {
+  return (
+    process.env.FINDABLE_CLAUDE_MODEL_SEARCH?.trim() ||
+    CLAUDE_SEARCH_DEFAULT_MODEL
+  );
+}
+
+/** 후보 max_tokens. 기본 4096, 1024~8192 로 clamp. 숫자가 아니면 기본값. */
+export function claudeSearchMaxTokens(): number {
+  const raw = process.env.FINDABLE_CLAUDE_SEARCH_MAX_TOKENS?.trim();
+  const value = raw ? Number(raw) : Number.NaN;
+  if (!Number.isFinite(value)) {
+    return CLAUDE_SEARCH_DEFAULT_MAX_TOKENS;
+  }
+  return Math.min(
+    CLAUDE_SEARCH_MAX_MAX_TOKENS,
+    Math.max(CLAUDE_SEARCH_MIN_MAX_TOKENS, Math.floor(value))
   );
 }
 
@@ -225,6 +260,38 @@ export function parseOpenAiResponses(body: unknown): ParsedOpenAiResponses {
   };
 }
 
+export interface ParsedClaudeMessages {
+  /** 응답 루트 `estimated_cost`({amount, currency:"unit"})가 있을 때만. 없으면 null → 토큰 단가표로 계산한다. */
+  estimatedCostUnits: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  sources: ProviderSource[];
+  stopReason: string | null;
+  text: string;
+  /** stop_reason === "max_tokens". stop_reason 미수집이면 null. */
+  truncated: boolean | null;
+  /** usage.server_tool_use.web_search_requests → 없으면 server_tool_use 블록 수 → 파싱 불가면 null. */
+  webSearchRequests: number | null;
+}
+
+/** Anthropic `/v1/messages`(LETSUR 경유) 응답 → 후보 저장용 값. 절대 throw 하지 않는다. */
+export function parseClaudeSearchMessages(body: unknown): ParsedClaudeMessages {
+  const { sources, text } = parseAnthropicMessages(body);
+  const usage = parseAnthropicUsage(body);
+  const stopReason = parseAnthropicStopReason(body);
+  return {
+    text,
+    sources,
+    stopReason,
+    truncated: stopReason === null ? null : stopReason === "max_tokens",
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    webSearchRequests:
+      usage.webSearchRequests ?? countAnthropicServerToolUseBlocks(body),
+    estimatedCostUnits: readEstimatedCostUnits(asRec(body)?.estimated_cost),
+  };
+}
+
 export interface ParsedGeminiGenerate {
   inputTokens: number | null;
   outputTokens: number | null;
@@ -276,7 +343,7 @@ export function parseGeminiGenerate(body: unknown): ParsedGeminiGenerate {
 // 호출 (fetch 직접 · 절대 throw 하지 않는다)
 // ──────────────────────────────────────────────────────────────────
 function failure(
-  engineId: "chatgpt" | "gemini",
+  engineId: "chatgpt" | "gemini" | "claude",
   message: string,
   start: number
 ): EngineResponse {
@@ -296,7 +363,7 @@ function failure(
 }
 
 function success(
-  engineId: "chatgpt" | "gemini",
+  engineId: "chatgpt" | "gemini" | "claude",
   rawText: string,
   sources: ProviderSource[],
   query: EngineQuery,
@@ -537,6 +604,89 @@ export async function runGeminiSearchCandidate(
   }
 }
 
+/**
+ * (C) Claude-search 후보 1회 호출. LETSUR `/v1/messages`(Anthropic 네이티브) 직접 fetch.
+ * 요청 빌더·파서는 운영 claude 경로(global-adapters)와 **같은 함수**를 쓰고, 모델·max_tokens 만 다르다.
+ * 🔴 Gateway 폴백 없음 — 후보가 Gateway 크레딧을 쓰면 안 된다. 실패하면 실패로 기록만 한다.
+ */
+export async function runClaudeSearchCandidate(
+  query: EngineQuery,
+  options: { timeoutMs?: number } = {}
+): Promise<EngineResponse> {
+  const start = Date.now();
+  const apiKey = process.env.LETSUR_API_KEY;
+  if (!apiKey) {
+    return failure("claude", "[api-search:not_configured]", start);
+  }
+  if (isLetsurCircuitOpen()) {
+    return failure("claude", "[api-search:circuit_open]", start);
+  }
+  const model = claudeSearchModel();
+  const timed = timedSignal(
+    query.signal,
+    options.timeoutMs ??
+      envMs("API_SEARCH_TIMEOUT_MS", DEFAULT_API_SEARCH_TIMEOUT_MS)
+  );
+  try {
+    const res = await fetch(`${LETSUR_BASE_URL}/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+        "anthropic-version": "2023-06-01",
+      },
+      body: claudeSearchRequestBody(model, query, {
+        maxTokens: claudeSearchMaxTokens(),
+        maxUses: CLAUDE_SEARCH_MAX_USES,
+      }),
+      signal: timed.signal,
+    });
+    if (!res.ok) {
+      const unavailable = classifyLetsurUnavailable(
+        res.status,
+        await res.text()
+      );
+      if (unavailable) {
+        tripLetsurCircuit(unavailable, "engine.api_search.claude");
+      }
+      return failure("claude", `[api-search:http_${res.status}]`, start);
+    }
+    const parsed = parseClaudeSearchMessages(await res.json());
+    if (parsed.text.length === 0) {
+      return failure("claude", "[api-search:empty_answer]", start);
+    }
+    const units = parsed.estimatedCostUnits;
+    return success("claude", parsed.text, parsed.sources, query, start, {
+      costModel: "token",
+      modelId: model,
+      inputTokens: parsed.inputTokens,
+      outputTokens: parsed.outputTokens,
+      webSearchRequests: parsed.webSearchRequests,
+      stopReason: parsed.stopReason,
+      // provider 가 원가를 주면 그 값(없으면 cost.ts 가 토큰 단가표로 계산 · [확인필요]).
+      ...(units === null
+        ? {}
+        : {
+            providerCostUsd: units,
+            providerCostKrw: units * LETSUR_KRW_PER_UNIT,
+          }),
+    });
+  } catch (error) {
+    if (timed.timedOut()) {
+      return failure("claude", "[api-search:timeout]", start);
+    }
+    if (query.signal?.aborted) {
+      return failure("claude", "[api-search:aborted]", start);
+    }
+    log.warn("engine.api_search.claude_failure", {
+      kind: error instanceof Error ? error.name : "unknown",
+    });
+    return failure("claude", "[api-search:network]", start);
+  } finally {
+    timed.cleanup();
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────
 // 섀도 핸들 (precedent: chatgpt-source.ts startChatgptWebShadow)
 // ──────────────────────────────────────────────────────────────────
@@ -567,6 +717,7 @@ function overlap(a: EngineResponse, b: EngineResponse): number | null {
 const CANDIDATE_MODEL: Record<ApiSearchCandidate, () => string> = {
   "chatgpt-search-v1": chatgptSearchModel,
   "gemini-search-v1": geminiSearchModel,
+  "claude-search-v1": claudeSearchModel,
 };
 
 function toApiSearchShadow(
@@ -586,6 +737,15 @@ function toApiSearchShadow(
     durationMs: result.durationMs,
     error: ok ? null : (result.errorMessage ?? "[api-search:other]"),
     ...(ok && result.usage ? { usage: result.usage } : {}),
+    ...(ok && candidate === "claude-search-v1"
+      ? {
+          stopReason: result.usage?.stopReason ?? null,
+          truncated:
+            result.usage?.stopReason == null
+              ? null
+              : result.usage.stopReason === "max_tokens",
+        }
+      : {}),
     comparison:
       ok && main && mainOk
         ? {
@@ -609,6 +769,16 @@ type CandidateRunner = (
 const CANDIDATE_RUNNERS: Record<ApiSearchCandidate, CandidateRunner> = {
   "chatgpt-search-v1": (q, o) => runChatgptSearchCandidate(q, o),
   "gemini-search-v1": (q, o) => runGeminiSearchCandidate(q, o),
+  "claude-search-v1": (q, o) => runClaudeSearchCandidate(q, o),
+};
+
+const CANDIDATE_ENGINE: Record<
+  ApiSearchCandidate,
+  "chatgpt" | "gemini" | "claude"
+> = {
+  "chatgpt-search-v1": "chatgpt",
+  "gemini-search-v1": "gemini",
+  "claude-search-v1": "claude",
 };
 
 /**
@@ -621,7 +791,7 @@ export function startApiSearchShadow(
   run: CandidateRunner = CANDIDATE_RUNNERS[candidate]
 ): ApiSearchShadowHandle {
   const started = Date.now();
-  const engineId = candidate === "chatgpt-search-v1" ? "chatgpt" : "gemini";
+  const engineId = CANDIDATE_ENGINE[candidate];
   const controller = new AbortController();
   const parent = base.signal;
   const onParentAbort = () => controller.abort(parent?.reason);
@@ -692,6 +862,7 @@ export function startApiSearchShadow(
         citationOverlap: shadow.comparison?.citationOverlap ?? null,
         shadowCitations: shadow.citations.length,
         webSearchRequests: shadow.usage?.webSearchRequests ?? null,
+        truncated: shadow.truncated ?? null,
       });
       return shadow;
     },
