@@ -27,9 +27,14 @@
 //   플래그를 안 켜면 들어오는 입력(`shadowApiSearch`)이 없어 **기존 계산은 한 줄도 안 바뀐다**(그래서 버전 유지).
 //   후보 원가는 `apiSearchShadowCostOf` 가 **별도 항목**으로 만들고 `auditCost` 가 shadowKrw·apiSearchShadowKrw 로만 보고한다(totalKrw 불포함).
 // ⚠️ chatgpt·claude 는 실제로는 Letsur 게이트웨이로 청구된다 — 아래는 **원 제공사 공식 정가**다.
+// ➕ 2026-10-10 메인 엔진 세트(FINDABLE_ENGINE_SET=api-search-v1) — chatgpt·gemini·claude 본 답 행이 `usage.engineSet` 표식을 단다.
+//   그 행은 기존 엔진 단가(gpt-5.4·sonnet-4.6·gemini 무료티어)를 **빌리지 않고** 후보 계산(`apiSearchTokenCost`)을 탄다:
+//   provider 보고 원가(estimated_cost × 1,525원/unit) → 없으면 후보 단가표(Gemini 는 검색 질의당 $0.014 가산·무료 한도 미가정) → 미등록은 unknown.
+//   표식이 없는 행(플래그 off)은 아래 기존 계산 그대로다(그래서 COST_MODEL_VERSION 유지).
 // ➕ 2026-10-10 ui-vendor-v1 섀도(UI_VENDOR_SHADOW=true · Bright Data 성공 레코드 $1.50/1,000) — 같은 방식으로 별도 항목(totalKrw 불포함).
 //    Letsur 의 재판매 단가·수수료는 [확인필요](청구서 대조 전까지 정가로 둔다).
 
+import { API_SEARCH_ENGINE_SET } from "./engine-set";
 import type { EngineId, EngineResponse } from "./types";
 
 // USD→KRW 환율(보정 지점).
@@ -273,6 +278,16 @@ function tokenCost(res: EngineResponse): EngineCost {
       note: "provider 보고 원가(USD)",
     };
   }
+  // 🔴 api-search-v1 메인 세트(FINDABLE_ENGINE_SET) 행은 기존 엔진 단가(gpt-5.4·sonnet-4.6 등)를 빌리지 않는다.
+  //   provider 보고 원가는 위에서 이미 처리했다. 없으면 후보 단가표 → 미등록이면 unknown(0원으로 단정 안 함).
+  if (usage?.engineSet === API_SEARCH_ENGINE_SET) {
+    return apiSearchTokenCost(
+      engineId,
+      usage.modelId ?? "",
+      usage,
+      `api-search-v1 메인 · ${usage.modelId ?? "모델 미기록"}`
+    );
+  }
   if (usage?.provider === "gateway") {
     return gatewayTokenCost(res);
   }
@@ -418,11 +433,72 @@ export function shadowCostOf(res: EngineResponse): EngineCost | null {
 }
 
 /**
+ * api-search-v1 경로(섀도 후보·메인 세트 공용) **토큰 단가표 계산**. provider 보고 원가는 호출하는 쪽이 먼저 본다.
+ *   · Gemini: 모델 단가표(SHADOW_MODEL_TOKEN_PRICES) + 검색 쿼리 수 × GEMINI_SEARCH_USD_PER_QUERY.
+ *     🔴 Google 월 무료 한도(5,000건)는 **가정하지 않는다** — 항상 유료 단가로 센다(보수).
+ *   · Claude: 토큰 단가표 × LETSUR_KRW_PER_UNIT(검색료 별도 없음 · [확인필요]).
+ *   · 단가 미등록 모델·토큰 미측정이면 unknown(0원). **기존 엔진 단가를 빌리지 않는다.**
+ */
+function apiSearchTokenCost(
+  engineId: EngineId,
+  model: string,
+  usage: NonNullable<EngineResponse["usage"]>,
+  label: string
+): EngineCost {
+  const price = SHADOW_MODEL_TOKEN_PRICES[model];
+  if (!price) {
+    return {
+      engineId,
+      krw: 0,
+      basis: "unknown",
+      note: `${label} · 모델 단가 미등록`,
+    };
+  }
+  if (usage.inputTokens == null || usage.outputTokens == null) {
+    return {
+      engineId,
+      krw: 0,
+      basis: "unknown",
+      note: `${label} · 토큰 미측정`,
+    };
+  }
+  const queries = usage.webSearchRequests;
+  const searchUsd =
+    engineId === "gemini" && isFiniteNonNegative(queries)
+      ? queries * GEMINI_SEARCH_USD_PER_QUERY
+      : 0;
+  const usd =
+    (usage.inputTokens / 1_000_000) * price.inputPerM +
+    (usage.outputTokens / 1_000_000) * price.outputPerM +
+    searchUsd;
+  if (engineId === "claude") {
+    // LETSUR unit 청구 = 정가 USD 동액, 원화 환산은 1,525원/unit. 검색료 별도 없음. [확인필요]
+    return {
+      engineId,
+      krw: usd * LETSUR_KRW_PER_UNIT,
+      basis: "token",
+      note: `${label} · 토큰 단가표×${LETSUR_KRW_PER_UNIT}원/unit · 검색 ${
+        isFiniteNonNegative(queries)
+          ? `${queries}회(별도 과금 없음)`
+          : "횟수 미수집"
+      } [확인필요]`,
+    };
+  }
+  return {
+    engineId,
+    krw: usd * USD_TO_KRW,
+    basis: "token",
+    note: isFiniteNonNegative(queries)
+      ? `${label} · 검색 ${queries}회`
+      : `${label} · 검색 횟수 미수집(검색료 0 산입)`,
+  };
+}
+
+/**
  * api-search-v1 섀도 후보 1건 원가. 후보가 호출에 성공해 `usage` 를 남긴 경우만 항목이 생긴다
  *   (실패·중단은 과금 여부를 모르므로 항목 없음 — [확인필요], 0원이라고 단정하지도 않는다).
  *   · ChatGPT 후보: provider 보고 원가(estimated_cost) 우선 → KRW 환산(1,525/unit) → 없으면 unknown.
- *   · Gemini 후보: 모델 단가표(SHADOW_MODEL_TOKEN_PRICES) + 검색 쿼리 수 × GEMINI_SEARCH_USD_PER_QUERY.
- *     단가 미등록 모델·토큰 미측정이면 unknown(0원). **메인 gemini/chatgpt 단가를 빌리지 않는다.**
+ *   · Gemini·Claude 후보: `apiSearchTokenCost`.
  */
 export function apiSearchShadowCostOf(res: EngineResponse): EngineCost | null {
   const shadow = res.shadowApiSearch;
@@ -448,53 +524,7 @@ export function apiSearchShadowCostOf(res: EngineResponse): EngineCost | null {
       note: `${label} · provider 보고 원가(USD, 환율 ${USD_TO_KRW})`,
     };
   }
-  const price = SHADOW_MODEL_TOKEN_PRICES[shadow.model];
-  if (!price) {
-    return {
-      engineId,
-      krw: 0,
-      basis: "unknown",
-      note: `${label} · 모델 단가 미등록`,
-    };
-  }
-  if (usage.inputTokens == null || usage.outputTokens == null) {
-    return {
-      engineId,
-      krw: 0,
-      basis: "unknown",
-      note: `${label} · 토큰 미측정`,
-    };
-  }
-  const queries = usage.webSearchRequests;
-  const searchUsd =
-    shadow.candidate === "gemini-search-v1" && isFiniteNonNegative(queries)
-      ? queries * GEMINI_SEARCH_USD_PER_QUERY
-      : 0;
-  const usd =
-    (usage.inputTokens / 1_000_000) * price.inputPerM +
-    (usage.outputTokens / 1_000_000) * price.outputPerM +
-    searchUsd;
-  if (shadow.candidate === "claude-search-v1") {
-    // LETSUR unit 청구 = 정가 USD 동액, 원화 환산은 1,525원/unit. 검색료 별도 없음. [확인필요]
-    return {
-      engineId,
-      krw: usd * LETSUR_KRW_PER_UNIT,
-      basis: "token",
-      note: `${label} · 토큰 단가표×${LETSUR_KRW_PER_UNIT}원/unit · 검색 ${
-        isFiniteNonNegative(queries)
-          ? `${queries}회(별도 과금 없음)`
-          : "횟수 미수집"
-      } [확인필요]`,
-    };
-  }
-  return {
-    engineId,
-    krw: usd * USD_TO_KRW,
-    basis: "token",
-    note: isFiniteNonNegative(queries)
-      ? `${label} · 검색 ${queries}회`
-      : `${label} · 검색 횟수 미수집(검색료 0 산입)`,
-  };
+  return apiSearchTokenCost(engineId, shadow.model, usage, label);
 }
 
 /**

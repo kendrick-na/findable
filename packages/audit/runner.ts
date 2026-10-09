@@ -1734,6 +1734,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
                 r.usage?.chatgptEngineSet ?? runChatgptEngineSet,
             }
           : {}),
+        // 메인 엔진 세트(2026-10-10 · FINDABLE_ENGINE_SET=api-search-v1). 미기재 = 기존 세트 — 비교 가드가
+        //   `+api:search-v1` 꼬리표로 바꾼다. 어댑터가 usage.engineSet 에 남긴 값을 행에도 복사해 둔다.
+        ...(r.usage?.engineSet ? { engineSet: r.usage.engineSet } : {}),
         // 섀도 결과 — 저장 전용. 점수·버킷·집계·PDF 에 안 쓴다.
         //   shadowChatgptWeb: CHATGPT_WEB_SHADOW=true · shadowApiSearch: API_SEARCH_SHADOW=true + 허용 도메인.
         ...shadowFieldsOf(r),

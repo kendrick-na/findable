@@ -22,6 +22,7 @@
 //   국내 전용 고객(병원·학원·국내 B2B)에게 "글로벌 0점" 공포를 주고 있었다.
 
 import type { EngineId } from "@repo/ai/lib/engines";
+import { isApiSearchEngineSetActive } from "@repo/ai/lib/engines/engine-set";
 
 /** 시장 권역. 엔진을 이 둘 중 하나로 가른다. */
 export type MarketRegion = "korea" | "global";
@@ -217,13 +218,27 @@ export type EngineSourceState =
  *
  * @param groundingEnabled 검색 그라운딩이 켜져 있는가(`FINDABLE_ENGINE_GROUNDING`).
  *   켜져 있으면 `not_collected` 는 나오지 않는다 — 실제로 받아오고 있으므로.
+ * @param engineSet 측정 엔진 세트(`FINDABLE_ENGINE_SET`). 생략하면 지금 프로세스의 플래그.
+ *   `api-search-v1` 이면 chatgpt·gemini·claude 는 **항상** 웹검색·그라운딩을 켜고 불러
+ *   출처가 provider 인용(`url_citation`·`groundingChunks`)으로 온다 → `collected`(0 이면 진짜 0).
  */
 export function engineSourceState(
   engineId: EngineId | string,
-  groundingEnabled: boolean
+  groundingEnabled: boolean,
+  engineSet?: string | null
 ): EngineSourceState {
   if (NO_CITATION_ENGINES.has(engineId)) {
     return "never";
+  }
+  if (
+    (engineId === "chatgpt" ||
+      engineId === "gemini" ||
+      engineId === "claude") &&
+    (engineSet === undefined
+      ? isApiSearchEngineSetActive()
+      : isApiSearchEngineSetActive(engineSet ?? ""))
+  ) {
+    return "collected";
   }
   // 🔴 웹 검색 없이 도는 엔진 — 그라운딩을 켜든 말든 **출처가 나올 길이 없다**(N-47 실측).
   //   claude(Letsur 일반 채팅)만 해당. ✅ perplexity 는 N-48 파싱 수정으로 빠졌다.

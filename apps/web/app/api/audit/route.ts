@@ -32,7 +32,7 @@ import { freeAuditPublicEnabled } from "../../../lib/free-audit";
 import {
   DEFAULT_DAILY_FREE_BUDGET_KRW,
   dailyFreeJobCap,
-  FREE_AUDIT_AVG_COST_KRW,
+  freeAuditAvgCostKrw,
 } from "../../../lib/free-audit-budget";
 import { resolveIsOwner } from "./_lib/owner";
 
@@ -457,7 +457,7 @@ export async function POST(request: NextRequest) {
         log.info("audit.cache.hit", {
           domain: payload.domain,
           jobId: cachedJobId,
-          savedKrw: FREE_AUDIT_AVG_COST_KRW,
+          savedKrw: freeAuditAvgCostKrw(),
         });
         return NextResponse.json({
           jobId: cachedJobId,
