@@ -185,6 +185,18 @@ describe("runChatgptSearchCandidate", () => {
     resetLetsurCircuit();
   });
 
+  it("omits instructions when FINDABLE_CHATGPT_SEARCH_INSTRUCTIONS=off and overrides when set", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(FIXTURE));
+    vi.stubEnv("FINDABLE_CHATGPT_SEARCH_INSTRUCTIONS", "off");
+    await runChatgptSearchCandidate(query());
+    const [, offInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(offInit.body))).not.toHaveProperty("instructions");
+    vi.stubEnv("FINDABLE_CHATGPT_SEARCH_INSTRUCTIONS", "짧게 답해");
+    await runChatgptSearchCandidate(query());
+    const [, setInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(String(setInit.body)).instructions).toBe("짧게 답해");
+  });
+
   it("posts the responses body with web_search + KR location and maps the result", async () => {
     fetchMock.mockResolvedValue(jsonResponse(FIXTURE));
     const res = await runChatgptSearchCandidate(query());
@@ -193,6 +205,7 @@ describe("runChatgptSearchCandidate", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       model: "gpt-6-luna",
       input: "수분크림 추천",
+      instructions: expect.stringContaining("3~5개"),
       tools: [
         {
           type: "web_search",

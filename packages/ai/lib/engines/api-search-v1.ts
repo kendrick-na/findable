@@ -360,10 +360,29 @@ function timedSignal(parent: AbortSignal | undefined, ms: number): TimedSignal {
   };
 }
 
+// 2026-10-09 시험(비화장품 56·뷰티 60문항): 지시문이 없으면 후보 답이 소비자 화면보다 짧아(평균 620자 vs
+// 1,045자) 이름 없는 비교형 질문에서 누락된다. 이 지시문(대표 브랜드 3~5개 비교 소개)을 주면 길이가
+// 소비자 수준(1,100~1,300자)이 되고 화면 일치율이 비화장품 82→91%, 뷰티 97% 유지(재현율 96~100%).
+// 소비자 화면에는 없는 시스템 지시라 「소비자 기본값 그대로」가 아니라 「화면 답변 스타일 보정」이다.
+// env FINDABLE_CHATGPT_SEARCH_INSTRUCTIONS 로 덮어쓰거나 "off" 로 끈다.
+const DEFAULT_CHATGPT_SEARCH_INSTRUCTIONS =
+  "한국어로 답해. 사용자가 묻는 주제에 대해 대표적인 서비스·브랜드를 3~5개 골라 각각 특징과 함께 구체적으로 비교해서 소개해.";
+
+function chatgptSearchInstructions(): string | null {
+  const raw = process.env.FINDABLE_CHATGPT_SEARCH_INSTRUCTIONS?.trim();
+  if (raw?.toLowerCase() === "off") {
+    return null;
+  }
+  return raw || DEFAULT_CHATGPT_SEARCH_INSTRUCTIONS;
+}
+
 function chatgptSearchBody(model: string, query: EngineQuery): string {
+  const instructions =
+    query.language === "en" ? null : chatgptSearchInstructions();
   return JSON.stringify({
     model,
     input: query.prompt,
+    ...(instructions ? { instructions } : {}),
     tools: [
       {
         type: "web_search",
