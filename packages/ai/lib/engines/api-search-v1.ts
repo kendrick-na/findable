@@ -459,7 +459,10 @@ export async function runGeminiSearchCandidate(
   options: { timeoutMs?: number } = {}
 ): Promise<EngineResponse> {
   const start = Date.now();
-  const apiKey = process.env.GOOGLE_API_KEY;
+  // 그림자 전용 유료 키를 우선(GOOGLE_API_KEY_SEARCH). 없으면 기존 키. 무료 티어 키는
+  // 약관상 입력·출력이 제품 개선에 쓰일 수 있어 고객 데이터를 보내는 용도로는 쓰지 않는다.
+  const apiKey =
+    process.env.GOOGLE_API_KEY_SEARCH?.trim() || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     return failure("gemini", "[api-search:not_configured]", start);
   }
