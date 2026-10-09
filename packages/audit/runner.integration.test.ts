@@ -645,6 +645,39 @@ describe("runAuditJob offline lifecycle contracts", () => {
     expect(result.cost).not.toHaveProperty("apiSearchShadowKrw");
   });
 
+  it("stores the ui-vendor shadow without touching scored fields", async () => {
+    const shadowUiVendor = {
+      candidate: "chatgpt-ui-vendor-v1",
+      outcome: "ok",
+      text: "vendor answer",
+      citations: [],
+      brandMentioned: false,
+      durationMs: 5,
+      error: null,
+      recordBilled: true,
+      vendorModel: null,
+      webSearchTriggered: true,
+      comparison: { mentionAgreement: false, citationOverlap: null },
+    };
+    queryPromptsSequentially.mockResolvedValue([
+      [{ ...response(), shadowUiVendor }],
+      [response()],
+    ]);
+    const runAuditJob = await loadRunner();
+
+    await runAuditJob(input);
+
+    const result = terminalCalls()[0].data.result;
+    const rows = result.engineResponses;
+    expect(rows[0]).toMatchObject({
+      engineId: "chatgpt",
+      brandMentioned: true,
+      shadowUiVendor,
+    });
+    expect(rows[1].shadowUiVendor).toBeUndefined();
+    expect(result.cost).not.toHaveProperty("uiVendorShadowKrw");
+  });
+
   it("does not overwrite a completed job when Tracking fails after commit", async () => {
     persistAuditTracking.mockResolvedValue("failed");
     const runAuditJob = await loadRunner();

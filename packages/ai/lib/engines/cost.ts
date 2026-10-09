@@ -27,6 +27,7 @@
 //   플래그를 안 켜면 들어오는 입력(`shadowApiSearch`)이 없어 **기존 계산은 한 줄도 안 바뀐다**(그래서 버전 유지).
 //   후보 원가는 `apiSearchShadowCostOf` 가 **별도 항목**으로 만들고 `auditCost` 가 shadowKrw·apiSearchShadowKrw 로만 보고한다(totalKrw 불포함).
 // ⚠️ chatgpt·claude 는 실제로는 Letsur 게이트웨이로 청구된다 — 아래는 **원 제공사 공식 정가**다.
+// ➕ 2026-10-10 ui-vendor-v1 섀도(UI_VENDOR_SHADOW=true · Bright Data 성공 레코드 $1.50/1,000) — 같은 방식으로 별도 항목(totalKrw 불포함).
 //    Letsur 의 재판매 단가·수수료는 [확인필요](청구서 대조 전까지 정가로 둔다).
 
 import type { EngineId, EngineResponse } from "./types";
@@ -58,6 +59,13 @@ export const LETSUR_KRW_PER_UNIT = 1525;
  *   계산에 새는 걸 막기 위해 후보 전용 상수로 둔다.
  */
 export const GEMINI_SEARCH_USD_PER_QUERY = 14 / 1000;
+
+/**
+ * 업체 화면 수집(Bright Data scraper API) 성공 레코드 1건당 USD = $1.50/1,000건. 실패 레코드는 미과금.
+ *   [확인필요] 요금제·물량 할인·최소 약정 단가는 계약 확인 전까지 정가로 둔다.
+ *   [법률 확인 필요] 이 수집물을 고객 점수·영업에 쓰는 것은 법률 검토 전 금지 — 보정·섀도 전용.
+ */
+export const UI_VENDOR_USD_PER_RECORD = 1.5 / 1000;
 
 /**
  * api-search-v1 후보 모델별 토큰 단가(USD/1M). **여기 없으면 `unknown`** — 다른 모델 값을 빌리지 않는다.
@@ -158,7 +166,7 @@ export const FIRECRAWL_USD_PER_CREDIT = 19 / 5000;
 const BROWSERBASE_USD_PER_MIN = 0.1;
 
 export interface EngineCost {
-  basis: "token" | "credit" | "browser" | "free" | "unknown";
+  basis: "token" | "credit" | "browser" | "free" | "unknown" | "vendor-record";
   engineId: EngineId;
   krw: number; // 이 엔진 호출 1회 원가(KRW)
   note?: string;
@@ -386,6 +394,10 @@ export interface AuditCost {
    */
   shadowKrw?: number;
   totalKrw: number;
+  /** 업체 화면 수집 섀도 항목(별도 보관 · totalKrw 불포함). 없으면 생략. */
+  uiVendorShadow?: EngineCost[];
+  /** 업체 화면 수집 섀도 원가 합(KRW). totalKrw 불포함(shadowKrw 에는 포함). 없으면 생략. */
+  uiVendorShadowKrw?: number;
 }
 
 /** 섀도 1건 원가. 크레딧 기록이 없으면(미설정·HTTP 오류 = 문서 없음) 0원이라 항목도 없다. */
@@ -469,6 +481,23 @@ export function apiSearchShadowCostOf(res: EngineResponse): EngineCost | null {
   };
 }
 
+/**
+ * 업체 화면 수집 섀도 1건 원가. 성공(outcome ok·recordBilled)만 1레코드 과금 → 항목 생성.
+ *   실패·중단은 미과금(업체 정책)이라 항목 없음. totalKrw 에는 넣지 않는다.
+ */
+export function uiVendorShadowCostOf(res: EngineResponse): EngineCost | null {
+  const shadow = res.shadowUiVendor;
+  if (!shadow || shadow.outcome !== "ok" || !shadow.recordBilled) {
+    return null;
+  }
+  return {
+    engineId: res.engineId,
+    krw: UI_VENDOR_USD_PER_RECORD * USD_TO_KRW,
+    basis: "vendor-record",
+    note: `ui-vendor 섀도 · ${shadow.candidate} · 성공 1레코드 $1.50/1,000 [확인필요: 요금제·물량 단가]`,
+  };
+}
+
 export function auditCost(responses: EngineResponse[]): AuditCost {
   const mainCosts = responses.map(costOf);
   const measuredEngines = mainCosts.filter(
@@ -483,6 +512,11 @@ export function auditCost(responses: EngineResponse[]): AuditCost {
   const apiSearchCosts = responses.flatMap(
     (res) => apiSearchShadowCostOf(res) ?? []
   );
+  // 업체 화면 수집 섀도도 같은 취급(totalKrw 불포함).
+  const uiVendorCosts = responses.flatMap(
+    (res) => uiVendorShadowCostOf(res) ?? []
+  );
+  const uiVendorKrw = uiVendorCosts.reduce((sum, c) => sum + c.krw, 0);
   const webShadowKrw = shadowCosts.reduce((sum, c) => sum + c.krw, 0);
   const apiSearchKrw = apiSearchCosts.reduce((sum, c) => sum + c.krw, 0);
   return {
@@ -490,8 +524,13 @@ export function auditCost(responses: EngineResponse[]): AuditCost {
     perEngine,
     measuredEngines,
     costModelVersion: COST_MODEL_VERSION,
-    ...(shadowCosts.length > 0 || apiSearchCosts.length > 0
-      ? { shadowKrw: webShadowKrw + apiSearchKrw }
+    ...(shadowCosts.length > 0 ||
+    apiSearchCosts.length > 0 ||
+    uiVendorCosts.length > 0
+      ? { shadowKrw: webShadowKrw + apiSearchKrw + uiVendorKrw }
+      : {}),
+    ...(uiVendorCosts.length > 0
+      ? { uiVendorShadow: uiVendorCosts, uiVendorShadowKrw: uiVendorKrw }
       : {}),
     ...(apiSearchCosts.length > 0
       ? { apiSearchShadow: apiSearchCosts, apiSearchShadowKrw: apiSearchKrw }

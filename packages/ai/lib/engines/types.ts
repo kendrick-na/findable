@@ -212,6 +212,12 @@ export interface EngineResponse {
    * 🔴 점수·집계·판정에 쓰지 않는다 — API 답과 웹 답의 차이를 재기 위한 저장 전용 값이다.
    */
   shadowChatgptWeb?: ChatgptWebShadow;
+  /**
+   * 업체 화면 수집 섀도(`UI_VENDOR_SHADOW=true` + 허용 도메인 · Bright Data). **chatgpt·gemini 행에만** 붙는다.
+   * 🔴 점수·집계·판정·PDF·UI 에 쓰지 않는다 — 보정(캘리브레이션) 저장 전용 값이다.
+   * [법률 확인 필요] 업체가 수집한 소비자 화면 결과를 고객 점수·영업에 쓰려면 법률 검토가 먼저다.
+   */
+  shadowUiVendor?: UiVendorShadow;
   shareOfVoice: number | null; // 0.0 ~ 1.0
   usage?: EngineUsage; // 원가계기(유닛이코노믹스). 없으면 미측정.
 }
@@ -238,6 +244,32 @@ export interface ApiSearchShadow {
   text: string;
   /** 원가 산정 재료. 실패·중단이면 생략(과금 여부 [확인필요]). */
   usage?: EngineUsage;
+}
+
+/** 업체 화면 수집 섀도 후보 식별자(저장 전용). */
+export type UiVendorCandidate = "chatgpt-ui-vendor-v1" | "gemini-ui-vendor-v1";
+
+/** 업체 화면 수집 섀도 1건(저장 전용). 원문은 길이를 제한해 저장한다. */
+export interface UiVendorShadow {
+  brandMentioned: boolean | null;
+  candidate: UiVendorCandidate;
+  citations: CitedSource[];
+  /** 메인 답과의 비교. 섀도가 실패했으면 null. */
+  comparison: {
+    citationOverlap: number | null;
+    mentionAgreement: boolean;
+  } | null;
+  durationMs: number;
+  error: string | null;
+  /** `ok` · `failed` · `skipped_budget`(메인 배치가 먼저 끝나 중단) */
+  outcome: "ok" | "failed" | "skipped_budget";
+  /** 업체가 성공 레코드로 과금했나(ok 일 때만 true). 실패는 미과금. */
+  recordBilled: boolean;
+  text: string;
+  /** 업체가 알려준 모델 표기(예: Gemini 'Flash-Lite'). ChatGPT 는 null. 투명성용. */
+  vendorModel: string | null;
+  /** 업체 레코드의 web_search_triggered. 미보고면 null. */
+  webSearchTriggered: boolean | null;
 }
 
 /** 섀도 웹 수집 1건(저장 전용). 원문은 길이를 제한해 저장한다. */

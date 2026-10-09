@@ -31,7 +31,14 @@ import type {
   EngineId,
   EngineQuery,
   EngineResponse,
+  UiVendorCandidate,
 } from "./types";
+import {
+  isUiVendorShadowAllowed,
+  isUiVendorShadowEnabled,
+  startUiVendorShadow,
+  type UiVendorShadowHandle,
+} from "./ui-vendor-v1";
 
 export * from "./aggregate";
 export {
@@ -50,6 +57,12 @@ export {
 export * from "./cost";
 export { NAVER_SEARCH_SAMPLING_VERSION } from "./korean-adapters";
 export * from "./types";
+export {
+  isUiVendorShadowAllowed,
+  isUiVendorShadowEnabled,
+  parseVendorRecord,
+  uiVendorShadowAllowlist,
+} from "./ui-vendor-v1";
 
 const ADAPTERS: Record<EngineId, EngineAdapter> = {
   // 경로 스위치(2026-10-07): CHATGPT_SOURCE=api(기본)면 기존 API 어댑터 그대로.
@@ -234,6 +247,9 @@ export async function queryAllEngines(
   }
   // 🔎 api-search-v1 후보 섀도(API_SEARCH_SHADOW=true + 허용 도메인) — 같은 방식(메인과 동시 시작).
   const apiSearchShadows = startApiSearchShadows(base, engineIds, options);
+  // 🔎 ui-vendor-v1 업체 화면 수집 섀도(UI_VENDOR_SHADOW=true + 허용 도메인) — 같은 방식.
+  //   [법률 확인 필요] 보정·섀도 전용. 점수·집계에 쓰지 않는다.
+  const uiVendorShadows = startUiVendorShadows(base, engineIds, options);
   const settled = await Promise.allSettled(
     engineIds.map(async (engineId) => {
       observe({ engineId, phase: "started" });
@@ -281,7 +297,59 @@ export async function queryAllEngines(
     await attachChatgptWebShadow(responses, shadow);
   }
   await attachApiSearchShadows(responses, apiSearchShadows);
+  await attachUiVendorShadows(responses, uiVendorShadows);
   return responses;
+}
+
+const UI_VENDOR_ROWS: ReadonlyArray<{
+  candidate: UiVendorCandidate;
+  engineId: EngineId;
+}> = [
+  { engineId: "chatgpt", candidate: "chatgpt-ui-vendor-v1" },
+  { engineId: "gemini", candidate: "gemini-ui-vendor-v1" },
+];
+
+/** 업체 화면 수집 섀도 시작. 플래그 off·허용 목록 비어 있음·도메인 불일치·늦은 칸 재질문이면 아무것도 안 한다. */
+function startUiVendorShadows(
+  base: Omit<EngineQuery, "engineId">,
+  engineIds: readonly EngineId[],
+  options?: { timeoutMs?: number }
+): Array<{ engineId: EngineId; handle: UiVendorShadowHandle }> {
+  try {
+    if (
+      options?.timeoutMs ||
+      !isUiVendorShadowEnabled() ||
+      !isUiVendorShadowAllowed(base.brandDomain)
+    ) {
+      return [];
+    }
+    return UI_VENDOR_ROWS.filter((row) => engineIds.includes(row.engineId)).map(
+      (row) => ({
+        engineId: row.engineId,
+        handle: startUiVendorShadow(base, row.candidate),
+      })
+    );
+  } catch {
+    return []; // 섀도는 어떤 경우에도 메인을 깨지 않는다.
+  }
+}
+
+async function attachUiVendorShadows(
+  responses: EngineResponse[],
+  shadows: Array<{ engineId: EngineId; handle: UiVendorShadowHandle }>
+): Promise<void> {
+  for (const { engineId, handle } of shadows) {
+    const index = responses.findIndex((r) => r.engineId === engineId);
+    try {
+      const result = await handle.finish(responses[index]);
+      const main = responses[index];
+      if (main) {
+        responses[index] = { ...main, shadowUiVendor: result };
+      }
+    } catch {
+      /* 섀도 실패는 메인 결과에 아무 영향도 주지 않는다. */
+    }
+  }
 }
 
 const API_SEARCH_ROWS: ReadonlyArray<{
