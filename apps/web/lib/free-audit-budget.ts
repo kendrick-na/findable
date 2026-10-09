@@ -1,6 +1,8 @@
 // 무료 진단 일일 예산 — 건수 × 평균단가 환산(스키마 변경 없이 전역 상한을 건다).
 //   쓰는 곳: apps/web/app/api/audit/route.ts (isDailyBudgetExhausted · cache hit savedKrw)
 
+import { isApiSearchEngineSetActive } from "@repo/ai/lib/engines/engine-set";
+
 /**
  * 무료 진단 1건의 **원가모델 v2 기준** 평균 원가(KRW) — 2026-10-07 재보정.
  *
@@ -29,12 +31,33 @@
  */
 export const FREE_AUDIT_AVG_COST_KRW = 1000;
 
+/**
+ * `FINDABLE_ENGINE_SET=api-search-v1`(소비자 화면 정렬 엔진 세트) 일 때의 보수적 평균 원가(KRW) — 2026-10-10.
+ *
+ * 위 1,000원에서 **올라가는 쪽만** 더하고 내려가는 쪽(ChatGPT gpt-5.4→gpt-6-luna 약 −20원/호출)은 뺀다(보수).
+ *   ① Gemini: 기존엔 무료 티어(0원)로 잡혔다. 새 경로는 그라운딩 검색 질의당 $0.014 + 토큰
+ *      → 호출당 약 25~37원(시험 1.76질의 ≈ 34원 + 토큰 ≈ 3원). **월 5,000건 무료분은 가정하지 않는다.**
+ *      무료 진단 질문 상한 8개 × 약 37원 ≈ +300원.
+ *   ② Claude: max_tokens 1,024→4,096(답이 안 잘림) · 모델 sonnet-4.6→sonnet-5-5. 호출당 실측 원가는 아직 없다
+ *      [확인필요] → 호출당 +12원 가정 × 8 ≈ +100원.
+ *   → 1,000 + 300 + 100 = 1,400원. 기본 예산 5만원이면 하루 35건(기존 50건).
+ * ⚠️ 시험 데이터로 추정한 값이다. 켠 뒤 일일 점검의 실제 원가로 다시 잰다.
+ */
+export const FREE_AUDIT_AVG_COST_API_SEARCH_KRW = 1400;
+
+/** 지금 설정에 맞는 무료 진단 평균 원가. 플래그가 꺼져 있으면 기존 값(1,000원) 그대로. */
+export function freeAuditAvgCostKrw(): number {
+  return isApiSearchEngineSetActive()
+    ? FREE_AUDIT_AVG_COST_API_SEARCH_KRW
+    : FREE_AUDIT_AVG_COST_KRW;
+}
+
 export const DEFAULT_DAILY_FREE_BUDGET_KRW = 50_000;
 
 /** 일일 예산(KRW) → 하루 무료 진단 건수 상한. 최소 1건. */
 export function dailyFreeJobCap(
   budgetKrw: number,
-  avgCostKrw: number = FREE_AUDIT_AVG_COST_KRW
+  avgCostKrw: number = freeAuditAvgCostKrw()
 ): number {
   if (!(Number.isFinite(budgetKrw) && budgetKrw > 0)) {
     return 1;

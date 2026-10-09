@@ -59,6 +59,25 @@ if [ -n "$BRIEFING_ON" ]; then
   REQUIRED=$(printf '%s\nFIRECRAWL_API_KEY\n' "$REQUIRED" | sort -u)
 fi
 
+# 🔴 2026-10-10: FINDABLE_ENGINE_SET=api-search-v1(소비자 화면 정렬 메인 엔진 세트)이 켜져 있으면
+#   gemini 본 답이 Google generateContent 로 간다 → GOOGLE_API_KEY_SEARCH 또는 GOOGLE_API_KEY 중
+#   하나는 필수(둘 다 위 OPTIONAL 이라 평소엔 안 막는다). LETSUR_API_KEY 는 원래 필수다(chatgpt·claude).
+#   ⚠️ NEXT_PUBLIC_FINDABLE_ENGINE_SET(화면 문구용 공개 변수)도 같은 값이어야 한다.
+SET_ON=$(grep -E '^FINDABLE_ENGINE_SET="?api-search-v1"?$' "$TMP" 2>/dev/null || true)
+if [ -n "$SET_ON" ]; then
+  echo "== 메인 엔진 세트 api-search-v1 ON — Google 키(둘 중 하나)·LETSUR_API_KEY 필수 =="
+  G=$(grep -E '^(GOOGLE_API_KEY_SEARCH|GOOGLE_API_KEY)=.+' "$TMP" 2>/dev/null | grep -v '=""$' || true)
+  if [ -z "$G" ]; then
+    echo "  MISS  GOOGLE_API_KEY_SEARCH|GOOGLE_API_KEY   <<< api-search-v1 인데 gemini 키 없음"
+    exit 1
+  fi
+  REQUIRED=$(printf '%s\nLETSUR_API_KEY\n' "$REQUIRED" | sort -u)
+  PUB=$(grep -E '^NEXT_PUBLIC_FINDABLE_ENGINE_SET="?api-search-v1"?$' "$TMP" 2>/dev/null || true)
+  if [ -z "$PUB" ]; then
+    echo "  WARN  NEXT_PUBLIC_FINDABLE_ENGINE_SET   <<< 클라이언트 화면 문구(엔진 이름)가 옛 문구로 남는다"
+  fi
+fi
+
 MISSING=0
 WARNED=0
 echo "== app production env 대조 (존재 + 실값) =="

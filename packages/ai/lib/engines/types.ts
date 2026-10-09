@@ -130,6 +130,12 @@ export interface EngineUsage {
    */
   creditsUsed?: number | null;
   /**
+   * 메인 엔진 세트 표식(2026-10-10). `FINDABLE_ENGINE_SET=api-search-v1` 로 잰 chatgpt·gemini·claude 행에만
+   *   붙는다(`api-search-v1`). 비교 가드(`search-sampling-version.ts`)가 `+api:search-v1` 꼬리표로 바꾸고,
+   *   원가 계산(`cost.ts`)이 이 값으로 후보 단가 경로를 탄다. 미기재 = 기존 세트.
+   */
+  engineSet?: string;
+  /**
    * Letsur 불가로 Vercel AI Gateway 에 **대신** 보낸 호출이면 `"gateway"`(2026-10-07 신설).
    * 원래 경로(Letsur·직접 키)로 끝난 호출에는 붙지 않는다.
    */

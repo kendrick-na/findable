@@ -14,6 +14,7 @@
 
 import { log } from "@repo/observability/log";
 import { runChatgptWeb } from "./chatgpt-web-adapter";
+import { isApiSearchEngineSetActive } from "./engine-set";
 import { chatgptAdapter, chatgptApiSearchAdapter } from "./global-adapters";
 import type {
   ChatgptWebShadow,
@@ -54,12 +55,20 @@ export function readChatgptSource(): ChatgptSource {
 
 /** 이번 실행 설정의 chatgpt 측정 방식 세트 키. api(기본)면 undefined = 기존 시계열. */
 export function chatgptEngineSetKey(): string | undefined {
+  // api-search-v1 메인 세트가 켜지면 chatgpt 본 답은 그 경로다 — 웹 세트 표식을 붙이면 거짓이다
+  //   (세트 표식은 `usage.engineSet` · 비교키 `+api:search-v1` 이 맡는다).
+  if (isApiSearchEngineSetActive()) {
+    return undefined;
+  }
   return readChatgptSource() === "web" ? CHATGPT_WEB_ENGINE_SET : undefined;
 }
 
 export function isChatgptWebShadowEnabled(): boolean {
   const raw = process.env.CHATGPT_WEB_SHADOW?.trim().toLowerCase();
-  // 웹이 이미 본 경로면 섀도는 의미가 없다(같은 걸 두 번 잰다).
+  // 웹이 이미 본 경로면 섀도는 의미가 없다(같은 걸 두 번 잰다). api-search-v1 세트가 켜져도 끈다(원가 중복 방지).
+  if (isApiSearchEngineSetActive()) {
+    return false;
+  }
   return (raw === "true" || raw === "1") && readChatgptSource() === "api";
 }
 

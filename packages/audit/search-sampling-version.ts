@@ -28,6 +28,15 @@
  * Claude-less daily run is never compared with a run that asked Claude, and a
  * v2 question set never with the v1 set. Runs without either marker (every
  * run stored so far) keep their exact old version string.
+ *
+ * ➕ Consumer-aligned main engine set (2026-10-10, `FINDABLE_ENGINE_SET=api-search-v1`).
+ * When chatgpt/gemini/claude are measured through the api-search-v1 path
+ * (web search / grounding ON), their rows carry `engineSet: "api-search-v1"`
+ * (on the row or on `usage`) and the key gets the LAST suffix `+api:search-v1`,
+ * so an old-method run and a new-method run are "not comparable (measurement
+ * method changed)". A marker on ANY of the three engines' rows is enough — a
+ * timed-out or failed row of the same run must not turn it into "legacy".
+ * Runs without the marker keep their exact old version string.
  */
 
 /** Naver rows without a sampling marker (pre-W1 blog-first sample or synthesis). */
@@ -76,7 +85,45 @@ export function searchSamplingVersionOf(result: unknown): string {
   if (plan !== null && plan !== 1) {
     parts.push(`${QUESTION_PLAN_PREFIX}${plan}`);
   }
+  if (hasApiSearchEngineSet(result)) {
+    parts.push(API_SEARCH_KEY_SUFFIX);
+  }
   return parts.join(ENGINE_SET_SEPARATOR);
+}
+
+/** Row marker written by the main api-search-v1 engine path (`usage.engineSet`). */
+export const API_SEARCH_ENGINE_SET_MARKER = "api-search-v1";
+/** Last suffix of the comparison key for api-search-v1 runs. */
+export const API_SEARCH_KEY_SUFFIX = "api:search-v1";
+
+const API_SEARCH_ENGINE_IDS = new Set(["chatgpt", "gemini", "claude"]);
+
+/** True when any chatgpt/gemini/claude row of the run was measured via api-search-v1. */
+export function hasApiSearchEngineSet(result: unknown): boolean {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return false;
+  }
+  const rows = (result as { engineResponses?: unknown }).engineResponses;
+  if (!Array.isArray(rows)) {
+    return false;
+  }
+  return rows.some((row) => {
+    if (!row || typeof row !== "object") {
+      return false;
+    }
+    const r = row as NaverRowLike & { engineSet?: unknown };
+    if (
+      typeof r.engineId !== "string" ||
+      !API_SEARCH_ENGINE_IDS.has(r.engineId)
+    ) {
+      return false;
+    }
+    const usage = r.usage as { engineSet?: unknown } | null | undefined;
+    return (
+      r.engineSet === API_SEARCH_ENGINE_SET_MARKER ||
+      usage?.engineSet === API_SEARCH_ENGINE_SET_MARKER
+    );
+  });
 }
 
 /** Suffix markers inside the comparison key (never shown to the user). */

@@ -26,6 +26,7 @@ import {
   tripLetsurCircuit,
 } from "../letsur-fallback";
 import { LETSUR_KRW_PER_UNIT } from "./cost";
+import { API_SEARCH_ENGINE_SET } from "./engine-set";
 import {
   CLAUDE_SEARCH_MAX_USES,
   claudeSearchRequestBody,
@@ -867,4 +868,67 @@ export function startApiSearchShadow(
       return shadow;
     },
   };
+}
+
+// ──────────────────────────────────────────────────────────────────
+// 메인(점수) 엔진 경로 — FINDABLE_ENGINE_SET=api-search-v1 (3단계 · 2026-10-10)
+// ──────────────────────────────────────────────────────────────────
+type MainEngineId = "chatgpt" | "gemini" | "claude";
+
+const MAIN_RUNNERS: Record<MainEngineId, CandidateRunner> = {
+  chatgpt: (q, o) => runChatgptSearchCandidate(q, o),
+  gemini: (q, o) => runGeminiSearchCandidate(q, o),
+  claude: (q, o) => runClaudeSearchCandidate(q, o),
+};
+
+/** 메인 세트가 대신하는 엔진인가. */
+export function isApiSearchMainEngine(
+  engineId: string
+): engineId is MainEngineId {
+  return (
+    engineId === "chatgpt" || engineId === "gemini" || engineId === "claude"
+  );
+}
+
+/**
+ * 행(성공·실패 모두)에 세트 표식을 붙인다 — 비교키·원가가 이 값을 읽는다.
+ * 실패 행도 표식이 있어야 회차가 「혼재」로 오판되지 않는다.
+ */
+export function withApiSearchEngineSet(res: EngineResponse): EngineResponse {
+  return {
+    ...res,
+    usage: {
+      costModel: "token",
+      inputTokens: null,
+      outputTokens: null,
+      ...res.usage,
+      engineSet: API_SEARCH_ENGINE_SET,
+    },
+  };
+}
+
+/**
+ * 메인 chatgpt·gemini·claude 어댑터의 api-search-v1 경로. 후보 실행기를 그대로 재사용하되 결과를
+ * 점수 행으로 쓴다(출처 → citedSources · usage·원가 · 세트 표식). 절대 throw 하지 않는다.
+ * 🔴 실패해도 옛 모델로 조용히 폴백하지 않는다 — `[api-search:*]` 오류 행으로 남긴다
+ *   (LETSUR 회로 차단기는 실행기가 존중한다).
+ */
+export async function runApiSearchMainEngine(
+  query: EngineQuery
+): Promise<EngineResponse> {
+  const start = Date.now();
+  if (!isApiSearchMainEngine(query.engineId)) {
+    return withApiSearchEngineSet(
+      failure("chatgpt", "[api-search:unsupported_engine]", start)
+    );
+  }
+  try {
+    return withApiSearchEngineSet(
+      await MAIN_RUNNERS[query.engineId](query, {})
+    );
+  } catch {
+    return withApiSearchEngineSet(
+      failure(query.engineId, "[api-search:other]", start)
+    );
+  }
 }

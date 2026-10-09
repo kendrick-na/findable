@@ -19,6 +19,8 @@
  *   (`FINDABLE_CLAUDE_WEB_SEARCH`·`FINDABLE_ENGINE_GROUNDING`)를 끄면 이 판단도 바꿔야 한다.
  */
 
+import { isApiSearchEngineSetActive } from "@repo/ai/lib/engines/engine-set";
+
 export const ENGINE_LABELS_KO: Readonly<Record<string, string>> = {
   chatgpt: "ChatGPT (웹검색 없음)",
   "chatgpt-web": "ChatGPT (웹)",
@@ -45,7 +47,45 @@ export const ENGINE_LABELS_EN: Readonly<Record<string, string>> = {
   daum: "Daum search exposure",
 };
 
-export function engineDisplayName(engineId: string, isKo = true): string {
+/**
+ * 메인 엔진 세트 `api-search-v1`(FINDABLE_ENGINE_SET) 일 때의 표시 이름 — 🔴 대표 승인 대기 문구.
+ *   chatgpt·gemini 만 바뀐다(웹검색·구글 검색 연동을 켜고 잰 값이라서). claude 는 원래도 검색을 붙여 불러 그대로다.
+ *   플래그가 꺼져 있으면 이 표는 **읽히지 않는다**(기존 문구 불변).
+ */
+export const ENGINE_LABELS_API_SEARCH_KO: Readonly<Record<string, string>> = {
+  chatgpt: "ChatGPT (웹검색)",
+  gemini: "Gemini (구글 검색 연동)",
+};
+
+export const ENGINE_LABELS_API_SEARCH_EN: Readonly<Record<string, string>> = {
+  chatgpt: "ChatGPT (web search)",
+  gemini: "Gemini (Google Search grounding)",
+};
+
+/** 표시 문맥. `engineSet` 을 주면 그 값을, 안 주면 지금 프로세스의 플래그를 따른다(한 곳에서만 읽는다). */
+export interface EngineLabelContext {
+  engineSet?: string | null;
+}
+
+function apiSearchSetActive(context?: EngineLabelContext): boolean {
+  return context && "engineSet" in context
+    ? isApiSearchEngineSetActive(context.engineSet ?? "")
+    : isApiSearchEngineSetActive();
+}
+
+export function engineDisplayName(
+  engineId: string,
+  isKo = true,
+  context?: EngineLabelContext
+): string {
+  if (apiSearchSetActive(context)) {
+    const set = (
+      isKo ? ENGINE_LABELS_API_SEARCH_KO : ENGINE_LABELS_API_SEARCH_EN
+    )[engineId];
+    if (set) {
+      return set;
+    }
+  }
   return (isKo ? ENGINE_LABELS_KO : ENGINE_LABELS_EN)[engineId] ?? engineId;
 }
 
@@ -69,8 +109,24 @@ const ENGINE_NOTES: Readonly<Record<string, readonly [string, string]>> = {
   ],
 };
 
-export function engineNote(engineId: string, isKo = true): string | null {
-  const note = ENGINE_NOTES[engineId];
+/** api-search-v1 세트에서 chatgpt 의 한 줄 설명 — 🔴 대표 승인 대기 문구(플래그 off 면 읽히지 않는다). */
+const ENGINE_NOTES_API_SEARCH: Readonly<
+  Record<string, readonly [string, string]>
+> = {
+  chatgpt: [
+    "ChatGPT는 웹검색을 켜고, 소비자 화면과 비슷한 길이로 답하도록 맞춰 측정했어요.",
+    "ChatGPT was measured with web search on, tuned to answer at a length similar to the consumer screen.",
+  ],
+};
+
+export function engineNote(
+  engineId: string,
+  isKo = true,
+  context?: EngineLabelContext
+): string | null {
+  const note =
+    (apiSearchSetActive(context) ? ENGINE_NOTES_API_SEARCH[engineId] : null) ??
+    ENGINE_NOTES[engineId];
   if (!note) {
     return null;
   }

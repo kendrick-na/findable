@@ -2,9 +2,12 @@
 
 import {
   type ApiSearchShadowHandle,
+  isApiSearchMainEngine,
   isApiSearchShadowAllowed,
   isApiSearchShadowEnabled,
+  runApiSearchMainEngine,
   startApiSearchShadow,
+  withApiSearchEngineSet,
 } from "./api-search-v1";
 import {
   chatgptRoutedAdapter,
@@ -13,6 +16,7 @@ import {
   startChatgptWebShadow,
 } from "./chatgpt-source";
 import { chatgptWebAdapter } from "./chatgpt-web-adapter";
+import { isApiSearchEngineSetActive } from "./engine-set";
 import { engineTimeoutMessage } from "./engine-timeout";
 import {
   claudeAdapter,
@@ -55,6 +59,10 @@ export {
   readChatgptSource,
 } from "./chatgpt-source";
 export * from "./cost";
+export {
+  API_SEARCH_ENGINE_SET,
+  isApiSearchEngineSetActive,
+} from "./engine-set";
 export { NAVER_SEARCH_SAMPLING_VERSION } from "./korean-adapters";
 export * from "./types";
 export {
@@ -64,13 +72,25 @@ export {
   uiVendorShadowAllowlist,
 } from "./ui-vendor-v1";
 
+/**
+ * 메인 엔진 세트 스위치(2026-10-10). `FINDABLE_ENGINE_SET=api-search-v1` 이면 chatgpt·gemini·claude 본 답이
+ * api-search-v1 경로(웹검색·그라운딩 ON)로 간다. 미설정(기본)이면 **기존 어댑터를 그대로** 부른다.
+ * 호출 시점에 플래그를 읽는다(모듈 로드 시 고정하지 않는다 — 테스트·롤백이 재시작 없이 먹는다).
+ */
+function engineSetRouted(legacy: EngineAdapter): EngineAdapter {
+  return (query) =>
+    isApiSearchEngineSetActive() && isApiSearchMainEngine(query.engineId)
+      ? runApiSearchMainEngine(query)
+      : legacy(query);
+}
+
 const ADAPTERS: Record<EngineId, EngineAdapter> = {
   // 경로 스위치(2026-10-07): CHATGPT_SOURCE=api(기본)면 기존 API 어댑터 그대로.
-  chatgpt: chatgptRoutedAdapter,
+  chatgpt: engineSetRouted(chatgptRoutedAdapter),
   "chatgpt-web": chatgptWebAdapter,
-  claude: claudeAdapter,
+  claude: engineSetRouted(claudeAdapter),
   perplexity: perplexityAdapter,
-  gemini: geminiAdapter,
+  gemini: engineSetRouted(geminiAdapter),
   hyperclova: hyperclovaAdapter,
   naver: naverAdapter,
   "naver-briefing": naverBriefingAdapter,
@@ -268,11 +288,12 @@ export async function queryAllEngines(
       }
     })
   );
+  const engineSetActive = isApiSearchEngineSetActive();
   const responses = settled.map((result, i): EngineResponse => {
     if (result.status === "fulfilled") {
       return result.value;
     }
-    return {
+    const failed: EngineResponse = {
       engineId: engineIds[i],
       rawResponse: "",
       brandMentioned: false,
@@ -292,6 +313,10 @@ export async function queryAllEngines(
           : 0,
       isStub: false,
     };
+    // 60초 상한으로 끊긴 행도 세트 표식을 달아야 한 회차가 「혼재」로 오판되지 않는다.
+    return engineSetActive && isApiSearchMainEngine(failed.engineId)
+      ? withApiSearchEngineSet(failed)
+      : failed;
   });
   if (shadow) {
     await attachChatgptWebShadow(responses, shadow);
@@ -373,6 +398,8 @@ function startApiSearchShadows(
   try {
     if (
       options?.timeoutMs ||
+      // 메인 세트가 켜져 있으면 후보가 이미 본 답이다 — 같은 호출을 한 번 더(섀도로) 돌려 원가를 두 번 내지 않는다.
+      isApiSearchEngineSetActive() ||
       !isApiSearchShadowEnabled() ||
       !isApiSearchShadowAllowed(base.brandDomain)
     ) {
