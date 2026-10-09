@@ -197,11 +197,18 @@ export interface AuditRunInput {
 
 /** 행에 붙은 섀도 결과만 골라 저장용 필드로(없으면 빈 객체 → 기존 저장 모양 불변). */
 function shadowFieldsOf(
-  r: Pick<EngineResponse, "shadowApiSearch" | "shadowChatgptWeb">
-): Pick<EngineResponse, "shadowApiSearch" | "shadowChatgptWeb"> {
+  r: Pick<
+    EngineResponse,
+    "shadowApiSearch" | "shadowChatgptWeb" | "shadowUiVendor"
+  >
+): Pick<
+  EngineResponse,
+  "shadowApiSearch" | "shadowChatgptWeb" | "shadowUiVendor"
+> {
   return {
     ...(r.shadowChatgptWeb ? { shadowChatgptWeb: r.shadowChatgptWeb } : {}),
     ...(r.shadowApiSearch ? { shadowApiSearch: r.shadowApiSearch } : {}),
+    ...(r.shadowUiVendor ? { shadowUiVendor: r.shadowUiVendor } : {}),
   };
 }
 
@@ -1446,6 +1453,17 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         : {
             apiSearchShadowKrw: Math.round(cost.apiSearchShadowKrw * 100) / 100,
             apiSearchShadow: (cost.apiSearchShadow ?? []).map((c) => ({
+              engineId: c.engineId,
+              krw: Math.round(c.krw * 100) / 100,
+              basis: c.basis,
+            })),
+          }),
+      // ui-vendor-v1 업체 화면 수집 섀도 원가(UI_VENDOR_SHADOW=true 일 때만). totalKrw 에 **안** 들어간다.
+      ...(cost.uiVendorShadowKrw === undefined
+        ? {}
+        : {
+            uiVendorShadowKrw: Math.round(cost.uiVendorShadowKrw * 100) / 100,
+            uiVendorShadow: (cost.uiVendorShadow ?? []).map((c) => ({
               engineId: c.engineId,
               krw: Math.round(c.krw * 100) / 100,
               basis: c.basis,
