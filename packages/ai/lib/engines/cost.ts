@@ -23,6 +23,9 @@
 //   · 웹 수집 = Firecrawl scrape(actions 포함) 1회 = 1크레딧(응답 metadata.creditsUsed 가 있으면 그 값).
 //   · 웹 실패 후 API 폴백 = gpt-5.4 토큰 + OpenAI 웹검색 $10/1,000회 + 앞서 쓴 웹 크레딧.
 //   · 섀도 = 메인과 별도로 Firecrawl 크레딧이 나간다 → `auditCost` 가 별도 항목으로 더한다.
+// ➕ 2026-10-09 api-search-v1 섀도 후보(API_SEARCH_SHADOW=true · 허용 도메인만) 원가 — v2 범위 안의 추가.
+//   플래그를 안 켜면 들어오는 입력(`shadowApiSearch`)이 없어 **기존 계산은 한 줄도 안 바뀐다**(그래서 버전 유지).
+//   후보 원가는 `apiSearchShadowCostOf` 가 **별도 항목**으로 만들고 `auditCost` 가 shadowKrw·apiSearchShadowKrw 로만 보고한다(totalKrw 불포함).
 // ⚠️ chatgpt·claude 는 실제로는 Letsur 게이트웨이로 청구된다 — 아래는 **원 제공사 공식 정가**다.
 //    Letsur 의 재판매 단가·수수료는 [확인필요](청구서 대조 전까지 정가로 둔다).
 
@@ -37,6 +40,32 @@ export const USD_TO_KRW = 1380;
  *   2 = 2026-10-07 공식 단가 재확인 + 웹검색료 + Firecrawl 크레딧 (이 파일 상단 참조)
  */
 export const COST_MODEL_VERSION = 2;
+
+/**
+ * LETSUR 1 unit 의 **원화 청구 환산**(KRW/unit) — api-search-v1 ChatGPT 후보 전용. [확인필요: 청구서 대조]
+ *   · LETSUR unit 은 원 제공사 정가 1 USD 와 같은 금액으로 차감된다(응답 `estimated_cost.currency="unit"`).
+ *   · 그러나 원화로 청구될 때의 환산은 1,525원/unit 로 보고 있다(대표 제공 가정).
+ *   🔴 위 USD_TO_KRW(1380, 정가 USD 환산용)와 **값이 다르다** — 같은 unit 이어도 후보 원가는
+ *      1380 이 아니라 1525 로 계산해 실제 청구에 맞춘다. 두 환율이 갈라진 것은 의도된 불일치이며,
+ *      메인(chatgpt·claude) 원가는 기존대로 1380 이다. 통일 여부는 청구서 확인 후 대표 결정.
+ */
+export const LETSUR_KRW_PER_UNIT = 1525;
+
+/**
+ * api-search-v1 Gemini 후보의 검색 1회(쿼리 1건)당 USD. [확인필요 — 공식 단가표로 재확인]
+ *   Gemini 3 계열 그라운딩은 「실행된 검색 쿼리 수」 기준 과금으로 알려져 있다($14/1,000 queries).
+ *   기존 `WEB_SEARCH_USD_PER_REQUEST`(엔진 id 기준)에 gemini 를 넣지 않는다 — 메인 gemini(무료 티어)
+ *   계산에 새는 걸 막기 위해 후보 전용 상수로 둔다.
+ */
+export const GEMINI_SEARCH_USD_PER_QUERY = 14 / 1000;
+
+/**
+ * api-search-v1 후보 모델별 토큰 단가(USD/1M). **여기 없으면 `unknown`** — 다른 모델 값을 빌리지 않는다.
+ *   · gemini-3.5-flash-lite: LETSUR 카탈로그 표기 in $0.30 / out $2.50 (LETSUR catalog · 공식 단가표 대조 [확인필요]).
+ */
+const SHADOW_MODEL_TOKEN_PRICES: Record<string, TokenPrice> = {
+  "gemini-3.5-flash-lite": { inputPerM: 0.3, outputPerM: 2.5 },
+};
 
 // 모델별 USD/1M tokens (input, output). 슬러그는 global/korean adapter 기본값 기준.
 interface TokenPrice {
@@ -216,6 +245,15 @@ function gatewayTokenCost(res: EngineResponse): EngineCost {
 function tokenCost(res: EngineResponse): EngineCost {
   const { engineId, usage } = res;
   // provider 가 직접 계산한 원가가 있으면 그게 정답이다(토큰·도구료 포함).
+  //   원화로 이미 환산해 둔 값(providerCostKrw)이 있으면 그걸 우선한다(LETSUR unit 1,525원 가정 — 상단 참조).
+  if (isFiniteNonNegative(usage?.providerCostKrw)) {
+    return {
+      engineId,
+      krw: usage.providerCostKrw,
+      basis: "token",
+      note: "provider 보고 원가(KRW 환산)",
+    };
+  }
   if (isFiniteNonNegative(usage?.providerCostUsd)) {
     return {
       engineId,
@@ -335,10 +373,17 @@ function inferCostModel(engineId: EngineId): EngineCost["basis"] {
 
 // 진단 1건(여러 엔진) 총원가 합산.
 export interface AuditCost {
+  /** api-search-v1 후보 섀도 항목(별도 보관 · perEngine/totalKrw 에 **불포함**). 없으면 생략. */
+  apiSearchShadow?: EngineCost[];
+  /** api-search-v1 후보 섀도 원가 합(KRW). **totalKrw 에 불포함**(shadowKrw 에는 포함). 없으면 생략. */
+  apiSearchShadowKrw?: number;
   costModelVersion: number; // 이 합계를 낸 원가 규칙 버전(COST_MODEL_VERSION)
   measuredEngines: number; // token/credit/browser 로 실제 산정된 엔진 수
   perEngine: EngineCost[];
-  /** ChatGPT 웹 섀도 수집 원가 합(KRW). 섀도가 없으면 생략. totalKrw 에 이미 포함. */
+  /**
+   * 섀도 원가 합(KRW) = ChatGPT 웹 섀도(totalKrw 에 이미 포함) + api-search-v1 후보 섀도(totalKrw 에 **불포함**).
+   * 섀도가 없으면 생략.
+   */
   shadowKrw?: number;
   totalKrw: number;
 }
@@ -357,6 +402,73 @@ export function shadowCostOf(res: EngineResponse): EngineCost | null {
   };
 }
 
+/**
+ * api-search-v1 섀도 후보 1건 원가. 후보가 호출에 성공해 `usage` 를 남긴 경우만 항목이 생긴다
+ *   (실패·중단은 과금 여부를 모르므로 항목 없음 — [확인필요], 0원이라고 단정하지도 않는다).
+ *   · ChatGPT 후보: provider 보고 원가(estimated_cost) 우선 → KRW 환산(1,525/unit) → 없으면 unknown.
+ *   · Gemini 후보: 모델 단가표(SHADOW_MODEL_TOKEN_PRICES) + 검색 쿼리 수 × GEMINI_SEARCH_USD_PER_QUERY.
+ *     단가 미등록 모델·토큰 미측정이면 unknown(0원). **메인 gemini/chatgpt 단가를 빌리지 않는다.**
+ */
+export function apiSearchShadowCostOf(res: EngineResponse): EngineCost | null {
+  const shadow = res.shadowApiSearch;
+  const usage = shadow?.usage;
+  if (!(shadow && usage) || shadow.outcome !== "ok") {
+    return null;
+  }
+  const engineId = res.engineId;
+  const label = `api-search-v1 섀도 · ${shadow.candidate} · ${shadow.model}`;
+  if (isFiniteNonNegative(usage.providerCostKrw)) {
+    return {
+      engineId,
+      krw: usage.providerCostKrw,
+      basis: "token",
+      note: `${label} · provider 보고 원가(1unit=${LETSUR_KRW_PER_UNIT}원 환산)`,
+    };
+  }
+  if (isFiniteNonNegative(usage.providerCostUsd)) {
+    return {
+      engineId,
+      krw: usage.providerCostUsd * USD_TO_KRW,
+      basis: "token",
+      note: `${label} · provider 보고 원가(USD, 환율 ${USD_TO_KRW})`,
+    };
+  }
+  const price = SHADOW_MODEL_TOKEN_PRICES[shadow.model];
+  if (!price) {
+    return {
+      engineId,
+      krw: 0,
+      basis: "unknown",
+      note: `${label} · 모델 단가 미등록`,
+    };
+  }
+  if (usage.inputTokens == null || usage.outputTokens == null) {
+    return {
+      engineId,
+      krw: 0,
+      basis: "unknown",
+      note: `${label} · 토큰 미측정`,
+    };
+  }
+  const queries = usage.webSearchRequests;
+  const searchUsd =
+    shadow.candidate === "gemini-search-v1" && isFiniteNonNegative(queries)
+      ? queries * GEMINI_SEARCH_USD_PER_QUERY
+      : 0;
+  const usd =
+    (usage.inputTokens / 1_000_000) * price.inputPerM +
+    (usage.outputTokens / 1_000_000) * price.outputPerM +
+    searchUsd;
+  return {
+    engineId,
+    krw: usd * USD_TO_KRW,
+    basis: "token",
+    note: isFiniteNonNegative(queries)
+      ? `${label} · 검색 ${queries}회`
+      : `${label} · 검색 횟수 미수집(검색료 0 산입)`,
+  };
+}
+
 export function auditCost(responses: EngineResponse[]): AuditCost {
   const mainCosts = responses.map(costOf);
   const measuredEngines = mainCosts.filter(
@@ -366,13 +478,23 @@ export function auditCost(responses: EngineResponse[]): AuditCost {
   const shadowCosts = responses.flatMap((res) => shadowCostOf(res) ?? []);
   const perEngine = [...mainCosts, ...shadowCosts];
   const totalKrw = perEngine.reduce((sum, c) => sum + c.krw, 0);
+  // api-search-v1 후보 섀도: **totalKrw·perEngine 에 넣지 않는다**(점수·주 엔진 원가와 분리).
+  //   shadowKrw 와 `apiSearchShadow*` 필드로만 보고한다.
+  const apiSearchCosts = responses.flatMap(
+    (res) => apiSearchShadowCostOf(res) ?? []
+  );
+  const webShadowKrw = shadowCosts.reduce((sum, c) => sum + c.krw, 0);
+  const apiSearchKrw = apiSearchCosts.reduce((sum, c) => sum + c.krw, 0);
   return {
     totalKrw,
     perEngine,
     measuredEngines,
     costModelVersion: COST_MODEL_VERSION,
-    ...(shadowCosts.length > 0
-      ? { shadowKrw: shadowCosts.reduce((sum, c) => sum + c.krw, 0) }
+    ...(shadowCosts.length > 0 || apiSearchCosts.length > 0
+      ? { shadowKrw: webShadowKrw + apiSearchKrw }
+      : {}),
+    ...(apiSearchCosts.length > 0
+      ? { apiSearchShadow: apiSearchCosts, apiSearchShadowKrw: apiSearchKrw }
       : {}),
   };
 }

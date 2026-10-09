@@ -1,6 +1,12 @@
 // Findable 7 엔진 라우터 + 병렬 호출 오케스트레이터
 
 import {
+  type ApiSearchShadowHandle,
+  isApiSearchShadowAllowed,
+  isApiSearchShadowEnabled,
+  startApiSearchShadow,
+} from "./api-search-v1";
+import {
   chatgptRoutedAdapter,
   isChatgptWebShadowEnabled,
   type ShadowHandle,
@@ -20,6 +26,7 @@ import {
 } from "./korean-adapters";
 import { naverBriefingAdapter } from "./naver-briefing-adapter";
 import type {
+  ApiSearchCandidate,
   EngineAdapter,
   EngineId,
   EngineQuery,
@@ -27,6 +34,13 @@ import type {
 } from "./types";
 
 export * from "./aggregate";
+export {
+  apiSearchShadowAllowlist,
+  isApiSearchShadowAllowed,
+  isApiSearchShadowEnabled,
+  parseGeminiGenerate,
+  parseOpenAiResponses,
+} from "./api-search-v1";
 export {
   CHATGPT_WEB_ENGINE_SET,
   chatgptEngineSetKey,
@@ -218,6 +232,8 @@ export async function queryAllEngines(
   } catch {
     shadow = null; // 섀도는 어떤 경우에도 메인을 깨지 않는다.
   }
+  // 🔎 api-search-v1 후보 섀도(API_SEARCH_SHADOW=true + 허용 도메인) — 같은 방식(메인과 동시 시작).
+  const apiSearchShadows = startApiSearchShadows(base, engineIds, options);
   const settled = await Promise.allSettled(
     engineIds.map(async (engineId) => {
       observe({ engineId, phase: "started" });
@@ -264,7 +280,62 @@ export async function queryAllEngines(
   if (shadow) {
     await attachChatgptWebShadow(responses, shadow);
   }
+  await attachApiSearchShadows(responses, apiSearchShadows);
   return responses;
+}
+
+const API_SEARCH_ROWS: ReadonlyArray<{
+  candidate: ApiSearchCandidate;
+  engineId: EngineId;
+}> = [
+  { engineId: "chatgpt", candidate: "chatgpt-search-v1" },
+  { engineId: "gemini", candidate: "gemini-search-v1" },
+];
+
+/**
+ * 후보 섀도 시작. 플래그 off·허용 목록 비어 있음·도메인 불일치·늦은 칸 다시 묻기(options.timeoutMs)면
+ * **아무것도 안 한다**(= 메인 동작 불변). 절대 throw 하지 않는다.
+ */
+function startApiSearchShadows(
+  base: Omit<EngineQuery, "engineId">,
+  engineIds: readonly EngineId[],
+  options?: { timeoutMs?: number }
+): Array<{ engineId: EngineId; handle: ApiSearchShadowHandle }> {
+  try {
+    if (
+      options?.timeoutMs ||
+      !isApiSearchShadowEnabled() ||
+      !isApiSearchShadowAllowed(base.brandDomain)
+    ) {
+      return [];
+    }
+    return API_SEARCH_ROWS.filter((row) =>
+      engineIds.includes(row.engineId)
+    ).map((row) => ({
+      engineId: row.engineId,
+      handle: startApiSearchShadow(base, row.candidate),
+    }));
+  } catch {
+    return []; // 섀도는 어떤 경우에도 메인을 깨지 않는다.
+  }
+}
+
+async function attachApiSearchShadows(
+  responses: EngineResponse[],
+  shadows: Array<{ engineId: EngineId; handle: ApiSearchShadowHandle }>
+): Promise<void> {
+  for (const { engineId, handle } of shadows) {
+    const index = responses.findIndex((r) => r.engineId === engineId);
+    try {
+      const result = await handle.finish(responses[index]);
+      const main = responses[index];
+      if (main) {
+        responses[index] = { ...main, shadowApiSearch: result };
+      }
+    } catch {
+      /* 섀도 실패는 메인 결과에 아무 영향도 주지 않는다. */
+    }
+  }
 }
 
 async function attachChatgptWebShadow(
