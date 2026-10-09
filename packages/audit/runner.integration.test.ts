@@ -607,6 +607,44 @@ describe("runAuditJob offline lifecycle contracts", () => {
     expect(rows[1].shadowChatgptWeb).toBeUndefined();
   });
 
+  it("stores the api-search-v1 shadow without touching scored fields", async () => {
+    const shadowApiSearch = {
+      candidate: "chatgpt-search-v1",
+      model: "gpt-6-luna",
+      outcome: "ok",
+      text: "candidate answer",
+      citations: [],
+      brandMentioned: false,
+      durationMs: 5,
+      error: null,
+      comparison: { mentionAgreement: false, citationOverlap: null },
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        costModel: "token",
+        providerCostKrw: 4.3,
+      },
+    };
+    queryPromptsSequentially.mockResolvedValue([
+      [{ ...response(), shadowApiSearch }],
+      [response()],
+    ]);
+    const runAuditJob = await loadRunner();
+
+    await runAuditJob(input);
+
+    const result = terminalCalls()[0].data.result;
+    const rows = result.engineResponses;
+    expect(rows[0]).toMatchObject({
+      engineId: "chatgpt",
+      brandMentioned: true,
+      shadowApiSearch,
+    });
+    expect(rows[1].shadowApiSearch).toBeUndefined();
+    // auditCost 는 이 파일에서 mock 이라 원가 합산은 ai 패키지 api-search-cost.test.ts 가 검증한다.
+    expect(result.cost).not.toHaveProperty("apiSearchShadowKrw");
+  });
+
   it("does not overwrite a completed job when Tracking fails after commit", async () => {
     persistAuditTracking.mockResolvedValue("failed");
     const runAuditJob = await loadRunner();

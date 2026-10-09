@@ -147,6 +147,12 @@ export interface EngineUsage {
    */
   provider?: "gateway";
   /**
+   * provider 청구 단위를 **원화로 환산해 둔** 이번 호출 원가(KRW). api-search-v1 ChatGPT 후보 전용
+   * (LETSUR unit 청구 · 1 unit = 정가 1 USD 이지만 원화 청구 환산은 1,525원/unit — cost.ts 참조).
+   * 있으면 `providerCostUsd × USD_TO_KRW` 보다 우선한다. 기존 엔진은 채우지 않는다.
+   */
+  providerCostKrw?: number | null;
+  /**
    * provider 가 **응답에 직접 적어 준** 이번 호출 총원가(USD). 있으면 단가표 계산보다 우선한다.
    * 현재 Perplexity Agent API(`usage.cost.total_cost`)만 채운다. 원가모델 v2 신설.
    */
@@ -197,12 +203,41 @@ export interface EngineResponse {
   rawResponse: string;
   sentiment: "positive" | "neutral" | "negative" | null;
   /**
+   * api-search-v1 후보 엔진 섀도 결과(`API_SEARCH_SHADOW=true` + 허용 도메인). **chatgpt·gemini 행에만** 붙는다.
+   * 🔴 점수·집계·판정·PDF 에 쓰지 않는다 — 소비자 화면에 가까운 API 후보 답을 재기 위한 저장 전용 값이다.
+   */
+  shadowApiSearch?: ApiSearchShadow;
+  /**
    * ChatGPT 웹 섀도 수집 결과(`CHATGPT_WEB_SHADOW=true` · 2026-10-07). **chatgpt 행에만** 붙는다.
    * 🔴 점수·집계·판정에 쓰지 않는다 — API 답과 웹 답의 차이를 재기 위한 저장 전용 값이다.
    */
   shadowChatgptWeb?: ChatgptWebShadow;
   shareOfVoice: number | null; // 0.0 ~ 1.0
   usage?: EngineUsage; // 원가계기(유닛이코노믹스). 없으면 미측정.
+}
+
+/** api-search-v1 섀도 후보 식별자(저장 전용). */
+export type ApiSearchCandidate = "chatgpt-search-v1" | "gemini-search-v1";
+
+/** api-search-v1 섀도 1건(저장 전용). 원문은 길이를 제한해 저장한다. */
+export interface ApiSearchShadow {
+  brandMentioned: boolean | null;
+  candidate: ApiSearchCandidate;
+  citations: CitedSource[];
+  /** 메인 답과의 비교. 섀도가 실패했으면 null. */
+  comparison: {
+    citationOverlap: number | null;
+    mentionAgreement: boolean;
+  } | null;
+  durationMs: number;
+  error: string | null;
+  /** 후보가 실제로 쓴 모델 슬러그. */
+  model: string;
+  /** `ok` · `failed` · `skipped_budget`(메인 배치가 먼저 끝나 중단) */
+  outcome: "ok" | "failed" | "skipped_budget";
+  text: string;
+  /** 원가 산정 재료. 실패·중단이면 생략(과금 여부 [확인필요]). */
+  usage?: EngineUsage;
 }
 
 /** 섀도 웹 수집 1건(저장 전용). 원문은 길이를 제한해 저장한다. */

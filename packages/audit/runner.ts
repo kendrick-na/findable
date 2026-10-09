@@ -20,6 +20,7 @@ import {
   aggregateAudit,
   auditCost,
   chatgptEngineSetKey,
+  type EngineResponse,
   NAVER_SEARCH_SAMPLING_VERSION,
   partitionCitedSources,
 } from "@repo/ai/lib/engines";
@@ -192,6 +193,16 @@ export interface AuditRunInput {
   // 20번(dual-write): 로그인 org audit만 채워진다. 비로그인 무료 audit은 undefined
   //   → Tracking 적재 skip(D1: 무료는 AuditJob email 스코프 유지).
   organizationId?: string;
+}
+
+/** 행에 붙은 섀도 결과만 골라 저장용 필드로(없으면 빈 객체 → 기존 저장 모양 불변). */
+function shadowFieldsOf(
+  r: Pick<EngineResponse, "shadowApiSearch" | "shadowChatgptWeb">
+): Pick<EngineResponse, "shadowApiSearch" | "shadowChatgptWeb"> {
+  return {
+    ...(r.shadowChatgptWeb ? { shadowChatgptWeb: r.shadowChatgptWeb } : {}),
+    ...(r.shadowApiSearch ? { shadowApiSearch: r.shadowApiSearch } : {}),
+  };
 }
 
 async function awaitWithTimeout<T>(
@@ -1425,10 +1436,21 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         krw: Math.round(c.krw * 100) / 100,
         basis: c.basis,
       })),
-      // ChatGPT 웹 섀도 원가(CHATGPT_WEB_SHADOW=true 일 때만). totalKrw 에 이미 포함.
+      // 섀도 원가 합(웹 섀도는 totalKrw 에 이미 포함 · api-search-v1 후보는 **불포함**).
       ...(cost.shadowKrw === undefined
         ? {}
         : { shadowKrw: Math.round(cost.shadowKrw * 100) / 100 }),
+      // api-search-v1 후보 섀도 원가(API_SEARCH_SHADOW=true 일 때만). totalKrw 에 **안** 들어간다.
+      ...(cost.apiSearchShadowKrw === undefined
+        ? {}
+        : {
+            apiSearchShadowKrw: Math.round(cost.apiSearchShadowKrw * 100) / 100,
+            apiSearchShadow: (cost.apiSearchShadow ?? []).map((c) => ({
+              engineId: c.engineId,
+              krw: Math.round(c.krw * 100) / 100,
+              basis: c.basis,
+            })),
+          }),
       // 늦은 칸 다시 묻기 원가(2026-10-07). totalKrw 에 이미 포함 — 운영 일일 점검용 내역.
       //   ⚠️ 60초에서 끊긴 첫 호출의 원가는 usage 가 없어 0으로 잡힌다(제공사 과금 여부 [확인필요]).
       ...(lateReaskCost ? { lateReask: lateReaskCost } : {}),
@@ -1694,8 +1716,9 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
                 r.usage?.chatgptEngineSet ?? runChatgptEngineSet,
             }
           : {}),
-        // ChatGPT 웹 섀도(CHATGPT_WEB_SHADOW=true) — 저장 전용. 점수·버킷·집계에 안 쓴다.
-        ...(r.shadowChatgptWeb ? { shadowChatgptWeb: r.shadowChatgptWeb } : {}),
+        // 섀도 결과 — 저장 전용. 점수·버킷·집계·PDF 에 안 쓴다.
+        //   shadowChatgptWeb: CHATGPT_WEB_SHADOW=true · shadowApiSearch: API_SEARCH_SHADOW=true + 허용 도메인.
+        ...shadowFieldsOf(r),
         engineId: r.engineId,
         // 늦은 칸(2026-10-07): resolved = 다시 물어 받은 답 · final_failed = 끝내 답이 없었다.
         ...lateCellFields[index],
