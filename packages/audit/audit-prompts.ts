@@ -1,3 +1,4 @@
+import { defaultConsumerQuestions } from "@repo/ai/lib/question-plan";
 import { conjunctionParticle, objectParticle, topicParticle } from "./actions";
 import type { PromptKind } from "./answer-buckets";
 import { DEFAULT_QUESTION_SET_V2 } from "./default-question-set";
@@ -20,42 +21,12 @@ export interface DefaultPrompt {
 }
 
 export interface DefaultPromptOptions {
-  /** 이름 없는 추천형 질문을 넣을지(사이트 기반 이름 없는 질문이 없을 때만 켠다). */
-  includeNameless?: boolean;
-  /** 고객이 확인한 업종(Industry enum 값). 없거나 other 면 질문을 만들지 않는다. */
+  /**
+   * 고객이 확인한 업종(Industry enum 값). 있고 other 가 아니면 **소비자 말투 기본 질문**
+   * (이름 없는 3 + 이름 1, `@repo/ai/lib/question-plan`)을 쓴다. 없거나 other 면 지어내지 않고
+   * 예전 4개 그대로 — 무료 진단(업종 없음)도 여기에 해당한다.
+   */
   industry?: string | null;
-}
-
-// 업종 enum → 질문에 쓰는 일반 분야 표기. 회사 사실이 아니라 고객이 고른 분류의 이름이다.
-//   other 는 뜻이 없어 넣지 않는다(지어내지 않는다).
-const INDUSTRY_QUESTION_LABEL: Record<string, { en: string; ko: string }> = {
-  beauty: { ko: "화장품·뷰티", en: "beauty and skincare" },
-  fashion: { ko: "패션", en: "fashion" },
-  food: { ko: "식품", en: "food" },
-  b2b_saas: { ko: "B2B 소프트웨어", en: "B2B software" },
-  content_ip: { ko: "콘텐츠", en: "content" },
-  retail: { ko: "온라인 쇼핑", en: "online shopping" },
-  finance: { ko: "금융 서비스", en: "financial services" },
-  healthcare: { ko: "병원·의료 서비스", en: "healthcare" },
-  education: { ko: "교육 서비스", en: "education" },
-  manufacturing: { ko: "제조·부품", en: "manufacturing and components" },
-};
-
-function namelessDefaultPrompts(
-  industry: string | null | undefined
-): { en: string; ko: string } | null {
-  const label = industry ? INDUSTRY_QUESTION_LABEL[industry] : undefined;
-  if (!label) {
-    return null;
-  }
-  return {
-    ko: `${label.ko} 분야에서 추천할 만한 곳 알려줘`,
-    en: `Which ${label.en} companies would you recommend?`,
-  };
-}
-
-function namelessPrompt(text: string, lang: "ko" | "en"): DefaultPrompt {
-  return { kind: "discovery", lang, source: DEFAULT_QUESTION_SET_V2, text };
 }
 
 /**
@@ -100,38 +71,33 @@ export function generateAuditPrompts(
     `Compare the main competitors of ${englishName}`,
   ];
 
-  // 🔴 2026-10-12 기본 질문 v2 — 4개가 전부 이름 질문이면 「AI 가 이 이름을 아나」만
-  //   잰다(프란츠·넘버즈인·프롬맘 사건). 업종을 알고 있고 사이트 기반 이름 없는 질문이
-  //   없을 때만, 이름 없는 추천형 질문 1개를 넣는다. 업종이 없으면 지어내지 않고 기존 4개.
-  const nameless = options.includeNameless
-    ? namelessDefaultPrompts(options.industry)
-    : null;
+  // 🔴 기본 질문 v2(2026-10-13) — 4개가 전부 이름 질문이면 「AI 가 이 이름을 아나」만 잰다
+  //   (프란츠·넘버즈인·프롬맘 사건). 업종을 알면 소비자 말투 기본 질문(이름 없는 3 + 이름 1)으로
+  //   바꾼다. 이름 없는 질문은 discovery 로 표시해 Tracking 분모·점수에 섞지 않는다.
+  const consumer = defaultConsumerQuestions({
+    englishName,
+    industry: options.industry,
+    koreanName: brandName,
+    language,
+  });
+  if (consumer) {
+    return consumer.map((q) =>
+      q.nameless
+        ? {
+            kind: "discovery" as const,
+            lang: q.language,
+            source: DEFAULT_QUESTION_SET_V2,
+            text: q.text,
+          }
+        : { lang: q.language, text: q.text }
+    );
+  }
 
   if (language === "ko") {
-    const texts = nameless ? [...ko.slice(0, 3), nameless.ko] : ko;
-    return texts.map((text) =>
-      nameless && text === nameless.ko
-        ? namelessPrompt(text, "ko")
-        : { text, lang: "ko" as const }
-    );
+    return ko.map((text) => ({ text, lang: "ko" as const }));
   }
   if (language === "en") {
-    const texts = nameless ? [...en.slice(0, 3), nameless.en] : en;
-    return texts.map((text) =>
-      nameless && text === nameless.en
-        ? namelessPrompt(text, "en")
-        : { text, lang: "en" as const }
-    );
-  }
-  if (nameless) {
-    // both: 브랜드형 2(한·영) + 이름 없는 추천형 2(한·영). 이름 없는 추천 답에도
-    //   경쟁사가 나열되므로 경쟁사형 자리를 대신한다(총 4개 · 원가 불변).
-    return [
-      { text: ko[0] as string, lang: "ko" as const },
-      namelessPrompt(nameless.ko, "ko"),
-      { text: en[0] as string, lang: "en" as const },
-      namelessPrompt(nameless.en, "en"),
-    ];
+    return en.map((text) => ({ text, lang: "en" as const }));
   }
   // both 모드: 각 언어에서 브랜드형 1 + 경쟁사형 1 → 총 브랜드형 2 + 경쟁사형 2.
   // ko[0]=브랜드형, ko[2]=경쟁사형 / en[0]=브랜드형, en[2]=경쟁사형.

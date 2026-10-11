@@ -345,8 +345,8 @@ async function resolveRunPrompts(
     brandVariants,
     language,
     RUNNER_PROMPT_LIMIT - discovery.length,
-    // 기본 질문 v2: 사이트 기반 이름 없는 질문이 이미 있으면 중복해서 넣지 않는다.
-    { includeNameless: discovery.length === 0, industry }
+    // 기본 질문 v2: 업종을 알면 소비자 말투 기본 질문(이름 없는 3 + 이름 1).
+    { industry }
   );
   return [...brandPrompts, ...discovery].slice(0, RUNNER_PROMPT_LIMIT);
 }

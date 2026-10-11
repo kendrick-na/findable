@@ -35,6 +35,15 @@ vi.mock("@repo/ai/lib/content-draft", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   generateContentDraft: h.generateContentDraft,
 }));
+vi.mock("@repo/audit/official-site-identity", () => ({
+  resolveOfficialSiteIdentity: () =>
+    Promise.resolve({
+      description: "민감성 피부 진정 크림",
+      h1: null,
+      siteName: "테스트",
+      title: "테스트 | 스킨케어",
+    }),
+}));
 vi.mock("@repo/audit/revalidate-stored-audit", () => ({
   revalidateStoredAuditResult: h.revalidateStoredAuditResult,
 }));
@@ -50,7 +59,15 @@ vi.mock("@repo/database", () => ({
 vi.mock("@/lib/db/scoped", () => ({
   requireOrg: () => Promise.resolve("org_1"),
   scopedBrandById: () =>
-    Promise.resolve({ id: "brand_1", name: "테스트브랜드", domain: "x.test" }),
+    Promise.resolve({
+      id: "brand_1",
+      name: "테스트브랜드",
+      domain: "x.test",
+      industry: "beauty",
+      marketScope: "korea",
+      entityVariants: ["별칭"],
+      competitors: [{ name: "경쟁사A" }],
+    }),
 }));
 
 import { suggestBrandIdentity } from "../app/actions/brand/suggest-brand-identity";
@@ -105,7 +122,14 @@ describe("on Vercel Preview", () => {
       throw new Error("expected ok");
     }
     expect(result.suggestions.prompts.length).toBeGreaterThanOrEqual(4);
-    expect(result.suggestions.prompts[0]?.text).toContain("테스트브랜드");
+    // 업종 기반 소비자 말투 기본 질문 — 이름 없는 질문 + 이름 질문 1개.
+    expect(
+      result.suggestions.prompts.some((p) => p.text.includes("테스트브랜드"))
+    ).toBe(true);
+    expect(
+      result.suggestions.prompts.filter((p) => !p.text.includes("테스트브랜드"))
+        .length
+    ).toBeGreaterThanOrEqual(3);
     expect(result.suggestions.competitors).toEqual([]);
     expect(h.resolveBrandIdentity).not.toHaveBeenCalled();
     expect(h.suggestTrackingPrompts).not.toHaveBeenCalled();
@@ -169,11 +193,19 @@ describe("on production (unchanged behaviour)", () => {
       "x.test",
       "테스트브랜드"
     );
+    // 재료: 업종·시장·사이트 문구·별칭·경쟁사까지 넘긴다(브랜드명 단독 입력 금지).
     expect(h.suggestTrackingPrompts).toHaveBeenCalledWith(
-      "해석된이름",
-      "x.test",
-      "both"
+      expect.objectContaining({
+        brandName: "해석된이름",
+        competitors: ["경쟁사A"],
+        domain: "x.test",
+        industry: "beauty",
+        marketScope: "korea",
+        site: expect.objectContaining({ title: "테스트 | 스킨케어" }),
+      })
     );
+    const passed = h.suggestTrackingPrompts.mock.calls[0]?.[0];
+    expect(passed.aliases).toContain("별칭");
   });
 
   it("suggestBrandIdentity resolves the industry profile", async () => {
