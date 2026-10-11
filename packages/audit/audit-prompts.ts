@@ -1,5 +1,6 @@
 import { conjunctionParticle, objectParticle, topicParticle } from "./actions";
 import type { PromptKind } from "./answer-buckets";
+import { DEFAULT_QUESTION_SET_V2 } from "./default-question-set";
 import type { DemandProvenance } from "./demand-prompts";
 import type { PlanV2PromptMeta } from "./plan-v2-contract";
 import { MAX_DISCOVERY_PROMPTS } from "./prompt-limits";
@@ -10,14 +11,62 @@ export interface PromptBrandNames {
   ko: string;
 }
 
+export interface DefaultPrompt {
+  kind?: PromptKind;
+  lang: "ko" | "en";
+  /** 기본 질문 v2 로 새로 넣은 질문 표시. 없으면 예전 4개와 같다. */
+  source?: typeof DEFAULT_QUESTION_SET_V2;
+  text: string;
+}
+
+export interface DefaultPromptOptions {
+  /** 이름 없는 추천형 질문을 넣을지(사이트 기반 이름 없는 질문이 없을 때만 켠다). */
+  includeNameless?: boolean;
+  /** 고객이 확인한 업종(Industry enum 값). 없거나 other 면 질문을 만들지 않는다. */
+  industry?: string | null;
+}
+
+// 업종 enum → 질문에 쓰는 일반 분야 표기. 회사 사실이 아니라 고객이 고른 분류의 이름이다.
+//   other 는 뜻이 없어 넣지 않는다(지어내지 않는다).
+const INDUSTRY_QUESTION_LABEL: Record<string, { en: string; ko: string }> = {
+  beauty: { ko: "화장품·뷰티", en: "beauty and skincare" },
+  fashion: { ko: "패션", en: "fashion" },
+  food: { ko: "식품", en: "food" },
+  b2b_saas: { ko: "B2B 소프트웨어", en: "B2B software" },
+  content_ip: { ko: "콘텐츠", en: "content" },
+  retail: { ko: "온라인 쇼핑", en: "online shopping" },
+  finance: { ko: "금융 서비스", en: "financial services" },
+  healthcare: { ko: "병원·의료 서비스", en: "healthcare" },
+  education: { ko: "교육 서비스", en: "education" },
+  manufacturing: { ko: "제조·부품", en: "manufacturing and components" },
+};
+
+function namelessDefaultPrompts(
+  industry: string | null | undefined
+): { en: string; ko: string } | null {
+  const label = industry ? INDUSTRY_QUESTION_LABEL[industry] : undefined;
+  if (!label) {
+    return null;
+  }
+  return {
+    ko: `${label.ko} 분야에서 추천할 만한 곳 알려줘`,
+    en: `Which ${label.en} companies would you recommend?`,
+  };
+}
+
+function namelessPrompt(text: string, lang: "ko" | "en"): DefaultPrompt {
+  return { kind: "discovery", lang, source: DEFAULT_QUESTION_SET_V2, text };
+}
+
 /**
  * 도메인 + 언어 기반 자동 프롬프트 생성 — 무료 Audit 빠른 모드용 6개.
  * v1.0.5 풀 모드는 30~50개로 확장.
  */
 export function generateAuditPrompts(
   names: PromptBrandNames,
-  language: "ko" | "en" | "both"
-): Array<{ text: string; lang: "ko" | "en" }> {
+  language: "ko" | "en" | "both",
+  options: DefaultPromptOptions = {}
+): DefaultPrompt[] {
   const brandName = names.ko;
   // 영어 질문에 한글 이름을 넣으면("What does 노우버스 offer") 영어권 AI는 그 표기를
   //   거의 모른다 — 시장 격차가 아니라 질문 설계 결함이다(2026-09-28). 공식 로마자
@@ -51,11 +100,38 @@ export function generateAuditPrompts(
     `Compare the main competitors of ${englishName}`,
   ];
 
+  // 🔴 2026-10-12 기본 질문 v2 — 4개가 전부 이름 질문이면 「AI 가 이 이름을 아나」만
+  //   잰다(프란츠·넘버즈인·프롬맘 사건). 업종을 알고 있고 사이트 기반 이름 없는 질문이
+  //   없을 때만, 이름 없는 추천형 질문 1개를 넣는다. 업종이 없으면 지어내지 않고 기존 4개.
+  const nameless = options.includeNameless
+    ? namelessDefaultPrompts(options.industry)
+    : null;
+
   if (language === "ko") {
-    return ko.map((text) => ({ text, lang: "ko" as const }));
+    const texts = nameless ? [...ko.slice(0, 3), nameless.ko] : ko;
+    return texts.map((text) =>
+      nameless && text === nameless.ko
+        ? namelessPrompt(text, "ko")
+        : { text, lang: "ko" as const }
+    );
   }
   if (language === "en") {
-    return en.map((text) => ({ text, lang: "en" as const }));
+    const texts = nameless ? [...en.slice(0, 3), nameless.en] : en;
+    return texts.map((text) =>
+      nameless && text === nameless.en
+        ? namelessPrompt(text, "en")
+        : { text, lang: "en" as const }
+    );
+  }
+  if (nameless) {
+    // both: 브랜드형 2(한·영) + 이름 없는 추천형 2(한·영). 이름 없는 추천 답에도
+    //   경쟁사가 나열되므로 경쟁사형 자리를 대신한다(총 4개 · 원가 불변).
+    return [
+      { text: ko[0] as string, lang: "ko" as const },
+      namelessPrompt(nameless.ko, "ko"),
+      { text: en[0] as string, lang: "en" as const },
+      namelessPrompt(nameless.en, "en"),
+    ];
   }
   // both 모드: 각 언어에서 브랜드형 1 + 경쟁사형 1 → 총 브랜드형 2 + 경쟁사형 2.
   // ko[0]=브랜드형, ko[2]=경쟁사형 / en[0]=브랜드형, en[2]=경쟁사형.
@@ -99,6 +175,8 @@ export interface RunPrompt {
    * 플래그 off 면 항상 undefined 라 checkpoint JSON 이 기존과 같다.
    */
   promptId?: string;
+  /** 기본 질문 v2 로 넣은 이름 없는 추천형이면 표시(비교 키용). 없으면 키도 없다. */
+  source?: typeof DEFAULT_QUESTION_SET_V2;
   text: string;
 }
 

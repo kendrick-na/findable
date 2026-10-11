@@ -170,3 +170,44 @@ describe("buildAuditHistory uses the guard", () => {
     expect(history.previousJobId).toBe("a");
   });
 });
+
+describe("default question set v2 comparison key (2026-10-12)", () => {
+  const withSet = (set?: string) => ({
+    engineResponses: [],
+    measurementContext: set ? { defaultQuestionSet: set } : {},
+  });
+
+  it("adds +q:default-v2 only for runs that carry the marker", () => {
+    expect(searchSamplingVersionOf(withSet("default-v2"))).toBe(
+      "none+q:default-v2"
+    );
+    // 기존 회차 문자열은 그대로다.
+    expect(searchSamplingVersionOf(withSet())).toBe("none");
+  });
+
+  it("blocks comparison between an old default-question run and a v2 run", () => {
+    expect(
+      isSearchSamplingComparable(
+        searchSamplingVersionOf(withSet()),
+        searchSamplingVersionOf(withSet("default-v2"))
+      )
+    ).toBe(false);
+    expect(
+      isSearchSamplingComparable(
+        searchSamplingVersionOf(withSet("default-v2")),
+        searchSamplingVersionOf(withSet("default-v2"))
+      )
+    ).toBe(true);
+  });
+
+  it("keeps the api suffix last", () => {
+    const result = {
+      engineResponses: [{ engineId: "chatgpt", engineSet: "api-search-v1" }],
+      measurementContext: { defaultQuestionSet: "default-v2" },
+    };
+    expect(searchSamplingVersionOf(result).endsWith("+api:search-v1")).toBe(
+      true
+    );
+    expect(searchSamplingVersionOf(result)).toContain("+q:default-v2+api");
+  });
+});

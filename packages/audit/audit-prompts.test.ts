@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { summarizeAnswerBuckets } from "./answer-buckets";
 import { classifySavedPromptKind, generateAuditPrompts } from "./audit-prompts";
 
@@ -183,4 +183,47 @@ it("브랜드 질문 + 이름 없는 질문 합계가 러너 상한(8)을 넘지
     expect(total).toBeLessThanOrEqual(RUNNER_PROMPT_LIMIT_FOR_TEST);
   }
   expect(MAX_DISCOVERY_PROMPTS).toBeLessThanOrEqual(2);
+});
+
+// ── 기본 질문 v2: 이름 없는 추천형 (2026-10-12) ──────────────────────
+import { DEFAULT_QUESTION_SET_V2 } from "./default-question-set";
+
+describe("기본 질문 v2", () => {
+  const names = { ko: "프란츠", en: "FRANZ" };
+
+  it("업종을 알고 사이트 기반 질문이 없으면 이름 없는 추천형 1개(언어별)가 들어간다", () => {
+    for (const language of ["ko", "en", "both"] as const) {
+      const prompts = generateAuditPrompts(names, language, {
+        includeNameless: true,
+        industry: "beauty",
+      });
+      expect(prompts).toHaveLength(4);
+      const nameless = prompts.filter((p) => p.kind === "discovery");
+      expect(nameless.length).toBe(language === "both" ? 2 : 1);
+      for (const p of nameless) {
+        expect(p.source).toBe(DEFAULT_QUESTION_SET_V2);
+        expect(p.text).not.toMatch(/프란츠|franz/i);
+      }
+      // 브랜드 이름 질문은 그대로 남는다(시계열 분모).
+      expect(prompts.some((p) => /프란츠|FRANZ/.test(p.text))).toBe(true);
+    }
+  });
+
+  it("업종이 없거나 other 면 지어내지 않고 예전 4개와 똑같다", () => {
+    const old = generateAuditPrompts(names, "both");
+    for (const industry of [undefined, null, "other"]) {
+      expect(
+        generateAuditPrompts(names, "both", {
+          includeNameless: true,
+          industry,
+        })
+      ).toEqual(old);
+    }
+  });
+
+  it("includeNameless 가 꺼져 있으면 예전 4개와 똑같다", () => {
+    expect(generateAuditPrompts(names, "ko", { industry: "beauty" })).toEqual(
+      generateAuditPrompts(names, "ko")
+    );
+  });
 });

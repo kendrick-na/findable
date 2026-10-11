@@ -37,6 +37,11 @@
  * method changed)". A marker on ANY of the three engines' rows is enough — a
  * timed-out or failed row of the same run must not turn it into "legacy".
  * Runs without the marker keep their exact old version string.
+ *
+ * ➕ Default question set v2 (2026-10-12). A run whose fallback questions include
+ * the name-less recommendation question records
+ * `measurementContext.defaultQuestionSet = "default-v2"` → `+q:default-v2`
+ * (before the api suffix, which stays last).
  */
 
 /** Naver rows without a sampling marker (pre-W1 blog-first sample or synthesis). */
@@ -85,6 +90,9 @@ export function searchSamplingVersionOf(result: unknown): string {
   if (plan !== null && plan !== 1) {
     parts.push(`${QUESTION_PLAN_PREFIX}${plan}`);
   }
+  if (defaultQuestionSetOf(result) !== null) {
+    parts.push(`${DEFAULT_QUESTION_SET_PREFIX}${defaultQuestionSetOf(result)}`);
+  }
   if (hasApiSearchEngineSet(result)) {
     parts.push(API_SEARCH_KEY_SUFFIX);
   }
@@ -128,6 +136,7 @@ export function hasApiSearchEngineSet(result: unknown): boolean {
 
 /** Suffix markers inside the comparison key (never shown to the user). */
 export const ENGINE_SET_KEY_PREFIX = "engines:";
+export const DEFAULT_QUESTION_SET_PREFIX = "q:";
 export const QUESTION_PLAN_PREFIX = "plan:";
 
 function measurementContextOf(result: unknown): Record<string, unknown> | null {
@@ -148,6 +157,16 @@ function measurementContextOf(result: unknown): Record<string, unknown> | null {
  */
 export function engineSetKeyOf(result: unknown): string | null {
   const value = measurementContextOf(result)?.engineSetKey;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/**
+ * 기본 질문 세트 표식(`default-v2` = 이름 없는 추천형 포함, 2026-10-12). 저장 질문이 없어
+ * 러너가 기본 질문을 쓴 회차 중 v2 로 잰 것만 값이 있다. null = 예전 기본 4개·저장 질문 회차
+ * (기존 키 문자열 그대로) → v2 회차와는 「비교 불가(측정 방식 변경)」.
+ */
+export function defaultQuestionSetOf(result: unknown): string | null {
+  const value = measurementContextOf(result)?.defaultQuestionSet;
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 

@@ -48,6 +48,8 @@ import {
 } from "./audit-execution-lease";
 import {
   classifySavedPromptKind,
+  type DefaultPrompt,
+  type DefaultPromptOptions,
   generateAuditPrompts,
   generateDiscoveryPrompts,
   type PromptBrandNames,
@@ -72,6 +74,7 @@ import {
   type KnownCompetitor,
   parseKnownCompetitors,
 } from "./competitor-extract";
+import { DEFAULT_QUESTION_SET_V2 } from "./default-question-set";
 import { isDemandPromptsEnabled } from "./demand-prompts";
 import {
   DEMAND_PROMPTS_TIMEOUT_MS,
@@ -333,14 +336,17 @@ async function resolveRunPrompts(
   brandName: PromptBrandNames,
   language: "ko" | "en" | "both",
   discovery: RunPrompt[],
-  brandVariants: readonly string[]
+  brandVariants: readonly string[],
+  industry?: string
 ): Promise<RunPrompt[]> {
   const brandPrompts = await resolveBrandPrompts(
     brandId,
     brandName,
     brandVariants,
     language,
-    RUNNER_PROMPT_LIMIT - discovery.length
+    RUNNER_PROMPT_LIMIT - discovery.length,
+    // 기본 질문 v2: 사이트 기반 이름 없는 질문이 이미 있으면 중복해서 넣지 않는다.
+    { includeNameless: discovery.length === 0, industry }
   );
   return [...brandPrompts, ...discovery].slice(0, RUNNER_PROMPT_LIMIT);
 }
@@ -446,8 +452,10 @@ async function resolveBrandPrompts(
   brandName: PromptBrandNames,
   brandVariants: readonly string[],
   language: "ko" | "en" | "both",
-  limit: number
+  limit: number,
+  fallbackOptions: DefaultPromptOptions = {}
 ): Promise<RunPrompt[]> {
+  // 무료 진단(brandId 없음)은 기존 4개 그대로 — 공개 리포트 회귀 0(2026-10-12 결정 대기).
   if (!brandId) {
     return generateAuditPrompts(brandName, language);
   }
@@ -468,7 +476,7 @@ async function resolveBrandPrompts(
     if (saved.length === 0) {
       return await persistFallbackPrompts(
         brandId,
-        generateAuditPrompts(brandName, language)
+        generateAuditPrompts(brandName, language, fallbackOptions)
       );
     }
     const withLastTracked = saved.map((p) => ({
@@ -482,7 +490,7 @@ async function resolveBrandPrompts(
       kind: classifySavedPromptKind(p.text, brandName, brandVariants),
     }));
   } catch {
-    return generateAuditPrompts(brandName, language);
+    return generateAuditPrompts(brandName, language, fallbackOptions);
   }
 }
 
@@ -494,11 +502,12 @@ async function resolveBrandPrompts(
  */
 async function persistFallbackPrompts(
   brandId: string,
-  fallback: Array<{ text: string; lang: "ko" | "en" }>
-): Promise<Array<{ text: string; lang: "ko" | "en" }>> {
+  fallback: DefaultPrompt[]
+): Promise<DefaultPrompt[]> {
   try {
     await database.$transaction(async (tx) => {
-      for (const p of fallback) {
+      // 이름 없는 추천형(discovery)은 Tracking 분모에 들어가지 않으므로 Prompt 로 심지 않는다.
+      for (const p of fallback.filter((q) => q.kind !== "discovery")) {
         await tx.prompt.upsert({
           where: { brandId_text: { brandId, text: p.text } },
           create: {
@@ -938,7 +947,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           promptNames,
           input.language,
           discovery,
-          brandVariants
+          brandVariants,
+          input.industry
         )
       ));
     if (plannedPrompts.length === 0) {
@@ -1692,6 +1702,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         // 측정 시작 시점의 준비도 + '기본값으로 진행' 선택 기록(없으면 키도 없다).
         ...(checkpoint.context.setupReadiness
           ? { setupReadiness: checkpoint.context.setupReadiness }
+          : {}),
+        // 기본 질문 v2(이름 없는 추천형 포함)로 잰 회차만 표시 — 비교 키에 반영된다.
+        ...(prompts.some((p) => p.source === DEFAULT_QUESTION_SET_V2)
+          ? { defaultQuestionSet: DEFAULT_QUESTION_SET_V2 }
           : {}),
         // 실제 수요 기반 질문 전체(플래그 켜짐일 때만) — 리포트 「물어본 구매 질문」·주제의 근거.
         ...(checkpoint.context.demandQuestionSet
