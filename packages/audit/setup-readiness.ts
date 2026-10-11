@@ -18,11 +18,35 @@
  */
 
 import { classifySavedPromptKind } from "./audit-prompts";
+import { parseKnownCompetitors } from "./competitor-extract";
 
 export type CompetitorSetting =
   | { kind: "none" }
   | { count: number; kind: "set" }
   | { kind: "unset" };
+
+/**
+ * `Brand.competitors`(Json 목록) → 값 타입. '없음'은 목록 안 표식 항목 `{"none": true}` 로 남긴다
+ * (2026-10-12 · 컬럼 추가 없이 — 운영 DB 변경 불필요). `parseKnownCompetitors` 는 이름 없는 항목을
+ * 버리므로 표식이 경쟁사로 잘못 세이지 않는다. 이름 있는 경쟁사가 하나라도 있으면 표식은 무시한다.
+ */
+export const NO_COMPETITORS_MARKER = { none: true } as const;
+
+export function competitorSettingOf(value: unknown): CompetitorSetting {
+  const named = parseKnownCompetitors(value).length;
+  if (named > 0) {
+    return { count: named, kind: "set" };
+  }
+  const declaredNone =
+    Array.isArray(value) &&
+    value.some(
+      (item) =>
+        item !== null &&
+        typeof item === "object" &&
+        (item as { none?: unknown }).none === true
+    );
+  return declaredNone ? { kind: "none" } : { kind: "unset" };
+}
 
 export type SetupRequirement = "required" | "recommended";
 

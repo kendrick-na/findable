@@ -9,7 +9,10 @@
  *   gated    — 이 파일이 `getBrandSetupReadiness` 를 직접 부른다(테스트가 문자열로 확인).
  *   delegates— 이 파일은 `via` 에 적은 파일의 게이트를 거친다(그 파일이 gated 여야 한다).
  *   exempt   — 준비도 규칙이 맞지 않는 경로. `reason` 필수.
- *   todo     — 아직 게이트를 달지 않았다(2단에서 gated/delegates 로 바꾼다). `reason` 필수.
+ *   todo     — 아직 게이트를 달지 않았다. `reason` 필수. (현재 0건 — 새 경로가 생기면 여기서 시작)
+ *
+ *   러너(`runAuditJob`)는 brandId 가 있으면 준비도를 읽어 결과에 기록하는 단일 지점이다. C·F·G 는 러너에
+ *   위임한다(기록 전용 — 영업 경로는 측정을 막지 않고, 발행·메일에서만 거부한다. 대표 승인 2026-10-12).
  */
 export type EntryPolicy =
   | { policy: "delegates"; via: string }
@@ -30,14 +33,19 @@ export interface MeasurementEntryPoint {
 
 export const MEASUREMENT_ENTRY_POINTS: readonly MeasurementEntryPoint[] = [
   {
+    code: "*",
+    file: "packages/audit/runner.ts",
+    label:
+      "러너(runAuditJob) — 모든 측정이 지나는 단일 지점. 준비도를 읽어 결과에 기록한다",
+    sites: [],
+    policy: { policy: "gated" },
+  },
+  {
     code: "A",
     file: "apps/app/app/actions/brand/start-tracking.ts",
     label: "브랜드 화면 '측정 시작' (+ ensureOrgBrand 브랜드 생성)",
     sites: ["runAuditJob", "auditJob.create", "brand.create"],
-    policy: {
-      policy: "todo",
-      reason: "2단: 필수 3개만 보는 기존 판정을 준비도 함수로 교체",
-    },
+    policy: { policy: "gated" },
   },
   {
     code: "B",
@@ -54,22 +62,14 @@ export const MEASUREMENT_ENTRY_POINTS: readonly MeasurementEntryPoint[] = [
     file: "packages/audit/audit-continuation.ts",
     label: "이어가기(측정 화면 폴링·cron) — 이미 시작된 회차의 나머지 질문",
     sites: ["runAuditJob"],
-    policy: {
-      policy: "todo",
-      reason:
-        "2단: 시작 시점 판정 결과를 이어받는지 확인(재판정 금지 여부 결정)",
-    },
+    policy: { policy: "delegates", via: "packages/audit/runner.ts" },
   },
   {
     code: "D",
     file: "apps/app/app/api/cron/auto-refresh-tracking/route.ts",
     label: "정기 측정 cron",
     sites: ["runAuditJob", "auditJob.create"],
-    policy: {
-      policy: "todo",
-      reason:
-        "2단: 미달이면 건너뛰고 needs_setup 기록 + 업종·시장·언어 전달을 A와 통일",
-    },
+    policy: { policy: "gated" },
   },
   {
     code: "E",
@@ -87,11 +87,7 @@ export const MEASUREMENT_ENTRY_POINTS: readonly MeasurementEntryPoint[] = [
     file: "apps/app/app/actions/admin/measure.ts",
     label: "관리자·영업 '측정' 서버 액션",
     sites: ["runAuditJob"],
-    policy: {
-      policy: "todo",
-      reason:
-        "2단: 업종·시장 자동 추정 허용 예외 + 차단/경고 결정(대표 답 대기)",
-    },
+    policy: { policy: "delegates", via: "packages/audit/runner.ts" },
   },
   {
     code: "F",
@@ -108,14 +104,14 @@ export const MEASUREMENT_ENTRY_POINTS: readonly MeasurementEntryPoint[] = [
     file: "apps/web/app/api/admin/measure-one/route.ts",
     label: "관리자 단건 측정 API",
     sites: ["runAuditJob"],
-    policy: { policy: "todo", reason: "2단: F와 같은 정책" },
+    policy: { policy: "delegates", via: "packages/audit/runner.ts" },
   },
   {
     code: "G",
     file: "packages/audit/measure-one.ts",
     label: "관리자 단건 측정(startMeasureOne / measureOneBrand)",
     sites: ["runAuditJob", "auditJob.create"],
-    policy: { policy: "todo", reason: "2단: F와 같은 정책" },
+    policy: { policy: "delegates", via: "packages/audit/runner.ts" },
   },
   {
     code: "H",

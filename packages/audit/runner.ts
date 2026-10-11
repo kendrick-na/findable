@@ -56,6 +56,7 @@ import {
 } from "./audit-prompts";
 import { assertCheckpointMode, selectAuditAi } from "./audit-stub";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
+import { loadSetupReadinessRecord } from "./brand-setup";
 import {
   type AuditCheckpoint,
   assertCheckpointProvenance,
@@ -129,6 +130,7 @@ import {
 } from "./run-budget";
 import { runCheckpointedQuestions } from "./run-checkpointed-questions";
 import { createRunTiming } from "./run-timing";
+import type { SetupReadinessRecord } from "./setup-readiness";
 import {
   attachShadowPlan,
   buildShadowPlanV2Result,
@@ -193,6 +195,12 @@ export interface AuditRunInput {
   // 20번(dual-write): 로그인 org audit만 채워진다. 비로그인 무료 audit은 undefined
   //   → Tracking 적재 skip(D1: 무료는 AuditJob email 스코프 유지).
   organizationId?: string;
+  /**
+   * 호출부가 이미 판정한 측정 준비도(+ '기본값으로 진행' 선택). 없으면 brandId 가 있을 때 러너가
+   * 직접 읽어 결과(measurementContext.setupReadiness)에 남긴다 — 모든 진입 경로가 이 한 곳을 지난다.
+   * 기록 전용이다: 이 값으로 측정을 막지 않는다(막는 건 호출부의 게이트).
+   */
+  setupReadiness?: SetupReadinessRecord;
 }
 
 /** 행에 붙은 섀도 결과만 골라 저장용 필드로(없으면 빈 객체 → 기존 저장 모양 불변). */
@@ -876,6 +884,13 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             });
           })
         : null;
+    // 측정 준비도 기록(2026-10-12) — 재개면 checkpoint 에 저장된 값을 쓰므로 다시 읽지 않는다.
+    const setupReadiness = savedCheckpoint
+      ? undefined
+      : (input.setupReadiness ??
+        (input.brandId && !ai.stubMode
+          ? await loadSetupReadinessRecord(input.brandId)
+          : undefined));
     const buildCheckpoint = (runPrompts: RunPrompt[]) =>
       attachShadowPlan(
         makeAuditCheckpoint(
@@ -888,6 +903,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
             ...(demandDiscovery
               ? { demandQuestionSet: demandDiscovery.set }
               : {}),
+            ...(setupReadiness ? { setupReadiness } : {}),
           },
           shadowPlan ? [...runPrompts, ...shadowPlan.prompts] : runPrompts,
           savedJob.createdAt.toISOString()
@@ -1673,6 +1689,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         ),
         discoveryPromptCount: prompts.filter((p) => p.kind === "discovery")
           .length,
+        // 측정 시작 시점의 준비도 + '기본값으로 진행' 선택 기록(없으면 키도 없다).
+        ...(checkpoint.context.setupReadiness
+          ? { setupReadiness: checkpoint.context.setupReadiness }
+          : {}),
         // 실제 수요 기반 질문 전체(플래그 켜짐일 때만) — 리포트 「물어본 구매 질문」·주제의 근거.
         ...(checkpoint.context.demandQuestionSet
           ? { demandQuestionSet: checkpoint.context.demandQuestionSet }

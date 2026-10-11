@@ -40,16 +40,26 @@ import {
   type AuditContinuationOutcome,
   continueOldestPendingAudit,
 } from "@repo/audit/audit-continuation";
+import { loadBrandSetupReadiness } from "@repo/audit/brand-setup";
 import {
   type DigestEntry,
   selectDigestEntries,
 } from "@repo/audit/digest-filter";
 import { buildAuditHistory } from "@repo/audit/history";
+import {
+  auditLanguageForMarketScope,
+  type MarketScope,
+} from "@repo/audit/market-scope";
 import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { runAuditJob } from "@repo/audit/runner";
 import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
+import {
+  type SetupReadinessRecord,
+  toSetupReadinessRecord,
+} from "@repo/audit/setup-readiness";
 import { planCapabilities } from "@repo/auth/plan";
+import type { Industry } from "@repo/database";
 import { database } from "@repo/database";
 import { notInternalOrg } from "@repo/database/internal-orgs";
 import { resend } from "@repo/email";
@@ -126,6 +136,16 @@ interface DueBrand {
   domain: string;
   lastMeasuredMs: number; // 정렬용(오래된 것 우선). 측정 이력 없으면 0.
   orgId: string;
+}
+
+/** 'attachCronSetup' 이 채운 값 — 측정 시작과 같은 입력(업종·시장·언어)과 준비도 기록. */
+interface CronBrand extends DueBrand {
+  industry: Industry | undefined;
+  /** AuditJob.industry 컬럼용(없으면 null). */
+  industryColumn: Industry | null;
+  language: "ko" | "en" | "both";
+  marketScope: MarketScope | undefined;
+  setupReadiness: SetupReadinessRecord | undefined;
 }
 
 /**
@@ -408,6 +428,40 @@ async function runRenewalNotices(now: Date) {
   }
 }
 
+/**
+ * 측정 준비도(2026-10-12). cron 은 **필수**(이름·업종·시장)가 비었을 때만 건너뛴다 —
+ * 권장(경쟁사·별칭·이름 없는 질문) 미달로 멈추면 경쟁사 0개인 기존 고객의 자동 측정이 전부
+ * 멈추므로, 권장 미달은 기록만 하고 측정은 계속한다(measurementContext.setupReadiness).
+ * 읽기 실패(null)도 예전처럼 진행한다. 건너뛴 브랜드는 batch 자리를 차지하지 않도록 **자르기 전에** 뺀다.
+ *
+ * 언어·업종·시장은 '측정 시작'(start-tracking)과 같은 값으로 넘긴다 — 같은 브랜드가
+ * 수동/자동에 따라 다른 질문 세트로 재지는 것을 막는다(이어가기도 같은 입력을 쓴다).
+ */
+async function attachCronSetup(due: readonly DueBrand[]): Promise<CronBrand[]> {
+  const out: CronBrand[] = [];
+  for (const item of due) {
+    const setup = await loadBrandSetupReadiness(item.brandId);
+    if (setup?.readiness.level === "blocked") {
+      log.warn("cron.auto-refresh.needs_setup", {
+        brandId: item.brandId,
+        missing: setup.readiness.missingRequired,
+      });
+      continue;
+    }
+    out.push({
+      ...item,
+      industry: setup?.brand.industry ?? undefined,
+      industryColumn: setup?.brand.industry ?? null,
+      language: auditLanguageForMarketScope(setup?.brand.marketScope),
+      marketScope: setup?.brand.marketScope ?? undefined,
+      setupReadiness: setup
+        ? toSetupReadinessRecord(setup.readiness, false)
+        : undefined,
+    });
+  }
+  return out;
+}
+
 export const GET = async (request: NextRequest) => {
   const invocationStartedAtMs = Date.now();
   // 🔒 원가가 나가기 전에 먼저 막는다(측정 1건 ~87원).
@@ -469,7 +523,7 @@ export const GET = async (request: NextRequest) => {
   const orgs = await loadAutoRefreshOrganizations(new Date(now), scope);
 
   // 2) 브랜드별 마지막 측정 시각 → 주기 경과분만 수집.
-  const due = await collectDueBrands(orgs, now);
+  const due = await attachCronSetup(await collectDueBrands(orgs, now));
 
   // 3) 오래된 것 우선, 상한까지만 트리거(원가 보호).
   due.sort((a, b) => a.lastMeasuredMs - b.lastMeasuredMs);
@@ -521,9 +575,10 @@ export const GET = async (request: NextRequest) => {
       data: {
         email: `org:${item.orgId}`,
         domain: item.domain,
-        language: "both",
+        language: item.language,
         organizationId: item.orgId,
         brandId: item.brandId,
+        industry: item.industryColumn,
       },
       select: { id: true },
     });
@@ -532,11 +587,14 @@ export const GET = async (request: NextRequest) => {
         invocationStartedAtMs,
         jobId: job.id,
         domain: item.domain,
-        language: "both",
+        language: item.language,
         brandName: item.brandName,
         brandVariants: item.brandVariants,
         organizationId: item.orgId,
         brandId: item.brandId,
+        industry: item.industry,
+        marketScope: item.marketScope,
+        setupReadiness: item.setupReadiness,
         // 마감으로 질문이 남으면 이어가기 대기로 멈추고 다음 cron 실행이 이어서 잰다.
         continueWhenTruncated: true,
       });

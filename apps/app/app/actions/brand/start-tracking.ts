@@ -1,5 +1,6 @@
 "use server";
 
+import { loadSetupReadinessRecord } from "@repo/audit/brand-setup";
 import { auditLanguageForMarketScope } from "@repo/audit/market-scope";
 import { newAuditAttemptBlockReason } from "@repo/audit/retry-policy";
 import { isUsableRun } from "@repo/audit/run-quality";
@@ -159,6 +160,12 @@ export interface StartTrackingInput {
   brandName?: string;
   domain: string;
   language?: "ko" | "en" | "both";
+  /**
+   * '기본값으로 진행'을 사용자가 명시 선택했는지(측정 준비도 게이트, 2026-10-12).
+   * 지금은 **기록 전용**이다 — 안내 화면이 생기기 전까지 A·B 는 막지 않고
+   * measurementContext.setupReadiness / skippedSetup 만 남긴다(대표 승인 (가) 안).
+   */
+  skippedSetup?: boolean;
 }
 
 export type StartTrackingResult =
@@ -329,6 +336,13 @@ export const startOrgTracking = async (
       };
     }
 
+    // 측정 준비도(필수 3 + 권장 4)를 읽어 결과에 기록한다. 필수 3개의 차단은 위 identity_incomplete 가
+    // 그대로 맡고(범위 불변), 권장 미달은 막지 않는다. 읽기 실패면 undefined → 러너가 다시 읽는다.
+    const setupReadiness = await loadSetupReadinessRecord(
+      brandId,
+      input.skippedSetup === true
+    );
+
     // Explicit callers may choose a language. Normal customer flows do not
     // send one, so honour the market they confirmed at onboarding instead of
     // silently adding a second (global) question set to a Korea-only audit.
@@ -384,6 +398,7 @@ export const startOrgTracking = async (
           // 마감으로 질문이 남으면 「이어가기 대기」로 멈춘다(2026-10-06).
           //   측정 화면 폴링(continueOrgTracking)·30분 cron 이 남은 질문만 이어서 잰다.
           continueWhenTruncated: true,
+          setupReadiness,
         });
       } catch (jobError) {
         log.error("audit.org.job_uncaught", {

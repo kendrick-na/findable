@@ -555,3 +555,56 @@ describe("리포트 세션 계약 보강 (06 계약 4절 요청)", () => {
     }
   });
 });
+
+describe("측정 준비도 발행 게이트 (2026-10-12)", () => {
+  const withContext = (extra: Record<string, unknown>): ReportSource => {
+    const job = knowverseJob();
+    const result = job.result as Record<string, unknown>;
+    result.measurementContext = {
+      ...(result.measurementContext as Record<string, unknown>),
+      ...extra,
+    };
+    return sourceOf(job);
+  };
+  const codes = (source: ReportSource, mode: "issue" | "preview" = "issue") => {
+    const r = issue(source, knowverseReview(source), mode);
+    return r.ok ? [] : r.errors.map((e) => e.code);
+  };
+  const readiness = (over: Record<string, unknown>) => ({
+    setupReadiness: {
+      level: "ready",
+      missingRecommended: [],
+      missingRequired: [],
+      skippedSetup: false,
+      ...over,
+    },
+  });
+
+  it("준비도 미달(경쟁사·질문 비어 있음) 회차는 '기본값으로 진행'했어도 발행 거부", () => {
+    const source = withContext(
+      readiness({
+        level: "needs_setup",
+        missingRecommended: ["competitors", "discovery_prompt"],
+        skippedSetup: true,
+      })
+    );
+    expect(codes(source)).toContain("setup_incomplete");
+  });
+
+  it("이름 확인이 mismatch 면 발행 거부", () => {
+    const source = withContext({ brandNameCheck: { status: "mismatch" } });
+    expect(codes(source)).toContain("brand_name_mismatch");
+  });
+
+  it("준비 완료 회차·기록 없는 옛 회차는 이 게이트가 거부하지 않는다", () => {
+    expect(codes(withContext(readiness({})))).not.toContain("setup_incomplete");
+    expect(codes(sourceOf(knowverseJob()))).not.toContain("setup_incomplete");
+  });
+
+  it("미리보기(저장 금지)는 점검용이라 막지 않는다", () => {
+    const source = withContext(
+      readiness({ level: "needs_setup", missingRecommended: ["competitors"] })
+    );
+    expect(codes(source, "preview")).not.toContain("setup_incomplete");
+  });
+});

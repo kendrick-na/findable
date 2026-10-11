@@ -64,6 +64,19 @@ export interface ReportSource {
     resultSha256: string;
     verdictVersion: number;
   };
+  /**
+   * 측정 준비도 기록(2026-10-12) — 결과의 measurementContext 에서 그대로 옮긴다. 없으면(기록 이전 회차)
+   * `setup` 자체가 없다 — 판단할 수 없으므로 발행 게이트는 거부하지 않는다.
+   */
+  setup?: {
+    brandNameCheck: string | null;
+    readiness: {
+      level: string;
+      missingRecommended: string[];
+      missingRequired: string[];
+      skippedSetup: boolean;
+    } | null;
+  };
   /** 기본 분모 제안 — 확정은 사람이 ReportReview 에서 한다. */
   suggestedDenominator: { engines: EngineId[]; promptKinds: string[] };
 }
@@ -249,11 +262,48 @@ export function buildReportSource(
             ? context.identityGrounded
             : null,
       },
+      ...setupOf(context),
       answers,
       suggestedDenominator: {
         engines: DEFAULT_COMPARE_ENGINES.filter((e) => present.has(e)),
         promptKinds: ["brand"],
       },
+    },
+  };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string")
+    : [];
+}
+
+/** 결과에 준비도 기록이나 이름 확인 결과가 하나라도 있을 때만 `setup` 을 만든다. */
+function setupOf(
+  context: Record<string, unknown>
+): Pick<ReportSource, "setup"> {
+  const readiness = isRecord(context.setupReadiness)
+    ? context.setupReadiness
+    : null;
+  const nameCheck = isRecord(context.brandNameCheck)
+    ? context.brandNameCheck
+    : null;
+  if (!(readiness || nameCheck)) {
+    return {};
+  }
+  return {
+    setup: {
+      brandNameCheck:
+        typeof nameCheck?.status === "string" ? nameCheck.status : null,
+      readiness:
+        readiness && typeof readiness.level === "string"
+          ? {
+              level: readiness.level,
+              missingRecommended: stringArray(readiness.missingRecommended),
+              missingRequired: stringArray(readiness.missingRequired),
+              skippedSetup: readiness.skippedSetup === true,
+            }
+          : null,
     },
   };
 }

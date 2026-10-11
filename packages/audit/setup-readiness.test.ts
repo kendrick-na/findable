@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MEASUREMENT_ENTRY_POINTS } from "./measurement-entry-points";
 import {
   type BrandSetupInput,
+  competitorSettingOf,
   getBrandSetupReadiness,
   isUsableBrandName,
   mayStartMeasurement,
@@ -107,6 +108,23 @@ describe("getBrandSetupReadiness", () => {
   });
 });
 
+describe("competitorSettingOf — 미설정/없음/n곳", () => {
+  it("빈 목록·이상한 값은 미설정", () => {
+    expect(competitorSettingOf([])).toEqual({ kind: "unset" });
+    expect(competitorSettingOf(null)).toEqual({ kind: "unset" });
+    expect(competitorSettingOf("x")).toEqual({ kind: "unset" });
+  });
+  it('표식 {"none": true} 만 있으면 없음', () => {
+    expect(competitorSettingOf([{ none: true }])).toEqual({ kind: "none" });
+  });
+  it("이름 있는 경쟁사는 세고, 표식은 경쟁사로 세지 않는다", () => {
+    expect(competitorSettingOf([{ name: "A" }, "B", { none: true }])).toEqual({
+      count: 2,
+      kind: "set",
+    });
+  });
+});
+
 describe("건너뛰기 선택과 기록", () => {
   const needs = getBrandSetupReadiness({
     ...full,
@@ -191,6 +209,11 @@ describe("측정 진입 경로 목록 (새 경로가 규칙을 우회하면 실�
     "packages/audit/runner.ts",
     "packages/audit/measurement-entry-points.ts",
   ]);
+  const READINESS_CALLS = [
+    "getBrandSetupReadiness",
+    "loadBrandSetupReadiness",
+    "loadSetupReadinessRecord",
+  ];
 
   it("소스에서 찾은 모든 호출 파일이 목록에 있다", () => {
     const unregistered = [...found.keys()].filter(
@@ -213,23 +236,52 @@ describe("측정 진입 경로 목록 (새 경로가 규칙을 우회하면 실�
       const text = readFileSync(join(ROOT, entry.file), "utf8");
       const p = entry.policy;
       if (p.policy === "gated") {
-        expect(text, `${entry.file}`).toContain("getBrandSetupReadiness");
+        expect(
+          READINESS_CALLS.some((name) => text.includes(name)),
+          `${entry.file} 가 준비도 함수를 부르지 않는다`
+        ).toBe(true);
       } else if (p.policy === "delegates") {
-        const target = registered.get(p.via);
-        expect(target, `${entry.file} → ${p.via} 가 목록에 없음`).toBeDefined();
-        // 위임 대상은 게이트됐거나(gated) 게이트 예정(todo)이어야 한다 — exempt 로 새면 우회다.
-        expect(["gated", "todo"]).toContain(target?.policy.policy);
+        // 위임 사슬을 따라가 결국 gated 에 닿아야 한다 — exempt·todo·순환으로 새면 우회다.
+        let hop: string | undefined = p.via;
+        const seen = new Set<string>([entry.file]);
+        let end = "";
+        while (hop && !seen.has(hop)) {
+          seen.add(hop);
+          const next = registered.get(hop);
+          expect(next, `${entry.file} → ${hop} 가 목록에 없음`).toBeDefined();
+          end = next?.policy.policy ?? "";
+          hop =
+            next?.policy.policy === "delegates" ? next.policy.via : undefined;
+        }
+        expect(end, `${entry.file} 의 위임 사슬`).toBe("gated");
       } else {
         expect(p.reason.length).toBeGreaterThan(10);
       }
     }
   });
 
-  it("2단 전 진행 상황: 아직 todo 인 경로를 숨기지 않고 드러낸다", () => {
+  it("게이트 예정(todo)으로 남은 경로가 없다 — 새 경로는 여기서 걸린다", () => {
     const todo = MEASUREMENT_ENTRY_POINTS.filter(
       (e) => e.policy.policy === "todo"
     ).map((e) => `${e.code}:${e.file}`);
-    // 2단이 끝나면 이 목록은 비어야 한다. 그때 이 기대값을 [] 로 바꾼다.
-    expect(todo.length).toBeGreaterThan(0);
+    expect(todo).toEqual([]);
+  });
+
+  it("러너는 준비도 기록을 결과에 싣는다(모든 경로의 공통 지점)", () => {
+    const runner = readFileSync(join(ROOT, "packages/audit/runner.ts"), "utf8");
+    expect(runner).toContain("loadSetupReadinessRecord");
+    expect(runner).toMatch(
+      /setupReadiness:\s*checkpoint\.context\.setupReadiness/
+    );
+  });
+
+  it("cron 은 권장이 아니라 필수 미달일 때만 건너뛴다", () => {
+    const cron = readFileSync(
+      join(ROOT, "apps/app/app/api/cron/auto-refresh-tracking/route.ts"),
+      "utf8"
+    );
+    expect(cron).toMatch(/level === "blocked"/);
+    expect(cron).not.toMatch(/level === "needs_setup"/);
+    expect(cron).toContain("auditLanguageForMarketScope");
   });
 });

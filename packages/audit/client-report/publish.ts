@@ -84,7 +84,11 @@ export type ReviewError =
   | { code: "not_approved" }
   | { code: "reviewer_missing" }
   | { code: "reviewed_before_measurement" }
-  | { code: "stale_measurement"; days: number };
+  | { code: "stale_measurement"; days: number }
+  /** 측정 준비도 미달 회차(경쟁사·질문·별칭 등 비어 있음) — 고객용 리포트로 발행하지 않는다. */
+  | { code: "setup_incomplete"; missing: string[] }
+  /** 입력한 브랜드명이 공식 사이트 표기와 맞지 않는 회차 — 이름이 틀리면 숫자가 무의미하다. */
+  | { code: "brand_name_mismatch" };
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
 
@@ -215,6 +219,22 @@ export function validateReview(
     }
   }
   if (opts.requireApproval) {
+    // 🔴 2026-10-12 측정 준비도 게이트: 준비가 덜 된 회차를 고객용 리포트로 내보내지 않는다.
+    //   '기본값으로 진행'으로 측정한 회차도 마찬가지다(측정은 허용, 발행은 불가).
+    //   기록이 없는 옛 회차는 판단할 수 없어 거부하지 않는다(source.setup 없음).
+    const readiness = source.setup?.readiness;
+    if (readiness && readiness.level !== "ready") {
+      errors.push({
+        code: "setup_incomplete",
+        missing: [
+          ...readiness.missingRequired,
+          ...readiness.missingRecommended,
+        ],
+      });
+    }
+    if (source.setup?.brandNameCheck === "mismatch") {
+      errors.push({ code: "brand_name_mismatch" });
+    }
     if (review.status !== "approved") {
       errors.push({ code: "not_approved" });
     }
