@@ -113,17 +113,32 @@ export function isUsableBrandName(
   return trimmed.toLowerCase().replace(WWW_RE, "") !== hostOf(domain);
 }
 
-function hasDiscoveryPrompt(input: BrandSetupInput, name: string): boolean {
-  const names = { ko: name, en: input.englishName?.trim() || name };
-  const variants = input.aliases ?? [];
-  return (input.savedPrompts ?? []).some(
+/**
+ * 「이름 없는(비브랜드) 질문이 1개 이상인가」의 판정 기준. 질문 체계(구성비·말투)는 대표 확정
+ * 전이라, 기준을 인터페이스로 분리해 두고 기본 구현만 제공한다 — 나중에 바꿔도 이 규칙은 그대로다.
+ */
+export type NonBrandPromptCriterion = (
+  prompts: readonly { text: string }[],
+  brand: { aliases: readonly string[]; englishName: string; name: string }
+) => boolean;
+
+/** 기본 기준: 저장 질문 중 브랜드 이름·별칭이 없는 질문이 하나라도 있다(`classifySavedPromptKind`). */
+export const hasNonBrandPromptByText: NonBrandPromptCriterion = (
+  prompts,
+  brand
+) =>
+  prompts.some(
     (prompt) =>
-      classifySavedPromptKind(prompt.text, names, variants) === "discovery"
+      classifySavedPromptKind(
+        prompt.text,
+        { ko: brand.name, en: brand.englishName },
+        brand.aliases
+      ) === "discovery"
   );
-}
 
 export function getBrandSetupReadiness(
-  input: BrandSetupInput
+  input: BrandSetupInput,
+  hasNonBrandPrompt: NonBrandPromptCriterion = hasNonBrandPromptByText
 ): BrandSetupReadiness {
   const missing = new Set<SetupItemCode>();
   const name = (input.name ?? "").trim();
@@ -146,7 +161,16 @@ export function getBrandSetupReadiness(
   ) {
     missing.add("competitors");
   }
-  if (!(name && hasDiscoveryPrompt(input, name))) {
+  if (
+    !(
+      name &&
+      hasNonBrandPrompt(input.savedPrompts ?? [], {
+        aliases: input.aliases ?? [],
+        englishName: input.englishName?.trim() || name,
+        name,
+      })
+    )
+  ) {
     missing.add("discovery_prompt");
   }
   if (input.brandNameCheck === "mismatch") {

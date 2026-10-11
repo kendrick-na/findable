@@ -87,6 +87,18 @@ describe("getBrandSetupReadiness", () => {
     expect(isUsableBrandName("프란츠", "franzskincare.com")).toBe(true);
   });
 
+  it("질문 기준은 바꿔 끼울 수 있다(질문 체계 확정 전)", () => {
+    const never = () => false;
+    expect(getBrandSetupReadiness(full, never).missingRecommended).toContain(
+      "discovery_prompt"
+    );
+    const always = () => true;
+    expect(
+      getBrandSetupReadiness({ ...full, savedPrompts: [] }, always)
+        .missingRecommended
+    ).not.toContain("discovery_prompt");
+  });
+
   it("이름 확인 mismatch 는 권장 항목으로 잡힌다", () => {
     expect(
       getBrandSetupReadiness({ ...full, brandNameCheck: "mismatch" })
