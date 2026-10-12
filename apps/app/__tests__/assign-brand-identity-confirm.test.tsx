@@ -165,6 +165,8 @@ describe.each([
         industry: "beauty",
         marketScope: "both",
         source: mode === "onboarding" ? "onboarding" : "brand_create",
+        // 등록만 하고 측정은 질문·경쟁사를 고른 뒤 시작한다(2026-10-13).
+        deferMeasurement: true,
       })
     );
   });

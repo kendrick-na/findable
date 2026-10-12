@@ -72,10 +72,13 @@ const formCode = stripToCode(readFileSync(ASSIGN_FORM, "utf8"));
 // biome: 정규식은 최상위 상수로.
 /** 세 결말이 **타입에 자리를 갖는다**. 자리가 없으면 조용한 실패가 되살아난다. */
 const OUTCOME_TYPE =
-  /BrandMeasurementOutcome\s*=\s*"started"\s*\|\s*"rate_limited"\s*\|\s*"failed"/;
+  /BrandMeasurementOutcome\s*=\s*\|?\s*"started"\s*\|\s*"rate_limited"\s*\|\s*"failed"\s*\|\s*"deferred"/;
+/** 🔴 2026-10-13 — 등록만 하고 측정은 설정 뒤에 시작하는 길(`deferMeasurement`). 결말 "deferred" 로 정직하게 알린다. */
+const DEFERS_MEASUREMENT =
+  /input\.deferMeasurement\s*\?\s*Promise\.resolve\(\{\s*measurement:\s*"deferred"/;
 /** 성공 반환이 결말을 **싣는다**(`{ok:true}` 단독 반환 금지). */
 const OK_CARRIES_OUTCOME =
-  /ok:\s*true,\s*\.\.\.\(await startMeasurementAfterAssign/g;
+  /ok:\s*true,\s*brandId:\s*[\w.]+,\s*\.\.\.\(await measurementAfterAssign/g;
 /** 한도 차단(`rate_limited`)을 **실패와 구분**해 옮긴다. */
 const MAPS_RATE_LIMITED = /code\s*===\s*"rate_limited"\s*\?\s*"rate_limited"/;
 /** 측정은 기존 액션에 **위임**한다(정책 복제 금지). */
@@ -111,8 +114,10 @@ const ROUTES_TO_WAITING =
 const OLD_UNCONDITIONAL_SUCCESS = /이제 측정 시작을 눌러/;
 
 describe("브랜드 등록 → 자동 측정: 결말을 숨기지 않는다", () => {
-  test("🔴 서버가 세 결말(started·rate_limited·failed)을 반환 타입에 싣는다", () => {
+  test("🔴 서버가 결말(started·rate_limited·failed·deferred)을 반환 타입에 싣는다", () => {
     expect(OUTCOME_TYPE.test(actionCode)).toBe(true);
+    // 보류(deferred)는 측정을 시작하지 않고 그 사실을 그대로 알린다(시작한 척하지 않는다).
+    expect(DEFERS_MEASUREMENT.test(actionCode)).toBe(true);
     // 성공 반환 2곳(기존 브랜드 소유지정 · 신규 생성) **모두** 결말을 싣는다.
     //   한쪽만 실으면 그 경로에서만 조용한 실패가 남는다.
     expect(actionCode.match(OK_CARRIES_OUTCOME)?.length).toBe(2);

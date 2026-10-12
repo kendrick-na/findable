@@ -95,15 +95,17 @@ describe("온보딩 여정 연결 — 한 곳이라도 끊기면 문다", () => 
     expect(FLOW).toContain('router.push("/")');
   });
 
-  it("⛔ 완료 저장 실패를 성공처럼 처리하지 않는다 (재시도 가능)", () => {
-    const finish = FLOW.slice(FLOW.indexOf("const finish"));
-    const body = finish.slice(0, finish.indexOf("};"));
+  it("⛔ 설정 저장 실패를 성공처럼 처리하지 않는다 (재시도 가능)", () => {
+    // 2026-10-13: 마지막 단계의 동작이 `finish`(대시보드로) → `startMeasurement`(측정 시작)로 바뀌었다.
+    //   저장이 실패하면 **측정을 시작하지 않고** 멈춰야 한다.
+    const start = FLOW.slice(FLOW.indexOf("const startMeasurement"));
+    const body = start.slice(0, start.indexOf("quickStart = {"));
     const errIdx = body.indexOf("toast.error");
     const returnIdx = body.indexOf("return;", errIdx);
-    const pushIdx = body.indexOf('router.push("/")');
+    const startCall = body.indexOf("actions.start(");
     expect(errIdx).toBeGreaterThan(-1);
     expect(returnIdx).toBeGreaterThan(errIdx);
-    expect(pushIdx).toBeGreaterThan(returnIdx);
+    expect(startCall).toBeGreaterThan(returnIdx);
   });
 
   it("중간 이탈자는 다음 로그인 때 `/welcome` 으로 복귀한다", () => {
@@ -125,18 +127,22 @@ describe("온보딩 여정 연결 — 한 곳이라도 끊기면 문다", () => 
     expect(skips.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("🔴 마지막 단계가 **측정 결말로 분기**한다 (성공 문구 하나로 뭉개지 않는다)", () => {
+  it("🔴 마지막 단계가 **측정 결말로 분기**한다 (성공 문구 하나로 뭉뚱그리지 않는다)", () => {
     // 📕 N-44 교차검증에서 잡은 거짓말: 한도 초과·실패인데도 "측정은 이미 시작됐어요".
-    for (const outcome of ["started", "rate_limited", "failed"]) {
-      expect(FLOW).toContain(outcome);
-    }
-    // 🔴 **제목과 설명 둘 다** 분기해야 한다. 하나만 검사하면 나머지 하나를
-    //   하드코딩으로 되돌려도 통과한다(N-44 뮤테이션에서 실제로 새어나갔다).
-    //   ⚠️ i18n 이관 후 문구는 사전에서 오고, 여기선 **결말→사전키** 매핑을 검사한다.
-    expect(FLOW).toMatch(
-      /description=\{t\[FINISH_KEYS\[measurement\]\.description\]/
-    );
-    expect(FLOW).toMatch(/title=\{t\[FINISH_KEYS\[measurement\]\.title\]/);
+    //   2026-10-13: 측정은 이제 마지막 단계에서 시작한다 → 결말마다 다른 말을 한다.
+    expect(FLOW).toContain('result.code === "rate_limited"');
+    expect(FLOW).toContain("t.measureRateLimited");
+    expect(FLOW).toContain("t.measureFailed");
+    expect(FLOW).toContain("t.measureStarted");
+    // 시작하기 전에 "이미 시작됐어요"라고 말하지 않는다.
+    expect(FLOW).not.toContain("doneStarted");
+  });
+
+  it("🔴 등록 직후 측정을 시작하지 않는다 — 질문·경쟁사를 고른 뒤 시작한다 (프란츠 사건)", () => {
+    expect(FORM).toContain("deferMeasurement: true");
+    expect(FORM).toMatch(/measurement === "deferred"/);
+    // 첫 측정 시작은 6단계 `startMeasurement` 한 곳에서만.
+    expect(FLOW).toContain("actions.start(");
   });
 
   it("🔴 1단계 폼이 온보딩에 **결말을 실어 보낸다** (토스트는 전환에 안 남는다)", () => {

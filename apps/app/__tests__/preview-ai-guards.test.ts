@@ -54,7 +54,10 @@ vi.mock("@repo/auth/plan-server", () => ({
   getCurrentPlan: () => Promise.resolve("free"),
 }));
 vi.mock("@repo/database", () => ({
-  database: { auditJob: { findUnique: h.findUnique } },
+  database: {
+    auditJob: { findUnique: h.findUnique },
+    prompt: { count: () => Promise.resolve(0) },
+  },
 }));
 vi.mock("@/lib/db/scoped", () => ({
   requireOrg: () => Promise.resolve("org_1"),
@@ -187,6 +190,8 @@ describe("on production (unchanged behaviour)", () => {
     const result = await suggestPromptsAction({ brandId: "brand_1" });
     expect(result).toEqual({
       ok: true,
+      // 무료 플랜 상한 5 − 저장된 질문 0 = 더 담을 수 있는 칸
+      remaining: 5,
       suggestions: { prompts: [], competitors: ["c"] },
     });
     expect(h.resolveBrandIdentity).toHaveBeenCalledWith(
