@@ -20,6 +20,33 @@ import { WelcomeIntro } from "./welcome-intro";
 /** 스토리용 가짜 저장 — 서버액션을 부르지 않는다(부르면 번들이 죽는다). */
 const noopSave = () => Promise.resolve({ ok: true } as const);
 
+/** 스토리용 가짜 서버 동작 — 질문 제안은 샘플 문구를 돌려준다(실제 제안이 아니다). */
+const sampleQuestions = [
+  ["category", "민감성 피부 보습 크림 추천해줘"],
+  ["category", "수분 크림 뭐가 좋아?"],
+  ["concern", "환절기에 피부가 당기는데 어떻게 해?"],
+  ["alternative", "다른 스킨케어 브랜드 뭐 있어?"],
+  ["brand", "이 브랜드 후기 어때?"],
+] as const;
+const fakeActions = (missing: string[]) => ({
+  check: () => Promise.resolve({ missing }),
+  save: () => Promise.resolve({ ok: true, saved: 2 } as const),
+  start: () => Promise.resolve({ ok: true, jobId: "job-1" } as const),
+  suggest: () =>
+    Promise.resolve({
+      ok: true,
+      prompts: sampleQuestions.map(([type, text]) => ({
+        category:
+          type === "brand" ? ("brand" as const) : ("competitor" as const),
+        language: "ko" as const,
+        text,
+        topic: "recommendation" as const,
+        type,
+      })),
+      remaining: 5,
+    } as const),
+});
+
 /**
  * 🔴 **실제 사전을 쓴다**(가짜 문구를 만들지 않는다). 스토리가 더미 문자열을 쓰면
  *   **사전에 키가 빠져도 화면이 멀쩡해 보여** 눈확인이 무의미해진다.
@@ -34,7 +61,10 @@ const meta: Meta<typeof WelcomeFlow> = {
       reason: "한국 도메인(.kr)이라 국내 중심으로 잡았습니다.",
       scope: "korea",
     },
+    actions: fakeActions([]),
+    brandDomain: "example.com",
     onSave: noopSave,
+    questionLabels: koDict.app.questionPicker,
     t,
   },
   component: WelcomeFlow,
@@ -109,20 +139,42 @@ export const LowConfidenceScope: Story = {
   },
 };
 
-/** 🔴 한도 초과 — "측정 시작됐어요"라고 **거짓말하면 안 된다**(N-44). */
-export const RateLimited: Story = {
-  args: {
-    brandId: "brand-5",
-    brandName: "아모레퍼시픽",
-    measurement: "rate_limited",
-  },
+/** 5단계 — 질문 승인. 처음엔 [질문 제안받기]만 보이고, 받은 뒤에도 **아무것도 선택돼 있지 않다**. */
+export const Step5Questions: Story = {
+  args: { brandId: "brand-5", brandName: "아모레퍼시픽", initialStep: 5 },
 };
 
-/** 🔴 측정 시작 실패 — 다시 시도할 길을 알려줘야 한다. */
-export const MeasurementFailed: Story = {
+/** 6단계 — 모두 갖춤: [설정 저장하고 측정 시작]. */
+export const Step6Ready: Story = {
   args: {
     brandId: "brand-6",
     brandName: "아모레퍼시픽",
-    measurement: "failed",
+    initialStep: 6,
+    initialVariants: ["아모레", "Amorepacific"],
+    initialCompetitors: ["LG생활건강"],
+  },
+};
+
+/**
+ * 6단계 — 질문·경쟁사가 비어 있음: 안내 + **[기본값으로 진행하고 측정 시작]**(명시 선택이 기록된다).
+ * 🔴 "측정은 이미 시작됐어요"라고 말하지 않는다 — 아직 시작 전이다.
+ */
+export const Step6SetupGap: Story = {
+  args: {
+    actions: fakeActions(["competitors", "discovery_prompt"]),
+    brandId: "brand-7",
+    brandName: "아모레퍼시픽",
+    initialStep: 6,
+  },
+};
+
+/** 4단계 — '경쟁사 없음' 선택지. 경쟁사가 있으면 비활성이다. */
+export const Step4NoCompetitors: Story = {
+  args: {
+    brandId: "brand-8",
+    brandName: "아모레퍼시픽",
+    initialNoCompetitors: true,
+    initialStep: 4,
+    suggestedCompetitors: [],
   },
 };

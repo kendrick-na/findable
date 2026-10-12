@@ -37,11 +37,17 @@ export const StartTrackingButton = ({
   // 대시보드의 추세 카드처럼 프로필 전체를 읽지 않는 표면은 서버 가드를 최종
   // 방어선으로 사용한다. 브랜드·측정 화면은 명시값을 넘겨 CTA부터 막는다.
   identityReady = true,
+  setupIncomplete = false,
   t,
 }: {
   domain: string;
   brandName: string;
   identityReady?: boolean;
+  /**
+   * 질문·경쟁사가 비어 있는데도 측정을 누르는 것은 「기본값으로 진행」의 명시 선택이다 —
+   * 그 사실이 측정 기록(`skippedSetup`)에 남는다(2026-10-13).
+   */
+  setupIncomplete?: boolean;
   /** 사전 `app.trackButton` (client 라 서버가 넘긴다). */
   t: AppDictionary["trackButton"];
 }) => {
@@ -115,7 +121,11 @@ export const StartTrackingButton = ({
   const start = async () => {
     setPhase("starting");
     try {
-      const result = await startOrgTracking({ domain, brandName });
+      const result = await startOrgTracking({
+        domain,
+        brandName,
+        skippedSetup: setupIncomplete,
+      });
       if ("error" in result) {
         setPhase("idle");
         if (result.code === "unauthorized") {

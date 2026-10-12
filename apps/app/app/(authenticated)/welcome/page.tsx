@@ -1,9 +1,11 @@
+import { competitorSettingOf } from "@repo/audit/setup-readiness";
 import { currentUser } from "@repo/auth/server";
 import { database } from "@repo/database";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import {
   requireOrg,
+  scopedBrandById,
   scopedBrands,
   scopedLatestSiteReadinessRun,
 } from "@/lib/db/scoped";
@@ -38,28 +40,10 @@ export const generateMetadata = async (): Promise<Metadata> => {
  *   그대로 렌더한다 — 그 폼이 등록 + 측정 시작 + `/brand/measuring` 이동까지 이미 한다.
  *   ⚠️ 그래서 `/welcome` 과 `/brand` 는 **같은 폼**을 쓴다(화면 2개가 갈리지 않는다).
  */
-/** 1단계 폼이 실어 보내는 측정 결말. 없으면 `started`(정상 경로). */
-type MeasurementOutcome = "failed" | "rate_limited" | "started";
-
-const toOutcome = (value?: string): MeasurementOutcome | undefined =>
-  value === "rate_limited" || value === "failed" || value === "started"
-    ? value
-    : undefined;
-
-/**
- * 쿼리가 없을 때(새로고침·직접 진입) 결말을 DB 에서 읽는다.
- * 🔴 2026-10-05 로컬 E2E: 쿼리가 사라지면 측정이 시작조차 안 됐어도
- *   "측정은 이미 시작됐어요"라고 말했다. 진행 중·완료 Job 이 있을 때만 started.
- */
-const outcomeFromJobs = async (
-  brandId: string
-): Promise<MeasurementOutcome> => {
-  const latest = await database.auditJob.findFirst({
-    orderBy: { createdAt: "desc" },
-    select: { status: true },
-    where: { brandId },
-  });
-  return latest && latest.status !== "failed" ? "started" : "failed";
+/** 쿼리 `step`(2~6). 없거나 이상하면 2단계부터. */
+const clampStep = (value?: string): number => {
+  const n = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(n) ? Math.min(6, Math.max(2, n)) : 2;
 };
 
 const stringList = (value: unknown): string[] =>
@@ -71,8 +55,21 @@ const WelcomePage = async ({
   searchParams,
 }: {
   // Next.js 16 — searchParams 는 Promise(대시보드·measuring 관례와 동일).
-  searchParams: Promise<{ measurement?: string }>;
+  searchParams: Promise<{ brand?: string; step?: string }>;
 }) => {
+  const { brand: brandParam, step: stepParam } = await searchParams;
+  // 🔴 `?brand=<id>` = '브랜드 추가' 뒤 설정 이어가기(2026-10-13) — 첫 온보딩과 **같은 순서**를 쓰되,
+  //   이미 온보딩을 마친 조직의 단계·완료는 건드리지 않는다. 다른 org 의 id 는 찾지 못한다(scopedBrandById).
+  if (brandParam) {
+    const target = await scopedBrandById(brandParam);
+    if (!target) {
+      redirect("/brand");
+    }
+    return await renderSetup(target, {
+      persistStep: false,
+      step: clampStep(stepParam),
+    });
+  }
   // 측정을 해본 조직은 온보딩 대상이 아니다 → 대시보드로.
   if (await hasCompletedSetup()) {
     redirect("/");
@@ -110,22 +107,27 @@ const WelcomePage = async ({
     select: { onboardingStep: true },
     where: { id: orgId },
   });
+  return await renderSetup(brand, {
+    persistStep: true,
+    step: organization?.onboardingStep ?? 2,
+  });
+};
+
+type SetupBrand = NonNullable<Awaited<ReturnType<typeof scopedBrandById>>>;
+
+/** 2~6단계 — 등록이 끝났으니 지역·별칭·경쟁사·질문을 받고, 마지막에 측정을 시작한다. */
+const renderSetup = async (
+  brand: SetupBrand,
+  opts: { persistStep: boolean; step: number }
+) => {
   // 1단계에서 예약된 기술 진단은 가입 흐름과 분리돼 백그라운드에서 돈다.
   // 마지막 단계가 추측으로 "완료"라고 말하지 않도록 실제 상태를 내려보낸다.
   const readinessRun = await scopedLatestSiteReadinessRun(brand.id);
 
-  // 2~4단계 — 등록이 끝났으니 별칭·경쟁사를 받는다.
-  // 🔴 측정이 실제로 돌고 있는지 — 마지막 단계가 이 값으로 **말을 바꾼다**.
-  //   이게 없으면 한도 초과·실패인데도 *"측정은 이미 시작됐어요"* 라고 거짓말한다.
-  const { measurement } = await searchParams;
-
-  // 🔴 2026-08-21 — 경쟁사 추천(§7). `suggestedCompetitors` 는 화면 뼈대만 있고
-  //   실제로 채워 넘긴 적이 없었다(prop 자체가 빠져 있었다). LLM 1회 호출로 채운다
-  //   — 측정 전이라 `extractCompetitorLandscape`(저장된 AI 답변 재파싱, 원가 0)를
-  //   못 쓴다. 상세=`packages/audit/competitor-suggest.ts` 주석.
+  // 경쟁사 추천(§7). LLM 1회 호출로 후보를 만든다(측정 전이라 저장된 답변 재파싱은 못 쓴다).
   //   ⚠️ 후보만 만든다 — 기본 선택은 화면(welcome-flow.tsx)이 결정한다.
   const suggestedCompetitors =
-    (organization?.onboardingStep ?? 2) < 5
+    opts.step < 5
       ? await suggestCompetitorsUnlessPreview({
           brandName: brand.name,
           domain: brand.domain,
@@ -140,10 +142,13 @@ const WelcomePage = async ({
       brandIndustry={brand.industry}
       brandName={brand.name}
       initialCompetitors={stringList(brand.competitors)}
+      initialNoCompetitors={
+        competitorSettingOf(brand.competitors).kind === "none"
+      }
       initialScope={brand.marketScope ?? undefined}
-      initialStep={organization?.onboardingStep ?? 2}
+      initialStep={opts.step}
       initialVariants={stringList(brand.entityVariants)}
-      measurement={toOutcome(measurement) ?? (await outcomeFromJobs(brand.id))}
+      persistStep={opts.persistStep}
       readiness={
         readinessRun
           ? {

@@ -1,3 +1,4 @@
+import { loadBrandSetupReadiness } from "@repo/audit/brand-setup";
 import {
   isPublishableAuditResult,
   withRecomputedAuditMetrics,
@@ -10,6 +11,7 @@ import { Badge } from "@repo/design-system/components/ui/badge";
 import { cn } from "@repo/design-system/lib/utils";
 import { ExternalLinkIcon } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { env } from "@/env";
 import { requireOrg, scopedBrands } from "@/lib/db/scoped";
 import {
@@ -160,6 +162,16 @@ const BrandPage = async () => {
     }
   }
 
+  // 측정 준비도(필수 3 + 권장 4)를 브랜드마다 **한 규칙**으로 읽는다(2026-10-13).
+  //   예전엔 이 화면이 이름·업종·시장만 따로 판정했다(판정 복제 4곳 중 하나).
+  const setupByBrand = new Map(
+    await Promise.all(
+      brands.map(
+        async (b) => [b.id, await loadBrandSetupReadiness(b.id)] as const
+      )
+    )
+  );
+
   const webUrl = env.NEXT_PUBLIC_WEB_URL;
 
   return (
@@ -191,8 +203,19 @@ const BrandPage = async () => {
               {brands.map((brand) => {
                 const lastJob = latestByDomain.get(brand.domain);
                 const view = lastJob ? jobView(lastJob, dict.jobStatus) : null;
-                const identityReady = Boolean(
-                  brand.name.trim() && brand.industry && brand.marketScope
+                const setup = setupByBrand.get(brand.id)?.readiness;
+                // 필수(이름·업종·시장)가 갖춰졌는가. 읽기 실패면 예전 판정으로 폴백한다.
+                const identityReady = setup
+                  ? setup.missingRequired.length === 0
+                  : Boolean(
+                      brand.name.trim() && brand.industry && brand.marketScope
+                    );
+                // 질문·경쟁사가 비었는가 — 안내하고 설정 단계로 이어 준다(막지는 않는다).
+                const setupGap = Boolean(
+                  setup?.missingRecommended.some(
+                    (code) =>
+                      code === "competitors" || code === "discovery_prompt"
+                  )
                 );
                 return (
                   <li
@@ -271,6 +294,7 @@ const BrandPage = async () => {
                         brandName={brand.name}
                         domain={brand.domain}
                         identityReady={identityReady}
+                        setupIncomplete={setupGap}
                         t={dict.trackButton}
                       />
                     </div>
@@ -279,7 +303,22 @@ const BrandPage = async () => {
                         {dict.brandPage.identityMissing}
                       </p>
                     )}
-                    <PromptWizard brandId={brand.id} t={dict.promptWizard} />
+                    {identityReady && setupGap && (
+                      <p className="flex flex-wrap items-center gap-2 text-amber-600 text-sm dark:text-amber-400">
+                        {dict.brandPage.setupMissing}
+                        <Link
+                          className="font-medium underline underline-offset-4"
+                          href={`/welcome?brand=${brand.id}`}
+                        >
+                          {dict.brandPage.setupContinue}
+                        </Link>
+                      </p>
+                    )}
+                    <PromptWizard
+                      brandId={brand.id}
+                      pickerLabels={dict.questionPicker}
+                      t={dict.promptWizard}
+                    />
                     {/* 🔴 N-44 남은일 1-c — 온보딩을 **건너뛴 사람의 유일한 경로**.
                         `/welcome` 2·4단계는 건너뛸 수 있고, 무료 진단 후 가입자는 온보딩
                         자체를 건너뛴다. 여기가 없으면 별칭·경쟁사를 **영영 못 넣는다**. */}
