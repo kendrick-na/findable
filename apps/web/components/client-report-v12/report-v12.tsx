@@ -60,6 +60,16 @@ const PLAIN_TERMS: [RegExp, string][] = [
     "검색 로봇 안내·사이트 지도 (robots.txt·sitemap.xml)",
   ],
 ];
+const HANGUL_RE = /[가-힣]/;
+
+/** 질문 언어 표기 — 영어 질문 수/전체 질문 수로 판정(전부 한국어면 '한국어'). */
+function questionLangLabelOf(enCount: number, total: number): string {
+  if (enCount === 0) {
+    return "한국어";
+  }
+  return enCount === total ? "영어" : "한국어·영어";
+}
+
 export function plain(text: string): string {
   return PLAIN_TERMS.reduce((t, [re, to]) => t.replace(re, to), text);
 }
@@ -284,7 +294,16 @@ export function ClientReportV12({
   // 발송 승인 전: 무조건 내부 시안. 승인 후: 원본 템플릿 기본값(status_note 없음)과 같게.
   const statusNote = sendApproved ? undefined : INTERNAL_STATUS_NOTE;
   const officialPct = s.cites_total ? pyFloatStr(s.official_pct) : "0";
-  const noteBase = `측정 ${c.measured_at} · 브랜드 이름을 넣은 질문 ${s.nq}개(한국어·영어) × AI ${s.engines_total}곳 = 답변 ${s.n}건 · 질문마다 1번씩 물어봤습니다(물을 때마다 답이 조금 달라질 수 있음). 답변은 사람이 한 건씩 읽고 공식 사이트 내용과 비교해 분류했습니다. ${str(c, "excluded_note") ?? ""}`;
+  // 질문 언어는 실제 질문 원문에서 판정한다(한글 포함=한국어). 전부 한국어면 '(영어)' 문구를 쓰지 않는다.
+  const isKoQuestion = (t: string) => HANGUL_RE.test(t);
+  const enQuestionNos = per_q
+    .filter((q) => !isKoQuestion(q.text))
+    .map((q) => `Q${q.i + 1}`);
+  const questionLangLabel = questionLangLabelOf(
+    enQuestionNos.length,
+    per_q.length
+  );
+  const noteBase = `측정 ${c.measured_at} · 브랜드 이름을 넣은 질문 ${s.nq}개(${questionLangLabel}) × AI ${s.engines_total}곳 = 답변 ${s.n}건 · 질문마다 1번씩 물어봤습니다(물을 때마다 답이 조금 달라질 수 있음). 답변은 사람이 한 건씩 읽고 공식 사이트 내용과 비교해 분류했습니다. ${str(c, "excluded_note") ?? ""}`;
 
   const share = c.category_share?.brands?.length ? c.category_share : null;
   const topics = c.topic_winners?.length ? c.topic_winners : null;
@@ -984,8 +1003,10 @@ export function ClientReportV12({
           </div>
         </div>
         <div className="notes">
-          답변 문장은 원문에서 핵심만 줄여 옮긴 요약입니다. 영어 질문(Q3·Q4)
-          결과는 {pad2(no("matrix"))}쪽에 있습니다.
+          답변 문장은 원문에서 핵심만 줄여 옮긴 요약입니다.
+          {enQuestionNos.length > 0
+            ? ` 영어 질문(${enQuestionNos.join("·")}) 결과는 ${pad2(no("matrix"))}쪽에 있습니다.`
+            : ""}
         </div>
         {foot("faces")}
       </section>
