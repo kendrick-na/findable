@@ -117,9 +117,7 @@ describe("suggestTrackingPrompts", () => {
     h.generateObject.mockResolvedValue(llm({ confident: false }));
     const a = await suggestTrackingPrompts(input);
     expect(a.prompts).toHaveLength(4);
-    h.generateObject.mockImplementation(async () => {
-      throw new Error("boom");
-    });
+    h.generateObject.mockRejectedValue(new Error("boom"));
     const b = await suggestTrackingPrompts(input);
     expect(b.prompts).toHaveLength(4);
     for (const p of [...a.prompts, ...b.prompts]) {
