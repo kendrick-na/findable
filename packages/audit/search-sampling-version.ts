@@ -42,6 +42,12 @@
  * the name-less recommendation question records
  * `measurementContext.defaultQuestionSet = "default-v2"` → `+q:default-v2`
  * (before the api suffix, which stays last).
+ *
+ * ➕ Saved question set fingerprint (2026-10-13). A run records
+ * `measurementContext.questionSetKey` (hash of the approved saved questions) →
+ * `+qs:<key>`. Changing the approved set makes runs "not comparable" (new baseline).
+ * Runs from before the fingerprint existed (no `+qs:`) are compared with keyed runs as
+ * if the fingerprint were absent — one-time tolerance; two keyed runs must match.
  */
 
 /** Naver rows without a sampling marker (pre-W1 blog-first sample or synthesis). */
@@ -93,6 +99,10 @@ export function searchSamplingVersionOf(result: unknown): string {
   if (defaultQuestionSetOf(result) !== null) {
     parts.push(`${DEFAULT_QUESTION_SET_PREFIX}${defaultQuestionSetOf(result)}`);
   }
+  const questionSet = savedQuestionSetKeyOf(result);
+  if (questionSet !== null) {
+    parts.push(`${QUESTION_SET_PREFIX}${questionSet}`);
+  }
   if (hasApiSearchEngineSet(result)) {
     parts.push(API_SEARCH_KEY_SUFFIX);
   }
@@ -137,6 +147,7 @@ export function hasApiSearchEngineSet(result: unknown): boolean {
 /** Suffix markers inside the comparison key (never shown to the user). */
 export const ENGINE_SET_KEY_PREFIX = "engines:";
 export const DEFAULT_QUESTION_SET_PREFIX = "q:";
+export const QUESTION_SET_PREFIX = "qs:";
 export const QUESTION_PLAN_PREFIX = "plan:";
 
 function measurementContextOf(result: unknown): Record<string, unknown> | null {
@@ -167,6 +178,15 @@ export function engineSetKeyOf(result: unknown): string | null {
  */
 export function defaultQuestionSetOf(result: unknown): string | null {
   const value = measurementContextOf(result)?.defaultQuestionSet;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/**
+ * 승인된 저장 질문 세트의 지문(`measurementContext.questionSetKey`, 2026-10-13). null = 기록 없음
+ * (기록 이전 회차 · 저장 질문이 없는 회차).
+ */
+export function savedQuestionSetKeyOf(result: unknown): string | null {
+  const value = measurementContextOf(result)?.questionSetKey;
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
@@ -255,9 +275,30 @@ export function isSearchSamplingComparable(
   a: string | null | undefined,
   b: string | null | undefined
 ): boolean {
-  const left = normalizeSearchSamplingVersion(a);
-  const right = normalizeSearchSamplingVersion(b);
+  let left = normalizeSearchSamplingVersion(a);
+  let right = normalizeSearchSamplingVersion(b);
+  // 전환기 관용(2026-10-13): 질문 세트 지문(+qs:)이 한쪽에만 있으면 — 지문이 생기기 전 옛 회차는
+  //   질문 세트를 알 수 없다 — 지문을 빼고 비교한다. 둘 다 있으면 같아야 한다(세트가 바뀌면 비교 불가).
+  if (hasQuestionSetPart(left) !== hasQuestionSetPart(right)) {
+    left = withoutQuestionSetPart(left);
+    right = withoutQuestionSetPart(right);
+  }
   return left === right && left !== MIXED_SEARCH_SAMPLING_VERSION;
+}
+
+function hasQuestionSetPart(version: string): boolean {
+  return version.split(ENGINE_SET_SEPARATOR).some(isQuestionSetPart);
+}
+
+function isQuestionSetPart(part: string): boolean {
+  return part.startsWith(QUESTION_SET_PREFIX);
+}
+
+function withoutQuestionSetPart(version: string): string {
+  return version
+    .split(ENGINE_SET_SEPARATOR)
+    .filter((part) => !isQuestionSetPart(part))
+    .join(ENGINE_SET_SEPARATOR);
 }
 
 export type SearchSamplingComparison =

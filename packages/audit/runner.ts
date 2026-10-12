@@ -58,7 +58,7 @@ import {
 } from "./audit-prompts";
 import { assertCheckpointMode, selectAuditAi } from "./audit-stub";
 import { checkBrandNameAgainstSite } from "./brand-name-check";
-import { loadSetupReadinessRecord } from "./brand-setup";
+import { loadQuestionSetKey, loadSetupReadinessRecord } from "./brand-setup";
 import {
   type AuditCheckpoint,
   assertCheckpointProvenance,
@@ -900,6 +900,11 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         (input.brandId && !ai.stubMode
           ? await loadSetupReadinessRecord(input.brandId)
           : undefined));
+    // 승인된 저장 질문 세트의 지문(2026-10-13) — 질문 세트가 바뀌면 비교 키가 달라진다.
+    const questionSetKey =
+      savedCheckpoint || ai.stubMode || !input.brandId
+        ? undefined
+        : await loadQuestionSetKey(input.brandId);
     const buildCheckpoint = (runPrompts: RunPrompt[]) =>
       attachShadowPlan(
         makeAuditCheckpoint(
@@ -913,6 +918,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
               ? { demandQuestionSet: demandDiscovery.set }
               : {}),
             ...(setupReadiness ? { setupReadiness } : {}),
+            ...(questionSetKey ? { questionSetKey } : {}),
           },
           shadowPlan ? [...runPrompts, ...shadowPlan.prompts] : runPrompts,
           savedJob.createdAt.toISOString()
@@ -1702,6 +1708,10 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         // 측정 시작 시점의 준비도 + '기본값으로 진행' 선택 기록(없으면 키도 없다).
         ...(checkpoint.context.setupReadiness
           ? { setupReadiness: checkpoint.context.setupReadiness }
+          : {}),
+        // 승인된 저장 질문 세트의 지문 — 비교 키(+qs:)에 반영된다(없으면 키도 없다).
+        ...(checkpoint.context.questionSetKey
+          ? { questionSetKey: checkpoint.context.questionSetKey }
           : {}),
         // 기본 질문 v2(이름 없는 추천형 포함)로 잰 회차만 표시 — 비교 키에 반영된다.
         ...(prompts.some((p) => p.source === DEFAULT_QUESTION_SET_V2)

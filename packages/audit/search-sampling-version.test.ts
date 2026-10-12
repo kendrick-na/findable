@@ -211,3 +211,48 @@ describe("default question set v2 comparison key (2026-10-12)", () => {
     expect(searchSamplingVersionOf(result)).toContain("+q:default-v2+api");
   });
 });
+
+describe("saved question set fingerprint (2026-10-13)", () => {
+  const withKey = (key?: string) => ({
+    engineResponses: [],
+    measurementContext: key ? { questionSetKey: key } : {},
+  });
+  const v = (key?: string) => searchSamplingVersionOf(withKey(key));
+
+  it("adds +qs:<key> only when the run recorded one", () => {
+    expect(v("ab12cd34")).toBe("none+qs:ab12cd34");
+    expect(v()).toBe("none");
+  });
+
+  it("two keyed runs are comparable only when the approved set is the same", () => {
+    expect(isSearchSamplingComparable(v("aaaaaaaa"), v("aaaaaaaa"))).toBe(true);
+    expect(isSearchSamplingComparable(v("aaaaaaaa"), v("bbbbbbbb"))).toBe(
+      false
+    );
+  });
+
+  it("one-time tolerance: a run from before the fingerprint existed still compares", () => {
+    expect(isSearchSamplingComparable(v(), v("aaaaaaaa"))).toBe(true);
+    // 하지만 다른 방식 차이(예: 기본 질문 세트)는 여전히 막는다.
+    const old = searchSamplingVersionOf({
+      engineResponses: [],
+      measurementContext: {},
+    });
+    const v2 = searchSamplingVersionOf({
+      engineResponses: [],
+      measurementContext: {
+        defaultQuestionSet: "default-v2",
+        questionSetKey: "aaaaaaaa",
+      },
+    });
+    expect(isSearchSamplingComparable(old, v2)).toBe(false);
+  });
+
+  it("the qs part sits before the api suffix, which stays last", () => {
+    const key = searchSamplingVersionOf({
+      engineResponses: [{ engineId: "chatgpt", engineSet: "api-search-v1" }],
+      measurementContext: { questionSetKey: "aaaaaaaa" },
+    });
+    expect(key).toContain("+qs:aaaaaaaa+api:search-v1");
+  });
+});
