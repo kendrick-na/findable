@@ -51,11 +51,21 @@ const makeActions = (
     ok: true,
   }
 ) => ({
-  check: vi.fn(() => Promise.resolve({ missing })),
-  save: vi.fn(() => Promise.resolve({ ok: true, saved: 1 } as const)),
-  start: vi.fn(() => Promise.resolve(startResult)),
-  suggest: vi.fn(() =>
-    Promise.resolve({ ok: true, prompts: [], remaining: 5 } as const)
+  check: vi.fn(
+    (): ReturnType<WelcomeActions["check"]> => Promise.resolve({ missing })
+  ),
+  save: vi.fn(
+    (): ReturnType<WelcomeActions["save"]> =>
+      Promise.resolve({ ok: true, saved: 1 })
+  ),
+  start: vi.fn(
+    (
+      _input: Parameters<WelcomeActions["start"]>[0]
+    ): ReturnType<WelcomeActions["start"]> => Promise.resolve(startResult)
+  ),
+  suggest: vi.fn(
+    (): ReturnType<WelcomeActions["suggest"]> =>
+      Promise.resolve({ ok: true, prompts: [], remaining: 5 })
   ),
 });
 
@@ -64,7 +74,12 @@ const renderFlow = (
     actions: ReturnType<typeof makeActions>;
   }
 ) => {
-  const onSave = vi.fn(() => Promise.resolve({ ok: true } as const));
+  const onSave = vi.fn(
+    (
+      _input: Parameters<React.ComponentProps<typeof WelcomeFlow>["onSave"]>[0]
+    ): ReturnType<React.ComponentProps<typeof WelcomeFlow>["onSave"]> =>
+      Promise.resolve({ ok: true })
+  );
   render(
     <WelcomeFlow
       brandDomain="franz.example"
@@ -162,7 +177,7 @@ describe("6단계 — 확인하고 측정 시작", () => {
   it("설정 저장이 실패하면 측정을 시작하지 않는다", async () => {
     const actions = makeActions([]);
     const { onSave } = renderFlow({ actions, initialStep: 6 });
-    onSave.mockResolvedValueOnce({ error: "저장 실패" } as never);
+    onSave.mockResolvedValueOnce({ error: "저장 실패" });
     const button = await screen.findByRole("button", { name: t.startMeasure });
     await waitFor(() =>
       expect((button as HTMLButtonElement).disabled).toBe(false)
@@ -194,7 +209,7 @@ describe("지름길과 '브랜드 추가' 모드", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: t.next }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
-    const sent = onSave.mock.calls[0]?.[0] as Record<string, unknown>;
+    const sent = onSave.mock.calls[0]?.[0] ?? {};
     expect(sent).not.toHaveProperty("onboardingStep");
     expect(sent).not.toHaveProperty("completeOnboarding");
   });
