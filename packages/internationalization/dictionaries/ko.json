@@ -331,7 +331,8 @@
       "industryOtherNote": "업종이 '기타'라 질문 재료가 적어요. 업종을 고르면 더 잘 제안돼요.",
       "questionSavedCapped": "선택한 {requested}개 중 {saved}개를 저장했어요. 현재 플랜 상한({limit}개)을 넘는 분은 저장되지 않았어요.",
       "questionLimitReached": "추적 질문 한도({limit}개)에 도달했어요. 더 담으려면 요금제를 올려 주세요.",
-      "viewPlans": "요금제 보기"
+      "viewPlans": "요금제 보기",
+      "editorMarketBaseline": "타깃 시장을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요."
     },
     "content": {
       "navLabel": "내 콘텐츠",
@@ -1184,7 +1185,8 @@
       "saving": "저장 중…",
       "saveSelected": "선택한 질문 저장 ({n})",
       "noSuggestions": "질문을 만들 재료가 부족해서 제안하지 못했어요. 직접 추가해 주세요.",
-      "industryOtherNote": "업종이 '기타'라 질문 재료가 적어요. 업종을 고르면 더 잘 제안돼요."
+      "industryOtherNote": "업종이 '기타'라 질문 재료가 적어요. 업종을 고르면 더 잘 제안돼요.",
+      "baselineChange": "질문을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요."
     },
     "promptsPage": {
       "metaTitle": "추적 질문 · Findable",
@@ -1229,7 +1231,8 @@
       "editLabel": "{text} 수정",
       "deleteLabel": "{text} 삭제",
       "confirmDelete": "삭제 확인",
-      "untagged": "유형 없음"
+      "untagged": "유형 없음",
+      "baselineChange": "질문을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요."
     },
     "promptResponses": {
       "metaTitle": "질문별 AI 답변 · Findable",

@@ -260,6 +260,10 @@ export const PromptList = ({
             ? t.editKeepsRecords.replace("{n}", String(prompt.measuredCount))
             : t.editChangesText}
         </span>
+        {/* 질문을 바꾸면 질문 세트 지문이 달라져 다음 측정부터 새 기준선이다(직전 대비 비교 불가). */}
+        <span className="text-[10px] text-amber-600 dark:text-amber-400">
+          {t.baselineChange}
+        </span>
       </div>
       <div className="flex shrink-0 gap-1">
         <Button
@@ -343,7 +347,8 @@ export const PromptList = ({
                   그 질문 바로 아래에서 읽혀야 한다. */}
           {isConfirming ? (
             <span className="text-[color:var(--findable-primary,#ff7a4d)] text-xs">
-              {t.deleteConfirm.replace("{n}", String(prompt.measuredCount))}
+              {t.deleteConfirm.replace("{n}", String(prompt.measuredCount))}{" "}
+              {t.baselineChange}
             </span>
           ) : null}
         </div>

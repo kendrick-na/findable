@@ -331,7 +331,8 @@
       "industryOtherNote": "Industry is 'Other', so there is little to build questions from. Pick an industry for better suggestions.",
       "questionSavedCapped": "Saved {saved} of the {requested} questions you picked. The rest are over your plan limit ({limit}).",
       "questionLimitReached": "You've reached your tracked-question limit ({limit}). Upgrade your plan to add more.",
-      "viewPlans": "View plans"
+      "viewPlans": "View plans",
+      "editorMarketBaseline": "Changing the target market starts a new baseline from the next measurement. Comparison with earlier scores won't be shown."
     },
     "content": {
       "navLabel": "My content",
@@ -1184,7 +1185,8 @@
       "saving": "Saving…",
       "saveSelected": "Save selected ({n})",
       "noSuggestions": "There wasn't enough information to suggest questions. Please add them yourself.",
-      "industryOtherNote": "Industry is 'Other', so there is little to build questions from. Pick an industry for better suggestions."
+      "industryOtherNote": "Industry is 'Other', so there is little to build questions from. Pick an industry for better suggestions.",
+      "baselineChange": "Changing questions starts a new baseline from the next measurement. Comparison with earlier scores won't be shown."
     },
     "promptsPage": {
       "metaTitle": "Tracked questions · Findable",
@@ -1229,7 +1231,8 @@
       "editLabel": "Edit {text}",
       "deleteLabel": "Delete {text}",
       "confirmDelete": "Confirm delete",
-      "untagged": "No type"
+      "untagged": "No type",
+      "baselineChange": "Changing questions starts a new baseline from the next measurement. Comparison with earlier scores won't be shown."
     },
     "promptResponses": {
       "metaTitle": "AI answers by question · Findable",

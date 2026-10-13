@@ -264,6 +264,12 @@ export const BrandProfileEditor = ({
             <option value="korea">{t.scopeKorea}</option>
             <option value="global">{t.scopeGlobal}</option>
           </select>
+          {/* 시장은 질문 언어를 정해 비교키에 들어간다 — 저장된 시장을 바꾸면 다음 측정부터 새 기준선. */}
+          {saved.marketScope && marketScope !== saved.marketScope && (
+            <span className="text-amber-600 text-xs dark:text-amber-400">
+              {t.editorMarketBaseline}
+            </span>
+          )}
         </label>
         <div className="flex flex-col gap-2">
           <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">

@@ -48,6 +48,11 @@
  * `+qs:<key>`. Changing the approved set makes runs "not comparable" (new baseline).
  * Runs from before the fingerprint existed (no `+qs:`) are compared with keyed runs as
  * if the fingerprint were absent — one-time tolerance; two keyed runs must match.
+ *
+ * ➕ Market + question language (2026-10-14). `+m:<korea|global|both>` (from `result.marketScope`)
+ * and `+l:<ko|en|ko-en>` (languages actually asked, from the rows' `promptLang`). Changing the
+ * market or asking in a different language makes runs "not comparable" (new baseline). Runs
+ * without a language record (`+l:` missing on one side) are compared as if it were absent.
  */
 
 /** Naver rows without a sampling marker (pre-W1 blog-first sample or synthesis). */
@@ -103,6 +108,16 @@ export function searchSamplingVersionOf(result: unknown): string {
   if (questionSet !== null) {
     parts.push(`${QUESTION_SET_PREFIX}${questionSet}`);
   }
+  // 시장·질문 언어(2026-10-14): 시장은 질문 언어를 정하고, 질문 언어는 어떤 엔진에 묻는지를 정한다.
+  //   시장이나 언어가 다른 회차를 같은 추세선에 놓으면 분모가 달라 점수가 튄다 → 비교 불가.
+  const market = marketScopeOf(result);
+  if (market !== null) {
+    parts.push(`${MARKET_PREFIX}${market}`);
+  }
+  const languages = questionLanguagesOf(result);
+  if (languages !== null) {
+    parts.push(`${LANGUAGE_PREFIX}${languages}`);
+  }
   if (hasApiSearchEngineSet(result)) {
     parts.push(API_SEARCH_KEY_SUFFIX);
   }
@@ -148,6 +163,8 @@ export function hasApiSearchEngineSet(result: unknown): boolean {
 export const ENGINE_SET_KEY_PREFIX = "engines:";
 export const DEFAULT_QUESTION_SET_PREFIX = "q:";
 export const QUESTION_SET_PREFIX = "qs:";
+export const MARKET_PREFIX = "m:";
+export const LANGUAGE_PREFIX = "l:";
 export const QUESTION_PLAN_PREFIX = "plan:";
 
 function measurementContextOf(result: unknown): Record<string, unknown> | null {
@@ -179,6 +196,42 @@ export function engineSetKeyOf(result: unknown): string | null {
 export function defaultQuestionSetOf(result: unknown): string | null {
   const value = measurementContextOf(result)?.defaultQuestionSet;
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/** 결과의 타깃 시장(`result.marketScope`). null = 기록 없음. */
+export function marketScopeOf(result: unknown): string | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return null;
+  }
+  const value = (result as { marketScope?: unknown }).marketScope;
+  return value === "korea" || value === "global" || value === "both"
+    ? value
+    : null;
+}
+
+/**
+ * 이 회차가 실제로 물은 질문 언어(`ko`·`en`·`ko-en`). 답변 행의 `promptLang` 에서 읽는다.
+ * null = 기록 없음(옛 결과 — 비교 키에서 빠지고, 있는 쪽과는 한 번 관용한다).
+ */
+export function questionLanguagesOf(result: unknown): string | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return null;
+  }
+  const rows = (result as { engineResponses?: unknown }).engineResponses;
+  if (!Array.isArray(rows)) {
+    return null;
+  }
+  const langs = new Set<string>();
+  for (const row of rows) {
+    const lang =
+      row && typeof row === "object"
+        ? (row as { promptLang?: unknown }).promptLang
+        : undefined;
+    if (lang === "ko" || lang === "en") {
+      langs.add(lang);
+    }
+  }
+  return langs.size === 0 ? null : [...langs].sort().join("-");
 }
 
 /**
@@ -277,27 +330,28 @@ export function isSearchSamplingComparable(
 ): boolean {
   let left = normalizeSearchSamplingVersion(a);
   let right = normalizeSearchSamplingVersion(b);
-  // 전환기 관용(2026-10-13): 질문 세트 지문(+qs:)이 한쪽에만 있으면 — 지문이 생기기 전 옛 회차는
-  //   질문 세트를 알 수 없다 — 지문을 빼고 비교한다. 둘 다 있으면 같아야 한다(세트가 바뀌면 비교 불가).
-  if (hasQuestionSetPart(left) !== hasQuestionSetPart(right)) {
-    left = withoutQuestionSetPart(left);
-    right = withoutQuestionSetPart(right);
+  // 전환기 관용: 질문 세트 지문(`qs:`)·질문 언어(`l:`)가 한쪽에만 있으면 — 기록이 생기기 전 옛 회차는 그 값을
+  //   알 수 없다 — 그 부분을 빼고 비교한다. 둘 다 있으면 같아야 한다(바뀌면 비교 불가 = 새 기준선).
+  for (const prefix of TOLERATED_PREFIXES) {
+    if (hasPart(left, prefix) !== hasPart(right, prefix)) {
+      left = withoutPart(left, prefix);
+      right = withoutPart(right, prefix);
+    }
   }
   return left === right && left !== MIXED_SEARCH_SAMPLING_VERSION;
 }
 
-function hasQuestionSetPart(version: string): boolean {
-  return version.split(ENGINE_SET_SEPARATOR).some(isQuestionSetPart);
+/** 한쪽에만 있어도 관용하는 비교 키 조각(기록이 나중에 생긴 값들). */
+const TOLERATED_PREFIXES = [QUESTION_SET_PREFIX, LANGUAGE_PREFIX] as const;
+
+function hasPart(version: string, prefix: string): boolean {
+  return version.split(ENGINE_SET_SEPARATOR).some((p) => p.startsWith(prefix));
 }
 
-function isQuestionSetPart(part: string): boolean {
-  return part.startsWith(QUESTION_SET_PREFIX);
-}
-
-function withoutQuestionSetPart(version: string): string {
+function withoutPart(version: string, prefix: string): string {
   return version
     .split(ENGINE_SET_SEPARATOR)
-    .filter((part) => !isQuestionSetPart(part))
+    .filter((p) => !p.startsWith(prefix))
     .join(ENGINE_SET_SEPARATOR);
 }
 

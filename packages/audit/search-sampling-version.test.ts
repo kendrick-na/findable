@@ -256,3 +256,58 @@ describe("saved question set fingerprint (2026-10-13)", () => {
     expect(key).toContain("+qs:aaaaaaaa+api:search-v1");
   });
 });
+
+describe("market and question language in the key (2026-10-14)", () => {
+  const run = (market?: string, langs: string[] = []) =>
+    searchSamplingVersionOf({
+      engineResponses: langs.map((promptLang) => ({
+        engineId: "chatgpt",
+        promptLang,
+      })),
+      ...(market ? { marketScope: market } : {}),
+    });
+
+  it("adds +m:<market> and +l:<languages>; a result without them keeps its old key", () => {
+    expect(run("korea", ["ko", "ko"])).toBe("none+m:korea+l:ko");
+    expect(run("both", ["en", "ko"])).toBe("none+m:both+l:en-ko");
+    expect(run()).toBe("none");
+    // 이상한 값은 무시한다.
+    expect(run("mars", ["fr"])).toBe("none");
+  });
+
+  it("a different market is not comparable; the same market is", () => {
+    expect(
+      isSearchSamplingComparable(run("korea", ["ko"]), run("global", ["ko"]))
+    ).toBe(false);
+    expect(
+      isSearchSamplingComparable(run("korea", ["ko"]), run("korea", ["ko"]))
+    ).toBe(true);
+  });
+
+  it("a different question language is not comparable (different engines are asked)", () => {
+    expect(
+      isSearchSamplingComparable(run("both", ["ko"]), run("both", ["ko", "en"]))
+    ).toBe(false);
+  });
+
+  it("one-time tolerance: a result with no language record compares with one that has it", () => {
+    expect(isSearchSamplingComparable(run("korea"), run("korea", ["ko"]))).toBe(
+      true
+    );
+    // 시장이 다르면 관용하지 않는다.
+    expect(
+      isSearchSamplingComparable(run("korea"), run("global", ["ko"]))
+    ).toBe(false);
+  });
+
+  it("the market/language parts sit before the api suffix, which stays last", () => {
+    const key = searchSamplingVersionOf({
+      engineResponses: [
+        { engineId: "chatgpt", engineSet: "api-search-v1", promptLang: "ko" },
+      ],
+      marketScope: "korea",
+    });
+    expect(key.endsWith("+api:search-v1")).toBe(true);
+    expect(key).toContain("+m:korea+l:ko+api");
+  });
+});

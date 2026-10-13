@@ -252,6 +252,9 @@ export const PromptWizard = ({
         <span className="text-right text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs tabular-nums">
           {customText.length}/{MAX_CUSTOM_PROMPT_LENGTH}
         </span>
+        <p className="text-amber-600 text-xs dark:text-amber-400">
+          {t.baselineChange}
+        </p>
         <div className="flex items-center justify-end gap-2">
           <Button
             disabled={isSaving}
@@ -306,6 +309,9 @@ export const PromptWizard = ({
         selected={selected}
       />
 
+      <p className="text-amber-600 text-xs dark:text-amber-400">
+        {t.baselineChange}
+      </p>
       <div className="flex items-center justify-between gap-2 pt-1">
         <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
           {t.selectedCount.replace("{n}", String(selected.size))}
