@@ -11,12 +11,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   update: vi.fn(),
+  orgUpdate: vi.fn(),
   owned: { current: null as unknown },
 }));
 vi.mock("@repo/database", () => ({
   database: {
     brand: { update: h.update },
-    organization: { update: vi.fn() },
+    organization: { update: h.orgUpdate },
   },
 }));
 vi.mock("@/lib/db/scoped", () => ({
@@ -40,6 +41,8 @@ const saved = async (
 };
 
 beforeEach(() => {
+  h.orgUpdate.mockReset();
+  h.orgUpdate.mockResolvedValue({});
   h.update.mockReset();
   h.update.mockResolvedValue({});
   h.owned.current = {
@@ -82,5 +85,20 @@ describe("updateBrandProfile — 경쟁사 없음 3상태", () => {
     expect(
       await saved({ competitors: ["라운드랩"], noCompetitors: true })
     ).toEqual(["라운드랩"]);
+  });
+});
+
+describe("온보딩 단계 저장 — 상한 6", () => {
+  it("6단계를 저장하면 6으로 저장된다(예전 상한 5는 6단계 이탈 시 5단계로 되돌렸다)", async () => {
+    await updateBrandProfile({ brandId: "b1", onboardingStep: 6 } as never);
+    expect(h.orgUpdate.mock.calls[0]?.[0].data.onboardingStep).toBe(6);
+  });
+
+  it("범위를 벗어난 값은 2~6 으로 자른다", async () => {
+    await updateBrandProfile({ brandId: "b1", onboardingStep: 99 } as never);
+    expect(h.orgUpdate.mock.calls[0]?.[0].data.onboardingStep).toBe(6);
+    h.orgUpdate.mockClear();
+    await updateBrandProfile({ brandId: "b1", onboardingStep: 0 } as never);
+    expect(h.orgUpdate.mock.calls[0]?.[0].data.onboardingStep).toBe(2);
   });
 });

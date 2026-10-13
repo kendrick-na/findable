@@ -14,6 +14,7 @@ import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { after } from "next/server";
 import { getAuditRuntimeReadiness } from "@/lib/audit/runtime-readiness";
+import { brandCapacityBlock } from "@/lib/brand/brand-capacity";
 import { requireOrg } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
 import { getAppDictionary } from "@/lib/i18n";
@@ -308,6 +309,19 @@ export const startOrgTracking = async (
     if (!orgReady) {
       return {
         error: (await brandErrors()).orgSyncFailed,
+      };
+    }
+
+    // 4-b) 새 브랜드를 만들게 되는 경우에만 플랜 브랜드 상한을 본다(2026-10-14 — '브랜드 추가'에만 있던 검사를
+    //   이 경로에도). 같은 도메인의 기존 브랜드를 재측정하는 것은 막지 않는다.
+    const full = await brandCapacityBlock(orgId, domain);
+    if (full) {
+      return {
+        error: (await brandErrors()).brandLimit.replace(
+          "{limit}",
+          String(full.limit)
+        ),
+        upgrade: true,
       };
     }
 

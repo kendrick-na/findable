@@ -5,6 +5,8 @@ import {
 } from "@repo/audit/normalize-stored-metrics";
 import { isUsableRun } from "@repo/audit/run-quality";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
+import { planCapabilities } from "@repo/auth/plan";
+import { getCurrentPlan } from "@repo/auth/plan-server";
 import type { AuditJob } from "@repo/database";
 import { database } from "@repo/database";
 import { Badge } from "@repo/design-system/components/ui/badge";
@@ -130,6 +132,8 @@ const BrandPage = async () => {
   const dateFormatter = dateFormatterFor(dateLocaleFor(locale));
   const orgId = await requireOrg();
   const brands = await scopedBrands();
+  // 플랜의 브랜드 상한 — 폼 위에 "n/한도"를 미리 보여 준다(제출해서 막히기 전에 알린다, 2026-10-14).
+  const brandLimit = planCapabilities(await getCurrentPlan()).brandLimit;
 
   // 브랜드별 마지막 측정(=이 org가 트리거한 AuditJob, email=`org:${orgId}`).
   // "측정 시작을 눌렀는데 어디서 확인하냐"는 혼란을 없애는 표면 — 행마다 상태·시각·결과 링크.
@@ -359,6 +363,26 @@ const BrandPage = async () => {
                 : dict.brandPage.addMore}
             </p>
           </div>
+          {Number.isFinite(brandLimit) && (
+            <p className="flex flex-wrap items-center gap-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+              {dict.brandPage.brandCount
+                .replace("{n}", String(brands.length))
+                .replace("{limit}", String(brandLimit))}
+              {brands.length >= brandLimit && (
+                <>
+                  <span className="text-amber-600 dark:text-amber-400">
+                    {dict.brandPage.brandLimitReached}
+                  </span>
+                  <Link
+                    className="font-medium underline underline-offset-4"
+                    href="/billing"
+                  >
+                    {dict.brandPage.viewPlans}
+                  </Link>
+                </>
+              )}
+            </p>
+          )}
           <AssignBrandForm t={dict.brandForm} />
         </section>
       </div>

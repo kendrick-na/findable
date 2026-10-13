@@ -45,11 +45,20 @@ export const checkBrandSetup = async (
 export const saveWelcomeQuestions = async (input: {
   brandId: string;
   prompts: SuggestedPrompt[];
-}): Promise<{ error: string } | { ok: true; saved: number }> => {
+}): Promise<
+  | { code?: "prompt_limit"; error: string; limit?: number }
+  | {
+      capped?: boolean;
+      limit?: number;
+      ok: true;
+      requested?: number;
+      saved: number;
+    }
+> => {
   const result = await saveApprovedPromptsAction(input);
-  return "error" in result
-    ? { error: result.error }
-    : { ok: true, saved: result.saved };
+  // 한도 정보(capped·requested·limit·code)를 **버리지 않고** 화면까지 전달한다 —
+  //   예전엔 {ok, saved} 만 돌려줘서 일부만 저장돼도 화면이 모르는 채 다음 단계로 넘어갔다(2026-10-14).
+  return result;
 };
 
 export const suggestWelcomeQuestions = async (

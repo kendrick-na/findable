@@ -140,11 +140,17 @@ const useSiteReadinessPolling = (
 export interface WelcomeActions {
   /** 지금 설정 상태에서 비어 있는 항목 코드(필수+권장). 읽기 실패면 null. */
   check: (brandId: string) => Promise<{ missing: string[] } | null>;
-  /** 사람이 고른 질문만 저장한다. */
-  save: (input: {
-    brandId: string;
-    prompts: SuggestedPrompt[];
-  }) => Promise<{ error: string } | { ok: true; saved: number }>;
+  /** 사람이 고른 질문만 저장한다. 한도 정보(`capped`·`limit`·`code`)를 화면까지 전달한다. */
+  save: (input: { brandId: string; prompts: SuggestedPrompt[] }) => Promise<
+    | { code?: "prompt_limit"; error: string; limit?: number }
+    | {
+        capped?: boolean;
+        limit?: number;
+        ok: true;
+        requested?: number;
+        saved: number;
+      }
+  >;
   /** 측정을 시작한다. `skippedSetup` = '기본값으로 진행'을 명시 선택했는지. */
   start: (input: {
     brandName: string;
@@ -209,6 +215,8 @@ interface WelcomeFlowProps {
   persistStep?: boolean;
   /** 질문 고르기 화면 문구(사전 `app.questionPicker`). */
   questionLabels: QuestionPickerLabels;
+  /** 플랜의 추적 질문 상한(null = 제한 없음). */
+  questionLimit: number | null;
   /** 가입 시 자동 예약한 SEO·GEO 기술 진단의 실제 상태. */
   readiness?: {
     id: string;
@@ -539,6 +547,7 @@ export const WelcomeFlow = ({
   onSave,
   persistStep = true,
   questionLabels,
+  questionLimit,
   readiness,
   t,
   suggestedCompetitors = [],
@@ -632,7 +641,9 @@ export const WelcomeFlow = ({
       ),
       entityVariants: variants,
       marketScope: scope,
-      ...(persistStep ? { completeOnboarding: true, onboardingStep: 5 } : {}),
+      ...(persistStep
+        ? { completeOnboarding: true, onboardingStep: ONBOARDING_TOTAL_STEPS }
+        : {}),
     });
     if ("error" in saved) {
       setStarting(false);
@@ -816,6 +827,7 @@ export const WelcomeFlow = ({
           await saveAndGo(6);
         }}
         onSkip={() => saveAndGo(6)}
+        questionLimit={questionLimit}
         quickStart={quickStart}
         savedCount={savedQuestions}
         t={t}

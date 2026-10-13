@@ -91,6 +91,7 @@ const renderFlow = (
       initialQuestionCount={0}
       onSave={onSave}
       questionLabels={koDict.app.questionPicker}
+      questionLimit={null}
       t={t}
       {...props}
     />

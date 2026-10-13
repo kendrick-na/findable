@@ -100,7 +100,7 @@ export interface UpdateBrandProfileInput {
    * `false` 는 '없음' 명시 해제(= 미설정으로), 안 보내면 이미 저장된 표식을 유지한다.
    */
   noCompetitors?: boolean;
-  /** 다음에 다시 들어왔을 때 복귀할 단계(2~5). */
+  /** 다음에 다시 들어왔을 때 복귀할 단계(2~6). */
   onboardingStep?: number;
 }
 
@@ -246,8 +246,9 @@ export const updateBrandProfile = async (
   if (scope) {
     data.marketScope = scope;
   }
+  // 상한 6 — 6단계(확인·측정)에서 이탈해도 6단계로 돌아온다(예전 상한 5 는 5단계로 되돌렸다).
   const onboardingStep = Math.min(
-    5,
+    6,
     Math.max(2, Math.trunc(input.onboardingStep ?? 2))
   );
   const updateOnboarding =

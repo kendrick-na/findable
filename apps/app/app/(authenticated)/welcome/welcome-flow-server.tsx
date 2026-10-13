@@ -39,6 +39,8 @@ export const WelcomeFlowServer = async ({
   initialVariants?: string[];
   /** false 면 온보딩 단계·완료를 조직에 저장하지 않는다('브랜드 추가' 흐름). */
   persistStep?: boolean;
+  /** 플랜의 추적 질문 상한(null = 제한 없음). */
+  questionLimit: number | null;
   readiness?: {
     id: string;
     report: unknown;

@@ -328,7 +328,10 @@
       "startDefault": "기본값으로 진행하고 측정 시작",
       "summaryQuestions": "추적 질문 {count}개",
       "summaryCompetitorsNone": "경쟁사 없음(비교 기준 없음)",
-      "industryOtherNote": "업종이 '기타'라 질문 재료가 적어요. 업종을 고르면 더 잘 제안돼요."
+      "industryOtherNote": "업종이 '기타'라 질문 재료가 적어요. 업종을 고르면 더 잘 제안돼요.",
+      "questionSavedCapped": "선택한 {requested}개 중 {saved}개를 저장했어요. 현재 플랜 상한({limit}개)을 넘는 분은 저장되지 않았어요.",
+      "questionLimitReached": "추적 질문 한도({limit}개)에 도달했어요. 더 담으려면 요금제를 올려 주세요.",
+      "viewPlans": "요금제 보기"
     },
     "content": {
       "navLabel": "내 콘텐츠",
@@ -1066,7 +1069,10 @@
       "addFirst": "도메인과 이름·업종·시장을 확인하면 시작해요. 이어서 별칭·경쟁사·질문을 정한 뒤 측정해요.",
       "addMore": "여러 브랜드를 등록해 각각 측정할 수 있어요.",
       "setupMissing": "질문·경쟁사가 아직 설정되지 않았어요. 이대로 측정하면 기본 질문으로만 측정돼요. 질문과 경쟁사를 정하면 더 정확해져요.",
-      "setupContinue": "설정 이어가기"
+      "setupContinue": "설정 이어가기",
+      "brandCount": "등록한 브랜드 {n}개 / 최대 {limit}개",
+      "brandLimitReached": "브랜드 한도에 도달했어요. 더 등록하려면 요금제를 올려 주세요.",
+      "viewPlans": "요금제 보기"
     },
     "trackButton": {
       "idle": "측정 시작",

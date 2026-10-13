@@ -68,6 +68,7 @@ const meta: Meta<typeof WelcomeFlow> = {
     initialQuestionCount: 0,
     onSave: noopSave,
     questionLabels: koDict.app.questionPicker,
+    questionLimit: null,
     t,
   },
   component: WelcomeFlow,
