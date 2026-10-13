@@ -205,7 +205,10 @@ const BRAND_KEY_ALIASES: Record<string, string> = {
 const HANGUL_RE = /[가-힣]/;
 
 // 같은 브랜드의 표기 흔들림 병합용 키(소문자·공백제거 → 한/영 사전 병합).
-function normalizeKey(name: string, extraAliases?: Map<string, string>): string {
+function normalizeKey(
+  name: string,
+  extraAliases?: Map<string, string>
+): string {
   const base = name.toLowerCase().replace(/\s+/g, "");
   // 🔴 사용자가 등록한 경쟁사가 **먼저**다(N-44). 내장 사전은 대형 브랜드만 담은
   //   일반값이고, 고객이 직접 적어준 값이 그 업종의 진실에 더 가깝다.
@@ -393,9 +396,7 @@ export function extractCompetitorLandscape(
     );
 
   // 순위표(번호목록) 실등장 여부 — 순위 컨텍스트 신호.
-  const brandInRanking = ranking.some(
-    (r) => key0(r.name) === key0(brandName)
-  );
+  const brandInRanking = ranking.some((r) => key0(r.name) === key0(brandName));
 
   // P0-d: brandFound는 GEO SoV와 동일 잣대(전체 excerpt 언급)로 판정. 번호목록 밖이어도
   // 언급됐으면 true → "SoV 높은데 미발견" 모순 제거. 순위표 등장은 brandInRanking으로 분리.
@@ -435,4 +436,122 @@ export function competitorKey(
   knownCompetitors: Array<KnownCompetitor | string> = []
 ): string {
   return normalizeKey(name, buildCompetitorAliases(knownCompetitors));
+}
+
+// ── 측정 결과에서 경쟁사 후보 제안(2026-10-14 · 설계원칙 2) ───────────────────────────
+//
+// 「같이 자주 언급된 브랜드」를 경쟁사 **후보**로 보여 준다(Peec: 2회 이상 · Scrunch Signals 방식).
+// 후보는 **제안일 뿐**이다 — 기본 미선택, 사람이 눌러 담고 저장해야 반영된다(Otterly 의 자동 채움 오분류
+// 사고 반면교사). 이 함수는 저장하지 않는다. 새 AI 호출 없이 저장된 답변을 다시 읽는다(원가 0).
+
+/** 후보로 보려면 번호목록에 이만큼 이상 등장해야 한다(한 번은 우연일 수 있다). */
+export const COMPETITOR_CANDIDATE_MIN_MENTIONS = 2;
+/** 화면에 보이는 후보 상한. */
+export const COMPETITOR_CANDIDATE_LIMIT = 5;
+
+export interface CompetitorCandidate {
+  mentions: number;
+  name: string;
+}
+
+export interface CompetitorCandidates {
+  /** 후보를 뽑는 데 읽은 AI 답변 수(신뢰도 표기용). */
+  answersRead: number;
+  candidates: CompetitorCandidate[];
+}
+
+const CANDIDATE_NON_AI_ENGINES = new Set([
+  "naver",
+  "daum",
+  "naver-briefing",
+  "hyperclova",
+]);
+
+const candidateKey = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9가-힣]/g, "");
+
+/**
+ * 한 회차의 결과(JSON)에서 경쟁사 후보를 만든다.
+ * 제외: 우리 브랜드(이름·별칭) · 이미 등록한 경쟁사(이름·별칭) · 한 번만 나온 이름.
+ * 검색 노출(네이버·다음)·브리핑·실패·스텁 답변은 읽지 않는다.
+ */
+function candidateAnswerText(row: unknown): string | null {
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+  const r = row as Record<string, unknown>;
+  const skip =
+    typeof r.engineId !== "string" ||
+    CANDIDATE_NON_AI_ENGINES.has(r.engineId) ||
+    r.isStub === true ||
+    (typeof r.errorMessage === "string" && r.errorMessage.length > 0);
+  if (skip) {
+    return null;
+  }
+  const text =
+    typeof r.rawResponse === "string" && r.rawResponse.length > 0
+      ? r.rawResponse
+      : r.excerpt;
+  return typeof text === "string" && text.length > 0 ? text : null;
+}
+
+function candidateAnswerTexts(result: unknown): string[] {
+  const rows =
+    result && typeof result === "object" && !Array.isArray(result)
+      ? (result as { engineResponses?: unknown }).engineResponses
+      : null;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+  return rows.flatMap((row) => {
+    const text = candidateAnswerText(row);
+    return text ? [text] : [];
+  });
+}
+
+function candidateKeys(
+  items: readonly (KnownCompetitor | string)[]
+): Set<string> {
+  const keys = new Set<string>();
+  for (const item of items) {
+    const entry = typeof item === "string" ? { name: item } : item;
+    for (const name of [entry.name, ...(entry.aliases ?? [])]) {
+      const key = candidateKey(name ?? "");
+      if (key) {
+        keys.add(key);
+      }
+    }
+  }
+  return keys;
+}
+
+export function competitorCandidatesFromResult(
+  result: unknown,
+  brand: { name: string; variants?: readonly string[] },
+  registered: readonly (KnownCompetitor | string)[] = []
+): CompetitorCandidates {
+  const excerpts = candidateAnswerTexts(result);
+  if (excerpts.length === 0) {
+    return { answersRead: 0, candidates: [] };
+  }
+  const excluded = candidateKeys([
+    brand.name,
+    ...(brand.variants ?? []),
+    ...registered,
+  ]);
+  const landscape = extractCompetitorLandscape(
+    excerpts,
+    brand.name,
+    [...(brand.variants ?? [])],
+    [...registered]
+  );
+  const candidates = landscape.ranking
+    .filter(
+      (rank) =>
+        rank.mentions >= COMPETITOR_CANDIDATE_MIN_MENTIONS &&
+        !excluded.has(candidateKey(rank.name))
+    )
+    .slice(0, COMPETITOR_CANDIDATE_LIMIT)
+    .map((rank) => ({ mentions: rank.mentions, name: rank.name }));
+  return { answersRead: excerpts.length, candidates };
 }
