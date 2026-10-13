@@ -1,5 +1,6 @@
 import type { EngineResponse } from "@repo/ai/lib/engines";
 import type { RunPrompt } from "./audit-prompts";
+import { ABSOLUTE_MAX_CONTINUATIONS } from "./continuation-limit";
 import type { DemandQuestionSet } from "./demand-prompts";
 import type { OfficialSiteIdentity } from "./official-site-identity";
 import {
@@ -94,6 +95,11 @@ export interface AuditCheckpoint {
    * 없으면 아직 한 번도 이어가지 않은 회차다. 질문 계획(planKey)에는 들어가지 않는다.
    */
   continuation?: AuditCheckpointContinuation;
+  /**
+   * 이 회차의 이어가기 상한(질문 수로 계산해 저장, 2026-10-14). 없으면(옛 체크포인트·대시보드 회차)
+   * 기본 2회다. 질문 계획(planKey)에는 들어가지 않는다.
+   */
+  continuationLimit?: number;
   /** Bump when provider selection or adapter semantics change. Old plans fail closed. */
   engineConfigVersion: 1;
   enginePlan: string[][];
@@ -173,16 +179,22 @@ export const enginesForRunPrompt = (
     prompt.planV2?.engineSetKey
   );
 
-/** 이 회차의 이어가기 상한 — 그림자 회차는 계획 크기로 계산한 값, 아니면 기본 2회. */
+/**
+ * 이 회차의 이어가기 상한. 기본 2회(= 옛 체크포인트·대시보드 회차 그대로),
+ * 그림자 회차는 계획 크기로 계산한 값, 질문 수를 늘려 시작한 회차(영업 20문항)는
+ * 체크포인트에 저장된 `continuationLimit`. 셋 중 가장 큰 값, 절대 상한 8 이하.
+ */
 export const continuationLimitOf = (
-  checkpoint: Pick<AuditCheckpoint, "shadowPlanV2">
+  checkpoint: Pick<AuditCheckpoint, "continuationLimit" | "shadowPlanV2">
 ): number =>
-  checkpoint.shadowPlanV2
-    ? Math.max(
-        MAX_AUDIT_CONTINUATIONS,
-        checkpoint.shadowPlanV2.maxContinuations
-      )
-    : MAX_AUDIT_CONTINUATIONS;
+  Math.min(
+    ABSOLUTE_MAX_CONTINUATIONS,
+    Math.max(
+      MAX_AUDIT_CONTINUATIONS,
+      checkpoint.shadowPlanV2?.maxContinuations ?? 0,
+      checkpoint.continuationLimit ?? 0
+    )
+  );
 
 /** 기존 세트 질문 수(그림자 질문은 그 뒤). 그림자가 없으면 전체. */
 export const mainPromptCountOf = (
@@ -241,6 +253,12 @@ const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const nullableString = (value: unknown): boolean =>
   value === null || typeof value === "string";
+/** 저장된 이어가기 상한 — 없거나, 기본(2) 이상 절대 상한(8) 이하의 정수. */
+const validContinuationLimit = (value: unknown): boolean =>
+  value === undefined ||
+  (Number.isInteger(value) &&
+    (value as number) >= MAX_AUDIT_CONTINUATIONS &&
+    (value as number) <= ABSOLUTE_MAX_CONTINUATIONS);
 const validContinuation = (value: unknown, limit: number): boolean =>
   value === undefined ||
   (object(value) &&
@@ -379,12 +397,19 @@ export function readAuditCheckpoint(
     !Number.isInteger(retry.noProgressFailures) ||
     (retry.noProgressFailures as number) < 0 ||
     !validShadow(value.shadowPlanV2, prompts) ||
+    !validContinuationLimit(value.continuationLimit) ||
     !validContinuation(
       value.continuation,
-      object(value.shadowPlanV2) &&
-        typeof value.shadowPlanV2.maxContinuations === "number"
-        ? Math.max(MAX_AUDIT_CONTINUATIONS, value.shadowPlanV2.maxContinuations)
-        : MAX_AUDIT_CONTINUATIONS
+      Math.max(
+        MAX_AUDIT_CONTINUATIONS,
+        object(value.shadowPlanV2) &&
+          typeof value.shadowPlanV2.maxContinuations === "number"
+          ? value.shadowPlanV2.maxContinuations
+          : 0,
+        typeof value.continuationLimit === "number"
+          ? value.continuationLimit
+          : 0
+      )
     ) ||
     !validLateReask(value.lateReask) ||
     !object(context) ||

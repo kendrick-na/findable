@@ -31,6 +31,7 @@ import {
   extractCompetitorLandscape,
   type KnownCompetitor,
 } from "./competitor-extract";
+import { plannedContinuationLimit } from "./continuation-limit";
 import { type DemandMarket, demandMarketsFor } from "./demand-prompts";
 import type { MarketScope } from "./market-scope";
 import {
@@ -40,7 +41,6 @@ import {
   type PlanV2Provenance,
   type PlanV2Type,
   QUESTION_PLAN_V2,
-  SHADOW_MAX_CONTINUATIONS,
 } from "./plan-v2-contract";
 import {
   PLAN_V2_TYPES,
@@ -157,24 +157,19 @@ export function shadowCadence(args: {
 }
 
 // ── 이어가기 상한(계획 크기 기반) ────────────────────────────────────
-export const SECONDS_PER_QUESTION = 40;
-export const SECONDS_PER_INVOCATION = 240;
-
-/** ⌈질문 수 × 40초 ÷ 240초⌉ + 1(여유 1회). */
-export function requiredContinuations(questionCount: number): number {
-  const q = Math.max(0, Math.floor(questionCount));
-  return Math.ceil((q * SECONDS_PER_QUESTION) / SECONDS_PER_INVOCATION) + 1;
-}
+// 계산식은 `continuation-limit.ts` 로 모았다(모든 회차가 같은 식을 쓴다). 이름은 그대로 다시 내보낸다.
+export {
+  requiredContinuations,
+  SECONDS_PER_INVOCATION,
+  SECONDS_PER_QUESTION,
+} from "./continuation-limit";
 
 /** 그림자 회차 이어가기 상한 — 기본 상한(2) 이상, 절대 상한(8) 이하. */
 export function shadowContinuationLimit(
   totalQuestions: number,
   baseLimit: number
 ): number {
-  return Math.min(
-    SHADOW_MAX_CONTINUATIONS,
-    Math.max(baseLimit, requiredContinuations(totalQuestions))
-  );
+  return plannedContinuationLimit(totalQuestions, baseLimit);
 }
 
 // ── 질문 계획 → 실행 프롬프트 ────────────────────────────────────────
