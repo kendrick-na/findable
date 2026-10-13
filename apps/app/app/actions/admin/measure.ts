@@ -1,6 +1,11 @@
 "use server";
 
-import { checkMeasureOne, startMeasureOne } from "@repo/audit/measure-one";
+import {
+  checkMeasureOne,
+  driveMeasureContinuation,
+  salesMeasureOptions,
+  startMeasureOne,
+} from "@repo/audit/measure-one";
 import { runAuditJob } from "@repo/audit/runner";
 import { requireAdmin } from "@repo/auth/admin";
 import { database } from "@repo/database";
@@ -45,8 +50,9 @@ export async function runMeasureOne(brandId: string) {
             brandName: started.brandName,
             domain: started.domain,
             jobId: started.jobId,
-            language: "both",
             organizationId: started.organizationId,
+            // 영업 20문항 · 이어가기 · 브랜드의 언어·업종·시장·별칭(2026-10-14)
+            ...salesMeasureOptions(started),
           });
         } catch (error) {
           log.error("admin.action.measure_one.bg_failed", {
@@ -71,6 +77,12 @@ export async function runMeasureOne(brandId: string) {
 export async function pollMeasureOne(jobId: string, trackingBefore: number) {
   await requireAdmin();
   const state = await checkMeasureOne(jobId, trackingBefore);
+  // 마감으로 잘린 20문항 측정은 이어가기를 기다린다 — 폴링이 한 걸음 이어 준다(응답은 막지 않는다).
+  //   동시에 여러 번 불려도 러너의 claim 이 한쪽만 통과시킨다. 크론의 이어가기가 백업이다.
+  if (state.waiting) {
+    const startedAt = Date.now();
+    after(() => driveMeasureContinuation(jobId, startedAt));
+  }
   if (state.done) {
     revalidatePath("/admin/measure");
   }

@@ -28,12 +28,16 @@
 
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
+import { continueAuditJob } from "./audit-continuation";
+import { isAuditContinuationPending } from "./audit-execution-lease";
 import {
   assertCheckpointProvenance,
   MAX_CHECKPOINT_AGE_MS,
   nextAuditCheckpointAttempt,
   readAuditCheckpoint,
 } from "./checkpoint";
+import { auditLanguageForMarketScope, type MarketScope } from "./market-scope";
+import { SALES_PROMPT_LIMIT } from "./prompt-limits";
 import { runAuditJob } from "./runner";
 import { reconcileStaleAuditJob } from "./stale-job";
 
@@ -53,6 +57,23 @@ export interface MeasureOneResult {
   trackingBefore: number;
   /** 이 측정으로 늘어난 Tracking 행 수. **0 이면 적재가 안 된 것**(핵심 검증 지표). */
   trackingDelta: number;
+}
+
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter(
+        (item): item is string => typeof item === "string" && item.trim() !== ""
+      )
+    : [];
+
+/**
+ * 영업(관리자) 측정이 러너에 넘기는 브랜드 값(2026-10-14). 고객 측정(`start-tracking`)과 같은 값을 쓴다 —
+ * 예전엔 언어를 "both" 로 고정하고 업종·시장·별칭을 안 넘겨 업종 기반 기본 질문(v2)을 못 썼다.
+ */
+export interface MeasureBrandContext {
+  brandVariants: string[];
+  industry?: string;
+  marketScope?: MarketScope;
 }
 
 /** `startMeasureOne` 반환 — 측정을 **걸어두고** 즉시 돌아온다. */
@@ -113,9 +134,20 @@ function readResumableCheckpoint(
  */
 export async function startMeasureOne(
   brandId: string
-): Promise<StartMeasureResult & { domain: string; organizationId: string }> {
+): Promise<
+  StartMeasureResult &
+    MeasureBrandContext & { domain: string; organizationId: string }
+> {
   const brand = await database.brand.findUnique({
-    select: { id: true, name: true, domain: true, organizationId: true },
+    select: {
+      id: true,
+      name: true,
+      domain: true,
+      entityVariants: true,
+      industry: true,
+      marketScope: true,
+      organizationId: true,
+    },
     where: { id: brandId },
   });
   if (!brand) {
@@ -125,6 +157,11 @@ export async function startMeasureOne(
   if (!organizationId) {
     throw new Error(`brand has no organization: ${brand.name}`);
   }
+  const context: MeasureBrandContext = {
+    brandVariants: stringList(brand.entityVariants),
+    industry: brand.industry ?? undefined,
+    marketScope: (brand.marketScope as MarketScope | null) ?? undefined,
+  };
 
   const trackingBefore = await database.tracking.count({
     where: { brandId: brand.id },
@@ -151,6 +188,7 @@ export async function startMeasureOne(
     (runningStatus === "queued" || runningStatus === "processing")
   ) {
     return {
+      ...context,
       brandId: brand.id,
       brandName: brand.name,
       domain: brand.domain,
@@ -236,6 +274,7 @@ export async function startMeasureOne(
         attempt: nextCheckpoint.retry.attempt,
       });
       return {
+        ...context,
         brandId: brand.id,
         brandName: brand.name,
         domain: brand.domain,
@@ -251,7 +290,9 @@ export async function startMeasureOne(
       brandId: brand.id,
       domain: brand.domain,
       email: `org:${organizationId}`,
-      language: "both",
+      // 고객 측정(start-tracking)과 같은 값 — 이어가기가 Job 행에서 언어·업종을 다시 읽는다.
+      language: auditLanguageForMarketScope(context.marketScope),
+      industry: brand.industry,
       organizationId,
     },
     select: { id: true },
@@ -265,6 +306,7 @@ export async function startMeasureOne(
   });
 
   return {
+    ...context,
     brandId: brand.id,
     brandName: brand.name,
     domain: brand.domain,
@@ -272,6 +314,44 @@ export async function startMeasureOne(
     organizationId,
     trackingBefore,
   };
+}
+
+/**
+ * 영업(관리자) 측정이 러너에 넘기는 옵션(2026-10-14 · 대표 결정 「20문항 1회」).
+ *
+ * 대시보드·고객 측정은 이 옵션을 쓰지 않는다(기본 8문항·이어가기 2회 그대로). 영업 경로만:
+ *  · `promptLimit: 20` — 저장 질문 최대 20개를 한 회차에
+ *  · `continueWhenTruncated: true` — 마감으로 잘리면 이어가기(상한은 질문 수로 계산해 체크포인트에 저장)
+ *  · 언어·업종·시장·별칭은 브랜드 값(고객 측정과 같은 규칙)
+ */
+export function salesMeasureOptions(started: MeasureBrandContext) {
+  return {
+    brandVariants: started.brandVariants,
+    continueWhenTruncated: true,
+    industry: started.industry,
+    language: auditLanguageForMarketScope(started.marketScope),
+    marketScope: started.marketScope,
+    promptLimit: SALES_PROMPT_LIMIT,
+  };
+}
+
+/**
+ * 이어가기 대기 중인 영업 측정을 한 걸음 이어간다. 폴링(관리자 콘솔·API)이 대기를 보면 호출한다.
+ * 대기가 아니면(`not_pending`) 아무것도 하지 않는다. 동시 호출은 러너의 claim 이 한쪽만 통과시킨다.
+ * ⛔ 절대 throw 하지 않는다 — 폴링 응답을 막지 않는다.
+ */
+export async function driveMeasureContinuation(
+  jobId: string,
+  invocationStartedAtMs: number
+): Promise<void> {
+  try {
+    await continueAuditJob(jobId, { invocationStartedAtMs });
+  } catch (error) {
+    log.error("admin.measure_one.continue_failed", {
+      error: String(error),
+      jobId,
+    });
+  }
 }
 
 /** 걸어둔 측정의 **현재 상태**를 본다. 폴링용(0원). */
@@ -283,6 +363,8 @@ export async function checkMeasureOne(
   status: string;
   trackingDelta: number;
   trackingNow: number;
+  /** 마감으로 잘려 이어가기를 기다리는 중(폴링이 이어 줘야 한다). */
+  waiting: boolean;
 }> {
   const job = await database.auditJob.findUnique({
     select: {
@@ -307,6 +389,7 @@ export async function checkMeasureOne(
     status,
     trackingDelta: trackingNow - trackingBefore,
     trackingNow,
+    waiting: job ? isAuditContinuationPending(job) : false,
   };
 }
 

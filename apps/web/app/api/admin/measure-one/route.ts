@@ -17,7 +17,12 @@
  *   - 한 요청에 **1건만**. 배열·전체 실행을 받지 않는다(실수로 전 브랜드가 도는 일 방지).
  */
 
-import { checkMeasureOne, startMeasureOne } from "@repo/audit/measure-one";
+import {
+  checkMeasureOne,
+  driveMeasureContinuation,
+  salesMeasureOptions,
+  startMeasureOne,
+} from "@repo/audit/measure-one";
 import { runAuditJob } from "@repo/audit/runner";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
@@ -38,7 +43,13 @@ export async function GET(request: NextRequest): Promise<Response> {
   const jobId = request.nextUrl.searchParams.get("jobId");
   if (jobId) {
     const before = Number(request.nextUrl.searchParams.get("before") ?? "0");
-    return Response.json(await checkMeasureOne(jobId, before));
+    const state = await checkMeasureOne(jobId, before);
+    // 마감으로 잘린 20문항 측정은 폴링이 한 걸음 이어 준다(응답은 막지 않는다 · 크론 이어가기가 백업).
+    if (state.waiting) {
+      const startedAt = Date.now();
+      after(() => driveMeasureContinuation(jobId, startedAt));
+    }
+    return Response.json(state);
   }
 
   const brands = await database.brand.findMany({
@@ -144,8 +155,9 @@ export async function POST(request: NextRequest): Promise<Response> {
           brandName: started.brandName,
           domain: started.domain,
           jobId: started.jobId,
-          language: "both",
           organizationId: started.organizationId,
+          // 영업 20문항 · 이어가기 · 브랜드의 언어·업종·시장·별칭(2026-10-14)
+          ...salesMeasureOptions(started),
         });
       } catch (error) {
         log.error("admin.measure_one.bg_failed", {

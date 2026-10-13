@@ -37,9 +37,9 @@ export default async function AdminMeasurePage() {
         <div className="flex flex-col gap-1">
           <h1 className="font-semibold text-2xl tracking-tight">측정 콘솔</h1>
           <p className="text-muted-foreground text-sm">
-            브랜드 하나를 골라 측정을 다시 돌려요. 1건은 질문 최대 8개를 기본
-            엔진 6곳에 묻고, 최근 14일 운영 평균 원가는 약 621원(2026-10-07
-            집계)이며 3~5분 걸려요.
+            브랜드 하나를 골라 측정을 다시 돌려요. 1건은 저장 질문 최대 20개를
+            기본 엔진 6곳에 묻고, 원가는 약 1,800원(질문 20개 기준 추정)이며
+            나눠 이어 측정해 15~20분 걸려요.
           </p>
         </div>
         <MeasureConsole brands={brands} />
