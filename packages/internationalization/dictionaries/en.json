@@ -1147,7 +1147,8 @@
       "promptLimit": "You've reached your plan's limit of {limit} tracked questions. Upgrade your plan to track more.",
       "promptSaveFailed": "Something went wrong saving the questions.",
       "legalNameInvalid": "Please enter a company name of 2–60 characters.",
-      "businessNumberInvalid": "Please check the 10-digit business registration number."
+      "businessNumberInvalid": "Please check the 10-digit business registration number.",
+      "measuringNoEdit": "A measurement is in progress, so questions can't be changed right now. Please try again after it finishes."
     },
     "promptWizard": {
       "categoryBrand": "Brand",

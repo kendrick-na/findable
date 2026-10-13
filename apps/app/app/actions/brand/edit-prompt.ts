@@ -3,6 +3,7 @@
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
+import { hasInFlightMeasurement } from "@/lib/brand/measurement-in-flight";
 import { requireOrg, scopedBrandById } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 
@@ -63,6 +64,12 @@ export const editPromptAction = async (input: {
     return {
       error: (await brandErrors()).defaultPromptNoEdit,
     };
+  }
+
+  // 🔴 측정이 진행 중이거나 결과 저장이 덜 끝났으면 질문을 바꾸지 않는다 — 저장 단계가 지운/고친 질문을
+  //   텍스트로 다시 만들어 되살린다(`measurement-in-flight.ts` 참고).
+  if (await hasInFlightMeasurement(brand.id)) {
+    return { error: (await brandErrors()).measuringNoEdit };
   }
 
   if (text === prompt.text) {
