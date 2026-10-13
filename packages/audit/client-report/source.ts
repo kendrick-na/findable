@@ -52,6 +52,23 @@ export interface ReportSource {
     exportedBy: string | null;
     kind: "app-export";
   };
+  /**
+   * 측정 준비도 기록(2026-10-12) — 결과의 measurementContext 에서 그대로 옮긴다. 없으면(기록 이전 회차)
+   * `setup` 자체가 없다 — 판단할 수 없으므로 발행 게이트는 거부하지 않는다.
+   */
+  /**
+   * 「N개 중 M개 측정」 기록(영업 20문항 회차, 2026-10-14) — 결과의 measurementContext.questionPlan 을 그대로 옮긴다.
+   * 리포트가 "20개 중 18개"처럼 개수를 표기하는 근거다. 잘렸으면(`truncated`) 발행 게이트가 거부한다.
+   * 기록이 없는 회차(대시보드·옛 회차)는 이 필드가 없다.
+   */
+  questionPlan?: {
+    approved: number | null;
+    asked: number;
+    limit: number;
+    planned: number;
+    truncated: boolean;
+    truncatedReason: string | null;
+  };
   run: {
     auditJobId: string;
     brandName: string | null;
@@ -64,10 +81,6 @@ export interface ReportSource {
     resultSha256: string;
     verdictVersion: number;
   };
-  /**
-   * 측정 준비도 기록(2026-10-12) — 결과의 measurementContext 에서 그대로 옮긴다. 없으면(기록 이전 회차)
-   * `setup` 자체가 없다 — 판단할 수 없으므로 발행 게이트는 거부하지 않는다.
-   */
   setup?: {
     brandNameCheck: string | null;
     readiness: {
@@ -263,6 +276,7 @@ export function buildReportSource(
             : null,
       },
       ...setupOf(context),
+      ...questionPlanOf(context),
       answers,
       suggestedDenominator: {
         engines: DEFAULT_COMPARE_ENGINES.filter((e) => present.has(e)),
@@ -304,6 +318,41 @@ function setupOf(
               skippedSetup: readiness.skippedSetup === true,
             }
           : null,
+    },
+  };
+}
+
+const integerOrNull = (value: unknown): number | null =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+
+/** 결과에 `questionPlan` 이 있고 모양이 맞을 때만 옮긴다(모르는 모양이면 만들지 않는다). */
+function questionPlanOf(
+  context: Record<string, unknown>
+): Pick<ReportSource, "questionPlan"> {
+  const plan = isRecord(context.questionPlan) ? context.questionPlan : null;
+  const asked = integerOrNull(plan?.asked);
+  const planned = integerOrNull(plan?.planned);
+  const limit = integerOrNull(plan?.limit);
+  if (
+    !plan ||
+    asked === null ||
+    planned === null ||
+    limit === null ||
+    typeof plan.truncated !== "boolean"
+  ) {
+    return {};
+  }
+  return {
+    questionPlan: {
+      approved: integerOrNull(plan.approved),
+      asked,
+      limit,
+      planned,
+      truncated: plan.truncated,
+      truncatedReason:
+        typeof plan.truncatedReason === "string" ? plan.truncatedReason : null,
     },
   };
 }

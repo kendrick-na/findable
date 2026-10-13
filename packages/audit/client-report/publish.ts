@@ -88,7 +88,12 @@ export type ReviewError =
   /** 측정 준비도 미달 회차(경쟁사·질문·별칭 등 비어 있음) — 고객용 리포트로 발행하지 않는다. */
   | { code: "setup_incomplete"; missing: string[] }
   /** 입력한 브랜드명이 공식 사이트 표기와 맞지 않는 회차 — 이름이 틀리면 숫자가 무의미하다. */
-  | { code: "brand_name_mismatch" };
+  | { code: "brand_name_mismatch" }
+  /**
+   * 질문이 다 끝나지 않고 마감된 회차(이어가기 상한 도달·대기 시간창 만료) — 「20개 중 N개」만 잰 잠정 결과라
+   * 고객용 리포트로 발행하지 않는다(재측정으로 이어가기를 끝내야 한다).
+   */
+  | { code: "question_plan_truncated"; asked: number; planned: number };
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
 
@@ -234,6 +239,14 @@ export function validateReview(
     }
     if (source.setup?.brandNameCheck === "mismatch") {
       errors.push({ code: "brand_name_mismatch" });
+    }
+    // 🔴 질문이 잘린 회차(20문항 중 일부만 측정)는 조용히 리포트에 섞이지 않게 거부한다.
+    if (source.questionPlan?.truncated) {
+      errors.push({
+        code: "question_plan_truncated",
+        asked: source.questionPlan.asked,
+        planned: source.questionPlan.planned,
+      });
     }
     if (review.status !== "approved") {
       errors.push({ code: "not_approved" });

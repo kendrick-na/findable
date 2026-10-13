@@ -608,3 +608,70 @@ describe("측정 준비도 발행 게이트 (2026-10-12)", () => {
     expect(codes(source, "preview")).not.toContain("setup_incomplete");
   });
 });
+
+describe("질문이 잘린 회차는 발행 거부 · 「N개 중 M개」 전달 (2026-10-14)", () => {
+  const withPlan = (plan: Record<string, unknown>): ReportSource => {
+    const job = knowverseJob();
+    const result = job.result as Record<string, unknown>;
+    result.measurementContext = {
+      ...(result.measurementContext as Record<string, unknown>),
+      questionPlan: plan,
+    };
+    return sourceOf(job);
+  };
+  const plan = (over: Record<string, unknown> = {}) => ({
+    approved: 20,
+    asked: 20,
+    limit: 20,
+    planned: 20,
+    truncated: false,
+    truncatedReason: null,
+    ...over,
+  });
+  const codes = (source: ReportSource, mode: "issue" | "preview" = "issue") => {
+    const r = issue(source, knowverseReview(source), mode);
+    return r.ok ? [] : r.errors.map((e) => e.code);
+  };
+
+  it("원본에 「20개 중 N개」가 그대로 실린다(리포트 표기용)", () => {
+    expect(
+      withPlan(
+        plan({ asked: 18, truncated: true, truncatedReason: "limit_reached" })
+      ).questionPlan
+    ).toEqual({
+      approved: 20,
+      asked: 18,
+      limit: 20,
+      planned: 20,
+      truncated: true,
+      truncatedReason: "limit_reached",
+    });
+  });
+
+  it("잘린 회차(이어가기 상한 도달·시간창 만료)는 발행을 거부한다", () => {
+    for (const reason of ["limit_reached", "window_expired"]) {
+      const source = withPlan(
+        plan({ asked: 14, truncated: true, truncatedReason: reason })
+      );
+      expect(codes(source)).toContain("question_plan_truncated");
+    }
+  });
+
+  it("다 끝난 회차·기록 없는 회차·미리보기는 이 게이트가 거부하지 않는다", () => {
+    expect(codes(withPlan(plan()))).not.toContain("question_plan_truncated");
+    expect(codes(sourceOf(knowverseJob()))).not.toContain(
+      "question_plan_truncated"
+    );
+    expect(sourceOf(knowverseJob()).questionPlan).toBeUndefined();
+    const truncated = withPlan(plan({ asked: 5, truncated: true }));
+    expect(codes(truncated, "preview")).not.toContain(
+      "question_plan_truncated"
+    );
+  });
+
+  it("모양이 이상한 기록은 옮기지 않는다(조용히 통과도, 오탐 거부도 하지 않는다)", () => {
+    expect(
+      withPlan({ asked: "많이", truncated: true }).questionPlan
+    ).toBeUndefined();
+  });
+});
