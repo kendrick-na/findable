@@ -18,7 +18,7 @@
  *      없으면 부분집합을 완료로 쓰지 않고 전체 write를 실패 처리한다.
  *   ② 쓸 행이 하나도 없으면 **아무것도 쓰지 않는다**(빈 트랜잭션 금지)
  *   ③ 부모 org 가 없으면 **전부 skip**(고아 row 방지 — relationMode="prisma" 라 FK 가 안 막는다)
- *   ④ 같은 프롬프트 텍스트는 **upsert 로 하나의 promptId**(시계열 선 분열 방지)
+ *   ④ 같은 프롬프트 텍스트는 **(brandId,text) 유니크로 하나의 promptId**(시계열 선 분열 방지)
  *   ⑤ 실패해도 **throw 하지 않는다**(측정 결과를 깨지 않는다)
  *
  * @vitest-environment node
@@ -32,6 +32,8 @@ const state = {
   orgExists: true,
   engineIds: ["chatgpt", "claude", "perplexity"],
   promptUpserts: [] as Array<{ brandId: string; text: string }>,
+  promptCreateManyCalls: 0,
+  skipDuplicates: false,
   trackingRows: [] as Record<string, unknown>[],
   transactionRan: false,
   throwOnCreateMany: false,
@@ -39,20 +41,28 @@ const state = {
 
 const tx = {
   prompt: {
-    // Prisma 의 실제 시그니처가 Promise 라 `async` 가 **계약**이다.
-    //   벗기면 호출부의 `await` 가 값이 아닌 함수를 받는다.
-    upsert: vi.fn(
-      // biome-ignore lint/suspicious/useAwait: 위 주석 참고
-      async ({
-        where,
+    // Prisma 의 실제 시그니처가 Promise 다(2026-10-14: upsert → createMany + findMany).
+    createMany: vi.fn(
+      ({
+        data,
+        skipDuplicates,
       }: {
-        where: { brandId_text: { brandId: string; text: string } };
+        data: Array<{ brandId: string; text: string }>;
+        skipDuplicates?: boolean;
       }) => {
-        const { brandId, text } = where.brandId_text;
-        state.promptUpserts.push({ brandId, text });
-        // 같은 text → 같은 id (실제 upsert 의미론).
-        return { id: `prompt_${text}` };
+        state.promptCreateManyCalls += 1;
+        state.skipDuplicates = skipDuplicates === true;
+        for (const { brandId, text } of data) {
+          state.promptUpserts.push({ brandId, text });
+        }
+        return Promise.resolve({ count: data.length });
       }
+    ),
+    // 같은 text → 같은 id (유니크 (brandId, text) 의미론).
+    findMany: vi.fn(({ where }: { where: { text: { in: string[] } } }) =>
+      Promise.resolve(
+        where.text.in.map((text) => ({ id: `prompt_${text}`, text }))
+      )
     ),
   },
   tracking: {
@@ -122,6 +132,8 @@ beforeEach(() => {
   state.orgExists = true;
   state.engineIds = ["chatgpt", "claude", "perplexity"];
   state.promptUpserts = [];
+  state.promptCreateManyCalls = 0;
+  state.skipDuplicates = false;
   state.trackingRows = [];
   state.transactionRan = false;
   state.throwOnCreateMany = false;
@@ -183,14 +195,16 @@ describe("persistAuditTracking — 적재 규칙 (원가 0원)", () => {
     expect(state.trackingRows).toHaveLength(0);
   });
 
-  test("같은 프롬프트 텍스트는 upsert 1회 — promptId 가 갈리지 않는다", async () => {
+  test("같은 프롬프트 텍스트는 한 번만 심고 — promptId 가 갈리지 않는다", async () => {
     await run([
       row({ engineId: "chatgpt", promptText: "같은 질문" }),
       row({ engineId: "claude", promptText: "같은 질문" }),
       row({ engineId: "perplexity", promptText: "다른 질문" }),
     ]);
 
-    // 텍스트 2종 → upsert 2회(엔진 3개인데도).
+    // 텍스트 2종 → 질문 2개를 **createMany 1번**으로(엔진 3개인데도), 중복은 건드리지 않는다.
+    expect(state.promptCreateManyCalls).toBe(1);
+    expect(state.skipDuplicates).toBe(true);
     expect(state.promptUpserts).toHaveLength(2);
     expect(state.trackingRows).toHaveLength(3);
     // 같은 텍스트의 두 행이 같은 promptId 를 공유한다.
