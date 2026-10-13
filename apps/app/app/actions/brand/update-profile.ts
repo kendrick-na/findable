@@ -1,5 +1,9 @@
 "use server";
 
+import {
+  competitorSettingOf,
+  NO_COMPETITORS_MARKER,
+} from "@repo/audit/setup-readiness";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
@@ -89,6 +93,12 @@ export interface UpdateBrandProfileInput {
    */
   marketScope?: string;
   name?: string;
+  /**
+   * '경쟁사 없음'을 **명시 선택**했는지(2026-10-13). 경쟁사가 비어 있을 때만 의미가 있고,
+   * 저장은 `Brand.competitors` 목록 안 표식 `{"none": true}` 로 한다(컬럼 추가 없음).
+   * 이름 있는 경쟁사가 하나라도 있으면 표식은 저장하지 않는다.
+   */
+  noCompetitors?: boolean;
   /** 다음에 다시 들어왔을 때 복귀할 단계(2~5). */
   onboardingStep?: number;
 }
@@ -169,6 +179,25 @@ function validatedOfficialIdentity(
   return out;
 }
 
+/**
+ * 저장할 경쟁사 목록. 비어 있는 목록은 '미설정'이다. 명시 선택(noCompetitors)이거나, 이미 '없음'으로 저장된
+ * 브랜드를 프로필 편집기가 빈 목록으로 다시 저장하는 경우(편집기는 표식을 모른다)엔 표식 `{"none": true}` 를
+ * 유지한다 — 지우면 '없음' 선택이 조용히 취소된다.
+ */
+function competitorsToStore(
+  names: string[],
+  noCompetitors: boolean,
+  existing: unknown
+): Array<string | { none: true }> {
+  const list = cleanList(names);
+  if (list.length > 0) {
+    return list;
+  }
+  const keepNone =
+    noCompetitors || competitorSettingOf(existing).kind === "none";
+  return keepNone ? [NO_COMPETITORS_MARKER] : [];
+}
+
 export const updateBrandProfile = async (
   input: UpdateBrandProfileInput
 ): Promise<UpdateBrandProfileResult> => {
@@ -182,7 +211,7 @@ export const updateBrandProfile = async (
   const data: {
     businessNumber?: string | null;
     legalName?: string | null;
-    competitors?: string[];
+    competitors?: Array<string | { none: true }>;
     entityVariants?: string[];
     marketScope?: MarketScopeValue;
     name?: string;
@@ -203,7 +232,11 @@ export const updateBrandProfile = async (
     data.entityVariants = cleanList(input.entityVariants);
   }
   if (input.competitors) {
-    data.competitors = cleanList(input.competitors);
+    data.competitors = competitorsToStore(
+      input.competitors,
+      input.noCompetitors === true,
+      owned.competitors
+    );
   }
   // 유효 enum 일 때만 저장한다 — 아니면 건드리지 않아 자동 추정이 그대로 산다.
   const scope = toMarketScope(input.marketScope);

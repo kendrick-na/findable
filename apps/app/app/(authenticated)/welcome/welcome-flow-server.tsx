@@ -1,5 +1,11 @@
 import { inferMarketScope } from "@repo/audit/market-scope";
 import { updateBrandProfile } from "@/app/actions/brand/update-profile";
+import {
+  checkBrandSetup,
+  saveWelcomeQuestions,
+  startWelcomeMeasurement,
+  suggestWelcomeQuestions,
+} from "@/app/actions/brand/welcome-actions";
 import { getAppDictionary } from "@/lib/i18n";
 import { marketScopeReason } from "@/lib/market-scope-reason";
 import { WelcomeFlow } from "./welcome-flow";
@@ -26,10 +32,12 @@ export const WelcomeFlowServer = async ({
   brandIndustry?: string | null;
   brandName: string;
   initialCompetitors?: string[];
+  initialNoCompetitors?: boolean;
   initialScope?: string;
   initialStep?: number;
   initialVariants?: string[];
-  measurement?: "failed" | "rate_limited" | "started";
+  /** false 면 온보딩 단계·완료를 조직에 저장하지 않는다('브랜드 추가' 흐름). */
+  persistStep?: boolean;
   readiness?: {
     id: string;
     report: unknown;
@@ -48,12 +56,20 @@ export const WelcomeFlowServer = async ({
   return (
     <WelcomeFlow
       {...props}
+      actions={{
+        check: checkBrandSetup,
+        save: saveWelcomeQuestions,
+        start: startWelcomeMeasurement,
+        suggest: suggestWelcomeQuestions,
+      }}
+      brandDomain={brandDomain}
       detected={{
         confidence: detected.confidence,
         reason: marketScopeReason(detected.reasonCode, dict.brandForm),
         scope: detected.scope,
       }}
       onSave={updateBrandProfile}
+      questionLabels={dict.questionPicker}
       t={t}
     />
   );

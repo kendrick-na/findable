@@ -213,7 +213,11 @@ const PromptsPage = async () => {
                 ) : null}
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <PromptWizard brandId={brand.id} t={dict.promptWizard} />
+                  <PromptWizard
+                    brandId={brand.id}
+                    pickerLabels={dict.questionPicker}
+                    t={dict.promptWizard}
+                  />
                   {/* 상한에 닿았으면 그 자리에서 길을 준다 — 마법사만 두면
                       누른 뒤에야 "상한 도달" 토스트를 만난다. */}
                   {Number.isFinite(promptLimit) &&

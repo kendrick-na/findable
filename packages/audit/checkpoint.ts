@@ -23,6 +23,8 @@ export interface AuditCheckpointContext {
   demandQuestionSet?: DemandQuestionSet;
   identityGrounded: boolean;
   officialSiteIdentity: OfficialSiteIdentity;
+  /** 측정 시작 시점의 승인된 저장 질문 세트 지문(비교 키용). 없으면 키에 붙이지 않는다. */
+  questionSetKey?: string;
   /** 측정 시작 시점의 준비도 기록. 이어가기·재개에서도 같은 값이 결과에 남는다. */
   setupReadiness?: SetupReadinessRecord;
 }

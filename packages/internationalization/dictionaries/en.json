@@ -311,7 +311,23 @@
       "editorBusinessNumberInvalid": "Please check the 10-digit business registration number.",
       "editorLegalNameInvalid": "Please enter a company name of 2–60 characters.",
       "editorBusinessNumberSuggested": "Found on your homepage: {number}",
-      "editorUseSuggested": "Use this number"
+      "editorUseSuggested": "Use this number",
+      "questionTitle": "These are the questions we'll ask AI",
+      "questionLede": "These are questions customers might really ask AI. Pick the ones to measure and edit the wording if you like. Nothing is added for you.",
+      "questionLedeEmpty": "There wasn't enough information to suggest questions. You can add them yourself later on the brand page.",
+      "questionWhyTitle": "Why are most questions nameless?",
+      "questionWhyBody": "Customers rarely ask by name — they ask things like 'recommend a moisturizer for sensitive skin'. Whether AI mentions you when nobody names you is your real visibility.",
+      "questionSuggest": "Suggest questions",
+      "questionSuggesting": "Writing questions…",
+      "questionFailed": "We couldn't load questions. You can skip this step.",
+      "competitorNone": "I have no competitors to compare with",
+      "competitorNoneHint": "If left empty we show 'no comparison baseline' and don't compute competitive share.",
+      "quickStart": "Measure now with the defaults",
+      "setupMissingTitle": "Some things aren't set up yet",
+      "setupMissingBody": "Without questions or competitors, we measure with default questions that use your brand name. Continuing is recorded as 'proceeded with defaults'.",
+      "startDefault": "Proceed with defaults and start measuring",
+      "summaryQuestions": "{count} tracked questions",
+      "summaryCompetitorsNone": "No competitors (no comparison baseline)"
     },
     "content": {
       "navLabel": "My content",
@@ -996,8 +1012,8 @@
       "industryOther": "Other",
       "nameAutoFilled": "We filled this in from your domain. Change it if it's different.",
       "nameHelp": "This is the name we use when asking AI. If your company and brand names differ, enter the one people actually use more.",
-      "submitting": "Starting measurement…",
-      "submit": "Confirm and start measuring",
+      "submitting": "Registering…",
+      "submit": "Confirm and continue",
       "toastStarted": "Measurement started. It usually takes 1–3 minutes.",
       "toastRateLimited": "You've already measured today.",
       "viewDashboard": "View dashboard",
@@ -1047,7 +1063,9 @@
       "identityMissing": "For an accurate measurement, check and save the brand name, industry and target market below.",
       "addTitle": "Add a brand",
       "addFirst": "Just enter a domain and we'll start measuring right away. It takes 1–3 minutes.",
-      "addMore": "You can add several brands and measure each one."
+      "addMore": "You can add several brands and measure each one.",
+      "setupMissing": "Questions and competitors aren't set up yet. Without them we only measure with default questions that use your brand name.",
+      "setupContinue": "Continue setup"
     },
     "trackButton": {
       "idle": "Start measuring",
@@ -1153,11 +1171,12 @@
       "adding": "Adding…",
       "add": "Add",
       "suggestedTitle": "Questions suggested by AI ({n})",
-      "suggestedLede": "Choose the questions to measure with and save them. From your next measurement, we'll ask ChatGPT, Perplexity and others these questions.",
+      "suggestedLede": "Choose the questions to measure and save them. Nothing is selected for you. [Pick a recommended mix] chooses a balanced set by type. You can edit the wording. From your next measurement, we'll ask ChatGPT, Perplexity and others these questions.",
       "competitorsNote": "Suggested competitors — answers to competitor and category questions will compare you with these brands.",
       "selectedCount": "{n} selected",
       "saving": "Saving…",
-      "saveSelected": "Save selected ({n})"
+      "saveSelected": "Save selected ({n})",
+      "noSuggestions": "There wasn't enough information to suggest questions. Please add them yourself."
     },
     "promptsPage": {
       "metaTitle": "Tracked questions · Findable",
@@ -2121,6 +2140,18 @@
       "nextDone": "Draft saved — check it in Gmail drafts and send it yourself.",
       "sourcesShow": "Show sources",
       "sourcesHide": "Hide sources"
+    },
+    "questionPicker": {
+      "clear": "Clear all",
+      "editAria": "Edit question wording",
+      "selectedOfMax": "{n} selected · up to {max}",
+      "recommend": "Pick a recommended mix",
+      "typeCategory": "Buying & category",
+      "typeConcern": "Problems to solve",
+      "typeRepresentative": "Signature products",
+      "typeAlternative": "Comparisons & alternatives",
+      "typeBrand": "About the brand",
+      "typeOther": "Other"
     }
   }
 }

@@ -49,7 +49,7 @@ describe.each([
       ).toBe("설화수")
     );
     const submit = screen.getByRole("button", {
-      name: "확인하고 측정 시작",
+      name: "확인하고 다음으로",
     }) as HTMLButtonElement;
     expect(screen.getByText(/제안이 없거나 맞지 않다면 직접/)).toBeTruthy();
     expect(submit.disabled).toBe(true);
@@ -93,7 +93,7 @@ describe.each([
       ).toBe("설화수")
     );
     const submit = screen.getByRole("button", {
-      name: "확인하고 측정 시작",
+      name: "확인하고 다음으로",
     }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     fireEvent.keyDown(screen.getByRole("combobox", { name: "업종" }), {
@@ -123,7 +123,7 @@ describe.each([
     const industry = screen.getByRole("combobox", { name: "업종" });
     await waitFor(() => expect(industry.textContent).toContain("뷰티·화장품"));
     const submit = screen.getByRole("button", {
-      name: "확인하고 측정 시작",
+      name: "확인하고 다음으로",
     }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     fireEvent.click(
@@ -165,6 +165,8 @@ describe.each([
         industry: "beauty",
         marketScope: "both",
         source: mode === "onboarding" ? "onboarding" : "brand_create",
+        // 등록만 하고 측정은 질문·경쟁사를 고른 뒤 시작한다(2026-10-13).
+        deferMeasurement: true,
       })
     );
   });

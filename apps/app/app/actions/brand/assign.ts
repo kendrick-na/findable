@@ -42,11 +42,18 @@ const brandErrors = async () => (await getAppDictionary()).brandErrors;
  *  · rate_limited — 한도·진행중 차단. 이미 결과가 있으니 그리로 안내한다.
  *  · failed       — 시작하지 못함. 다시 시도할 수 있게 한다.
  */
-export type BrandMeasurementOutcome = "started" | "rate_limited" | "failed";
+export type BrandMeasurementOutcome =
+  | "started"
+  | "rate_limited"
+  | "failed"
+  /** 등록만 하고 측정은 시작하지 않았다(2026-10-13) — 질문·경쟁사 설정 뒤에 시작한다. */
+  | "deferred";
 
 export type AssignBrandOwnerResult =
   | {
       ok: true;
+      /** 등록·갱신된 브랜드 id — 등록 뒤 설정 단계(`/welcome?brand=`)로 이어 갈 때 쓴다. */
+      brandId?: string;
       measurement: BrandMeasurementOutcome;
       /** 가입/브랜드 등록과 함께 예약된 SEO·GEO 기술 진단 실행. */
       siteReadinessRunId?: string;
@@ -60,6 +67,11 @@ export type AssignBrandOwnerResult =
 export interface AssignBrandOwnerInput {
   /** 지정할 기존 brand id. 없으면 신규 생성. */
   brandId?: string;
+  /**
+   * 등록만 하고 **측정은 시작하지 않는다**(2026-10-13 · 대표 승인). 경쟁사·질문을 고르는 단계를
+   * 건너뛰고 이름 질문만으로 재는 길이 없게 한다(프란츠 사건). 측정은 설정 뒤 `startOrgTracking` 이 시작한다.
+   */
+  deferMeasurement?: boolean;
   domain: string;
   /**
    * 업종(선택). 비우면 측정 시 도메인으로 자동 추론한다.
@@ -167,6 +179,20 @@ const startMeasurementAfterAssign = async (
     };
   }
 };
+
+/** 보류(deferMeasurement)면 측정을 시작하지 않고 결말만 알린다. 아니면 기존대로 시작한다. */
+const measurementAfterAssign = (
+  input: AssignBrandOwnerInput,
+  domain: string,
+  name: string
+): Promise<{
+  measurement: BrandMeasurementOutcome;
+  jobId?: string;
+  message?: string;
+}> =>
+  input.deferMeasurement
+    ? Promise.resolve({ measurement: "deferred" as const })
+    : startMeasurementAfterAssign(domain, name);
 
 /**
  * 도메인 등록 직후의 기술 준비도 진단을 예약한다.
@@ -347,7 +373,8 @@ export const assignBrandOwner = async (
         : undefined;
       return {
         ok: true,
-        ...(await startMeasurementAfterAssign(domain, name)),
+        brandId: owned.id,
+        ...(await measurementAfterAssign(input, domain, name)),
         siteReadinessRunId: siteReadinessRunId ?? undefined,
       };
     }
@@ -379,7 +406,8 @@ export const assignBrandOwner = async (
     });
     return {
       ok: true,
-      ...(await startMeasurementAfterAssign(domain, name)),
+      brandId: brand.id,
+      ...(await measurementAfterAssign(input, domain, name)),
       siteReadinessRunId: siteReadinessRunId ?? undefined,
     };
   } catch (error) {

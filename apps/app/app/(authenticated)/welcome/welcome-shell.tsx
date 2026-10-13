@@ -27,6 +27,11 @@ export interface WelcomeShellProps {
   /** 주 행동. 라벨과 동작을 단계가 정한다. */
   primary: { disabled?: boolean; label: string; onClick: () => void };
   /**
+   * 「지금은 기본값으로 바로 측정」 지름길(2026-10-13). 질문·경쟁사를 고르지 않고 지금 상태로 측정을 시작한다.
+   * 누르는 것이 **명시 선택**이며 그 사실이 측정 기록(`skippedSetup`)에 남는다.
+   */
+  quickStart?: { disabled?: boolean; label: string; onClick: () => void };
+  /**
    * 건너뛰기. 🔴 **주 CTA 와 같은 위계**로 렌더된다(회색 작은 글씨 금지) —
    * 전자상거래법 「잘못된 계층구조」(v4 §7-D-4).
    */
@@ -44,6 +49,7 @@ export const WelcomeShell = ({
   current,
   description,
   primary,
+  quickStart,
   skip,
   stepOfTemplate,
   title,
@@ -118,5 +124,17 @@ export const WelcomeShell = ({
         {primary.label}
       </button>
     </div>
+    {quickStart ? (
+      <div className="flex justify-end">
+        <button
+          className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm underline underline-offset-4 disabled:opacity-50"
+          disabled={quickStart.disabled}
+          onClick={quickStart.onClick}
+          type="button"
+        >
+          {quickStart.label}
+        </button>
+      </div>
+    ) : null}
   </div>
 );

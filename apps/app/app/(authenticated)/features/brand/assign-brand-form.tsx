@@ -27,6 +27,8 @@ import { marketScopeReason } from "@/lib/market-scope-reason";
 export type BrandFormLabels = AppDictionary["brandForm"];
 
 interface FormState {
+  /** 등록된 브랜드 id — 등록 뒤 설정 단계(`/welcome?brand=`)로 이어 갈 때 쓴다. */
+  brandId?: string;
   error?: string;
   jobId?: string;
   /** 등록에 이어 자동 실행한 측정의 결말. §3-b ⑴ — 조용한 실패를 막는 자리. */
@@ -229,12 +231,16 @@ export const AssignBrandForm = ({
         industry,
         marketScope: selectedMarketScope,
         source: isOnboarding ? "onboarding" : "brand_create",
+        // 🔴 2026-10-13 — 등록만 하고 측정은 **질문·경쟁사를 고른 뒤** 시작한다(온보딩 6단계).
+        //   등록 즉시 측정하면 그 단계를 건너뛰고 이름 질문만으로 재는 길이 생긴다(프란츠 사건).
+        deferMeasurement: true,
       });
       if ("error" in result) {
         return { status: "idle", error: result.error };
       }
       return {
         status: "ok",
+        brandId: result.brandId,
         measurement: result.measurement,
         jobId: result.jobId,
         message: result.message,
@@ -257,6 +263,11 @@ export const AssignBrandForm = ({
   //   성공처럼 보이는 조용한 실패**가 된다. 결말마다 다른 말을 한다.
   useEffect(() => {
     if (state.status !== "ok") {
+      return;
+    }
+    // 등록만 끝났다 — 질문·경쟁사를 정하는 설정 단계로 보낸다(온보딩과 같은 순서).
+    if (state.measurement === "deferred") {
+      router.push(nextHref ?? `/welcome?brand=${state.brandId ?? ""}`);
       return;
     }
     if (state.measurement === "started") {
@@ -293,6 +304,7 @@ export const AssignBrandForm = ({
   }, [
     state.status,
     state.measurement,
+    state.brandId,
     state.jobId,
     state.message,
     router,

@@ -57,7 +57,10 @@ const SCHEMA = join(
   "../../packages/database/prisma/schema.prisma"
 );
 
+const PLAN = join(process.cwd(), "../../packages/ai/lib/question-plan.ts");
 const suggestSource = readFileSync(SUGGEST, "utf8");
+// 단계2(2026-10-13): 유형→주제 매핑은 순수 모듈 question-plan.ts 로 옮겼다.
+const planSource = readFileSync(PLAN, "utf8");
 const saveSource = readFileSync(SAVE, "utf8");
 const schemaSource = readFileSync(SCHEMA, "utf8");
 
@@ -75,8 +78,11 @@ const SAVE_USES_OLD_MAP = /category:\s*CATEGORY_MAP\[/;
 const GENERATE_CALL = /generateObject\(/g;
 /** enum 본문. */
 const ENUM_BLOCK = /enum PromptCategory\s*\{([^}]*)\}/;
-/** 폴백 질문들의 topic. */
-const FALLBACK_TOPICS = /topic:\s*"([a-z_]+)"/g;
+/** 표 우변의 문자열 값. */
+const TOPIC_VALUE = /:\s*"([a-z_]+)"/g;
+/** question-plan.ts 의 유형→주제 표 본문. */
+const TYPE_TOPIC_BLOCK =
+  /const TYPE_TOPIC: Record<QuestionType, PlanTopic> = \{([^}]*)\}/;
 /** enum 값 한 줄. */
 const ENUM_LINE = /^[a-z_]+$/;
 /** 원본의 폴백 표 — 위 재현본이 이것과 같아야 한다. */
@@ -156,12 +162,23 @@ describe("normalizeTopic — 모르는 값이 와도 질문을 잃지 않는다"
   });
 });
 
-describe("정적 폴백 — LLM 이 실패해도 유형이 한 덩어리가 되지 않는다", () => {
-  it("폴백 질문들의 유형이 **2종 넘게** 갈린다", () => {
-    // 폴백이 전부 같은 유형이면 LLM 실패 시 묶음 화면이 한 칸이 된다.
-    const topics = new Set(
-      [...suggestSource.matchAll(FALLBACK_TOPICS)].map((m) => m[1])
-    );
-    expect(topics.size).toBeGreaterThanOrEqual(3);
+describe("질문 유형 → 저장 주제 — LLM 이 실패해도 한 덩어리가 되지 않는다", () => {
+  const body = planSource.match(TYPE_TOPIC_BLOCK)?.[1] ?? "";
+  const topics = [...body.matchAll(TOPIC_VALUE)].map((m) => m[1]);
+
+  it("5개 질문 유형이 **3종 넘는** 주제로 갈린다", () => {
+    expect(topics).toHaveLength(5);
+    expect(new Set(topics).size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("🔴 매핑 값이 모두 DB enum 안에 있다", () => {
+    for (const topic of topics) {
+      expect(TOPIC_VALUES.has(topic as string)).toBe(true);
+    }
+  });
+
+  it("제안 모듈이 유형별 목록 스키마를 쓰고, 유형은 코드가 정한다", () => {
+    expect(suggestSource).toContain("topicOfType(");
+    expect(suggestSource).toContain("guardQuestions(");
   });
 });

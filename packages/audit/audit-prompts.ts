@@ -1,5 +1,7 @@
+import { defaultConsumerQuestions } from "@repo/ai/lib/question-plan";
 import { conjunctionParticle, objectParticle, topicParticle } from "./actions";
 import type { PromptKind } from "./answer-buckets";
+import { DEFAULT_QUESTION_SET_V2 } from "./default-question-set";
 import type { DemandProvenance } from "./demand-prompts";
 import type { PlanV2PromptMeta } from "./plan-v2-contract";
 import { MAX_DISCOVERY_PROMPTS } from "./prompt-limits";
@@ -10,14 +12,32 @@ export interface PromptBrandNames {
   ko: string;
 }
 
+export interface DefaultPrompt {
+  kind?: PromptKind;
+  lang: "ko" | "en";
+  /** 기본 질문 v2 로 새로 넣은 질문 표시. 없으면 예전 4개와 같다. */
+  source?: typeof DEFAULT_QUESTION_SET_V2;
+  text: string;
+}
+
+export interface DefaultPromptOptions {
+  /**
+   * 고객이 확인한 업종(Industry enum 값). 있고 other 가 아니면 **소비자 말투 기본 질문**
+   * (이름 없는 3 + 이름 1, `@repo/ai/lib/question-plan`)을 쓴다. 없거나 other 면 지어내지 않고
+   * 예전 4개 그대로 — 무료 진단(업종 없음)도 여기에 해당한다.
+   */
+  industry?: string | null;
+}
+
 /**
  * 도메인 + 언어 기반 자동 프롬프트 생성 — 무료 Audit 빠른 모드용 6개.
  * v1.0.5 풀 모드는 30~50개로 확장.
  */
 export function generateAuditPrompts(
   names: PromptBrandNames,
-  language: "ko" | "en" | "both"
-): Array<{ text: string; lang: "ko" | "en" }> {
+  language: "ko" | "en" | "both",
+  options: DefaultPromptOptions = {}
+): DefaultPrompt[] {
   const brandName = names.ko;
   // 영어 질문에 한글 이름을 넣으면("What does 노우버스 offer") 영어권 AI는 그 표기를
   //   거의 모른다 — 시장 격차가 아니라 질문 설계 결함이다(2026-09-28). 공식 로마자
@@ -50,6 +70,28 @@ export function generateAuditPrompts(
     `Top alternatives to ${englishName} and how they differ`,
     `Compare the main competitors of ${englishName}`,
   ];
+
+  // 🔴 기본 질문 v2(2026-10-13) — 4개가 전부 이름 질문이면 「AI 가 이 이름을 아나」만 잰다
+  //   (프란츠·넘버즈인·프롬맘 사건). 업종을 알면 소비자 말투 기본 질문(이름 없는 3 + 이름 1)으로
+  //   바꾼다. 이름 없는 질문은 discovery 로 표시해 Tracking 분모·점수에 섞지 않는다.
+  const consumer = defaultConsumerQuestions({
+    englishName,
+    industry: options.industry,
+    koreanName: brandName,
+    language,
+  });
+  if (consumer) {
+    return consumer.map((q) =>
+      q.nameless
+        ? {
+            kind: "discovery" as const,
+            lang: q.language,
+            source: DEFAULT_QUESTION_SET_V2,
+            text: q.text,
+          }
+        : { lang: q.language, text: q.text }
+    );
+  }
 
   if (language === "ko") {
     return ko.map((text) => ({ text, lang: "ko" as const }));
@@ -99,6 +141,8 @@ export interface RunPrompt {
    * 플래그 off 면 항상 undefined 라 checkpoint JSON 이 기존과 같다.
    */
   promptId?: string;
+  /** 기본 질문 v2 로 넣은 이름 없는 추천형이면 표시(비교 키용). 없으면 키도 없다. */
+  source?: typeof DEFAULT_QUESTION_SET_V2;
   text: string;
 }
 

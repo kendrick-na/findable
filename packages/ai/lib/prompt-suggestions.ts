@@ -19,6 +19,19 @@ import {
   letsurModelWithFallback,
 } from "./letsur-fallback";
 import { models } from "./models";
+import {
+  balanceAxisOfType,
+  composeQuestions,
+  defaultConsumerQuestions,
+  guardQuestions,
+  industryLabel,
+  type PlanMarketScope,
+  type PlanQuestion,
+  QUESTION_COMPOSITION,
+  type QuestionType,
+  targetCounts,
+  topicOfType,
+} from "./question-plan";
 
 // brand-identity.ts와 동일 모델 라우팅(Letsur haiku 우선, 구조화 출력 라이브 검증됨).
 const LETSUR_SUGGEST_MODEL_ID =
@@ -100,6 +113,8 @@ export interface SuggestedPrompt {
   text: string;
   /** 주제 유형(7종). 저장 시 `Prompt.category` 로 들어간다. */
   topic: PromptTopic;
+  /** 단계2 질문 유형(구매·고민·대표상품·대안·브랜드 이해). 화면이 묶어 보여준다. 옛 제안엔 없다. */
+  type?: QuestionType;
 }
 
 export interface PromptSuggestions {
@@ -107,235 +122,248 @@ export interface PromptSuggestions {
   prompts: SuggestedPrompt[];
 }
 
-// 개수 상한(전략: 지금은 고정, 플랜별 차등은 백로그 2·7 게이팅에서). 러너 원가·429 보호.
-const MAX_PROMPTS = 24;
-const MAX_COMPETITORS = 8;
+// 상한: 구성비(8·4·3·2·3 = 20)와 같다. 러너 원가·429 보호는 저장 상한(플랜)과 러너 상한이 맡는다.
+const MAX_PROMPTS = Object.values(QUESTION_COMPOSITION).reduce(
+  (a, b) => a + b,
+  0
+);
+// 유형별로 목표보다 넉넉히 받아 둔다 — 자동 검사에서 버려지는 몫.
+const OVERSHOOT = 2;
 
 /**
- * 질문 1개 = 문장 + **주제 유형**.
- *
- * 🔴 N-42: 예전엔 `z.array(z.string())` 이라 유형을 **배열 단위로 통째** 부여했다
- *   → 저장되는 값이 2종뿐이었다. 이제 질문마다 LLM 이 유형을 판단한다.
- *   ⚠️ **추가 AI 호출은 없다**(같은 `generateObject` 한 번의 출력 모양만 바뀐다).
+ * 질문 1개 = 문장 + 언어. 유형은 배열(유형별 목록)이 정한다 — 질문마다 LLM 이 유형을 고르게 하면
+ * 이름 없는 유형에 이름이 섞이는 오분류가 늘어서, 유형은 프롬프트 구조로 고정하고 코드가 검사한다.
+ * ⚠️ **추가 AI 호출은 없다**(같은 `generateObject` 한 번).
  */
 const promptItemSchema = z.object({
   text: z.string(),
-  topic: z
-    .enum([
-      "best_in_category",
-      "alternative",
-      "comparison",
-      "recommendation",
-      "problem_solving",
-      "buying_guide",
-      "custom",
-    ])
-    .describe(
-      "이 질문의 의도. best_in_category=카테고리 1위/최고를 묻는 것, alternative=대안·대체재를 찾는 것, comparison=둘 이상을 비교하는 것, recommendation=추천을 구하는 것, problem_solving=문제·고민 해결을 묻는 것, buying_guide=구매 기준·고르는 법을 묻는 것, custom=위 어디에도 안 맞는 것."
-    ),
+  language: z.enum(["ko", "en"]),
 });
 
 const suggestionSchema = z.object({
-  brandPromptsKo: z
+  category: z
     .array(promptItemSchema)
     .describe(
-      "브랜드 자체를 묻는 한국어 질문 5~7개. 예: '{브랜드} 어때?', '{브랜드} 믿을만해?'. 실제 소비자가 AI에게 물을 법한 자연스러운 문장. 각 질문에 topic 을 붙일 것."
+      "이름 없는 구매·카테고리 질문. 소비자가 AI에게 반말로 묻는 말. 예: '민감성 피부 보습 크림 추천해줘', '아이 간식 뭐가 좋아?'. 브랜드명·별칭을 절대 넣지 말 것."
     )
     .default([]),
-  brandPromptsEn: z
-    .array(promptItemSchema)
-    .describe("Same as brandPromptsKo but in English, 5~7 items.")
-    .default([]),
-  competitorPromptsKo: z
+  concern: z
     .array(promptItemSchema)
     .describe(
-      "경쟁·카테고리 순위를 묻는 한국어 질문 5~7개. 예: '{카테고리} 브랜드 추천 5개', '{브랜드} 대안'. 브랜드가 경쟁사 나열 속에서 얼마나 등장하는지 측정용. 각 질문에 topic 을 붙일 것."
+      "이름 없는 고민 해결 질문. 예: '환절기에 피부가 당기는데 어떻게 해?'. 브랜드명·별칭 금지."
     )
     .default([]),
-  competitorPromptsEn: z
+  representative: z
     .array(promptItemSchema)
-    .describe("Same as competitorPromptsKo but in English, 5~7 items.")
-    .default([]),
-  competitors: z
-    .array(z.string())
     .describe(
-      "이 브랜드의 실제 경쟁 브랜드명 3~8개(브랜드명만, 설명 없이). 확실하지 않으면 넣지 말 것."
+      "이름 없는 대표 제품·서비스 질문. **공식 사이트 문구에 적힌 제품·서비스·특징만** 써서 만든다. 사이트에 없는 제품명·수치·성분은 지어내지 말 것. 브랜드명·별칭 금지."
+    )
+    .default([]),
+  alternative: z
+    .array(promptItemSchema)
+    .describe(
+      "비교·대안 질문. 경쟁사 이름이 주어졌으면 '[경쟁사] 대신 쓸 만한 곳', '[경쟁사] 말고 뭐 있어?' 형태(우리 브랜드명은 넣지 말 것). 경쟁사가 없으면 '이 분야 다른 선택지' 같은 일반형."
+    )
+    .default([]),
+  brandUnderstanding: z
+    .array(promptItemSchema)
+    .describe(
+      "브랜드를 직접 묻는 질문. 반드시 브랜드명을 넣을 것. 예: '{브랜드} 후기 어때?', '{브랜드} 어디서 사?', '{브랜드}는 어떤 곳이야?'."
     )
     .default([]),
   confident: z
     .boolean()
     .describe(
-      "이 브랜드/업종을 실제로 알고 맥락 있는 제안을 했으면 true. 도메인만 보고 추측했으면 false."
+      "주어진 업종·사이트 문구로 맥락 있는 질문을 만들었으면 true. 재료가 부족해 추측했으면 false."
     ),
 });
 
-// 목록 마커("- ", "1. ", "* ")·따옴표 제거용(top-level: useTopLevelRegex).
-const LIST_MARKER_RE = /^\s*[-*\d.)\s]+/;
-const QUOTE_RE = /["'`]/g;
-
-function cleanLine(raw: string): string {
-  return raw.replace(LIST_MARKER_RE, "").replace(QUOTE_RE, "").trim();
+export interface SuggestInput {
+  /** 고객이 확인한 별칭(한·영·제품 표기). */
+  aliases?: readonly string[];
+  brandName: string;
+  /** 등록·승인된 경쟁사 이름. 없으면 대안 질문은 일반형. */
+  competitors?: readonly string[];
+  domain: string;
+  /** 업종 enum 값. */
+  industry?: string | null;
+  /** 주 사용 언어 힌트(시장 범위가 없을 때). */
+  language?: "ko" | "en" | "both";
+  /** 타깃 시장 — 언어 배분을 정한다. */
+  marketScope?: PlanMarketScope | null;
+  /** 공식 사이트가 스스로 쓴 문구. */
+  site?: {
+    description?: string | null;
+    h1?: string | null;
+    siteName?: string | null;
+    title?: string | null;
+  } | null;
 }
 
-function takeClean(
-  items: Array<{ text: string; topic?: string }>,
-  language: SuggestLanguage,
-  category: PromptCategoryHint
-): SuggestedPrompt[] {
-  const seen = new Set<string>();
-  const out: SuggestedPrompt[] = [];
-  for (const raw of items) {
-    const text = cleanLine(raw.text ?? "");
-    const key = text.toLowerCase();
-    if (text.length >= 3 && text.length <= 200 && !seen.has(key)) {
-      seen.add(key);
-      // 모르는 유형이어도 질문은 살린다(normalizeTopic 이 균형축 기준으로 떨어뜨린다).
-      out.push({
-        text,
-        language,
-        category,
-        topic: normalizeTopic(raw.topic, category),
-      });
-    }
+const MARKET_LABEL: Record<PlanMarketScope, string> = {
+  korea: "한국",
+  global: "해외(영어)",
+  both: "한국+해외",
+};
+
+function scopeOf(input: SuggestInput): PlanMarketScope {
+  if (input.marketScope) {
+    return input.marketScope;
   }
-  return out;
+  if (input.language === "en") {
+    return "global";
+  }
+  return input.language === "both" ? "both" : "korea";
 }
 
-function dedupeCompetitors(items: string[], brandName: string): string[] {
-  const seen = new Set<string>([brandName.toLowerCase()]);
-  const out: string[] = [];
-  for (const raw of items) {
-    const name = cleanLine(raw);
-    const key = name.toLowerCase();
-    if (name.length >= 1 && name.length <= 60 && !seen.has(key)) {
-      seen.add(key);
-      out.push(name);
-    }
-  }
-  return out.slice(0, MAX_COMPETITORS);
+function siteTextOf(site: SuggestInput["site"]): string {
+  return [site?.title, site?.siteName, site?.h1, site?.description]
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .join(" ");
 }
 
-// 두 유형을 번갈아 섞어 상한까지(brand·competitor 균형 유지 — P0-a). ko/en도 교차.
-function interleave(
-  brand: SuggestedPrompt[],
-  competitor: SuggestedPrompt[]
-): SuggestedPrompt[] {
-  const out: SuggestedPrompt[] = [];
-  const max = Math.max(brand.length, competitor.length);
-  for (let i = 0; i < max && out.length < MAX_PROMPTS; i++) {
-    if (brand[i]) {
-      out.push(brand[i] as SuggestedPrompt);
-    }
-    if (competitor[i] && out.length < MAX_PROMPTS) {
-      out.push(competitor[i] as SuggestedPrompt);
-    }
-  }
-  return out;
+const PROTOCOL_RE = /^https?:\/\//;
+const WWW_RE = /^www\./;
+
+function domainName(domain: string): string {
+  return (
+    domain
+      .replace(PROTOCOL_RE, "")
+      .replace(WWW_RE, "")
+      .split("/")[0]
+      ?.split(".")[0] ?? ""
+  );
+}
+
+function brandNamesOf(input: SuggestInput): string[] {
+  return [
+    input.brandName,
+    ...(input.aliases ?? []),
+    input.site?.siteName ?? "",
+    domainName(input.domain),
+  ].filter((v) => v.trim().length >= 2);
+}
+
+function toSuggested(q: PlanQuestion): SuggestedPrompt {
+  return {
+    text: q.text,
+    language: q.language,
+    category: balanceAxisOfType(q.type),
+    topic: topicOfType(q.type),
+    type: q.type,
+  };
 }
 
 /**
- * 정적 폴백 — LLM 실패·비확신 시 generateAuditPrompts와 같은 골격을 제안으로 낸다.
- *   최소한 고정 4개 수준은 항상 보장(마법사가 빈 화면이 되지 않게).
+ * 정적 폴백 — LLM 실패·비확신 시 업종 분야 이름만으로 만든 소비자 말투 기본 질문을 제안으로 낸다.
+ *   업종을 모르면(또는 other) 지어내지 않고 빈 목록 — 화면이 "직접 추가"로 안내한다.
  */
-export function staticFallback(brandName: string): PromptSuggestions {
-  // ⚠️ 폴백도 유형을 갖는다 — LLM 이 실패해도 묶음 화면이 「직접 추가」 한 덩어리가 되지 않게.
-  //   유형은 문장의 실제 의도에 맞춘다(추측 라벨을 붙이면 처방이 어긋난다).
-  const prompts: SuggestedPrompt[] = [
-    {
-      text: `${brandName} 추천해줘`,
-      language: "ko",
-      category: "brand",
-      topic: "recommendation",
-    },
-    {
-      text: `${brandName}의 장단점은?`,
-      language: "ko",
-      category: "brand",
-      topic: "buying_guide",
-    },
-    {
-      text: `${brandName}와 같은 카테고리의 인기 브랜드 5가지 추천해줘`,
-      language: "ko",
-      category: "competitor",
-      topic: "best_in_category",
-    },
-    {
-      text: `${brandName} 경쟁사 대표 브랜드를 순위로 알려줘`,
-      language: "ko",
-      category: "competitor",
-      topic: "comparison",
-    },
-    {
-      text: `What is ${brandName}? Is it worth buying?`,
-      language: "en",
-      category: "brand",
-      topic: "buying_guide",
-    },
-    {
-      text: `Top 5 popular brands similar to ${brandName}`,
-      language: "en",
-      category: "competitor",
-      topic: "alternative",
-    },
-  ];
+export function staticFallback(input: SuggestInput): PromptSuggestions {
+  const defaults = defaultConsumerQuestions({
+    englishName: input.brandName,
+    industry: input.industry,
+    koreanName: input.brandName,
+    language: scopeOf(input) === "global" ? "en" : "ko",
+  });
+  if (!defaults) {
+    return { prompts: [], competitors: [] };
+  }
+  const prompts = defaults.map((d) =>
+    toSuggested({
+      language: d.language,
+      text: d.text,
+      type: d.nameless ? "category" : "brand",
+    })
+  );
   return { prompts, competitors: [] };
 }
 
 /**
- * 브랜드 등록 맥락 → 추적 프롬프트·경쟁사 후보 제안.
- *   추가 AI 호출은 1개(generateObject). confident=false거나 실패 시 정적 폴백.
- *   반환값은 "후보"일 뿐 — 저장·측정 반영은 호출부(서버 액션)의 승인 흐름이 결정한다.
- *
- * @param brandName 대표 브랜드명(resolveBrandIdentity의 brandName 권장).
- * @param domain    브랜드 도메인(업종 힌트).
- * @param language  주 사용 언어. "both"면 ko/en 모두, "ko"/"en"이면 그 언어 위주.
+ * 브랜드 등록 맥락 → 추적 질문 후보(소비자 말투 · 이름 없는 질문 중심).
+ *   입력: 업종·시장·사이트 문구·별칭·경쟁사 (브랜드명 단독 입력은 오분류 위험).
+ *   추가 AI 호출은 1개(generateObject). 코드가 결과를 거른 뒤 구성비(8·4·3·2·3)에 맞춘다.
+ *   반환값은 "후보"일 뿐 — 사람이 고른 것만 저장·측정된다(호출부의 승인 흐름).
  */
 export async function suggestTrackingPrompts(
-  brandName: string,
-  domain: string,
-  language: "ko" | "en" | "both" = "both"
+  input: SuggestInput
 ): Promise<PromptSuggestions> {
+  const scope = scopeOf(input);
   try {
+    const targets = targetCounts(scope);
+    const want = (type: QuestionType) =>
+      (["ko", "en"] as const)
+        .filter((lang) => targets[type][lang] > 0)
+        .map(
+          (lang) =>
+            `${lang === "ko" ? "한국어" : "영어"} ${targets[type][lang] + OVERSHOOT}개`
+        )
+        .join(" + ");
+    const label = industryLabel(input.industry);
+    const siteText = siteTextOf(input.site);
     const { object: out } = await generateObject({
       model: suggestModel(),
       schema: suggestionSchema,
-      prompt: `브랜드 "${brandName}"(도메인: ${domain})를 AI 검색(ChatGPT·Perplexity·네이버 등)에서 추적하기 위한 질문 목록과 경쟁 브랜드를 제안해줘.
-- 실제 소비자가 AI에게 물을 법한 자연스러운 문장으로.
-- 브랜드형(브랜드 자체를 묻는 것)과 경쟁형(카테고리·순위·대안을 묻는 것) 두 유형을 균형 있게.
-- **질문마다 topic 을 붙여줘.** 실제 의도에 맞는 것으로 — 다 recommendation 으로 몰지 말고
-  카테고리 1위를 묻는 질문은 best_in_category, 대안 탐색은 alternative,
-  고르는 기준을 묻는 질문은 buying_guide, 고민 해결은 problem_solving 처럼 갈라줘.
-- 이 브랜드/업종을 실제로 알 때만 맥락 있는 제안을 하고, 도메인만 보고 추측한 거면 confident=false로 표시해.`,
+      prompt: `브랜드를 AI 검색(ChatGPT·Perplexity·네이버 등)에서 추적할 **질문 후보**를 만들어줘.
+질문은 투자자·사업자가 아니라 **소비자·고객이 AI에게 실제로 묻는 말**(반말 대화체)이어야 해.
+
+[재료]
+- 브랜드명: ${input.brandName}${input.aliases?.length ? ` (별칭: ${input.aliases.join(", ")})` : ""}
+- 도메인: ${input.domain}
+- 업종: ${label ? label.ko : "알 수 없음"}
+- 타깃 시장: ${MARKET_LABEL[scope]}
+- 공식 사이트 문구: ${siteText || "없음"}
+- 경쟁사: ${input.competitors?.length ? input.competitors.join(", ") : "없음"}
+
+[만들 개수 — 유형별]
+- category(구매·카테고리, 이름 없음): ${want("category")}
+- concern(고민 해결, 이름 없음): ${want("concern")}
+- representative(대표 제품·서비스, 이름 없음, 사이트 문구에 있는 것만): ${want("representative")}
+- alternative(비교·대안): ${want("alternative")}
+- brandUnderstanding(브랜드 직접 질문): ${want("brand")}
+
+[규칙]
+- category·concern·representative 질문에는 **브랜드명·별칭·도메인 이름을 절대 넣지 마.**
+- 사이트 문구에 없는 제품명·성분·수치·실적은 만들지 마. 재료가 부족하면 개수를 줄이고 confident=false 로 표시해.
+- 언어는 각 항목의 language 에 맞게(ko=한국어, en=영어) 자연스럽게.`,
     });
 
-    const wantKo = language === "ko" || language === "both";
-    const wantEn = language === "en" || language === "both";
-
-    const brand = [
-      ...(wantKo ? takeClean(out.brandPromptsKo, "ko", "brand") : []),
-      ...(wantEn ? takeClean(out.brandPromptsEn, "en", "brand") : []),
+    const asPlan = (
+      items: { language: SuggestLanguage; text: string }[],
+      type: QuestionType
+    ): PlanQuestion[] => items.map((i) => ({ ...i, type }));
+    const all = [
+      ...asPlan(out.category, "category"),
+      ...asPlan(out.concern, "concern"),
+      ...asPlan(out.representative, "representative"),
+      ...asPlan(out.alternative, "alternative"),
+      ...asPlan(out.brandUnderstanding, "brand"),
     ];
-    const competitor = [
-      ...(wantKo ? takeClean(out.competitorPromptsKo, "ko", "competitor") : []),
-      ...(wantEn ? takeClean(out.competitorPromptsEn, "en", "competitor") : []),
-    ];
-
-    const prompts = interleave(brand, competitor);
-    // 비확신이거나 LLM이 사실상 빈손이면 정적 폴백으로 최소치 보장.
-    if (!out.confident || prompts.length < 4) {
-      return staticFallback(brandName);
+    const guarded = guardQuestions(all, {
+      brandNames: brandNamesOf(input),
+      competitors: input.competitors,
+      siteText,
+    });
+    if (guarded.dropped.length > 0) {
+      log.info("prompt.suggest.guard_dropped", {
+        brandName: input.brandName,
+        dropped: guarded.dropped.map((d) => d.reason),
+      });
     }
-
+    const composed = composeQuestions(guarded.kept, scope);
+    // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
+    if (!out.confident || composed.length < 4) {
+      return staticFallback(input);
+    }
     return {
-      prompts,
-      competitors: dedupeCompetitors(out.competitors, brandName),
+      prompts: composed.slice(0, MAX_PROMPTS).map(toSuggested),
+      competitors: [],
     };
   } catch (error) {
     log.warn("prompt.suggest.failed", {
-      brandName,
-      domain,
+      brandName: input.brandName,
+      domain: input.domain,
       error: String(error),
     });
-    return staticFallback(brandName);
+    return staticFallback(input);
   }
 }

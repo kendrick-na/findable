@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { summarizeAnswerBuckets } from "./answer-buckets";
 import { classifySavedPromptKind, generateAuditPrompts } from "./audit-prompts";
 
@@ -183,4 +183,56 @@ it("브랜드 질문 + 이름 없는 질문 합계가 러너 상한(8)을 넘지
     expect(total).toBeLessThanOrEqual(RUNNER_PROMPT_LIMIT_FOR_TEST);
   }
   expect(MAX_DISCOVERY_PROMPTS).toBeLessThanOrEqual(2);
+});
+
+// ── 기본 질문 v2: 소비자 말투(2026-10-13) ───────────────────────────
+import { DEFAULT_QUESTION_SET_V2 } from "./default-question-set";
+
+describe("기본 질문 v2 — 소비자 말투", () => {
+  const names = { ko: "프란츠", en: "FRANZ" };
+  const businessSpeak =
+    /강점과 한계|경쟁사를 비교|Compare the main competitors/;
+
+  it("업종을 알면 이름 없는 3 + 이름 1 (한국어·영어 각각 4개)", () => {
+    for (const language of ["ko", "en"] as const) {
+      const prompts = generateAuditPrompts(names, language, {
+        industry: "beauty",
+      });
+      expect(prompts).toHaveLength(4);
+      const nameless = prompts.filter((p) => p.kind === "discovery");
+      expect(nameless).toHaveLength(3);
+      for (const p of nameless) {
+        expect(p.source).toBe(DEFAULT_QUESTION_SET_V2);
+        expect(p.text).not.toMatch(/프란츠|franz/i);
+      }
+      const named = prompts.filter((p) => p.kind !== "discovery");
+      expect(named).toHaveLength(1);
+      expect(named[0]?.text).toMatch(/프란츠|FRANZ/);
+      // 사업자 문구가 남아 있지 않다.
+      for (const p of prompts) {
+        expect(p.text).not.toMatch(businessSpeak);
+      }
+    }
+  });
+
+  it("both: 4개 유지, 한국어 중심(이름 없는 2 + 이름 1) + 영어 이름 없는 1", () => {
+    const prompts = generateAuditPrompts(names, "both", { industry: "beauty" });
+    expect(prompts).toHaveLength(4);
+    expect(prompts.filter((p) => p.kind === "discovery")).toHaveLength(3);
+    expect(prompts.filter((p) => p.lang === "en")).toHaveLength(1);
+  });
+
+  it("업종이 없거나 other 면 지어내지 않고 예전 4개와 똑같다", () => {
+    const old = generateAuditPrompts(names, "both");
+    for (const industry of [undefined, null, "other"]) {
+      expect(generateAuditPrompts(names, "both", { industry })).toEqual(old);
+    }
+  });
+
+  it("옵션이 없으면(무료 진단) 예전 4개와 똑같다", () => {
+    expect(generateAuditPrompts(names, "ko")).toHaveLength(4);
+    expect(
+      generateAuditPrompts(names, "ko").every((p) => p.kind === undefined)
+    ).toBe(true);
+  });
 });

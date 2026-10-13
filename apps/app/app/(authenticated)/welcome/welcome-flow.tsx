@@ -1,6 +1,8 @@
 "use client";
 
+import type { SuggestedPrompt } from "@repo/ai/lib/prompt-suggestions";
 import { Badge } from "@repo/design-system/components/ui/badge";
+import { Checkbox } from "@repo/design-system/components/ui/checkbox";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Label } from "@repo/design-system/components/ui/label";
 import { toast } from "@repo/design-system/components/ui/sonner";
@@ -17,6 +19,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
+import type { QuestionPickerLabels } from "../features/brand/question-picker";
+import { WelcomeQuestionStep } from "./welcome-question-step";
 import { WelcomeShell } from "./welcome-shell";
 
 /**
@@ -114,7 +118,41 @@ const ExposurePreviewChart = ({
  *   (별칭·경쟁사 둘 다 없어도 측정은 돈다). 완성 기준 = 건너뛸 수 있는 단계 2·3·4.
  */
 
+/** 온보딩 전체 단계 수(1 도메인 등록 · 2 지역 · 3 별칭 · 4 경쟁사 · 5 질문 · 6 확인·측정). */
+const TOTAL = 6;
+
+/** 온보딩이 쓰는 서버 동작 — 뷰는 서버액션을 import 하지 않고 이 모양으로 주입받는다. */
+export interface WelcomeActions {
+  /** 지금 설정 상태에서 비어 있는 항목 코드(필수+권장). 읽기 실패면 null. */
+  check: (brandId: string) => Promise<{ missing: string[] } | null>;
+  /** 사람이 고른 질문만 저장한다. */
+  save: (input: {
+    brandId: string;
+    prompts: SuggestedPrompt[];
+  }) => Promise<{ error: string } | { ok: true; saved: number }>;
+  /** 측정을 시작한다. `skippedSetup` = '기본값으로 진행'을 명시 선택했는지. */
+  start: (input: {
+    brandName: string;
+    domain: string;
+    skippedSetup: boolean;
+  }) => Promise<{ code?: string; error: string } | { jobId: string; ok: true }>;
+  /** 질문 후보 제안(저장 안 함). `remaining` = 더 담을 수 있는 개수. */
+  suggest: (
+    brandId: string
+  ) => Promise<
+    | { error: string }
+    | { ok: true; prompts: SuggestedPrompt[]; remaining: number }
+  >;
+}
+
 interface WelcomeFlowProps {
+  /**
+   * 서버액션 묶음 — **주입**받는다(아래 `onSave` 주석과 같은 이유로 직접 import 하지 않는다).
+   * 질문 제안·저장·측정 시작·설정 상태 확인이 여기 있다.
+   */
+  actions: WelcomeActions;
+  /** 브랜드 도메인 — 측정 시작에 쓴다. */
+  brandDomain: string;
   /** 1단계에서 등록된 브랜드. 없으면 이 컴포넌트는 렌더되지 않는다. */
   brandId: string;
   brandName: string;
@@ -125,24 +163,11 @@ interface WelcomeFlowProps {
    */
   detected: { confidence: string; reason: string; scope: string };
   initialCompetitors?: string[];
+  /** '경쟁사 없음'을 이미 선택해 저장한 브랜드. */
+  initialNoCompetitors?: boolean;
   initialScope?: string;
   initialStep?: number;
   initialVariants?: string[];
-  /**
-   * 1단계에서 측정이 **실제로 시작됐는지**(N-44 교차검증에서 잡은 거짓말).
-   *
-   * 🔴 이 값이 없을 때 마지막 단계는 결말과 무관하게 *"측정은 이미 시작됐어요"* 라고
-   *   말했다. 24시간 한도(`rate_limited`)나 시작 실패(`failed`)여도 그렇게 말해서,
-   *   사용자는 **텅 빈 대시보드에 도착하고 이유를 모른다**.
-   *   📕 이 저장소가 이미 고쳤던 「조용한 실패」와 같은 형태(§3-b ⑴).
-   */
-  measurement?: "failed" | "rate_limited" | "started";
-  /** 가입 시 자동 예약한 SEO·GEO 기술 진단의 실제 상태. */
-  readiness?: {
-    id: string;
-    report: unknown;
-    status: "queued" | "processing" | "completed" | "failed";
-  };
   /**
    * 🔴 **서버액션을 import 하지 않고 주입받는다**(N-44 · 실제로 Storybook 이 죽고서 고침).
    *   `@/app/actions/...` 를 여기서 import 하면 Prisma·`server-only` 가 브라우저 번들에
@@ -153,10 +178,24 @@ interface WelcomeFlowProps {
     brandId: string;
     competitors?: string[];
     completeOnboarding?: boolean;
+    noCompetitors?: boolean;
     entityVariants?: string[];
     marketScope?: string;
     onboardingStep?: number;
   }) => Promise<{ ok: true } | { error: string }>;
+  /**
+   * 온보딩 단계·완료를 조직(Org)에 저장할지. 첫 브랜드 온보딩은 true(기본),
+   * '브랜드 추가'(`/welcome?brand=`)는 false — 이미 온보딩을 마친 조직의 단계를 건드리지 않는다.
+   */
+  persistStep?: boolean;
+  /** 질문 고르기 화면 문구(사전 `app.questionPicker`). */
+  questionLabels: QuestionPickerLabels;
+  /** 가입 시 자동 예약한 SEO·GEO 기술 진단의 실제 상태. */
+  readiness?: {
+    id: string;
+    report: unknown;
+    status: "queued" | "processing" | "completed" | "failed";
+  };
   /** AI 가 제안한 경쟁사(있으면). ⛔ **담긴 상태가 아니다** — 후보일 뿐이다. */
   suggestedCompetitors?: string[];
   /**
@@ -277,19 +316,6 @@ const GrowthFeaturePreview = ({ t }: { t: Record<string, string> }) => (
   </div>
 );
 
-/**
- * 마지막 단계가 할 말 — **측정 결말마다 다르다.**
- * ⚠️ 하나로 뭉개면 거짓말이 된다(그게 N-44 에서 잡은 버그다).
- */
-const FINISH_KEYS: Record<
-  "failed" | "rate_limited" | "started",
-  { description: string; title: string }
-> = {
-  started: { description: "doneStarted", title: "doneTitle" },
-  rate_limited: { description: "doneRateLimited", title: "savedTitle" },
-  failed: { description: "doneFailed", title: "savedTitle" },
-};
-
 const getInitialCompetitors = (
   initialStep: number,
   initialCompetitors: string[],
@@ -300,22 +326,26 @@ const getInitialCompetitors = (
     : suggestedCompetitors;
 
 export const WelcomeFlow = ({
+  actions,
+  brandDomain,
   brandId,
   brandName,
   detected,
   initialCompetitors = [],
+  initialNoCompetitors = false,
   initialScope,
   initialStep = 2,
   initialVariants = [],
-  measurement = "started",
   onSave,
+  persistStep = true,
+  questionLabels,
   readiness,
   t,
   suggestedCompetitors = [],
 }: WelcomeFlowProps) => {
   const router = useRouter();
   // 2단계에서 시작한다(1단계 = 브랜드 등록은 이미 끝났다).
-  const [step, setStep] = useState(Math.min(5, Math.max(2, initialStep)));
+  const [step, setStep] = useState(Math.min(6, Math.max(2, initialStep)));
   // 추정값에서 시작한다 — 고객이 그대로 두면 추정이 확정된다(프로파운드 f049 형태).
   const [scope, setScope] = useState(initialScope ?? detected.scope);
   const [variants, setVariants] = useState<string[]>(initialVariants);
@@ -328,17 +358,23 @@ export const WelcomeFlow = ({
   );
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  // '경쟁사 없음' 명시 선택 — 경쟁사가 비어 있을 때만 의미가 있다(저장은 목록 안 표식).
+  const [noCompetitors, setNoCompetitors] = useState(initialNoCompetitors);
+  // 5단계 질문 승인 — 기본 전부 미선택, 사람이 고른 것만 저장한다.
+  const [savedQuestions, setSavedQuestions] = useState(0);
+  // 6단계: 지금 비어 있는 설정(서버가 준비도 규칙 한 곳으로 판정한다). null = 아직 모름.
+  const [starting, setStarting] = useState(false);
 
   // 진단은 서버의 after()에서 실행된다. 진행 중일 때만 새로 읽어 결과를 갱신한다.
   useEffect(() => {
-    if (!(readiness?.status === "queued" || readiness?.status === "processing")) {
+    if (
+      !(readiness?.status === "queued" || readiness?.status === "processing")
+    ) {
       return;
     }
-    const timer = window.setInterval(() => router.refresh(), 5_000);
+    const timer = window.setInterval(() => router.refresh(), 5000);
     return () => window.clearInterval(timer);
   }, [readiness?.status, router]);
-
-  const TOTAL = 5;
 
   const addDraft = (into: "variants" | "competitors") => {
     const value = draft.trim();
@@ -346,6 +382,9 @@ export const WelcomeFlow = ({
       return;
     }
     const setter = into === "variants" ? setVariants : setCompetitors;
+    if (into === "competitors") {
+      setNoCompetitors(false);
+    }
     setter((prev) => (prev.includes(value) ? prev : [...prev, value]));
     setDraft("");
   };
@@ -356,12 +395,13 @@ export const WelcomeFlow = ({
       competitors: string[];
       entityVariants: string[];
       marketScope: string;
+      noCompetitors: boolean;
     }> = {}
   ) => {
     setSaving(true);
     const result = await onSave({
       brandId,
-      onboardingStep: nextStep,
+      ...(persistStep ? { onboardingStep: nextStep } : {}),
       ...profile,
     });
     setSaving(false);
@@ -372,23 +412,51 @@ export const WelcomeFlow = ({
     setStep(nextStep);
   };
 
-  /** 마지막 단계 — 설정 완료 사실까지 저장하고 대시보드로. */
-  const finish = async () => {
-    setSaving(true);
-    const result = await onSave({
+  /**
+   * 설정을 저장하고 **측정을 시작**한다(2026-10-13 — 등록 때가 아니라 질문·경쟁사를 고른 뒤).
+   * `skippedSetup` = 「기본값으로 진행」을 명시 선택했는지 — 그 사실이 측정 기록에 남는다.
+   */
+  const startMeasurement = async (skippedSetup: boolean) => {
+    setStarting(true);
+    const saved = await onSave({
       brandId,
-      completeOnboarding: true,
       competitors,
       entityVariants: variants,
       marketScope: scope,
-      onboardingStep: 5,
+      noCompetitors: noCompetitors && competitors.length === 0,
+      ...(persistStep ? { completeOnboarding: true, onboardingStep: 5 } : {}),
     });
-    setSaving(false);
-    if ("error" in result) {
-      toast.error(result.error, { description: t.saveFailedHint });
+    if ("error" in saved) {
+      setStarting(false);
+      toast.error(saved.error, { description: t.saveFailedHint });
       return;
     }
-    router.push("/");
+    const result = await actions.start({
+      brandName,
+      domain: brandDomain,
+      skippedSetup,
+    });
+    setStarting(false);
+    if ("error" in result) {
+      if (result.code === "rate_limited") {
+        toast.info(result.error || (t.measureRateLimited as string));
+        router.push("/");
+        return;
+      }
+      toast.error(result.error || (t.measureFailed as string), {
+        description: t.measureFailedHint,
+      });
+      return;
+    }
+    toast.success(t.measureStarted);
+    router.push(`/brand/measuring?job=${result.jobId}`);
+  };
+
+  /** 2~5단계 공통 — 「지금은 기본값으로 바로 측정」 지름길(명시 선택으로 기록). */
+  const quickStart = {
+    disabled: saving || starting,
+    label: t.quickStart as string,
+    onClick: () => startMeasurement(true),
   };
 
   if (step === 2) {
@@ -415,6 +483,7 @@ export const WelcomeFlow = ({
           label: saving ? (t.saving as string) : (t.next as string),
           onClick: () => saveAndGo(3, { marketScope: scope }),
         }}
+        quickStart={quickStart}
         skip={{ label: t.skip as string, onClick: () => saveAndGo(3) }}
         stepOfTemplate={t.stepOf as string}
         title={t.scopeTitle}
@@ -469,6 +538,7 @@ export const WelcomeFlow = ({
           label: saving ? (t.saving as string) : (t.next as string),
           onClick: () => saveAndGo(4, { entityVariants: variants }),
         }}
+        quickStart={quickStart}
         skip={{ label: t.skip as string, onClick: () => saveAndGo(4) }}
         stepOfTemplate={t.stepOf as string}
         title={t.aliasTitle}
@@ -531,8 +601,13 @@ export const WelcomeFlow = ({
         primary={{
           disabled: saving,
           label: saving ? (t.saving as string) : (t.next as string),
-          onClick: () => saveAndGo(5, { competitors }),
+          onClick: () =>
+            saveAndGo(5, {
+              competitors,
+              noCompetitors: noCompetitors && competitors.length === 0,
+            }),
         }}
+        quickStart={quickStart}
         skip={{ label: t.skip as string, onClick: () => saveAndGo(5) }}
         stepOfTemplate={t.stepOf as string}
         title={t.competitorTitle}
@@ -562,6 +637,24 @@ export const WelcomeFlow = ({
             </div>
           </div>
         )}
+        <label
+          className="flex items-start gap-2 text-[color:var(--findable-ink,#f7f8f8)] text-sm"
+          htmlFor="welcome-no-competitors"
+        >
+          <Checkbox
+            checked={noCompetitors && competitors.length === 0}
+            className="mt-0.5"
+            disabled={competitors.length > 0}
+            id="welcome-no-competitors"
+            onCheckedChange={(value) => setNoCompetitors(value === true)}
+          />
+          <span className="flex flex-col gap-0.5">
+            {t.competitorNone}
+            <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+              {t.competitorNoneHint}
+            </span>
+          </span>
+        </label>
         <Label className="pt-2" htmlFor="welcome-competitor">
           {t.competitorAddLabel}
         </Label>
@@ -596,7 +689,120 @@ export const WelcomeFlow = ({
     );
   }
 
-  // 5단계 — 확인하고 끝낸다. ⛔ 가격 숫자·결제 CTA 는 넣지 않는다(§7-B/C-4).
+  // 5단계 — 질문 승인. 자동 제안 → **사람이 고른 것만** 저장 → 측정은 그 뒤에 시작한다.
+  if (step === 5) {
+    return (
+      <WelcomeQuestionStep
+        actions={actions}
+        brandId={brandId}
+        busy={saving || starting}
+        labels={questionLabels}
+        onNext={async (saved) => {
+          setSavedQuestions((n) => n + saved);
+          await saveAndGo(6);
+        }}
+        onSkip={() => saveAndGo(6)}
+        quickStart={quickStart}
+        t={t}
+        total={TOTAL}
+      />
+    );
+  }
+
+  // 6단계 — 확인하고 **측정을 시작**한다.
+  return (
+    <ReadyStep
+      actions={actions}
+      brandId={brandId}
+      brandName={brandName}
+      competitors={competitors}
+      noCompetitors={noCompetitors}
+      onRemoveCompetitor={(v) =>
+        setCompetitors((p) => p.filter((x) => x !== v))
+      }
+      onRemoveVariant={(v) => setVariants((p) => p.filter((x) => x !== v))}
+      onStart={startMeasurement}
+      readiness={readiness}
+      savedQuestions={savedQuestions}
+      saving={saving}
+      scope={scope}
+      starting={starting}
+      t={t}
+      variants={variants}
+    />
+  );
+};
+
+interface ReadyStepProps {
+  actions: WelcomeActions;
+  brandId: string;
+  brandName: string;
+  competitors: string[];
+  noCompetitors: boolean;
+  onRemoveCompetitor: (value: string) => void;
+  onRemoveVariant: (value: string) => void;
+  onStart: (skippedSetup: boolean) => Promise<void>;
+  readiness: WelcomeFlowProps["readiness"];
+  savedQuestions: number;
+  saving: boolean;
+  scope: string;
+  starting: boolean;
+  t: Record<string, string>;
+  variants: string[];
+}
+
+/** 6단계 — 확인하고 측정 시작. 비어 있는 설정은 서버 규칙(준비도 한 곳)으로 확인한다. */
+const ReadyStep = ({
+  actions,
+  brandId,
+  brandName,
+  competitors,
+  noCompetitors,
+  onRemoveCompetitor,
+  onRemoveVariant,
+  onStart,
+  readiness,
+  savedQuestions,
+  saving,
+  scope,
+  starting,
+  t,
+  variants,
+}: ReadyStepProps) => {
+  // 지금 비어 있는 설정 코드(필수+권장). null = 아직 모름.
+  const [missing, setMissing] = useState<string[] | null>(null);
+  // 6단계에 들어오면 비어 있는 설정을 서버 규칙으로 확인한다(화면이 규칙을 다시 만들지 않는다).
+  useEffect(() => {
+    let cancelled = false;
+    actions
+      .check(brandId)
+      .then((r) => {
+        if (!cancelled) {
+          setMissing(r?.missing ?? []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMissing([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, actions]);
+
+  // 비어 있는 설정이 있으면 「기본값으로 진행」을 **명시 선택**해야 한다(그 사실이 측정 기록에 남는다).
+  const hasMissing = (missing?.length ?? 0) > 0;
+  const setupGap = (missing ?? []).some(
+    (code) => code === "competitors" || code === "discovery_prompt"
+  );
+  let startLabel = t.startMeasure as string;
+  if (starting) {
+    startLabel = t.measureStarting as string;
+  } else if (setupGap) {
+    startLabel = t.startDefault as string;
+  }
+
   return (
     <WelcomeShell
       aside={
@@ -613,17 +819,27 @@ export const WelcomeFlow = ({
           />
         </>
       }
-      current={5}
-      description={t[FINISH_KEYS[measurement].description] as string}
+      current={6}
+      description={t.readyLede as string}
       primary={{
-        disabled: saving,
-        label: saving ? (t.saving as string) : (t.goDashboard as string),
-        onClick: finish,
+        disabled: saving || starting || missing === null,
+        label: startLabel,
+        onClick: () => onStart(hasMissing),
       }}
       stepOfTemplate={t.stepOf as string}
-      title={t[FINISH_KEYS[measurement].title] as string}
+      title={t.readyTitle as string}
       total={TOTAL}
     >
+      {setupGap && (
+        <section className="rounded-md border border-amber-600/40 bg-amber-600/10 p-4 text-sm">
+          <h2 className="font-medium text-amber-600 dark:text-amber-400">
+            {t.setupMissingTitle}
+          </h2>
+          <p className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)]">
+            {t.setupMissingBody}
+          </p>
+        </section>
+      )}
       <dl className="flex flex-col gap-3 text-sm">
         <div className="flex flex-col gap-1">
           <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
@@ -652,27 +868,39 @@ export const WelcomeFlow = ({
             <ChipList
               emptyHint={t.emptyHint as string}
               items={variants}
-              onRemove={(v) => setVariants((p) => p.filter((x) => x !== v))}
+              onRemove={onRemoveVariant}
               removeLabel={(i) => (t.removeItem ?? "").replace("{item}", i)}
             />
           </dd>
         </div>
         <div className="flex flex-col gap-1">
           <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            {(t.summaryCompetitors ?? "").replace(
-              "{count}",
-              String(competitors.length)
-            )}
+            {noCompetitors && competitors.length === 0
+              ? t.summaryCompetitorsNone
+              : (t.summaryCompetitors ?? "").replace(
+                  "{count}",
+                  String(competitors.length)
+                )}
           </dt>
           <dd>
             <ChipList
               emptyHint={t.emptyHint as string}
               items={competitors}
-              onRemove={(v) => setCompetitors((p) => p.filter((x) => x !== v))}
+              onRemove={onRemoveCompetitor}
               removeLabel={(i) => (t.removeItem ?? "").replace("{item}", i)}
             />
           </dd>
         </div>
+        {savedQuestions > 0 && (
+          <div className="flex flex-col gap-1">
+            <dt className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
+              {(t.summaryQuestions ?? "").replace(
+                "{count}",
+                String(savedQuestions)
+              )}
+            </dt>
+          </div>
+        )}
       </dl>
       <SiteReadinessStatus readiness={readiness} t={t} />
       <div className="border-[color:var(--findable-hairline,#23252a)] border-t pt-4">
@@ -680,6 +908,22 @@ export const WelcomeFlow = ({
       </div>
     </WelcomeShell>
   );
+};
+
+/** 기술 진단 상태 → 사전 키. */
+const siteReadinessKey = (
+  status: "queued" | "processing" | "completed" | "failed" | undefined
+): string => {
+  if (status === "completed") {
+    return "siteReadinessCompleted";
+  }
+  if (status === "failed") {
+    return "siteReadinessFailed";
+  }
+  if (status === "queued" || status === "processing") {
+    return "siteReadinessRunning";
+  }
+  return "siteReadinessUnavailable";
 };
 
 const SiteReadinessStatus = ({
@@ -690,14 +934,7 @@ const SiteReadinessStatus = ({
   t: Record<string, string>;
 }) => {
   const status = readiness?.status;
-  const statusKey =
-    status === "completed"
-      ? "siteReadinessCompleted"
-      : status === "failed"
-        ? "siteReadinessFailed"
-        : status === "queued" || status === "processing"
-          ? "siteReadinessRunning"
-          : "siteReadinessUnavailable";
+  const statusKey = siteReadinessKey(status);
 
   return (
     <section className="rounded-md border border-[color:var(--findable-hairline,#23252a)] bg-[color:var(--findable-surface-2,rgba(255,255,255,0.03))] p-4">
@@ -706,11 +943,17 @@ const SiteReadinessStatus = ({
           <h2 className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
             {t.siteReadinessTitle}
           </h2>
-          <p aria-live="polite" className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+          <p
+            aria-live="polite"
+            className="mt-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm"
+          >
             {t[statusKey]}
           </p>
         </div>
-        <Link className="shrink-0 text-[color:var(--findable-primary,#ff7a4d)] text-sm" href="/site-audit">
+        <Link
+          className="shrink-0 text-[color:var(--findable-primary,#ff7a4d)] text-sm"
+          href="/site-audit"
+        >
           {t.siteReadinessLink}
         </Link>
       </div>

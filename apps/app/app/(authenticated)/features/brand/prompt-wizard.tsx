@@ -3,7 +3,6 @@
 import type { SuggestedPrompt } from "@repo/ai/lib/prompt-suggestions";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
-import { Checkbox } from "@repo/design-system/components/ui/checkbox";
 import { Input } from "@repo/design-system/components/ui/input";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { Spinner } from "@repo/design-system/components/ui/spinner";
@@ -14,13 +13,14 @@ import {
   suggestPromptsAction,
 } from "@/app/actions/brand/suggest-prompts";
 import type { AppDictionary } from "@/lib/i18n";
+import { QuestionPicker } from "./question-picker";
 
 /**
  * 프롬프트 자동 제안 마법사 (표준 백로그 1, 2026-07-30) + 직접 추가(2026-08-22).
  *
- * 흐름 A(AI 제안): [AI 추적 질문 제안받기] → 서버가 브랜드 맥락으로 질문 ~20개·경쟁사
- *   후보 생성 → 사용자가 체크박스로 승인(기본 전체 선택) → [선택한 질문 저장] →
- *   Prompt 테이블 upsert.
+ * 흐름 A(AI 제안): [AI 추적 질문 제안받기] → 서버가 업종·시장·사이트 문구·별칭·경쟁사로
+ *   질문 후보 ~20개 생성 → 사용자가 직접 승인(**기본 전부 미선택**, [추천 구성으로 담기] 버튼,
+ *   문구 수정 가능 · 2026-10-13 대표 승인) → [선택한 질문 저장] → Prompt 테이블 upsert.
  * 흐름 B(직접 추가): [직접 추가] → 입력창 1개 → 저장 → 같은 upsert 경로.
  *   🔴 경쟁사 5곳 재조사 결과 Profound만 수동 추가를 지원(Otterly·Peec·Scrunch는
  *   AI 제안·CSV 임포트뿐) — 하지만 Findable은 이미 저장 액션이 임의 텍스트를
@@ -44,26 +44,14 @@ type Phase =
 const HANGUL_RE = /[가-힣]/;
 const MAX_CUSTOM_PROMPT_LENGTH = 200;
 
-const categoryLabel = (
-  t: AppDictionary["promptWizard"]
-): Record<SuggestedPrompt["category"], string> => ({
-  brand: t.categoryBrand,
-  competitor: t.categoryCompetitor,
-});
-
-const LANG_LABEL: Record<SuggestedPrompt["language"], string> = {
-  ko: "KO",
-  en: "EN",
-};
-
-// 제안 프롬프트의 안정 키(텍스트 소문자) — 선택 상태 Set의 원소.
-const promptKey = (p: SuggestedPrompt): string => p.text.toLowerCase();
-
 export const PromptWizard = ({
   brandId,
+  pickerLabels,
   t,
 }: {
   brandId: string;
+  /** 사전 `app.questionPicker` — 질문 고르기 화면 문구. */
+  pickerLabels: AppDictionary["questionPicker"];
   /** 사전 `app.promptWizard` (client 라 서버가 넘긴다). */
   t: AppDictionary["promptWizard"];
 }) => {
@@ -71,8 +59,10 @@ export const PromptWizard = ({
   const [phase, setPhase] = useState<Phase>("idle");
   const [prompts, setPrompts] = useState<SuggestedPrompt[]>([]);
   const [competitors, setCompetitors] = useState<string[]>([]);
-  // 승인된 프롬프트 키 집합. 제안받으면 전체 선택으로 시작(대부분 채택 전제).
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // 승인한 질문의 인덱스. **기본은 전부 미선택**이다(사람이 고른 것만 측정 — 2026-10-13).
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  // 플랜 상한에서 이미 저장된 질문을 뺀, 더 담을 수 있는 개수.
+  const [maxPick, setMaxPick] = useState(0);
   const [customText, setCustomText] = useState("");
 
   const addCustom = async () => {
@@ -136,9 +126,15 @@ export const PromptWizard = ({
         return;
       }
       const next = result.suggestions.prompts;
+      if (next.length === 0) {
+        setPhase("idle");
+        toast.error(t.noSuggestions);
+        return;
+      }
       setPrompts(next);
       setCompetitors(result.suggestions.competitors);
-      setSelected(new Set(next.map(promptKey)));
+      setMaxPick(result.remaining);
+      setSelected(new Set());
       setPhase("review");
     } catch {
       setPhase("idle");
@@ -146,21 +142,15 @@ export const PromptWizard = ({
     }
   };
 
-  const toggle = (p: SuggestedPrompt) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      const key = promptKey(p);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
+  const edit = (index: number, text: string) =>
+    setPrompts((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, text } : p))
+    );
 
   const save = async () => {
-    const approved = prompts.filter((p) => selected.has(promptKey(p)));
+    const approved = prompts
+      .filter((_, i) => selected.has(i))
+      .map((p) => ({ ...p, text: p.text.trim() }));
     if (approved.length === 0) {
       toast.error(t.selectOne);
       return;
@@ -303,43 +293,14 @@ export const PromptWizard = ({
         </span>
       </div>
 
-      <ul className="flex max-h-72 flex-col gap-1 overflow-y-auto">
-        {prompts.map((p, i) => {
-          const key = promptKey(p);
-          const inputId = `prompt-${brandId}-${i}`;
-          return (
-            <li key={key}>
-              <label
-                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 hover:bg-[color:var(--findable-surface-2,#17181a)]"
-                htmlFor={inputId}
-              >
-                <Checkbox
-                  checked={selected.has(key)}
-                  className="mt-0.5"
-                  id={inputId}
-                  onCheckedChange={() => toggle(p)}
-                />
-                <span className="flex flex-1 flex-col gap-1">
-                  <span className="text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-                    {p.text}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Badge
-                      className="border-transparent bg-[color:var(--findable-surface-2,#17181a)] text-[10px] text-[color:var(--findable-ink-subtle,#8a8f98)]"
-                      variant="outline"
-                    >
-                      {categoryLabel(t)[p.category]}
-                    </Badge>
-                    <span className="text-[10px] text-[color:var(--findable-ink-tertiary,#7e8289)]">
-                      {LANG_LABEL[p.language]}
-                    </span>
-                  </span>
-                </span>
-              </label>
-            </li>
-          );
-        })}
-      </ul>
+      <QuestionPicker
+        labels={pickerLabels}
+        max={maxPick}
+        onEdit={edit}
+        onSelectedChange={setSelected}
+        prompts={prompts}
+        selected={selected}
+      />
 
       {competitors.length > 0 && (
         <div className="flex flex-col gap-1.5 border-[color:var(--findable-hairline,#23252a)] border-t pt-2">
