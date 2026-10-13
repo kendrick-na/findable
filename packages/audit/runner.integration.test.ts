@@ -20,6 +20,10 @@ const transaction = vi.fn();
 const ledgerTableAccess = vi.fn();
 const realContracts = vi.hoisted(() => ({ enabled: false }));
 const resolveDemandDiscovery = vi.fn();
+const generateDiscoveryPrompts = vi.fn();
+const savedKind = vi.hoisted(() => ({
+  of: (_text: string): "brand" | "discovery" => "brand",
+}));
 const resolveShadowPlanV2 = vi.fn();
 let briefingEnabled = false;
 const log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
@@ -86,10 +90,10 @@ vi.mock("@repo/ai/lib/mention-verdict", () => ({
   verifyMentions,
 }));
 vi.mock("./audit-prompts", () => ({
-  classifySavedPromptKind: () => "brand",
+  classifySavedPromptKind: (text: string) => savedKind.of(text),
   englishPromptName: vi.fn(() => "Test Brand"),
   generateAuditPrompts,
-  generateDiscoveryPrompts: vi.fn(() => []),
+  generateDiscoveryPrompts,
   siteCategoryTerms: vi.fn(() => []),
 }));
 vi.mock("./shadow-plan-v2", async () => ({
@@ -208,6 +212,8 @@ const terminalCalls = () =>
 
 beforeEach(() => {
   vi.resetAllMocks();
+  savedKind.of = () => "brand";
+  generateDiscoveryPrompts.mockReturnValue([]);
   briefingEnabled = false;
   keys.mockImplementation(() => ({
     AUDIT_BRIEFING_IN_MAIN_ENABLED: briefingEnabled,
@@ -470,6 +476,118 @@ describe("runAuditJob offline lifecycle contracts", () => {
         maxContinuations: 2,
       });
       vi.unstubAllEnvs();
+    });
+  });
+
+  describe("promptLimit 호출 옵션 — 영업 20문항 (2026-10-14)", () => {
+    const manySaved = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `p-${String(i).padStart(2, "0")}`,
+        text: `저장 질문 ${i}`,
+        language: "en",
+        trackings: [],
+      }));
+    const checkpoint = () =>
+      auditJobUpdate.mock.calls
+        .map(([call]) => call?.data?.checkpoint)
+        .find((cp) => cp && Array.isArray(cp.prompts)) as
+        | Record<string, unknown>
+        | undefined;
+    const completedResult = () =>
+      terminalCalls()
+        .map((call) => call.data?.result)
+        .find(Boolean) as Record<string, unknown> | undefined;
+    const planOf = () =>
+      (completedResult()?.measurementContext as Record<string, unknown>)
+        ?.questionPlan as Record<string, unknown> | undefined;
+
+    it("옵션이 없으면 예전처럼 8개 · 이어가기 상한 필드 없음 · 결과에 questionPlan 없음 (대시보드 불변)", async () => {
+      promptFindMany.mockResolvedValue(manySaved(20));
+      await (await loadRunner())(input);
+      expect((checkpoint()?.prompts as unknown[]).length).toBe(8);
+      expect(checkpoint()).not.toHaveProperty("continuationLimit");
+      expect(planOf()).toBeUndefined();
+    });
+
+    it("promptLimit 20 → 저장 질문 20개 전부 · 이어가기 상한 5 저장 · 「20개 중 20개」 기록", async () => {
+      promptFindMany.mockResolvedValue(manySaved(20));
+      await (await loadRunner())({ ...input, promptLimit: 20 });
+      expect((checkpoint()?.prompts as unknown[]).length).toBe(20);
+      expect(checkpoint()?.continuationLimit).toBe(5);
+      expect(planOf()).toMatchObject({
+        approved: 20,
+        asked: 20,
+        limit: 20,
+        planned: 20,
+        truncated: false,
+        truncatedReason: null,
+      });
+    });
+
+    it("절대 상한 20 — 더 큰 값을 줘도 20개까지만", async () => {
+      promptFindMany.mockResolvedValue(manySaved(30));
+      await (await loadRunner())({ ...input, promptLimit: 500 });
+      expect((checkpoint()?.prompts as unknown[]).length).toBe(20);
+    });
+
+    it("저장 질문에 이름 없는 질문이 있으면 사이트 자동 질문을 붙이지 않는다(합계 20 유지)", async () => {
+      savedKind.of = () => "discovery";
+      generateDiscoveryPrompts.mockReturnValue([
+        { kind: "discovery", lang: "en", text: "site q1" },
+        { kind: "discovery", lang: "en", text: "site q2" },
+      ]);
+      promptFindMany.mockResolvedValue(manySaved(20));
+      await (await loadRunner())({ ...input, promptLimit: 20 });
+      const texts = (checkpoint()?.prompts as { text: string }[]).map(
+        (p) => p.text
+      );
+      expect(texts).toHaveLength(20);
+      expect(texts.some((t) => t.startsWith("site q"))).toBe(false);
+    });
+
+    it("저장 질문이 전부 이름 질문이면 사이트 자동 질문은 예전처럼 자리를 나눈다", async () => {
+      savedKind.of = () => "brand";
+      generateDiscoveryPrompts.mockReturnValue([
+        { kind: "discovery", lang: "en", text: "site q1" },
+        { kind: "discovery", lang: "en", text: "site q2" },
+      ]);
+      promptFindMany.mockResolvedValue(manySaved(20));
+      await (await loadRunner())({ ...input, promptLimit: 20 });
+      const texts = (checkpoint()?.prompts as { text: string }[]).map(
+        (p) => p.text
+      );
+      expect(texts).toHaveLength(20);
+      expect(texts.filter((t) => t.startsWith("site q"))).toHaveLength(2);
+    });
+
+    it("옵션 없는 회차는 사이트 자동 질문 규칙이 그대로다(저장 이름 없는 질문이 있어도 붙인다)", async () => {
+      savedKind.of = () => "discovery";
+      generateDiscoveryPrompts.mockReturnValue([
+        { kind: "discovery", lang: "en", text: "site q1" },
+        { kind: "discovery", lang: "en", text: "site q2" },
+      ]);
+      promptFindMany.mockResolvedValue(manySaved(20));
+      await (await loadRunner())(input);
+      const texts = (checkpoint()?.prompts as { text: string }[]).map(
+        (p) => p.text
+      );
+      expect(texts).toHaveLength(8);
+      expect(texts.filter((t) => t.startsWith("site q"))).toHaveLength(2);
+    });
+
+    it("이어가기 없이 잘리면 잠정으로 마감하고 「20개 중 6개」·잘림 사유를 남긴다", async () => {
+      promptFindMany.mockResolvedValue(manySaved(20));
+      queryPromptsSequentially.mockResolvedValue(
+        Array.from({ length: 6 }, () => [response()])
+      );
+      await (await loadRunner())({ ...input, promptLimit: 20 });
+      expect(planOf()).toMatchObject({
+        approved: 20,
+        asked: 6,
+        planned: 20,
+        truncated: true,
+        truncatedReason: "limit_reached",
+      });
     });
   });
 

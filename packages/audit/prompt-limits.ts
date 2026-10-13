@@ -20,3 +20,20 @@ export const MAX_DISCOVERY_PROMPTS = 2;
  */
 export const SAVED_PROMPTS_MIN_PER_RUN =
   RUNNER_PROMPT_LIMIT - MAX_DISCOVERY_PROMPTS;
+
+/**
+ * 영업 경로(관리자 측정)의 한 회차 질문 상한(2026-10-14 · 대표 결정 2026-10-07 「20문항 1회」).
+ * 대시보드·고객 측정은 그대로 `RUNNER_PROMPT_LIMIT`(8)이다 — 호출 옵션 `promptLimit` 으로만 늘린다.
+ */
+export const SALES_PROMPT_LIMIT = 20;
+
+/** 호출 옵션 `promptLimit` 의 절대 상한 — 잘못된 값이 원가를 키우지 못하게 한다. */
+export const MAX_PROMPT_LIMIT_OPTION = 20;
+
+/** 호출 옵션을 실제 상한으로. 없거나 이상하면 기본(8), 너무 크면 20으로 자른다. */
+export function effectivePromptLimit(option: number | undefined): number {
+  if (option === undefined || !Number.isFinite(option)) {
+    return RUNNER_PROMPT_LIMIT;
+  }
+  return Math.min(MAX_PROMPT_LIMIT_OPTION, Math.max(1, Math.floor(option)));
+}
