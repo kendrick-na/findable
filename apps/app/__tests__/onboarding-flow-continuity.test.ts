@@ -92,7 +92,7 @@ describe("온보딩 여정 연결 — 한 곳이라도 끊기면 문다", () => 
 
   it("④ 마지막 단계는 저장하고 대시보드로 보낸다 (막다른 길이 없다)", () => {
     expect(FLOW).toContain("onSave");
-    expect(FLOW).toContain('router.push("/")');
+    expect(FLOW).toContain('push("/")');
   });
 
   it("⛔ 설정 저장 실패를 성공처럼 처리하지 않는다 (재시도 가능)", () => {
@@ -187,7 +187,7 @@ describe("온보딩 여정 연결 — 한 곳이라도 끊기면 문다", () => 
     // ⚠️ 문구를 하드코딩해 검사하지 않는다 — 그러면 가드가 **버그의 호위병**이 된다
     //   (📕reference_findable_traps: 기대값에 문구를 박으면 틀린 문구도 「통과」시킨다).
     //   대신 **「설명이 같은 조건을 보는가」라는 계약**을 검사한다.
-    const step4 = FLOW.slice(FLOW.indexOf("step === 4"));
+    const step4 = FLOW.slice(FLOW.indexOf("const CompetitorStep"));
     const desc = step4.slice(
       step4.indexOf("description="),
       step4.indexOf("primary=")

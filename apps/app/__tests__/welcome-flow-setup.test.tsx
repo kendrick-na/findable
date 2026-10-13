@@ -86,6 +86,8 @@ const renderFlow = (
       brandId="brand-1"
       brandName="프란츠"
       detected={{ confidence: "high", reason: "r", scope: "korea" }}
+      initialNoCompetitors={false}
+      initialQuestionCount={0}
       onSave={onSave}
       questionLabels={koDict.app.questionPicker}
       t={t}
@@ -220,5 +222,97 @@ describe("지름길과 '브랜드 추가' 모드", () => {
     fireEvent.click(screen.getByRole("button", { name: t.next }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({ onboardingStep: 4 });
+  });
+});
+
+describe("저장값 우선 · AI 후보는 확인 전엔 저장하지 않는다 (2026-10-13 회귀)", () => {
+  const ai = ["AI후보1", "AI후보2"];
+  const lastSave = (onSave: { mock: { calls: unknown[][] } }) =>
+    (onSave.mock.calls.at(-1)?.[0] ?? {}) as Record<string, unknown>;
+
+  it("저장된 경쟁사가 있으면 '설정 이어가기'(2단계 시작)에서도 AI 후보로 덮어쓰지 않는다", async () => {
+    const actions = makeActions([]);
+    const { onSave } = renderFlow({
+      actions,
+      initialCompetitors: ["라운드랩"],
+      initialStep: 2,
+      persistStep: false,
+      suggestedCompetitors: ai,
+    });
+    fireEvent.click(screen.getByRole("button", { name: t.quickStart }));
+    await waitFor(() => expect(actions.start).toHaveBeenCalled());
+    expect(lastSave(onSave).competitors).toEqual(["라운드랩"]);
+  });
+
+  it("'없음'을 저장했으면 AI 후보를 채우지 않고 그대로 '없음'으로 저장한다", async () => {
+    const actions = makeActions([]);
+    const { onSave } = renderFlow({
+      actions,
+      initialNoCompetitors: true,
+      initialStep: 2,
+      persistStep: false,
+      suggestedCompetitors: ai,
+    });
+    fireEvent.click(screen.getByRole("button", { name: t.quickStart }));
+    await waitFor(() => expect(actions.start).toHaveBeenCalled());
+    expect(lastSave(onSave)).toMatchObject({
+      competitors: [],
+      noCompetitors: true,
+    });
+  });
+
+  it("4단계를 건너뛰고 바로 측정해도 AI 후보를 저장하지 않는다(사용자가 확인한 값만)", async () => {
+    const actions = makeActions([]);
+    const { onSave } = renderFlow({
+      actions,
+      initialStep: 4,
+      suggestedCompetitors: ai,
+    });
+    // 화면에는 미리 채워져 보이지만…
+    expect(screen.getByText("AI후보1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: t.skip }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    // …건너뛰기 저장에는 경쟁사가 없다.
+    expect(lastSave(onSave)).not.toHaveProperty("competitors");
+    fireEvent.click(await screen.findByRole("button", { name: t.quickStart }));
+    await waitFor(() => expect(actions.start).toHaveBeenCalled());
+    expect(lastSave(onSave)).not.toHaveProperty("competitors");
+    expect(lastSave(onSave)).not.toHaveProperty("noCompetitors");
+  });
+
+  it("2단계에서 바로 측정해도(4단계 안 거침) AI 후보를 저장하지 않는다", async () => {
+    const actions = makeActions([]);
+    const { onSave } = renderFlow({
+      actions,
+      initialStep: 2,
+      suggestedCompetitors: ai,
+    });
+    fireEvent.click(screen.getByRole("button", { name: t.quickStart }));
+    await waitFor(() => expect(actions.start).toHaveBeenCalled());
+    expect(lastSave(onSave)).not.toHaveProperty("competitors");
+  });
+
+  it("4단계 [다음]으로 확인한 값은 이후 측정 시작에도 저장된다", async () => {
+    const actions = makeActions([]);
+    const { onSave } = renderFlow({
+      actions,
+      initialStep: 4,
+      suggestedCompetitors: ai,
+    });
+    fireEvent.click(screen.getByRole("button", { name: t.next }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(lastSave(onSave).competitors).toEqual(ai);
+    fireEvent.click(await screen.findByRole("button", { name: t.quickStart }));
+    await waitFor(() => expect(actions.start).toHaveBeenCalled());
+    expect(lastSave(onSave).competitors).toEqual(ai);
+  });
+
+  it("이미 저장된 질문 수를 5단계에 보여 준다", () => {
+    renderFlow({
+      actions: makeActions([]),
+      initialQuestionCount: 7,
+      initialStep: 5,
+    });
+    expect(screen.getByText("추적 질문 7개")).toBeTruthy();
   });
 });

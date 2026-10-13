@@ -30,6 +30,7 @@ export const WelcomeQuestionStep = ({
   onNext,
   onSkip,
   quickStart,
+  savedCount,
   t,
   total,
 }: {
@@ -42,6 +43,8 @@ export const WelcomeQuestionStep = ({
   onNext: (saved: number) => Promise<void>;
   onSkip: () => void;
   quickStart: { disabled?: boolean; label: string; onClick: () => void };
+  /** 이미 저장된 추적 질문 수(없으면 0). 처음 보는 사람이 "아직 아무것도 없다"고 오해하지 않게 보여 준다. */
+  savedCount: number;
   t: Record<string, string>;
   total: number;
 }) => {
@@ -110,6 +113,11 @@ export const WelcomeQuestionStep = ({
       title={t.questionTitle}
       total={total}
     >
+      {savedCount > 0 && (
+        <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+          {t.summaryQuestions.replace("{count}", String(savedCount))}
+        </p>
+      )}
       {phase === "review" && prompts.length > 0 ? (
         <QuestionPicker
           labels={labels}

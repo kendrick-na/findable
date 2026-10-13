@@ -63,6 +63,8 @@ const meta: Meta<typeof WelcomeFlow> = {
     },
     actions: fakeActions([]),
     brandDomain: "example.com",
+    initialNoCompetitors: false,
+    initialQuestionCount: 0,
     onSave: noopSave,
     questionLabels: koDict.app.questionPicker,
     t,

@@ -121,6 +121,21 @@ const ExposurePreviewChart = ({
 /** 온보딩 전체 단계 수(1 도메인 등록 · 2 지역 · 3 별칭 · 4 경쟁사 · 5 질문 · 6 확인·측정). */
 const TOTAL = 6;
 
+/** 진단은 서버의 after()에서 실행된다. 진행 중이고 화면이 상태를 보여 줄 때만 새로 읽어 갱신한다. */
+const useSiteReadinessPolling = (
+  status: "queued" | "processing" | "completed" | "failed" | undefined,
+  active: boolean
+) => {
+  const router = useRouter();
+  useEffect(() => {
+    if (!(active && (status === "queued" || status === "processing"))) {
+      return;
+    }
+    const timer = window.setInterval(() => router.refresh(), 5000);
+    return () => window.clearInterval(timer);
+  }, [active, status, router]);
+};
+
 /** 온보딩이 쓰는 서버 동작 — 뷰는 서버액션을 import 하지 않고 이 모양으로 주입받는다. */
 export interface WelcomeActions {
   /** 지금 설정 상태에서 비어 있는 항목 코드(필수+권장). 읽기 실패면 null. */
@@ -164,7 +179,9 @@ interface WelcomeFlowProps {
   detected: { confidence: string; reason: string; scope: string };
   initialCompetitors?: string[];
   /** '경쟁사 없음'을 이미 선택해 저장한 브랜드. */
-  initialNoCompetitors?: boolean;
+  initialNoCompetitors: boolean;
+  /** 이미 저장된 추적 질문 수 — 5·6단계에 보여 준다. */
+  initialQuestionCount: number;
   initialScope?: string;
   initialStep?: number;
   initialVariants?: string[];
@@ -316,14 +333,193 @@ const GrowthFeaturePreview = ({ t }: { t: Record<string, string> }) => (
   </div>
 );
 
+/** 측정 시작 결말을 사용자에게 **있는 그대로** 알린다 — 한도 초과·실패를 "시작됐어요"로 뭉뚱그리지 않는다. */
+const announceStartResult = (
+  result: Awaited<ReturnType<WelcomeActions["start"]>>,
+  push: (href: string) => void,
+  t: Record<string, string>
+) => {
+  if ("error" in result) {
+    if (result.code === "rate_limited") {
+      toast.info(result.error || t.measureRateLimited);
+      push("/");
+      return;
+    }
+    toast.error(result.error || t.measureFailed, {
+      description: t.measureFailedHint,
+    });
+    return;
+  }
+  toast.success(t.measureStarted);
+  push(`/brand/measuring?job=${result.jobId}`);
+};
+
+/** 사용자가 확인한 경쟁사만 저장 값으로 만든다. 확인 전이면 빈 객체 — 저장된 값을 건드리지 않는다. */
+const confirmedCompetitorProfile = (
+  confirmed: boolean,
+  competitors: string[],
+  noCompetitors: boolean
+): { competitors?: string[]; noCompetitors?: boolean } =>
+  confirmed
+    ? { competitors, noCompetitors: noCompetitors && competitors.length === 0 }
+    : {};
+
+interface CompetitorStepProps {
+  addDraft: () => void;
+  competitors: string[];
+  draft: string;
+  noCompetitors: boolean;
+  onNext: () => void;
+  onSkip: () => void;
+  quickStart: { disabled?: boolean; label: string; onClick: () => void };
+  saving: boolean;
+  setCompetitors: (update: (prev: string[]) => string[]) => void;
+  setDraft: (value: string) => void;
+  setNoCompetitors: (value: boolean) => void;
+  suggestedCompetitors: string[];
+  t: Record<string, string>;
+}
+
+/** 4단계 — 경쟁사 확인. AI 후보는 미리 채워 **보여 주기만** 하고, [다음]을 눌러야 확정 저장된다. */
+const CompetitorStep = ({
+  addDraft,
+  competitors,
+  draft,
+  noCompetitors,
+  onNext,
+  onSkip,
+  quickStart,
+  saving,
+  setCompetitors,
+  setDraft,
+  setNoCompetitors,
+  suggestedCompetitors,
+  t,
+}: CompetitorStepProps) => (
+  <WelcomeShell
+    aside={
+      <>
+        <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+          {t.competitorWhyTitle}
+        </p>
+        <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
+          {t.competitorWhyBody}
+        </p>
+      </>
+    }
+    current={4}
+    /* 🔴 2026-08-21 — 제안을 기본으로 채우므로(위 competitors 초깃값 주석)
+           "눌러서 담아주세요"가 아니라 "틀린 게 있으면 빼주세요"로 안내한다.
+           제안이 0개면 채울 게 없었다는 뜻이라 여전히 빈 안내로 분기한다. */
+    description={
+      suggestedCompetitors.length > 0 ? t.competitorLede : t.competitorLedeEmpty
+    }
+    primary={{
+      disabled: saving,
+      label: saving ? (t.saving as string) : (t.next as string),
+      onClick: onNext,
+    }}
+    quickStart={quickStart}
+    skip={{ label: t.skip as string, onClick: onSkip }}
+    stepOfTemplate={t.stepOf as string}
+    title={t.competitorTitle}
+    total={TOTAL}
+  >
+    {/* 🔴 2026-08-21 — 이제 제안은 기본으로 담겨 아래 ChipList에 있다.
+            이 섹션은 사용자가 X로 뺀 항목을 다시 담는 되돌리기 자리로 남는다
+            (competitors 에서 빼면 이 filter 가 다시 여기 보여준다). */}
+    {suggestedCompetitors.length > 0 && (
+      <div className="flex flex-col gap-2">
+        <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+          {t.competitorSuggestion}
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {suggestedCompetitors
+            .filter((name) => !competitors.includes(name))
+            .map((name) => (
+              <button
+                className="rounded-full border border-[color:var(--findable-hairline,#23252a)] border-dashed px-3 py-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs"
+                key={name}
+                onClick={() => setCompetitors((p) => [...p, name])}
+                type="button"
+              >
+                + {name}
+              </button>
+            ))}
+        </div>
+      </div>
+    )}
+    <label
+      className="flex items-start gap-2 text-[color:var(--findable-ink,#f7f8f8)] text-sm"
+      htmlFor="welcome-no-competitors"
+    >
+      <Checkbox
+        checked={noCompetitors && competitors.length === 0}
+        className="mt-0.5"
+        disabled={competitors.length > 0}
+        id="welcome-no-competitors"
+        onCheckedChange={(value) => setNoCompetitors(value === true)}
+      />
+      <span className="flex flex-col gap-0.5">
+        {t.competitorNone}
+        <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+          {t.competitorNoneHint}
+        </span>
+      </span>
+    </label>
+    <Label className="pt-2" htmlFor="welcome-competitor">
+      {t.competitorAddLabel}
+    </Label>
+    <div className="flex gap-2">
+      <Input
+        id="welcome-competitor"
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            addDraft();
+          }
+        }}
+        placeholder={t.competitorPlaceholder}
+        value={draft}
+      />
+      <button
+        className="shrink-0 rounded-md border border-[color:var(--findable-hairline,#23252a)] px-3 font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm"
+        onClick={() => addDraft()}
+        type="button"
+      >
+        {t.add}
+      </button>
+    </div>
+    <ChipList
+      emptyHint={t.emptyHint as string}
+      items={competitors}
+      onRemove={(v) => setCompetitors((p) => p.filter((x) => x !== v))}
+      removeLabel={(i) => (t.removeItem ?? "").replace("{item}", i)}
+    />
+  </WelcomeShell>
+);
+
+/** 경쟁사를 이미 저장해 뒀는가(이름 있는 경쟁사 또는 '없음' 표식). */
+const hasStoredCompetitorSetting = (stored: string[], none: boolean): boolean =>
+  stored.length > 0 || none;
+
+/**
+ * 4단계 경쟁사 칸의 처음 값. **저장된 값이 항상 먼저다**(2026-10-13):
+ *  · 저장된 경쟁사가 있으면 그것, '없음'을 저장했으면 빈 목록 — AI 후보로 덮어쓰지 않는다.
+ *  · 아무것도 저장 안 한 첫 설정일 때만 AI 후보를 미리 채워 **보여 준다**(2026-08-21 결정).
+ *    이 값은 사용자가 4단계 [다음]으로 확인하기 전에는 저장되지 않는다(`competitorsConfirmed`).
+ */
 const getInitialCompetitors = (
-  initialStep: number,
   initialCompetitors: string[],
+  initialNoCompetitors: boolean,
   suggestedCompetitors: string[]
-) =>
-  initialStep >= 4 && initialCompetitors.length > 0
-    ? initialCompetitors
-    : suggestedCompetitors;
+) => {
+  if (initialCompetitors.length > 0) {
+    return initialCompetitors;
+  }
+  return initialNoCompetitors ? [] : suggestedCompetitors;
+};
 
 export const WelcomeFlow = ({
   actions,
@@ -332,7 +528,8 @@ export const WelcomeFlow = ({
   brandName,
   detected,
   initialCompetitors = [],
-  initialNoCompetitors = false,
+  initialNoCompetitors,
+  initialQuestionCount,
   initialScope,
   initialStep = 2,
   initialVariants = [],
@@ -354,27 +551,29 @@ export const WelcomeFlow = ({
   //   하나씩 X로 빼기 쉽고(ChipList), 잘못된 제안은 그대로 두는 게 아니라
   //   지우는 게 기본 동작이 되도록 안내 문구(competitorLede)를 맞춘다.
   const [competitors, setCompetitors] = useState<string[]>(
-    getInitialCompetitors(initialStep, initialCompetitors, suggestedCompetitors)
+    getInitialCompetitors(
+      initialCompetitors,
+      initialNoCompetitors,
+      suggestedCompetitors
+    )
+  );
+  // 경쟁사를 **사용자가 확인했는지**. 저장돼 있거나 4단계 [다음]을 눌렀을 때만 true —
+  //   건너뛰기·「기본값으로 바로 측정」에서는 AI 후보를 확정 저장하지 않는다.
+  const [competitorsConfirmed, setCompetitorsConfirmed] = useState(
+    hasStoredCompetitorSetting(initialCompetitors, initialNoCompetitors)
   );
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   // '경쟁사 없음' 명시 선택 — 경쟁사가 비어 있을 때만 의미가 있다(저장은 목록 안 표식).
   const [noCompetitors, setNoCompetitors] = useState(initialNoCompetitors);
   // 5단계 질문 승인 — 기본 전부 미선택, 사람이 고른 것만 저장한다.
-  const [savedQuestions, setSavedQuestions] = useState(0);
+  const [savedQuestions, setSavedQuestions] = useState(initialQuestionCount);
   // 6단계: 지금 비어 있는 설정(서버가 준비도 규칙 한 곳으로 판정한다). null = 아직 모름.
   const [starting, setStarting] = useState(false);
 
-  // 진단은 서버의 after()에서 실행된다. 진행 중일 때만 새로 읽어 결과를 갱신한다.
-  useEffect(() => {
-    if (
-      !(readiness?.status === "queued" || readiness?.status === "processing")
-    ) {
-      return;
-    }
-    const timer = window.setInterval(() => router.refresh(), 5000);
-    return () => window.clearInterval(timer);
-  }, [readiness?.status, router]);
+  // 기술 진단 상태는 **6단계(진단 상태를 보여 주는 단계)에서만** 다시 읽는다 — 2~5단계에서 5초마다
+  //   서버 화면을 다시 그리면 그때마다 경쟁사 후보 AI 호출이 반복된다(2026-10-13).
+  useSiteReadinessPolling(readiness?.status, step === 6);
 
   const addDraft = (into: "variants" | "competitors") => {
     const value = draft.trim();
@@ -396,7 +595,8 @@ export const WelcomeFlow = ({
       entityVariants: string[];
       marketScope: string;
       noCompetitors: boolean;
-    }> = {}
+    }> = {},
+    onSaved?: () => void
   ) => {
     setSaving(true);
     const result = await onSave({
@@ -410,6 +610,7 @@ export const WelcomeFlow = ({
       return;
     }
     setStep(nextStep);
+    onSaved?.();
   };
 
   /**
@@ -420,10 +621,14 @@ export const WelcomeFlow = ({
     setStarting(true);
     const saved = await onSave({
       brandId,
-      competitors,
+      // 경쟁사는 사용자가 확인한 값만 저장한다 — AI 후보를 몰래 확정하지 않는다.
+      ...confirmedCompetitorProfile(
+        competitorsConfirmed,
+        competitors,
+        noCompetitors
+      ),
       entityVariants: variants,
       marketScope: scope,
-      noCompetitors: noCompetitors && competitors.length === 0,
       ...(persistStep ? { completeOnboarding: true, onboardingStep: 5 } : {}),
     });
     if ("error" in saved) {
@@ -437,19 +642,7 @@ export const WelcomeFlow = ({
       skippedSetup,
     });
     setStarting(false);
-    if ("error" in result) {
-      if (result.code === "rate_limited") {
-        toast.info(result.error || (t.measureRateLimited as string));
-        router.push("/");
-        return;
-      }
-      toast.error(result.error || (t.measureFailed as string), {
-        description: t.measureFailedHint,
-      });
-      return;
-    }
-    toast.success(t.measureStarted);
-    router.push(`/brand/measuring?job=${result.jobId}`);
+    announceStartResult(result, router.push, t);
   };
 
   /** 2~5단계 공통 — 「지금은 기본값으로 바로 측정」 지름길(명시 선택으로 기록). */
@@ -578,114 +771,31 @@ export const WelcomeFlow = ({
 
   if (step === 4) {
     return (
-      <WelcomeShell
-        aside={
-          <>
-            <p className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-              {t.competitorWhyTitle}
-            </p>
-            <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm leading-relaxed">
-              {t.competitorWhyBody}
-            </p>
-          </>
-        }
-        current={4}
-        /* 🔴 2026-08-21 — 제안을 기본으로 채우므로(위 competitors 초깃값 주석)
-           "눌러서 담아주세요"가 아니라 "틀린 게 있으면 빼주세요"로 안내한다.
-           제안이 0개면 채울 게 없었다는 뜻이라 여전히 빈 안내로 분기한다. */
-        description={
-          suggestedCompetitors.length > 0
-            ? t.competitorLede
-            : t.competitorLedeEmpty
-        }
-        primary={{
-          disabled: saving,
-          label: saving ? (t.saving as string) : (t.next as string),
-          onClick: () =>
-            saveAndGo(5, {
+      <CompetitorStep
+        addDraft={() => addDraft("competitors")}
+        competitors={competitors}
+        draft={draft}
+        noCompetitors={noCompetitors}
+        onNext={() =>
+          saveAndGo(
+            5,
+            {
               competitors,
               noCompetitors: noCompetitors && competitors.length === 0,
-            }),
-        }}
+            },
+            // 저장에 성공했을 때만 그 값을 사용자가 **확인한 값**으로 친다.
+            () => setCompetitorsConfirmed(true)
+          )
+        }
+        onSkip={() => saveAndGo(5)}
         quickStart={quickStart}
-        skip={{ label: t.skip as string, onClick: () => saveAndGo(5) }}
-        stepOfTemplate={t.stepOf as string}
-        title={t.competitorTitle}
-        total={TOTAL}
-      >
-        {/* 🔴 2026-08-21 — 이제 제안은 기본으로 담겨 아래 ChipList에 있다.
-            이 섹션은 사용자가 X로 뺀 항목을 다시 담는 되돌리기 자리로 남는다
-            (competitors 에서 빼면 이 filter 가 다시 여기 보여준다). */}
-        {suggestedCompetitors.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-              {t.competitorSuggestion}
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {suggestedCompetitors
-                .filter((name) => !competitors.includes(name))
-                .map((name) => (
-                  <button
-                    className="rounded-full border border-[color:var(--findable-hairline,#23252a)] border-dashed px-3 py-1 text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs"
-                    key={name}
-                    onClick={() => setCompetitors((p) => [...p, name])}
-                    type="button"
-                  >
-                    + {name}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
-        <label
-          className="flex items-start gap-2 text-[color:var(--findable-ink,#f7f8f8)] text-sm"
-          htmlFor="welcome-no-competitors"
-        >
-          <Checkbox
-            checked={noCompetitors && competitors.length === 0}
-            className="mt-0.5"
-            disabled={competitors.length > 0}
-            id="welcome-no-competitors"
-            onCheckedChange={(value) => setNoCompetitors(value === true)}
-          />
-          <span className="flex flex-col gap-0.5">
-            {t.competitorNone}
-            <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
-              {t.competitorNoneHint}
-            </span>
-          </span>
-        </label>
-        <Label className="pt-2" htmlFor="welcome-competitor">
-          {t.competitorAddLabel}
-        </Label>
-        <div className="flex gap-2">
-          <Input
-            id="welcome-competitor"
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addDraft("competitors");
-              }
-            }}
-            placeholder={t.competitorPlaceholder}
-            value={draft}
-          />
-          <button
-            className="shrink-0 rounded-md border border-[color:var(--findable-hairline,#23252a)] px-3 font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm"
-            onClick={() => addDraft("competitors")}
-            type="button"
-          >
-            {t.add}
-          </button>
-        </div>
-        <ChipList
-          emptyHint={t.emptyHint as string}
-          items={competitors}
-          onRemove={(v) => setCompetitors((p) => p.filter((x) => x !== v))}
-          removeLabel={(i) => (t.removeItem ?? "").replace("{item}", i)}
-        />
-      </WelcomeShell>
+        saving={saving}
+        setCompetitors={setCompetitors}
+        setDraft={setDraft}
+        setNoCompetitors={setNoCompetitors}
+        suggestedCompetitors={suggestedCompetitors}
+        t={t}
+      />
     );
   }
 
@@ -703,6 +813,7 @@ export const WelcomeFlow = ({
         }}
         onSkip={() => saveAndGo(6)}
         quickStart={quickStart}
+        savedCount={savedQuestions}
         t={t}
         total={TOTAL}
       />
@@ -715,8 +826,8 @@ export const WelcomeFlow = ({
       actions={actions}
       brandId={brandId}
       brandName={brandName}
-      competitors={competitors}
-      noCompetitors={noCompetitors}
+      competitors={competitorsConfirmed ? competitors : []}
+      noCompetitors={competitorsConfirmed && noCompetitors}
       onRemoveCompetitor={(v) =>
         setCompetitors((p) => p.filter((x) => x !== v))
       }
