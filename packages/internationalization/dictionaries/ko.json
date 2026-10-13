@@ -1163,7 +1163,10 @@
       "promptSaveFailed": "프롬프트 저장 중 문제가 발생했습니다.",
       "legalNameInvalid": "회사 정식 상호는 2~60자로 입력해 주세요.",
       "businessNumberInvalid": "사업자등록번호 10자리를 확인해 주세요.",
-      "measuringNoEdit": "측정이 진행 중이라 지금은 질문을 바꿀 수 없어요. 측정이 끝난 뒤 다시 시도해 주세요."
+      "measuringNoEdit": "측정이 진행 중이라 지금은 질문을 바꿀 수 없어요. 측정이 끝난 뒤 다시 시도해 주세요.",
+      "restoreNoRoom": "질문 칸이 가득 차서 복원할 수 없어요. 다른 질문을 보관하거나 플랜을 올려주세요.",
+      "archiveUnavailable": "질문 보관 기능을 준비 중이에요. 잠시 후 다시 시도해 주세요.",
+      "archiveFailed": "보관·복원하지 못했어요. 잠시 후 다시 시도해 주세요."
     },
     "promptWizard": {
       "categoryBrand": "브랜드",
@@ -1239,7 +1242,18 @@
       "deleteLabel": "{text} 삭제",
       "confirmDelete": "삭제 확인",
       "untagged": "유형 없음",
-      "baselineChange": "질문을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요."
+      "baselineChange": "질문을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요.",
+      "archive": "보관",
+      "archiveLabel": "{text} 보관",
+      "archived": "질문을 보관했어요. 측정 기록은 그대로 남아요.",
+      "restore": "복원",
+      "restoreLabel": "{text} 복원",
+      "restored": "질문을 복원했어요.",
+      "archivedTitle": "보관한 질문",
+      "archivedHint": "측정에서 빠져 있어요. 기록은 남아 있고, 복원하면 다시 측정해요.",
+      "deleteInstead": "삭제하면 이 질문의 측정 기록도 사라져요. 기록을 남기려면 보관하세요.",
+      "editNewKeeps": "저장하면 새 질문으로 저장되고, 기존 질문은 보관돼요. 기존 측정 기록 {n}건은 남아요.",
+      "archiveFailed": "보관·복원하지 못했어요. 잠시 후 다시 시도해 주세요."
     },
     "promptResponses": {
       "metaTitle": "질문별 AI 답변 · Findable",

@@ -28,6 +28,11 @@ const resolveShadowPlanV2 = vi.fn();
 let briefingEnabled = false;
 const log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
 
+// 질문 보관 조회(raw SQL)는 이 테스트의 관심사가 아니다 — 보관된 질문 없음으로 둔다.
+vi.mock("./prompt-archive", () => ({
+  activePromptFilter: () => ({}),
+  archivedPromptIds: () => Promise.resolve([]),
+}));
 vi.mock("@repo/database", () => ({
   database: {
     auditJob: {

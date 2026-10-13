@@ -98,7 +98,7 @@ describe("추적 질문 수정", () => {
     });
   });
 
-  it("측정 기록이 있으면 보존 안내 문구가 뜬다", () => {
+  it("측정 기록이 있으면 「새 질문으로 저장·기존 질문 보관·기록 5건 남음」 안내가 뜬다", () => {
     render(
       <PromptList
         onEdit={vi.fn()}
@@ -109,7 +109,9 @@ describe("추적 질문 수정", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "우리 브랜드 어때? 수정" })
     );
-    screen.getByText(/측정 기록 5건은 그대로 남아요/);
+    screen.getByText(
+      /새 질문으로 저장되고, 기존 질문은 보관돼요.*5건은 남아요/
+    );
   });
 
   it("취소 버튼을 누르면 편집이 닫힌다", () => {

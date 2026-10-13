@@ -1163,7 +1163,10 @@
       "promptSaveFailed": "Something went wrong saving the questions.",
       "legalNameInvalid": "Please enter a company name of 2–60 characters.",
       "businessNumberInvalid": "Please check the 10-digit business registration number.",
-      "measuringNoEdit": "A measurement is in progress, so questions can't be changed right now. Please try again after it finishes."
+      "measuringNoEdit": "A measurement is in progress, so questions can't be changed right now. Please try again after it finishes.",
+      "restoreNoRoom": "No free question slots to restore this. Archive another question or upgrade your plan.",
+      "archiveUnavailable": "Question archiving is being prepared. Please try again shortly.",
+      "archiveFailed": "Couldn't archive or restore. Please try again shortly."
     },
     "promptWizard": {
       "categoryBrand": "Brand",
@@ -1239,7 +1242,18 @@
       "deleteLabel": "Delete {text}",
       "confirmDelete": "Confirm delete",
       "untagged": "No type",
-      "baselineChange": "Changing questions starts a new baseline from the next measurement. Comparison with earlier scores won't be shown."
+      "baselineChange": "Changing questions starts a new baseline from the next measurement. Comparison with earlier scores won't be shown.",
+      "archive": "Archive",
+      "archiveLabel": "Archive {text}",
+      "archived": "Question archived. Its measurement records stay.",
+      "restore": "Restore",
+      "restoreLabel": "Restore {text}",
+      "restored": "Question restored.",
+      "archivedTitle": "Archived questions",
+      "archivedHint": "Not measured anymore. Records stay; restore to measure again.",
+      "deleteInstead": "Deleting also removes this question's measurement records. Archive it to keep them.",
+      "editNewKeeps": "Saving creates a new question and archives the old one. The {n} existing measurement records stay.",
+      "archiveFailed": "Couldn't archive or restore. Please try again shortly."
     },
     "promptResponses": {
       "metaTitle": "AI answers by question · Findable",

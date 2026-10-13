@@ -24,6 +24,11 @@ const h = vi.hoisted(() => ({
   chain: Promise.resolve() as Promise<unknown>,
 }));
 
+// 질문 보관 조회(raw SQL)는 이 테스트의 관심사가 아니다 — 보관된 질문 없음으로 둔다.
+vi.mock("@repo/audit/prompt-archive", () => ({
+  activePromptFilter: () => ({}),
+  archivedPromptIds: () => Promise.resolve([]),
+}));
 vi.mock("@repo/database", () => ({
   database: {
     $transaction: async (

@@ -5,10 +5,17 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { Spinner } from "@repo/design-system/components/ui/spinner";
-import { CheckIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react";
+import {
+  ArchiveIcon,
+  CheckIcon,
+  PencilIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { ArchivePromptResult } from "@/app/actions/brand/archive-prompt";
 import type { DeletePromptResult } from "@/app/actions/brand/delete-prompt";
 import type { EditPromptResult } from "@/app/actions/brand/edit-prompt";
 import type { AppDictionary } from "@/lib/i18n";
@@ -121,12 +128,43 @@ function groupByTopic(prompts: PromptListItem[]): Array<{
     });
 }
 
+const ArchiveButton = ({
+  disabled,
+  enabled,
+  label,
+  onClick,
+  text,
+}: {
+  disabled: boolean;
+  /** 보관 실행자가 없으면 버튼을 그리지 않는다(눌러도 아무 일 없는 가짜 컨트롤 금지). */
+  enabled: boolean;
+  label: string;
+  onClick: () => void;
+  text: string;
+}) =>
+  enabled ? (
+    <Button
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      size="sm"
+      type="button"
+      variant="ghost"
+    >
+      <ArchiveIcon aria-hidden="true" className="size-3.5" />
+      <span className="ml-1 text-xs">{text}</span>
+    </Button>
+  ) : null;
+
 export const PromptList = ({
   prompts,
+  onArchive,
   onDelete,
   onEdit,
   t,
 }: {
+  /** 보관 실행자(2026-10-14). 없으면 보관 버튼을 렌더하지 않는다. 이력이 남는 쪽이 기본이다. */
+  onArchive?: (input: { promptId: string }) => Promise<ArchivePromptResult>;
   /**
    * 삭제 실행자. 서버 컴포넌트가 `deletePromptAction` 을 넘긴다.
    * 없으면 삭제 버튼을 렌더하지 않는다 — 눌러도 아무 일 없는 버튼을 두지 않는다
@@ -177,6 +215,26 @@ export const PromptList = ({
       router.refresh();
     } catch {
       toast.error(t.deleteFailed);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const archive = async (prompt: PromptListItem) => {
+    if (!onArchive) {
+      return;
+    }
+    setDeleting(prompt.id);
+    try {
+      const result = await onArchive({ promptId: prompt.id });
+      if ("error" in result) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(t.archived);
+      router.refresh();
+    } catch {
+      toast.error(t.archiveFailed);
     } finally {
       setDeleting(null);
     }
@@ -257,7 +315,7 @@ export const PromptList = ({
             "오타 고치려다 기록 잃기 싫어서"인 경우가 많다. */}
         <span className="text-[10px] text-[color:var(--findable-ink-tertiary,#7e8289)]">
           {prompt.measuredCount > 0
-            ? t.editKeepsRecords.replace("{n}", String(prompt.measuredCount))
+            ? t.editNewKeeps.replace("{n}", String(prompt.measuredCount))
             : t.editChangesText}
         </span>
         {/* 질문을 바꾸면 질문 세트 지문이 달라져 다음 측정부터 새 기준선이다(직전 대비 비교 불가). */}
@@ -348,7 +406,7 @@ export const PromptList = ({
           {isConfirming ? (
             <span className="text-[color:var(--findable-primary,#ff7a4d)] text-xs">
               {t.deleteConfirm.replace("{n}", String(prompt.measuredCount))}{" "}
-              {t.baselineChange}
+              {t.deleteInstead} {t.baselineChange}
             </span>
           ) : null}
         </div>
@@ -366,6 +424,17 @@ export const PromptList = ({
               <PencilIcon aria-hidden="true" className="size-3.5" />
             </Button>
           ) : null}
+          <ArchiveButton
+            disabled={isDeleting}
+            enabled={Boolean(onArchive)}
+            label={t.archiveLabel.replace("{text}", prompt.text)}
+            onClick={() => {
+              archive(prompt).catch(() => {
+                // archive 가 자체적으로 토스트를 띄운다.
+              });
+            }}
+            text={t.archive}
+          />
           {onDelete ? (
             <Button
               aria-label={t.deleteLabel.replace("{text}", prompt.text)}
