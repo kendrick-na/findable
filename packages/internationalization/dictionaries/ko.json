@@ -893,7 +893,12 @@
       "errorDate": "날짜를 다시 확인해주세요.",
       "errorBrand": "브랜드를 찾을 수 없어요.",
       "errorGone": "이미 지워진 메모예요.",
-      "errorForbidden": "권한이 없어요."
+      "errorForbidden": "권한이 없어요.",
+      "questionAdded": "질문 {n}개 추가 — 여기서부터 새 기준선",
+      "questionEdited": "질문 수정 — 새 기준선: {text}",
+      "questionDeleted": "질문 삭제 — 새 기준선: {text}",
+      "questionArchived": "질문 보관 — 새 기준선: {text}",
+      "questionRestored": "질문 복원 — 새 기준선: {text}"
     },
     "partnerCta": {
       "submitted": "파트너 신청이 접수됐어요. 검토 후 알려드릴게요.",

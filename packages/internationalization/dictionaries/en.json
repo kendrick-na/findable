@@ -893,7 +893,12 @@
       "errorDate": "Please check the date.",
       "errorBrand": "We couldn't find that brand.",
       "errorGone": "This note has already been deleted.",
-      "errorForbidden": "You don't have permission to do that."
+      "errorForbidden": "You don't have permission to do that.",
+      "questionAdded": "{n} questions added — new baseline from here",
+      "questionEdited": "Question edited — new baseline: {text}",
+      "questionDeleted": "Question deleted — new baseline: {text}",
+      "questionArchived": "Question archived — new baseline: {text}",
+      "questionRestored": "Question restored — new baseline: {text}"
     },
     "partnerCta": {
       "submitted": "Your partner application has been received. We'll let you know after review.",

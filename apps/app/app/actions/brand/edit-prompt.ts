@@ -4,6 +4,7 @@ import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { hasInFlightMeasurement } from "@/lib/brand/measurement-in-flight";
+import { recordQuestionChange } from "@/lib/brand/question-change-log";
 import { requireOrg, scopedBrandById } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 
@@ -90,6 +91,7 @@ export const editPromptAction = async (input: {
       data: { text },
     });
     log.info("brand.prompt.edited", { brandId: brand.id, promptId: prompt.id });
+    await recordQuestionChange(brand.id, { kind: "edited", text });
     return { ok: true };
   } catch (error) {
     log.error("brand.prompt.edit_failed", {

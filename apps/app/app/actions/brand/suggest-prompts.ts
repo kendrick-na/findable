@@ -19,6 +19,7 @@ import { getCurrentPlan } from "@repo/auth/plan-server";
 import { database } from "@repo/database";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
+import { recordQuestionChange } from "@/lib/brand/question-change-log";
 import { requireOrg, scopedBrandById } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 
@@ -269,6 +270,10 @@ export const saveApprovedPromptsAction = async (input: {
 
     log.info("brand.prompts.saved", {
       brandId: brand.id,
+      count: capped.length,
+    });
+    await recordQuestionChange(brand.id, {
+      kind: "added",
       count: capped.length,
     });
     // 상한에 걸려 일부만 저장된 경우 신호(UI가 업그레이드 안내). 전부 저장이면 생략.
