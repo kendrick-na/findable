@@ -63,6 +63,7 @@ const meta: Meta<typeof WelcomeFlow> = {
     },
     actions: fakeActions([]),
     brandDomain: "example.com",
+    industryOther: false,
     initialNoCompetitors: false,
     initialQuestionCount: 0,
     onSave: noopSave,

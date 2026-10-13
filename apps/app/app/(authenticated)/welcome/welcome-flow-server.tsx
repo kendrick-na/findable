@@ -69,6 +69,7 @@ export const WelcomeFlowServer = async ({
         reason: marketScopeReason(detected.reasonCode, dict.brandForm),
         scope: detected.scope,
       }}
+      industryOther={brandIndustry === "other"}
       onSave={updateBrandProfile}
       questionLabels={dict.questionPicker}
       t={t}

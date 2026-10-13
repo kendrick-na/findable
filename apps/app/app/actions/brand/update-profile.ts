@@ -97,6 +97,7 @@ export interface UpdateBrandProfileInput {
    * '경쟁사 없음'을 **명시 선택**했는지(2026-10-13). 경쟁사가 비어 있을 때만 의미가 있고,
    * 저장은 `Brand.competitors` 목록 안 표식 `{"none": true}` 로 한다(컬럼 추가 없음).
    * 이름 있는 경쟁사가 하나라도 있으면 표식은 저장하지 않는다.
+   * `false` 는 '없음' 명시 해제(= 미설정으로), 안 보내면 이미 저장된 표식을 유지한다.
    */
   noCompetitors?: boolean;
   /** 다음에 다시 들어왔을 때 복귀할 단계(2~5). */
@@ -180,13 +181,15 @@ function validatedOfficialIdentity(
 }
 
 /**
- * 저장할 경쟁사 목록. 비어 있는 목록은 '미설정'이다. 명시 선택(noCompetitors)이거나, 이미 '없음'으로 저장된
- * 브랜드를 프로필 편집기가 빈 목록으로 다시 저장하는 경우(편집기는 표식을 모른다)엔 표식 `{"none": true}` 를
- * 유지한다 — 지우면 '없음' 선택이 조용히 취소된다.
+ * 저장할 경쟁사 목록. 이름 있는 경쟁사가 있으면 그것(표식은 저장하지 않는다). 비어 있을 때:
+ *  · `noCompetitors === true`  → '없음' 표식 `{"none": true}` (명시 선택)
+ *  · `noCompetitors === false` → 빈 목록 = '미설정' (명시 해제 — 프로필 편집기의 [해제])
+ *  · `undefined`(안 보냄)      → 이미 '없음'으로 저장돼 있으면 표식 유지, 아니면 빈 목록
+ *    (표식을 모르는 호출부가 빈 목록으로 저장해도 '없음' 선택이 조용히 취소되지 않는다)
  */
 function competitorsToStore(
   names: string[],
-  noCompetitors: boolean,
+  noCompetitors: boolean | undefined,
   existing: unknown
 ): Array<string | { none: true }> {
   const list = cleanList(names);
@@ -194,7 +197,7 @@ function competitorsToStore(
     return list;
   }
   const keepNone =
-    noCompetitors || competitorSettingOf(existing).kind === "none";
+    noCompetitors ?? competitorSettingOf(existing).kind === "none";
   return keepNone ? [NO_COMPETITORS_MARKER] : [];
 }
 
@@ -234,7 +237,7 @@ export const updateBrandProfile = async (
   if (input.competitors) {
     data.competitors = competitorsToStore(
       input.competitors,
-      input.noCompetitors === true,
+      input.noCompetitors,
       owned.competitors
     );
   }

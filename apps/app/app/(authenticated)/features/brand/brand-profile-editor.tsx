@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@repo/design-system/components/ui/badge";
+import { Checkbox } from "@repo/design-system/components/ui/checkbox";
 import { Input } from "@repo/design-system/components/ui/input";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { ChevronDownIcon, XIcon } from "lucide-react";
@@ -35,12 +36,15 @@ export interface BrandProfileEditorProps {
   legalName: string | null;
   marketScope: string | null;
   name: string;
+  /** '경쟁사 없음'으로 저장돼 있는가(저장값). */
+  noCompetitors: boolean;
   onSave: (input: {
     brandId: string;
     name: string;
     industry: string;
     marketScope: string;
     competitors: string[];
+    noCompetitors: boolean;
     entityVariants: string[];
     legalName: string;
     businessNumber: string;
@@ -94,6 +98,7 @@ export const BrandProfileEditor = ({
   industry: initialIndustry,
   marketScope: initialMarketScope,
   competitors: initialCompetitors,
+  noCompetitors: initialNoCompetitors,
   entityVariants: initialVariants,
   legalName: initialLegalName,
   businessNumber: initialBusinessNumber,
@@ -103,6 +108,8 @@ export const BrandProfileEditor = ({
 }: BrandProfileEditorProps) => {
   const [variants, setVariants] = useState(initialVariants);
   const [competitors, setCompetitors] = useState(initialCompetitors);
+  // '경쟁사 없음' — 경쟁사가 비어 있을 때만 의미가 있다. 켜면 '비교 기준 없음', 끄면 '미설정'.
+  const [noCompetitors, setNoCompetitors] = useState(initialNoCompetitors);
   const [name, setName] = useState(initialName);
   const [industry, setIndustry] = useState(initialIndustry ?? "");
   const [marketScope, setMarketScope] = useState(initialMarketScope ?? "");
@@ -118,6 +125,7 @@ export const BrandProfileEditor = ({
     marketScope: initialMarketScope ?? "",
     variants: initialVariants,
     competitors: initialCompetitors,
+    noCompetitors: initialNoCompetitors,
   });
   const [variantDraft, setVariantDraft] = useState("");
   const [competitorDraft, setCompetitorDraft] = useState("");
@@ -131,7 +139,8 @@ export const BrandProfileEditor = ({
     legalName.trim() !== saved.legalName ||
     businessNumber.trim() !== saved.businessNumber ||
     JSON.stringify(variants) !== JSON.stringify(saved.variants) ||
-    JSON.stringify(competitors) !== JSON.stringify(saved.competitors);
+    JSON.stringify(competitors) !== JSON.stringify(saved.competitors) ||
+    noCompetitors !== saved.noCompetitors;
 
   const add = (
     draft: string,
@@ -154,6 +163,8 @@ export const BrandProfileEditor = ({
       industry,
       marketScope,
       competitors,
+      // 명시 값을 항상 보낸다 — 켜면 '없음' 저장, 끄면 미설정으로 되돌린다(경쟁사가 있으면 표식은 저장되지 않는다).
+      noCompetitors: noCompetitors && competitors.length === 0,
       entityVariants: variants,
       legalName: legalName.trim(),
       businessNumber: businessNumber.trim(),
@@ -171,6 +182,7 @@ export const BrandProfileEditor = ({
       marketScope,
       variants,
       competitors,
+      noCompetitors: noCompetitors && competitors.length === 0,
     });
     toast.success(t.editorSaved);
   };
@@ -375,9 +387,10 @@ export const BrandProfileEditor = ({
             />
             <button
               className="shrink-0 rounded-md border border-[color:var(--findable-hairline,#23252a)] px-3 font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm"
-              onClick={() =>
-                add(competitorDraft, setCompetitorDraft, setCompetitors)
-              }
+              onClick={() => {
+                setNoCompetitors(false);
+                add(competitorDraft, setCompetitorDraft, setCompetitors);
+              }}
               type="button"
             >
               {t.add}
@@ -389,6 +402,24 @@ export const BrandProfileEditor = ({
             onRemove={(v) => setCompetitors((p) => p.filter((x) => x !== v))}
             removeLabel={(i) => (t.removeItem ?? "").replace("{item}", i)}
           />
+          <label
+            className="flex items-start gap-2 text-[color:var(--findable-ink,#f7f8f8)] text-sm"
+            htmlFor="editor-no-competitors"
+          >
+            <Checkbox
+              checked={noCompetitors && competitors.length === 0}
+              className="mt-0.5"
+              disabled={competitors.length > 0}
+              id="editor-no-competitors"
+              onCheckedChange={(value) => setNoCompetitors(value === true)}
+            />
+            <span className="flex flex-col gap-0.5">
+              {t.competitorNone}
+              <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+                {t.competitorNoneHint}
+              </span>
+            </span>
+          </label>
         </div>
 
         <div className="flex items-center gap-3">

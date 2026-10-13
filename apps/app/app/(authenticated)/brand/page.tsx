@@ -316,6 +316,7 @@ const BrandPage = async () => {
                     )}
                     <PromptWizard
                       brandId={brand.id}
+                      industry={brand.industry}
                       pickerLabels={dict.questionPicker}
                       t={dict.promptWizard}
                     />

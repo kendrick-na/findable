@@ -26,6 +26,7 @@ export const WelcomeQuestionStep = ({
   actions,
   brandId,
   busy,
+  industryOther,
   labels,
   onNext,
   onSkip,
@@ -38,6 +39,8 @@ export const WelcomeQuestionStep = ({
   brandId: string;
   /** 부모가 저장·측정 중이면 버튼을 잠근다. */
   busy: boolean;
+  /** 업종이 '기타'인가 — 질문 재료가 적다는 안내를 보인다. */
+  industryOther: boolean;
   labels: QuestionPickerLabels;
   /** 고른 질문을 저장한 뒤 호출된다(`saved` = 새로 저장된 개수, 0이면 고른 게 없다). */
   onNext: (saved: number) => Promise<void>;
@@ -113,6 +116,11 @@ export const WelcomeQuestionStep = ({
       title={t.questionTitle}
       total={total}
     >
+      {industryOther && (
+        <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+          {t.industryOtherNote}
+        </p>
+      )}
       {savedCount > 0 && (
         <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
           {t.summaryQuestions.replace("{count}", String(savedCount))}

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ONBOARDING_TOTAL_STEPS } from "./welcome-steps";
 
 /**
  * 온보딩 1단계 **틀** — 기존 `AssignBrandForm` 을 감싸기만 한다.
@@ -24,13 +25,18 @@ export const WelcomeIntro = ({
   <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6">
     <div className="flex flex-col gap-2">
       <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-        {(t.stepOf ?? "").replace("{current}", "1").replace("{total}", "5")}
+        {(t.stepOf ?? "")
+          .replace("{current}", "1")
+          .replace("{total}", String(ONBOARDING_TOTAL_STEPS))}
       </span>
       <div
         aria-hidden="true"
         className="h-1 w-full overflow-hidden rounded-full bg-[color:var(--findable-hairline,#23252a)]"
       >
-        <div className="h-full w-1/5 rounded-full bg-[color:var(--findable-primary,#ff7a4d)]" />
+        <div
+          className="h-full rounded-full bg-[color:var(--findable-primary,#ff7a4d)]"
+          style={{ width: `${Math.round(100 / ONBOARDING_TOTAL_STEPS)}%` }}
+        />
       </div>
     </div>
 

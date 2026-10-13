@@ -86,6 +86,7 @@ const renderFlow = (
       brandId="brand-1"
       brandName="프란츠"
       detected={{ confidence: "high", reason: "r", scope: "korea" }}
+      industryOther={false}
       initialNoCompetitors={false}
       initialQuestionCount={0}
       onSave={onSave}

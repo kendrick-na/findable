@@ -1,3 +1,4 @@
+import { competitorSettingOf } from "@repo/audit/setup-readiness";
 import { updateBrandProfile } from "@/app/actions/brand/update-profile";
 import { getAppDictionary } from "@/lib/i18n";
 import { BrandProfileEditor } from "./brand-profile-editor";
@@ -63,6 +64,7 @@ export const BrandProfileEditorServer = async ({
       legalName={legalName}
       marketScope={marketScope}
       name={name}
+      noCompetitors={competitorSettingOf(competitors).kind === "none"}
       onSave={updateBrandProfile}
       suggestedBusinessNumber={suggestedBusinessNumber}
       t={t}

@@ -215,6 +215,7 @@ const PromptsPage = async () => {
                 <div className="flex flex-wrap items-center gap-2">
                   <PromptWizard
                     brandId={brand.id}
+                    industry={brand.industry}
                     pickerLabels={dict.questionPicker}
                     t={dict.promptWizard}
                   />

@@ -22,6 +22,7 @@ import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import type { QuestionPickerLabels } from "../features/brand/question-picker";
 import { WelcomeQuestionStep } from "./welcome-question-step";
 import { WelcomeShell } from "./welcome-shell";
+import { ONBOARDING_TOTAL_STEPS } from "./welcome-steps";
 
 /**
  * 5단계 우측 — **예시** 노출도 그래프(Profound f044 참조).
@@ -118,8 +119,7 @@ const ExposurePreviewChart = ({
  *   (별칭·경쟁사 둘 다 없어도 측정은 돈다). 완성 기준 = 건너뛸 수 있는 단계 2·3·4.
  */
 
-/** 온보딩 전체 단계 수(1 도메인 등록 · 2 지역 · 3 별칭 · 4 경쟁사 · 5 질문 · 6 확인·측정). */
-const TOTAL = 6;
+const TOTAL = ONBOARDING_TOTAL_STEPS;
 
 /** 진단은 서버의 after()에서 실행된다. 진행 중이고 화면이 상태를 보여 줄 때만 새로 읽어 갱신한다. */
 const useSiteReadinessPolling = (
@@ -177,6 +177,8 @@ interface WelcomeFlowProps {
    * ⚠️ 고객은 이걸 **고칠 수 있다**. 고쳐도 측정 엔진은 줄지 않는다(분모 불변).
    */
   detected: { confidence: string; reason: string; scope: string };
+  /** 업종이 '기타'인가(질문 재료가 적다는 안내용). */
+  industryOther: boolean;
   initialCompetitors?: string[];
   /** '경쟁사 없음'을 이미 선택해 저장한 브랜드. */
   initialNoCompetitors: boolean;
@@ -528,6 +530,7 @@ export const WelcomeFlow = ({
   brandName,
   detected,
   initialCompetitors = [],
+  industryOther,
   initialNoCompetitors,
   initialQuestionCount,
   initialScope,
@@ -806,6 +809,7 @@ export const WelcomeFlow = ({
         actions={actions}
         brandId={brandId}
         busy={saving || starting}
+        industryOther={industryOther}
         labels={questionLabels}
         onNext={async (saved) => {
           setSavedQuestions((n) => n + saved);

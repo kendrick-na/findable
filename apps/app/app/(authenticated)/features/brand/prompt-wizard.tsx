@@ -1,7 +1,6 @@
 "use client";
 
 import type { SuggestedPrompt } from "@repo/ai/lib/prompt-suggestions";
-import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { toast } from "@repo/design-system/components/ui/sonner";
@@ -46,10 +45,13 @@ const MAX_CUSTOM_PROMPT_LENGTH = 200;
 
 export const PromptWizard = ({
   brandId,
+  industry,
   pickerLabels,
   t,
 }: {
   brandId: string;
+  /** 업종(Industry enum 값). '기타'면 질문 재료가 적다는 안내를 보인다. */
+  industry?: string | null;
   /** 사전 `app.questionPicker` — 질문 고르기 화면 문구. */
   pickerLabels: AppDictionary["questionPicker"];
   /** 사전 `app.promptWizard` (client 라 서버가 넘긴다). */
@@ -58,7 +60,6 @@ export const PromptWizard = ({
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
   const [prompts, setPrompts] = useState<SuggestedPrompt[]>([]);
-  const [competitors, setCompetitors] = useState<string[]>([]);
   // 승인한 질문의 인덱스. **기본은 전부 미선택**이다(사람이 고른 것만 측정 — 2026-10-13).
   const [selected, setSelected] = useState<Set<number>>(new Set());
   // 플랜 상한에서 이미 저장된 질문을 뺀, 더 담을 수 있는 개수.
@@ -132,7 +133,6 @@ export const PromptWizard = ({
         return;
       }
       setPrompts(next);
-      setCompetitors(result.suggestions.competitors);
       setMaxPick(result.remaining);
       setSelected(new Set());
       setPhase("review");
@@ -185,7 +185,6 @@ export const PromptWizard = ({
       }
       setPhase("idle");
       setPrompts([]);
-      setCompetitors([]);
       setSelected(new Set());
       router.refresh();
     } catch {
@@ -197,6 +196,11 @@ export const PromptWizard = ({
   if (phase === "idle" || phase === "suggesting") {
     return (
       <div className="flex flex-wrap items-center gap-2">
+        {industry === "other" && (
+          <p className="w-full text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+            {t.industryOtherNote}
+          </p>
+        )}
         <Button
           className="findable-btn-secondary"
           disabled={phase === "suggesting"}
@@ -302,25 +306,6 @@ export const PromptWizard = ({
         selected={selected}
       />
 
-      {competitors.length > 0 && (
-        <div className="flex flex-col gap-1.5 border-[color:var(--findable-hairline,#23252a)] border-t pt-2">
-          <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
-            {t.competitorsNote}
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {competitors.map((name) => (
-              <Badge
-                className="border-[color:var(--findable-hairline,#23252a)] text-[color:var(--findable-ink-subtle,#8a8f98)]"
-                key={name}
-                variant="outline"
-              >
-                {name}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="flex items-center justify-between gap-2 pt-1">
         <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
           {t.selectedCount.replace("{n}", String(selected.size))}
@@ -331,7 +316,6 @@ export const PromptWizard = ({
             onClick={() => {
               setPhase("idle");
               setPrompts([]);
-              setCompetitors([]);
               setSelected(new Set());
             }}
             size="sm"
