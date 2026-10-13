@@ -332,7 +332,9 @@
       "questionSavedCapped": "선택한 {requested}개 중 {saved}개를 저장했어요. 현재 플랜 상한({limit}개)을 넘는 분은 저장되지 않았어요.",
       "questionLimitReached": "추적 질문 한도({limit}개)에 도달했어요. 더 담으려면 요금제를 올려 주세요.",
       "viewPlans": "요금제 보기",
-      "editorMarketBaseline": "타깃 시장을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요."
+      "editorMarketBaseline": "타깃 시장을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요.",
+      "competitorCandidatesTitle": "이런 브랜드가 함께 언급됐어요",
+      "competitorCandidatesHint": "누르면 목록에 담겨요. 저장해야 반영되고, 맞지 않으면 담지 마세요. 측정 답변에서 2번 이상 나온 이름이에요."
     },
     "content": {
       "navLabel": "내 콘텐츠",
@@ -1550,7 +1552,10 @@
       "lockedDesc": "경쟁사가 우리보다 얼마나 더, 또는 덜 나오는지 한눈에 보여드려요.",
       "checkRun": "이번 회차 확인하기",
       "provisionalBody": "최신 측정의 브랜드 판별·외부 출처 귀속 또는 데이터 반영이 완료되지 않았습니다. 다른 회사의 언급을 우리 브랜드의 경쟁 결과로 확정하지 않습니다.",
-      "provisionalTitle": "경쟁사 비교는 아직 잠정입니다"
+      "provisionalTitle": "경쟁사 비교는 아직 잠정입니다",
+      "baselineUnset": "비교할 브랜드를 정하지 않았어요. 아래 순위는 AI 답변에서 자동으로 뽑은 이름이라 「비교 기준 없음」 상태예요.",
+      "baselineNone": "'경쟁사 없음'으로 저장돼 있어요. 아래 순위는 AI 답변에서 자동으로 뽑은 이름이고, 우리가 정한 비교 기준은 없어요.",
+      "baselineSet": "비교할 브랜드 정하기"
     },
     "competitorBoard": {
       "myRankHint": "AI 답변 순위표에서의 내 위치",

@@ -332,7 +332,9 @@
       "questionSavedCapped": "Saved {saved} of the {requested} questions you picked. The rest are over your plan limit ({limit}).",
       "questionLimitReached": "You've reached your tracked-question limit ({limit}). Upgrade your plan to add more.",
       "viewPlans": "View plans",
-      "editorMarketBaseline": "Changing the target market starts a new baseline from the next measurement. Comparison with earlier scores won't be shown."
+      "editorMarketBaseline": "Changing the target market starts a new baseline from the next measurement. Comparison with earlier scores won't be shown.",
+      "competitorCandidatesTitle": "Brands mentioned alongside yours",
+      "competitorCandidatesHint": "Tap to add to the list. Nothing counts until you save; skip any that don't fit. Names that appeared at least twice in measured answers."
     },
     "content": {
       "navLabel": "My content",
@@ -1550,7 +1552,10 @@
       "lockedDesc": "See at a glance how much more or less often competitors appear than you.",
       "checkRun": "Check this run",
       "provisionalBody": "Brand verification, external source attribution or data sync for the latest measurement hasn't finished. We won't treat mentions of other companies as final competitive results for your brand.",
-      "provisionalTitle": "Competitor comparison is still provisional"
+      "provisionalTitle": "Competitor comparison is still provisional",
+      "baselineUnset": "You haven't picked brands to compare. The ranking below is auto-extracted from AI answers, so there is no comparison baseline.",
+      "baselineNone": "Saved as 'no competitors'. The ranking below is auto-extracted from AI answers; you have no comparison baseline.",
+      "baselineSet": "Choose brands to compare"
     },
     "competitorBoard": {
       "myRankHint": "Your position in AI answer rankings",

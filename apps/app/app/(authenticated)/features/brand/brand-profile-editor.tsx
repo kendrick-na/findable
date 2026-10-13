@@ -28,6 +28,8 @@ export interface BrandProfileEditorProps {
   brandId: string;
   /** 고객이 넣은 사업자등록번호(저장값). */
   businessNumber: string | null;
+  /** 측정에서 같이 언급된 브랜드 — 제안일 뿐, 눌러야 담긴다(기본 미선택). */
+  candidates?: Array<{ mentions: number; name: string }>;
   /** 현재 저장값. 서버가 읽어 내려준다. */
   competitors: string[];
   entityVariants: string[];
@@ -97,6 +99,7 @@ export const BrandProfileEditor = ({
   name: initialName,
   industry: initialIndustry,
   marketScope: initialMarketScope,
+  candidates = [],
   competitors: initialCompetitors,
   noCompetitors: initialNoCompetitors,
   entityVariants: initialVariants,
@@ -402,6 +405,34 @@ export const BrandProfileEditor = ({
               {t.add}
             </button>
           </div>
+          {candidates.filter((c) => !competitors.includes(c.name)).length >
+            0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
+                {t.competitorCandidatesTitle}
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {candidates
+                  .filter((c) => !competitors.includes(c.name))
+                  .map((c) => (
+                    <button
+                      className="rounded-full border border-[color:var(--findable-hairline,#23252a)] px-2 py-0.5 text-[color:var(--findable-ink,#f7f8f8)] text-xs"
+                      key={c.name}
+                      onClick={() => {
+                        setNoCompetitors(false);
+                        setCompetitors((p) => [...p, c.name]);
+                      }}
+                      type="button"
+                    >
+                      +{c.name}
+                    </button>
+                  ))}
+              </div>
+              <span className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+                {t.competitorCandidatesHint}
+              </span>
+            </div>
+          )}
           <ChipRow
             emptyText={t.editorEmpty as string}
             items={competitors}

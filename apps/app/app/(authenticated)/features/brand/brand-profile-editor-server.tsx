@@ -1,5 +1,6 @@
 import { competitorSettingOf } from "@repo/audit/setup-readiness";
 import { updateBrandProfile } from "@/app/actions/brand/update-profile";
+import { loadCompetitorCandidates } from "@/lib/brand/competitor-candidates";
 import { getAppDictionary } from "@/lib/i18n";
 import { BrandProfileEditor } from "./brand-profile-editor";
 
@@ -54,10 +55,17 @@ export const BrandProfileEditorServer = async ({
 }) => {
   // 🔴 사전은 서버에서만 읽는다(`server-only`) — 뷰에는 문자열만 내려간다.
   const t = (await getAppDictionary()).onboarding;
+  const found = await loadCompetitorCandidates({
+    competitors,
+    entityVariants,
+    id: brandId,
+    name,
+  }).catch(() => ({ answersRead: 0, candidates: [] }));
   return (
     <BrandProfileEditor
       brandId={brandId}
       businessNumber={businessNumber}
+      candidates={found.candidates}
       competitors={toNameList(competitors)}
       entityVariants={toNameList(entityVariants)}
       industry={industry}

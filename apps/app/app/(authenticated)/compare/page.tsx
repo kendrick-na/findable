@@ -1,7 +1,9 @@
+import { competitorSettingOf } from "@repo/audit/setup-readiness";
 import { isPaid } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { SwordsIcon } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { env } from "@/env";
 import { canShowLatestAnalysis } from "@/lib/content/analysis-publication";
 import {
@@ -158,6 +160,25 @@ const ComparePage = async ({
     );
   }
 
+  const selectedBrand = brands.find((brand) => brand.id === selectedBrandId);
+  // 🔴 비교할 브랜드를 정하지 않았으면 「비교 기준 없음」을 밝힌다(설계원칙 2).
+  //   순위 표는 답변에서 자동으로 뽑은 이름이라 지우지 않지만, 우리가 정한 기준이 아님을 말한다.
+  const setting = selectedBrand
+    ? competitorSettingOf(selectedBrand.competitors).kind
+    : "set";
+  const baselineNotice =
+    selectedBrand && setting !== "set" ? (
+      <p className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 px-3 py-2 text-amber-600 text-sm dark:text-amber-400">
+        {setting === "none" ? t.baselineNone : t.baselineUnset}
+        <Link
+          className="font-medium underline underline-offset-4"
+          href={`/welcome?brand=${selectedBrand.id}&step=4`}
+        >
+          {t.baselineSet}
+        </Link>
+      </p>
+    ) : null;
+
   return (
     <>
       <Header page={t.title} pages={["Findable"]} showMetric={false} />
@@ -168,6 +189,7 @@ const ComparePage = async ({
           selectedBrandId={selectedBrandId}
           t={dict.brandPicker}
         />
+        {baselineNotice}
         {content}
       </div>
     </>
