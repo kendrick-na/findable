@@ -1,6 +1,7 @@
 import { database } from "@repo/database";
 import type { TaggedEngineResponse } from "./tracking";
 import { isTrackableResponse } from "./tracking-eligibility";
+import { TRACKING_MANIFEST_MAX_KEYS } from "./tracking-limits";
 
 export const TRACKING_RECONCILE_MAX_ATTEMPTS = 3;
 export const TRACKING_RECONCILE_RETRY_MS = 60_000;
@@ -49,7 +50,7 @@ export function retireExhaustedTrackingClaim(
          (candidate."postprocessing"->$12->>'v' = '1'
            AND candidate."postprocessing"->$12->>'brandId' = candidate."brandId"
            AND jsonb_typeof(candidate."postprocessing"->$12->'keys') = 'array'
-           AND stats.expected BETWEEN 1 AND 100
+           AND stats.expected BETWEEN 1 AND $14
            AND stats.expected = stats.distinct_keys
            AND stats.expected = stats.scoped_keys
            AND stats.expected = stats.found_keys) AS complete
@@ -94,7 +95,8 @@ export function retireExhaustedTrackingClaim(
     staleBefore.toISOString(),
     now.toISOString(),
     manifestKey,
-    rowAxis
+    rowAxis,
+    TRACKING_MANIFEST_MAX_KEYS
   );
 }
 

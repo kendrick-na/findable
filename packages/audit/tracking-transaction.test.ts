@@ -35,7 +35,11 @@ const state = {
     v: number;
   },
   dropPromptId: false,
+  failTrackingCreateOnCall: 0,
+  trackingCreateCalls: 0,
 };
+
+const ENGINES = ["chatgpt", "claude", "perplexity", "gemini", "naver", "daum"];
 
 const tx = {
   prompt: {
@@ -80,6 +84,10 @@ const tx = {
     ),
     createMany: vi.fn(
       ({ data }: { data: StoredRow[]; skipDuplicates?: boolean }) => {
+        state.trackingCreateCalls += 1;
+        if (state.trackingCreateCalls === state.failTrackingCreateOnCall) {
+          return Promise.reject(new Error("DB 중간 실패"));
+        }
         let created = 0;
         for (const row of data) {
           if (
@@ -107,7 +115,7 @@ vi.mock("@repo/database", () => ({
   database: {
     organization: { findUnique: () => Promise.resolve({ id: "org_1" }) },
     engine: {
-      findMany: () => Promise.resolve([{ id: "chatgpt" }, { id: "claude" }]),
+      findMany: () => Promise.resolve(ENGINES.map((id) => ({ id }))),
     },
     $transaction: vi.fn(
       (
@@ -115,7 +123,18 @@ vi.mock("@repo/database", () => ({
         options?: { maxWait?: number; timeout?: number }
       ) => {
         state.txOptions = options;
-        return fn(tx);
+        // 실제 트랜잭션처럼: 실패하면 이 안에서 쓴 것을 전부 되돌린다.
+        const snapshot = {
+          rows: [...state.trackingRows],
+          prompts: new Map(state.prompts),
+          manifest: state.manifest,
+        };
+        return fn(tx).catch((error: unknown) => {
+          state.trackingRows = snapshot.rows;
+          state.prompts = snapshot.prompts;
+          state.manifest = snapshot.manifest;
+          throw error;
+        });
       }
     ),
   },
@@ -171,6 +190,8 @@ beforeEach(() => {
   state.txOptions = undefined;
   state.manifest = null;
   state.dropPromptId = false;
+  state.failTrackingCreateOnCall = 0;
+  state.trackingCreateCalls = 0;
   vi.clearAllMocks();
 });
 
@@ -287,5 +308,97 @@ describe("질문 id 를 못 찾으면 행을 쓰지 않는다", () => {
     expect(await run()).toBe("failed");
     expect(state.trackingRows).toHaveLength(0);
     expect(state.manifest).toBeNull();
+  });
+});
+
+// ── 20문항 한 회차: 120행 분할 저장 (2026-10-14) ───────────────────────────
+const bigRun = (questions: number) =>
+  Array.from({ length: questions }, (_, q) =>
+    ENGINES.map((engineId) =>
+      row({
+        engineId: engineId as Tagged["engineId"],
+        promptText: `이름 질문 ${q}`,
+        promptIndex: q,
+      })
+    )
+  ).flat();
+
+describe("120행(20문항 × 엔진 6) — 나눠 넣되 한 매니페스트·한 트랜잭션", () => {
+  it("120행을 100+20 으로 나눠 넣고, 매니페스트는 120개 행 키 전체(정렬)", async () => {
+    expect(await run({ tagged: bigRun(20) })).toBe("completed");
+    expect(state.trackingRows).toHaveLength(120);
+    expect(tx.tracking.createMany).toHaveBeenCalledTimes(2);
+    expect(
+      tx.tracking.createMany.mock.calls.map((c) => c[0].data.length)
+    ).toEqual([100, 20]);
+    expect(state.manifest?.keys).toHaveLength(120);
+    expect(state.manifest?.keys).toEqual(
+      [...(state.manifest?.keys ?? [])].sort()
+    );
+    // 행 키 형식은 그대로
+    expect(state.manifest?.keys).toContain("job-1|core|19|daum");
+    expect(state.manifest?.keys).toContain("job-1|core|0|chatgpt");
+    // 질문은 20개를 createMany 1번으로
+    expect(state.promptCreateManyCalls).toBe(1);
+  });
+
+  it("같은 회차를 다시 저장해도(중복 재시도) 행이 늘지 않고 같은 매니페스트로 완료", async () => {
+    await run({ tagged: bigRun(20) });
+    const first = JSON.stringify(state.manifest);
+    expect(await run({ tagged: bigRun(20) })).toBe("completed");
+    expect(state.trackingRows).toHaveLength(120);
+    expect(JSON.stringify(state.manifest)).toBe(first);
+  });
+
+  it("중간(두 번째 묶음)에서 실패하면 전부 되돌려지고(부분 적재 없음), 다시 하면 처음부터 끝까지 완료", async () => {
+    state.failTrackingCreateOnCall = 2;
+    expect(await run({ tagged: bigRun(20) })).toBe("failed");
+    expect(state.trackingRows).toHaveLength(0);
+    expect(state.manifest).toBeNull();
+    // 복구 크론의 재시도 — 같은 행 키로 처음부터.
+    state.failTrackingCreateOnCall = 0;
+    state.trackingCreateCalls = 0;
+    expect(await run({ tagged: bigRun(20) })).toBe("completed");
+    expect(state.trackingRows).toHaveLength(120);
+    expect(state.manifest?.keys).toHaveLength(120);
+  });
+
+  it("복구 증명이 감당하는 상한(300)을 넘으면 매니페스트를 만들지 않고 failed — 아무것도 쓰지 않는다", async () => {
+    expect(await run({ tagged: bigRun(51) })).toBe("failed"); // 306행
+    expect(state.trackingRows).toHaveLength(0);
+    expect(state.manifest).toBeNull();
+    expect(state.txOptions).toBeUndefined();
+  });
+
+  it("경계: 정확히 300행(50문항 × 6)은 저장된다", async () => {
+    expect(await run({ tagged: bigRun(50) })).toBe("completed");
+    expect(state.trackingRows).toHaveLength(300);
+    expect(state.manifest?.keys).toHaveLength(300);
+  });
+});
+
+describe("복구 SQL 상한은 저장 상한과 같은 상수를 쓴다", () => {
+  it("retireExhaustedTrackingClaim 이 상한을 SQL 파라미터($14)로 넘긴다(리터럴 100 아님)", async () => {
+    const { retireExhaustedTrackingClaim } = await import(
+      "./tracking-replay-policy"
+    );
+    const { TRACKING_MANIFEST_MAX_KEYS } = await import("./tracking-limits");
+    const exec = vi.fn(() => Promise.resolve(1));
+    await retireExhaustedTrackingClaim(
+      { $executeRawUnsafe: exec } as never,
+      "job-1",
+      "tracking",
+      "failed",
+      null
+    );
+    const [sql, ...params] = exec.mock.calls[0] as unknown as [
+      string,
+      ...unknown[],
+    ];
+    expect(sql).toContain("BETWEEN 1 AND $14");
+    expect(sql).not.toMatch(/BETWEEN 1 AND 100\b/);
+    expect(params.at(-1)).toBe(TRACKING_MANIFEST_MAX_KEYS);
+    expect(TRACKING_MANIFEST_MAX_KEYS).toBe(300);
+    expect(params).toHaveLength(14);
   });
 });

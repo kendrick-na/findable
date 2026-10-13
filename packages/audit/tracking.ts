@@ -25,6 +25,11 @@ import {
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { isTrackableResponse } from "./tracking-eligibility";
+import {
+  chunked,
+  TRACKING_INSERT_CHUNK,
+  TRACKING_MANIFEST_MAX_KEYS,
+} from "./tracking-limits";
 
 // Postgres stores text as UTF-8: a lone UTF-16 surrogate (e.g. an emoji cut in
 // half by a provider) comes back as U+FFFD, and NUL is rejected outright. Store
@@ -80,6 +85,23 @@ type ReplayComparable = Record<
 > & {
   trackedAt: Date;
 };
+
+/**
+ * 행을 `TRACKING_INSERT_CHUNK` 개씩 나눠 넣는다(2026-10-14). 호출부와 **같은 트랜잭션**이라 중간에 실패하면
+ * 전부 되돌려지고(부분 적재 없음), 같은 행 키로 다시 써도 `skipDuplicates` 로 멱등이다.
+ */
+async function insertTrackingRows<Row>(
+  tx: {
+    tracking: {
+      createMany(args: { data: Row[]; skipDuplicates: true }): Promise<unknown>;
+    };
+  },
+  rows: Row[]
+): Promise<void> {
+  for (const chunk of chunked(rows, TRACKING_INSERT_CHUNK)) {
+    await tx.tracking.createMany({ data: chunk, skipDuplicates: true });
+  }
+}
 
 async function findExistingRowKeys(
   tx: {
@@ -290,9 +312,10 @@ export async function persistAuditTracking(
       });
       return "failed";
     }
-    // The bounded SQL proof in stale-claim retirement accepts at most 100 keys.
+    // The bounded SQL proof in stale-claim retirement accepts at most
+    // TRACKING_MANIFEST_MAX_KEYS keys (shared constant — `tracking-limits.ts`).
     // Never commit a manifest that the recovery path cannot verify.
-    if (auditJobId && usable.length > 100) {
+    if (auditJobId && usable.length > TRACKING_MANIFEST_MAX_KEYS) {
       log.warn("audit.tracking.manifest_too_large", {
         auditJobId,
         trackingAxis,
@@ -392,7 +415,7 @@ export async function persistAuditTracking(
           tx,
           rows.map((row) => row.trackingRowKey)
         );
-        await tx.tracking.createMany({ data: rows, skipDuplicates: true });
+        await insertTrackingRows(tx, rows);
 
         // A duplicate key is an idempotent replay only if its immutable payload
         // agrees with the first writer. Never overwrite first-write evidence;
