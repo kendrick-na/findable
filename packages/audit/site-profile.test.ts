@@ -5,6 +5,7 @@ vi.mock("@repo/observability/log", () => ({
 }));
 
 import {
+  alternateOrigin,
   extractSiteProfile,
   mergeSiteProfiles,
   THIN_SITE_TEXT_CHARS,
@@ -90,5 +91,17 @@ describe("mergeSiteProfiles — 홈 + 서비스 페이지", () => {
     const merged = mergeSiteProfiles(big, [big, big, big]);
     expect(merged.bodySnippet.length).toBeLessThanOrEqual(2000);
     expect(merged.headings.length).toBeLessThanOrEqual(16);
+  });
+});
+
+describe("alternateOrigin — apex ↔ www", () => {
+  it("apex 는 www 로, www 는 apex 로 바꾼다(포트·프로토콜 유지)", () => {
+    expect(alternateOrigin("https://starbucks.co.kr")).toBe(
+      "https://www.starbucks.co.kr"
+    );
+    expect(alternateOrigin("https://www.skax.com")).toBe("https://skax.com");
+    expect(alternateOrigin("http://example.com:8080")).toBe(
+      "http://www.example.com:8080"
+    );
   });
 });

@@ -267,6 +267,38 @@ export function mergeSiteProfiles(
   };
 }
 
+/** apex ↔ www 짝 주소(예: starbucks.co.kr 은 www 로만 열린다). */
+export function alternateOrigin(origin: string): string {
+  const url = new URL(origin);
+  url.hostname = url.hostname.startsWith("www.")
+    ? url.hostname.slice(4)
+    : `www.${url.hostname}`;
+  return url.origin;
+}
+
+/** 홈을 읽는다. 연결 자체가 안 되면(주소 해석 실패 등) apex ↔ www 짝 주소로 한 번 더 시도한다. */
+async function fetchHome(
+  origin: string,
+  signal: AbortSignal
+): Promise<{ html: string; origin: string }> {
+  try {
+    return {
+      html: await fetchText(new URL("/", origin), signal, "html"),
+      origin,
+    };
+  } catch (error) {
+    const alt = alternateOrigin(origin);
+    try {
+      return {
+        html: await fetchText(new URL("/", alt), signal, "html"),
+        origin: alt,
+      };
+    } catch {
+      throw error;
+    }
+  }
+}
+
 /**
  * 질문 제안용으로 사이트를 읽는다: 홈 + 사이트맵의 서비스 소개 페이지 최대 3쪽(robots.txt 금지 경로는 읽지 않는다).
  * 실패·시간 초과·robots 로 홈이 막힌 경우는 null(제안을 막지 않는다).
@@ -275,11 +307,11 @@ export async function readSiteProfile(
   domain: string
 ): Promise<SiteProfile | null> {
   try {
-    const origin = normalizePublicUrl(domain).origin;
+    const requested = normalizePublicUrl(domain).origin;
     const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-    const [robots, homeHtml, sitemap] = await Promise.all([
+    const { html: homeHtml, origin } = await fetchHome(requested, signal);
+    const [robots, sitemap] = await Promise.all([
       orNull(fetchText(new URL("/robots.txt", origin), signal, "text")),
-      fetchText(new URL("/", origin), signal, "html"),
       orNull(fetchText(new URL("/sitemap.xml", origin), signal, "text")),
     ]);
     const disallow = robots ? parseRobotsDisallow(robots) : [];
@@ -290,7 +322,7 @@ export async function readSiteProfile(
     let home = extractSiteProfile(homeHtml);
     // 일반 읽기로 글자가 거의 없으면(JS 로 그리는 사이트) 브라우저로 그려 한 번 더 읽는다(꺼져 있으면 건너뜀).
     if (home.thin) {
-      const rendered = await renderSiteHtml(domain);
+      const rendered = await renderSiteHtml(origin);
       if (rendered) {
         const renderedProfile = extractSiteProfile(rendered);
         if (
