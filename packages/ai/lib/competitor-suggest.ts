@@ -17,6 +17,7 @@
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { findEngineName } from "./engine-names";
 import {
   HELPER_GATEWAY_MODEL_ID,
   letsurModelWithFallback,
@@ -90,6 +91,144 @@ export async function suggestCompetitors(input: {
     return out.competitors.map((c: string) => c.trim()).filter(Boolean);
   } catch (error) {
     log.warn("competitor.suggest.failed", {
+      domain: input.domain,
+      error: String(error),
+    });
+    return [];
+  }
+}
+
+// ── 웹 검색으로 근거를 둔 경쟁사 후보 (2026-10-15 · 대표 승인) ─────────────────────
+//
+// 왜: 위 `suggestCompetitors` 는 모델의 **기억**에만 기댄다. 신생 카테고리(예: Findable 의 GEO)는 모델이 몰라서
+//   `confident=false` → 항상 빈 배열이 됐다(재현 3/3 · 사이트 설명을 줘도 SEO 도구만 나열). 같은 질문을 **웹 검색이 되는
+//   엔진(ChatGPT)** 에 던지면 실제 경쟁사(Profound·Peec AI·Otterly·Scrunch·AthenaHQ…)가 나왔다.
+// 후보만 만든다(사람이 고른 것만 저장 — Otterly 오분류 사고 반면교사). 자사 이름·AI 엔진 이름은 후보에서 뺀다.
+
+export interface GroundedSite {
+  bodySnippet?: string | null;
+  description?: string | null;
+  headings?: readonly string[] | null;
+  title?: string | null;
+}
+
+export interface GroundedDeps {
+  /** 사이트 재료 → 서비스 분야 한 줄(고유명사 없음). 못 만들면 null. */
+  categoryOf: (input: {
+    brandName: string;
+    industry?: string | null;
+    site: GroundedSite;
+  }) => Promise<string | null>;
+  /** 답변에서 나열된 브랜드 이름. 실패면 null. */
+  extract: (answer: string) => Promise<string[] | null>;
+  /** 웹 검색이 되는 엔진에 질문해 답변 본문을 받는다. 실패면 null. */
+  search: (question: string) => Promise<string | null>;
+}
+
+const MAX_GROUNDED = 6;
+const NON_IDENTITY_RE = /[^a-z0-9가-힣]/g;
+const compactKey = (v: string) => v.toLowerCase().replace(NON_IDENTITY_RE, "");
+
+/** 후보에서 자사 이름·AI 엔진 이름·중복을 뺀다(순수 함수). */
+export function filterCompetitorCandidates(
+  names: readonly string[],
+  ownNames: readonly string[]
+): string[] {
+  const own = ownNames.map(compactKey).filter((k) => k.length >= 2);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    const k = compactKey(name);
+    if (
+      k.length < 2 ||
+      seen.has(k) ||
+      own.some((o) => k.includes(o) || o.includes(k)) ||
+      findEngineName(name)
+    ) {
+      continue;
+    }
+    seen.add(k);
+    out.push(name);
+  }
+  return out.slice(0, MAX_GROUNDED);
+}
+
+const categorySchema = z.object({
+  category: z
+    .string()
+    .describe(
+      "이 회사가 제공하는 서비스 분야를 한 줄로(20자 안팎). 회사·브랜드·제품 고유명사와 AI 서비스 이름은 넣지 말 것. 모르면 빈 문자열."
+    )
+    .default(""),
+});
+
+const defaultDeps: GroundedDeps = {
+  async categoryOf({ brandName, industry, site }) {
+    try {
+      const { object } = await generateObject({
+        model: competitorSuggestModel(),
+        schema: categorySchema,
+        prompt: `"${brandName}"의 공식 사이트 문구로 이 회사가 제공하는 **서비스 분야**를 한 줄로 써줘(예: '신생아용 보습 스킨케어', '기업용 협업 소프트웨어'). 회사 이름·제품 고유명사는 쓰지 마.\n업종: ${industry ?? "알 수 없음"}\n제목: ${site.title ?? ""}\n설명: ${site.description ?? ""}\n소제목: ${(site.headings ?? []).slice(0, 8).join(" / ")}\n본문: ${(site.bodySnippet ?? "").slice(0, 500)}`,
+      });
+      const category = object.category.trim();
+      return category.length >= 4 && category.length <= 60 ? category : null;
+    } catch {
+      return null;
+    }
+  },
+  async search(question) {
+    // 순환 import 를 피하려고 필요할 때만 불러온다.
+    const { queryEngine } = await import("./engines");
+    const res = await queryEngine({
+      engineId: "chatgpt",
+      language: "ko",
+      prompt: question,
+    });
+    return res.errorMessage || res.isStub || !res.rawResponse
+      ? null
+      : res.rawResponse;
+  },
+  async extract(answer) {
+    const { extractListedBrands } = await import("./answer-brands");
+    return extractListedBrands(answer);
+  },
+};
+
+/**
+ * 서비스 분야 질문을 웹 검색 엔진에 던져 실제 경쟁사 후보를 만든다. 실패·근거 없음이면 빈 배열(지어내지 않는다).
+ * 호출: 분야 정리 1(Haiku) + 웹 검색 1(ChatGPT) + 이름 추출 1(Haiku) — 온보딩에서 브랜드당 1번.
+ */
+export async function suggestCompetitorsGrounded(
+  input: {
+    aliases?: readonly string[];
+    brandName: string;
+    domain: string;
+    industry?: string | null;
+    site: GroundedSite;
+  },
+  deps: GroundedDeps = defaultDeps
+): Promise<string[]> {
+  try {
+    const category = await deps.categoryOf(input);
+    if (!category) {
+      return [];
+    }
+    const answer = await deps.search(
+      `${category} 분야에서 많이 쓰는 유명한 서비스·브랜드를 5~8곳 알려줘`
+    );
+    if (!answer) {
+      return [];
+    }
+    const brands = await deps.extract(answer);
+    const stem = normalizeHost(input.domain).split(".")[0] ?? "";
+    return filterCompetitorCandidates(brands ?? [], [
+      input.brandName,
+      ...(input.aliases ?? []),
+      stem,
+    ]);
+  } catch (error) {
+    log.warn("competitor.suggest.grounded_failed", {
       domain: input.domain,
       error: String(error),
     });

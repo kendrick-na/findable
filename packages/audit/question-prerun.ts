@@ -47,16 +47,45 @@ export function isQuestionPrerunEnabled(
   return keys().QUESTION_PRERUN_ENABLED === true && !isVercelPreview(env);
 }
 
-/** 답변 한 개에서 신호를 만든다(순수 함수). */
-export function signalOfAnswer(
+/** 답변에서 나열된 브랜드 이름을 뽑는 함수(주입). 판단할 수 없으면 null. */
+export type BrandExtractor = (answer: string) => Promise<string[] | null>;
+
+const NON_IDENTITY_RE = /[^a-z0-9가-힣]/g;
+const compactKey = (v: string) => v.toLowerCase().replace(NON_IDENTITY_RE, "");
+
+/**
+ * 답변 한 개에서 신호를 만든다.
+ * 🔴 번호 목록 파서(`extractCompetitorLandscape`)만으로는 표·글머리표·문장으로 나열된 답변을 "브랜드 0개"로 잘못 읽었다
+ *   (2026-10-15 운영 화면: "간편 송금 서비스 뭐가 좋아?"가 '브랜드가 안 나와요'). 이름 추출은 주입된 추출기가 하고,
+ *   추출기가 실패하면(null) 0개로 단정하지 않고 error 로 둔다. 우리 브랜드 노출 판정은 기존 감지 함수를 그대로 쓴다.
+ */
+export async function signalOfAnswer(
   text: string,
   rawResponse: string,
   brand: {
     competitors?: readonly (KnownCompetitor | string)[];
     name: string;
     variants?: readonly string[];
+  },
+  extractBrands: BrandExtractor
+): Promise<PrerunSignal> {
+  const names = await extractBrands(rawResponse);
+  if (names === null) {
+    return { text, brandsListed: 0, ours: false, error: true };
   }
-): PrerunSignal {
+  const own = [brand.name, ...(brand.variants ?? [])]
+    .map(compactKey)
+    .filter((k) => k.length >= 2);
+  const others = new Set<string>();
+  let namedOurs = false;
+  for (const name of names) {
+    const k = compactKey(name);
+    if (own.some((o) => k.includes(o) || o.includes(k))) {
+      namedOurs = true;
+    } else if (k.length >= 2) {
+      others.add(k);
+    }
+  }
   const landscape = extractCompetitorLandscape(
     [rawResponse],
     brand.name,
@@ -65,8 +94,8 @@ export function signalOfAnswer(
   );
   return {
     text,
-    brandsListed: landscape.ranking.length,
-    ours: landscape.brandFound,
+    brandsListed: others.size,
+    ours: namedOurs || landscape.brandFound,
   };
 }
 
@@ -78,7 +107,8 @@ export async function prerunQuestions(
     name: string;
     variants?: readonly string[];
   },
-  run: PrerunRunner
+  run: PrerunRunner,
+  extractBrands: BrandExtractor
 ): Promise<PrerunSignal[]> {
   const list = questions.slice(0, PRERUN_MAX_QUESTIONS);
   const out: PrerunSignal[] = new Array(list.length);
@@ -96,7 +126,12 @@ export async function prerunQuestions(
         out[index] =
           result.errorMessage || result.isStub || !result.rawResponse
             ? { text, brandsListed: 0, ours: false, error: true }
-            : signalOfAnswer(text, result.rawResponse, brand);
+            : await signalOfAnswer(
+                text,
+                result.rawResponse,
+                brand,
+                extractBrands
+              );
       } catch {
         out[index] = { text, brandsListed: 0, ours: false, error: true };
       }

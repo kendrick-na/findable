@@ -2212,7 +2212,7 @@
       "rowNamed": "우리 이름을 넣은 질문",
       "rowNameless": "이름 없이 추천을 묻는 질문",
       "counts": "AI 답변 {n}개 중 {m}개에서 나옴",
-      "competitorsAvg": "같은 질문에서 AI가 나열한 다른 브랜드는 평균 {n}곳이에요.",
+      "competitorsAvg": "AI가 번호 목록으로 나열한 다른 브랜드는 평균 {n}곳이에요. 표·문장으로 나열한 것은 세지 않아 실제는 더 많을 수 있어요.",
       "baselineFirst": "이번이 첫 기준선이에요. 다음 측정부터 변화를 보여 드려요.",
       "baselineSame": "처음 측정({date}) 대비 이름 없는 질문 노출 {from}% → {to}%",
       "baselineChanged": "질문이 바뀌어서 처음 측정과 숫자로 비교할 수 없어요."

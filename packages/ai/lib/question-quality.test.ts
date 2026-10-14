@@ -27,6 +27,7 @@ import {
   industryFrame,
   type PlanGuardContext,
   type PlanQuestion,
+  vetCategoryPhrase,
 } from "./question-plan";
 
 const q = (
@@ -335,7 +336,7 @@ const findableInput = {
   industry: "b2b_saas",
   marketScope: "korea" as const,
   site: {
-    description: "AI 검색 모니터링 GEO 플랫폼",
+    description: "AI 검색 가시성 진단 · 모니터링 GEO 플랫폼",
     h1: null,
     siteName: "Findable",
     title: "Findable | AI 검색 모니터링",
@@ -570,5 +571,67 @@ describe("답변 유형 — 브랜드가 나열되는 질문 vs 설명만 하는
     expect(
       composeQuestions(pool, "korea").filter((x) => x.type === "category")
     ).toHaveLength(8);
+  });
+});
+
+describe("대안 고정 문형에 서비스 분야 이름 넣기(2026-10-15 · IR덱 세션 지적)", () => {
+  it("분야 이름이 있으면 한국어 대안 문형에 들어간다(업종 라벨 'B2B 소프트웨어'만 쓰던 모호함 해소)", () => {
+    const alt = fixedAlternativeQuestions(
+      "b2b_saas",
+      "korea",
+      "AI 검색 가시성 진단 서비스"
+    );
+    expect(alt.map((a) => a.text)).toEqual([
+      "AI 검색 가시성 진단 서비스 중에 비교해 볼 만한 다른 선택지는 뭐가 있어?",
+      "AI 검색 가시성 진단 서비스 대신 많이 쓰는 대안 알려줘",
+    ]);
+  });
+
+  it("분야 이름이 없으면 예전 업종 일반 문형 그대로", () => {
+    expect(
+      fixedAlternativeQuestions("b2b_saas", "korea", null)[0]?.text
+    ).toContain("B2B 소프트웨어");
+  });
+
+  it("영어 문형은 분야 이름을 넣지 않는다(한국어 구절이 영어 문장에 섞이지 않게)", () => {
+    const en = fixedAlternativeQuestions(
+      "beauty",
+      "global",
+      "신생아용 보습 스킨케어"
+    );
+    expect(
+      en.every((a) => a.language === "en" && !/[가-힣]/.test(a.text))
+    ).toBe(true);
+  });
+
+  it("vetCategoryPhrase: 정상 분야 이름은 통과, 브랜드·엔진 이름·전제·너무 짧거나 긴 것은 버린다", () => {
+    expect(vetCategoryPhrase("AI 검색 가시성 진단 서비스.", findable)).toBe(
+      "AI 검색 가시성 진단 서비스"
+    );
+    expect(vetCategoryPhrase("Findable 같은 진단 서비스", findable)).toBeNull();
+    expect(vetCategoryPhrase("ChatGPT 노출 진단 서비스", findable)).toBeNull();
+    expect(vetCategoryPhrase("Profound 류의 서비스", findable)).toBeNull(); // 입력에 없는 고유명사
+    expect(vetCategoryPhrase("순위 높다고 한 서비스", findable)).toBeNull();
+    expect(vetCategoryPhrase("서비스", findable)).toBeNull();
+    expect(vetCategoryPhrase("센드버드 서비스", findable)).toBeNull(); // 사이트에 없는 이름만 있는 분야 이름
+    expect(vetCategoryPhrase("가".repeat(60), findable)).toBeNull();
+    expect(vetCategoryPhrase("", findable)).toBeNull();
+  });
+
+  it("통합: 모델이 준 분야 이름이 최종 대안 질문에 들어가고, 오염된 분야 이름은 업종 문형으로 물러난다", async () => {
+    h.generateObject.mockResolvedValue(
+      llm({ categoryPhrase: "AI 검색 가시성 진단 서비스" })
+    );
+    const ok = await suggestTrackingPrompts(findableInput);
+    expect(
+      ok.prompts.filter((p) => p.type === "alternative").map((p) => p.text)[0]
+    ).toContain("AI 검색 가시성 진단 서비스");
+    h.generateObject.mockResolvedValue(
+      llm({ categoryPhrase: "센드버드 같은 서비스" })
+    );
+    const bad = await suggestTrackingPrompts(findableInput);
+    expect(
+      bad.prompts.filter((p) => p.type === "alternative").map((p) => p.text)[0]
+    ).toContain("B2B 소프트웨어");
   });
 });

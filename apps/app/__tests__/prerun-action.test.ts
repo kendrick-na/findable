@@ -11,6 +11,9 @@ const h = vi.hoisted(() => ({
   brand: { current: null as unknown },
 }));
 vi.mock("@repo/ai/lib/engines", () => ({ queryEngine: h.queryEngine }));
+vi.mock("@repo/ai/lib/answer-brands", () => ({
+  extractListedBrands: () => Promise.resolve(["라운드랩", "토리든", "아누아"]),
+}));
 vi.mock("@repo/audit/question-prerun", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   isQuestionPrerunEnabled: () => h.enabled,

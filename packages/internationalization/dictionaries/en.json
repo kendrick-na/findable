@@ -2212,7 +2212,7 @@
       "rowNamed": "Questions with your brand name",
       "rowNameless": "Nameless questions asking for recommendations",
       "counts": "Appeared in {m} of {n} AI answers",
-      "competitorsAvg": "On the same questions, AI listed {n} other brands on average.",
+      "competitorsAvg": "On the same questions, AI listed {n} other brands on average in numbered lists. Brands in tables or prose aren't counted, so the real number may be higher.",
       "baselineFirst": "This is your first baseline. We'll show the change from the next run.",
       "baselineSame": "Since the first run ({date}): nameless-question visibility {from}% → {to}%",
       "baselineChanged": "The questions changed, so the numbers can't be compared with the first run."

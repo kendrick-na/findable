@@ -32,24 +32,45 @@ describe("isQuestionPrerunEnabled — 기본 off, Preview 에서는 항상 off",
   });
 });
 
-describe("signalOfAnswer", () => {
-  it("번호 목록의 브랜드 수를 센다", () => {
-    const s = signalOfAnswer("민감성 크림 추천해줘", list, brand);
-    expect(s.brandsListed).toBeGreaterThanOrEqual(3);
+const tableAnswer =
+  "| 브랜드 | 특징 |\n|---|---|\n| **토스** | 송금 |\n| **카카오페이** | 결제 |\n| **페이코** | 포인트 |";
+const extractor = (names: string[] | null) => vi.fn(async () => names);
+
+describe("signalOfAnswer — 표·문장으로 나열된 답변도 센다(번호 목록이 아니어도)", () => {
+  it("표로 나열된 답변: 추출기가 준 브랜드 수를 센다", async () => {
+    const s = await signalOfAnswer(
+      "송금 서비스 뭐가 좋아?",
+      tableAnswer,
+      { name: "프란츠" },
+      extractor(["토스", "카카오페이", "페이코"])
+    );
+    expect(s.brandsListed).toBe(3);
     expect(s.ours).toBe(false);
+    expect(s.error).toBeUndefined();
   });
-  it("설명만 하고 브랜드가 없는 답변은 0개", () => {
-    const s = signalOfAnswer(
+  it("설명만 하고 브랜드가 없는 답변은 0개(정상 판정)", async () => {
+    const s = await signalOfAnswer(
       "SEO랑 달라?",
-      "GEO는 AI 답변에서의 노출을 다루는 개념입니다. SEO는 검색 순위를 다룹니다.",
-      brand
+      "GEO는 AI 답변에서의 노출을 다루는 개념입니다.",
+      brand,
+      extractor([])
     );
     expect(s.brandsListed).toBe(0);
+    expect(s.error).toBeUndefined();
   });
-  it("우리 브랜드가 나오면 ours", () => {
-    expect(signalOfAnswer("q", `${list}프란츠도 있습니다.`, brand).ours).toBe(
-      true
+  it("우리 브랜드가 나오면 ours, 우리 이름은 '다른 브랜드' 수에서 뺀다", async () => {
+    const s = await signalOfAnswer(
+      "q",
+      tableAnswer,
+      { name: "토스" },
+      extractor(["토스", "카카오페이"])
     );
+    expect(s.ours).toBe(true);
+    expect(s.brandsListed).toBe(1);
+  });
+  it("추출기가 실패(null)하면 0개로 단정하지 않고 error 로 둔다", async () => {
+    const s = await signalOfAnswer("q", tableAnswer, brand, extractor(null));
+    expect(s).toMatchObject({ error: true, brandsListed: 0 });
   });
 });
 
@@ -63,7 +84,9 @@ describe("prerunQuestions", () => {
     const out = await prerunQuestions(
       ["크림 추천해줘", "설명해줘 설명", "토너 추천해줘"],
       brand,
-      run
+      run,
+      async (answer) =>
+        answer.includes("설명만") ? [] : ["라운드랩", "토리든"]
     );
     expect(run).toHaveBeenCalledTimes(3);
     expect(out.map((o) => o.text)).toEqual([
@@ -97,7 +120,8 @@ describe("prerunQuestions", () => {
     const out = await prerunQuestions(
       ["a 질문", "b 질문", "c 질문", "d 질문"],
       brand,
-      run
+      run,
+      async () => ["라운드랩"]
     );
     expect(out.map((o) => Boolean(o.error))).toEqual([true, true, true, false]);
   });
@@ -111,7 +135,8 @@ describe("prerunQuestions", () => {
     await prerunQuestions(
       Array.from({ length: 40 }, (_, i) => `질문 ${i}`),
       brand,
-      run
+      run,
+      async () => ["라운드랩"]
     );
     expect(run).toHaveBeenCalledTimes(PRERUN_MAX_QUESTIONS);
   });
@@ -122,7 +147,12 @@ describe("prerunQuestions", () => {
       isStub: false,
       rawResponse: list,
     }));
-    await prerunQuestions(["크림 추천해줘", "best moisturizers?"], brand, run);
+    await prerunQuestions(
+      ["크림 추천해줘", "best moisturizers?"],
+      brand,
+      run,
+      async () => ["라운드랩"]
+    );
     expect(run.mock.calls.map((c) => c[0].language)).toEqual(["ko", "en"]);
   });
 });

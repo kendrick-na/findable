@@ -514,7 +514,8 @@ export function industryFrame(
  */
 export function fixedAlternativeQuestions(
   industry: string | null | undefined,
-  scope: PlanMarketScope | null | undefined
+  scope: PlanMarketScope | null | undefined,
+  categoryPhrase?: string | null
 ): PlanQuestion[] {
   const label = industryLabel(industry);
   if (!label) {
@@ -522,13 +523,90 @@ export function fixedAlternativeQuestions(
   }
   const forms = industryFrame(industry).alternativeForms;
   const targets = targetCounts(scope).alternative;
-  return (["ko", "en"] as const).flatMap((language) =>
-    forms[language].slice(0, targets[language]).map((form) => ({
+  return (["ko", "en"] as const).flatMap((language) => {
+    // 한국어 문형에는 사이트에서 읽은 '서비스 분야'를 넣는다(없으면 업종별 일반 문형). 영어 문형은 일반 문형 그대로.
+    const phrased =
+      language === "ko" && categoryPhrase
+        ? categoryAlternativeForms(categoryPhrase)
+        : forms[language];
+    return phrased.slice(0, targets[language]).map((form) => ({
       language,
       type: "alternative" as const,
       text: form,
-    }))
-  );
+    }));
+  });
+}
+
+const MIN_KNOWN_TOKEN_SHARE = 0.6;
+const EXAMPLE_REFERENCE_RE = /같은|처럼|류의|류$|등의|와 비슷|과 비슷/;
+const GENERIC_CATEGORY_WORDS = new Set([
+  "서비스",
+  "제품",
+  "브랜드",
+  "솔루션",
+  "플랫폼",
+  "도구",
+  "툴",
+  "앱",
+  "업체",
+  "회사",
+  "시스템",
+  "전용",
+  "관리",
+  "분석",
+  "용",
+  "및",
+  "기반",
+]);
+const WHITESPACE_RUN_RE = /\s+/g;
+const TRAILING_PUNCT_RE = /[.?!。]+$/;
+
+/** 서비스 분야 이름을 넣은 한국어 대안 문형. */
+export function categoryAlternativeForms(phrase: string): readonly string[] {
+  return [
+    `${phrase} 중에 비교해 볼 만한 다른 선택지는 뭐가 있어?`,
+    `${phrase} 대신 많이 쓰는 대안 알려줘`,
+  ];
+}
+
+/**
+ * 모델이 준 '서비스 분야 이름'이 고정 문형에 들어가도 되는지 검사한다. 통과하면 정리된 문구, 아니면 null(→ 업종 일반 문형).
+ * 브랜드·별칭·AI 엔진 이름, 입력에 없는 고유명사, 전제 표현이 들어 있으면 버린다. 길이 4~40자.
+ */
+export function vetCategoryPhrase(
+  raw: string | null | undefined,
+  ctx: PlanGuardContext
+): string | null {
+  const phrase = (raw ?? "")
+    .replace(WHITESPACE_RUN_RE, " ")
+    .trim()
+    .replace(TRAILING_PUNCT_RE, "");
+  if (phrase.length < 4 || phrase.length > 40) {
+    return null;
+  }
+  if (
+    findEngineName(phrase) ||
+    containsAnyName(phrase, ctx.brandNames) ||
+    PRESUPPOSITION_RE.test(phrase) ||
+    EXAMPLE_REFERENCE_RE.test(phrase) ||
+    findUnknownProperNoun(phrase, ctx)
+  ) {
+    return null;
+  }
+  // 분야 이름은 사이트에서 읽은 말로 만들어져야 한다 — 일반 단어를 뺀 나머지 중 사이트 문구·업종 이름에 있는 비율이 60% 미만이면
+  //   (예: 지어낸 회사 이름이 섞임) 버리고 업종 일반 문형으로 물러난다.
+  const site = compact(ctx.siteText);
+  const label = industryLabel(ctx.industry);
+  const known = `${site}${compact(label?.ko ?? "")}${compact(label?.en ?? "")}`;
+  const content = phrase
+    .split(" ")
+    .map(compact)
+    .filter((t) => t.length >= 2 && !GENERIC_CATEGORY_WORDS.has(t));
+  const knownCount = content.filter((t) => known.includes(t)).length;
+  return content.length === 0 ||
+    knownCount / content.length >= MIN_KNOWN_TOKEN_SHARE
+    ? phrase
+    : null;
 }
 
 // ── 질문 속 고유명사·전제 검사 ───────────────────────────────────────────

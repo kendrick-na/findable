@@ -12,6 +12,8 @@ const h = vi.hoisted(() => ({
   suggestTrackingPrompts: vi.fn(),
   resolveIndustryProfile: vi.fn(),
   suggestCompetitors: vi.fn(),
+  suggestCompetitorsGrounded: vi.fn(),
+  readSite: vi.fn(),
   generateContentDraft: vi.fn(),
   revalidateStoredAuditResult: vi.fn(),
   findUnique: vi.fn(),
@@ -35,24 +37,14 @@ vi.mock("@repo/ai/lib/industry-profile", () => ({
 }));
 vi.mock("@repo/ai/lib/competitor-suggest", () => ({
   suggestCompetitors: h.suggestCompetitors,
+  suggestCompetitorsGrounded: h.suggestCompetitorsGrounded,
 }));
 vi.mock("@repo/ai/lib/content-draft", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   generateContentDraft: h.generateContentDraft,
 }));
 vi.mock("@repo/audit/site-profile", () => ({
-  readSiteProfile: () =>
-    Promise.resolve({
-      bodySnippet: "",
-      description: "민감성 피부 진정 크림",
-      faq: [],
-      h1: null,
-      headings: [],
-      jsonLdFacts: [],
-      siteName: "테스트",
-      thin: false,
-      title: "테스트 | 스킨케어",
-    }),
+  readSiteProfile: (...args: unknown[]) => h.readSite(...args),
 }));
 vi.mock("@repo/audit/revalidate-stored-audit", () => ({
   revalidateStoredAuditResult: h.revalidateStoredAuditResult,
@@ -118,6 +110,17 @@ beforeEach(() => {
     fn.mockReset();
   }
   h.lookupStaticBrandName.mockReturnValue(null);
+  h.readSite.mockResolvedValue({
+    bodySnippet: "",
+    description: "민감성 피부 진정 크림",
+    faq: [],
+    h1: null,
+    headings: [],
+    jsonLdFacts: [],
+    siteName: "테스트",
+    thin: false,
+    title: "테스트 | 스킨케어",
+  });
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -236,15 +239,44 @@ describe("on production (unchanged behaviour)", () => {
     expect(h.resolveIndustryProfile).toHaveBeenCalledTimes(1);
   });
 
-  it("onboarding competitor suggestion calls the LLM helper", async () => {
-    h.suggestCompetitors.mockResolvedValue(["A", "B"]);
+  it("onboarding competitor suggestion: 기억만으로 3곳 이상이면 그대로(웹 검색 없음)", async () => {
+    h.suggestCompetitors.mockResolvedValue(["A", "B", "C"]);
     expect(
       await suggestCompetitorsUnlessPreview({
         brandName: "b",
         domain: "x.test",
       })
-    ).toEqual(["A", "B"]);
+    ).toEqual(["A", "B", "C"]);
     expect(h.suggestCompetitors).toHaveBeenCalledTimes(1);
+    expect(h.suggestCompetitorsGrounded).not.toHaveBeenCalled();
+  });
+
+  it("onboarding competitor suggestion: 기억이 3곳 미만이면 웹 검색 근거 후보를 합친다(중복 제거)", async () => {
+    h.suggestCompetitors.mockResolvedValue(["A", "B"]);
+    h.suggestCompetitorsGrounded.mockResolvedValue([
+      "b",
+      "Profound",
+      "Peec AI",
+    ]);
+    expect(
+      await suggestCompetitorsUnlessPreview({
+        brandName: "b",
+        domain: "x.test",
+      })
+    ).toEqual(["A", "B", "Profound", "Peec AI"]);
+    expect(h.suggestCompetitorsGrounded).toHaveBeenCalledTimes(1);
+  });
+
+  it("onboarding competitor suggestion: 사이트를 못 읽으면 기억 결과만", async () => {
+    h.suggestCompetitors.mockResolvedValue([]);
+    h.readSite.mockResolvedValueOnce(null);
+    expect(
+      await suggestCompetitorsUnlessPreview({
+        brandName: "b",
+        domain: "x.test",
+      })
+    ).toEqual([]);
+    expect(h.suggestCompetitorsGrounded).not.toHaveBeenCalled();
   });
 
   it("content draft calls the LLM generator", async () => {

@@ -1,5 +1,6 @@
 "use server";
 
+import { extractListedBrands } from "@repo/ai/lib/answer-brands";
 import { queryEngine } from "@repo/ai/lib/engines";
 import { parseKnownCompetitors } from "@repo/audit/competitor-extract";
 import {
@@ -79,7 +80,8 @@ export const prerunQuestionsAction = async (input: {
           isStub: res.isStub,
           rawResponse: res.rawResponse,
         };
-      }
+      },
+      extractListedBrands
     );
     return { ok: true, signals };
   } catch (error) {

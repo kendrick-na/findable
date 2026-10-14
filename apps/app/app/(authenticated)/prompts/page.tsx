@@ -1,4 +1,3 @@
-import { parseKnownCompetitors } from "@repo/audit/competitor-extract";
 import {
   activePromptFilter,
   archivedPromptIds,
@@ -20,12 +19,7 @@ import {
 import { deletePromptAction } from "@/app/actions/brand/delete-prompt";
 import { editPromptAction } from "@/app/actions/brand/edit-prompt";
 import { prerunInjection } from "@/lib/brand/prerun-injection";
-import { zeroSignalPromptTexts } from "@/lib/brand/zero-signal";
-import {
-  requireOrg,
-  scopedBrands,
-  scopedLatestOrgAudit,
-} from "@/lib/db/scoped";
+import { requireOrg, scopedBrands } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 import { Header } from "../components/header";
 import { PromptWizard } from "../features/brand/prompt-wizard";
@@ -120,26 +114,6 @@ const PromptsPage = async () => {
         })
       : [];
 
-  // 최근 측정에서 아직 어떤 브랜드도 안 나온 질문(참고용 표시 — 점수·삭제에는 영향 없음).
-  const zeroSignalByBrand = new Map<string, Set<string>>();
-  await Promise.all(
-    brands.map(async (brand) => {
-      const latest = await scopedLatestOrgAudit(brand.id).catch(() => null);
-      zeroSignalByBrand.set(
-        brand.id,
-        zeroSignalPromptTexts(latest?.result, {
-          name: brand.name,
-          variants: Array.isArray(brand.entityVariants)
-            ? brand.entityVariants.filter(
-                (v): v is string => typeof v === "string"
-              )
-            : [],
-          competitors: parseKnownCompetitors(brand.competitors),
-        })
-      );
-    })
-  );
-
   return (
     <>
       <Header page={t.title} pages={["Findable"]} />
@@ -228,10 +202,6 @@ const PromptsPage = async () => {
                     language: prompt.language,
                     category: prompt.category,
                     measuredCount: prompt._count.trackings,
-                    zeroSignal:
-                      zeroSignalByBrand
-                        .get(brand.id)
-                        ?.has(prompt.text.trim()) ?? false,
                   }))}
                   t={dict.promptList}
                 />

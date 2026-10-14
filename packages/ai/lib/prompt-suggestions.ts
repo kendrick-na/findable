@@ -33,6 +33,7 @@ import {
   type QuestionType,
   targetCounts,
   topicOfType,
+  vetCategoryPhrase,
 } from "./question-plan";
 
 // brand-identity.ts와 동일 모델 라우팅(Letsur haiku 우선, 구조화 출력 라이브 검증됨).
@@ -181,6 +182,12 @@ const suggestionSchema = z.object({
       "브랜드를 직접 묻는 질문. 반드시 브랜드명을 넣을 것. 예시는 프롬프트의 [업종 틀]을 따른다(업종에 맞지 않는 구매처 질문 금지)."
     )
     .default([]),
+  categoryPhrase: z
+    .string()
+    .describe(
+      "이 브랜드가 속한 서비스 분야 이름 한 줄(예: 'AI 검색 가시성 진단 서비스', '신생아용 보습 스킨케어'). 회사·브랜드·제품 고유명사와 AI 서비스 이름은 절대 넣지 말 것. 모르면 빈 문자열."
+    )
+    .default(""),
   confident: z
     .boolean()
     .describe(
@@ -346,17 +353,20 @@ export async function suggestTrackingPrompts(
     const hasCompetitors = (input.competitors?.length ?? 0) > 0;
     let all: PlanQuestion[] = [];
     let confident = true;
+    let categoryPhrase: string | null = null;
     // 처음 1번 + 모자라면 1번 더(합쳐서 다시 거른다). 추가 호출은 최대 1회.
     for (let attempt = 0; attempt < 2; attempt++) {
       const round = await generateCandidates(input, scope);
       all = [...all, ...round.questions];
       confident = confident && round.confident;
+      categoryPhrase ??= vetCategoryPhrase(round.categoryPhrase, ctx);
       const guarded = guardQuestions(all, ctx);
       const composed = composeWithFixedAlternatives(
         composeQuestions(guarded.kept, scope, { preferListing: true }),
         input,
         scope,
-        hasCompetitors
+        hasCompetitors,
+        categoryPhrase
       );
       if (attempt === 0 && guarded.dropped.length > 0) {
         log.info("prompt.suggest.guard_dropped", {
@@ -392,21 +402,26 @@ function composeWithFixedAlternatives(
   composed: PlanQuestion[],
   input: SuggestInput,
   scope: PlanMarketScope,
-  hasCompetitors: boolean
+  hasCompetitors: boolean,
+  categoryPhrase: string | null
 ): PlanQuestion[] {
   if (hasCompetitors) {
     return composed;
   }
   return [
     ...composed.filter((q) => q.type !== "alternative"),
-    ...fixedAlternativeQuestions(input.industry, scope),
+    ...fixedAlternativeQuestions(input.industry, scope, categoryPhrase),
   ];
 }
 
 async function generateCandidates(
   input: SuggestInput,
   scope: PlanMarketScope
-): Promise<{ confident: boolean; questions: PlanQuestion[] }> {
+): Promise<{
+  categoryPhrase: string;
+  confident: boolean;
+  questions: PlanQuestion[];
+}> {
   const targets = targetCounts(scope);
   const want = (type: QuestionType) =>
     (["ko", "en"] as const)
@@ -456,6 +471,7 @@ async function generateCandidates(
 - ChatGPT·Claude·Gemini 같은 **AI 서비스·모델 이름을 질문에 쓰지 마.**
 - 브랜드 이름의 뜻을 풀어서 질문을 만들지 마(예: 이름이 '넘버즈인'이라고 '번호 매긴 제품'으로 쓰기 금지).
 - "~라고 했는데", "~있다던데"처럼 **들은 이야기를 전제로 까는 문장 금지.** 질문은 전제 없이 바로 묻는다.
+- categoryPhrase 에는 이 브랜드가 속한 **서비스 분야 이름**을 한 줄로 적어(고유명사·AI 서비스 이름 금지). 다른 선택지를 묻는 고정 질문에 쓰인다.
 - 각 질문의 basis 에 재료 출처를 적어(brand·competitor·industry·site). 대표 제품 질문은 site 만 가능.
 - 질문이 브랜드 이름의 뜻을 풀어서(이름 속 단어를 번역·설명해서) 나왔으면 fromName=true 로 표시해. 이름 뜻을 질문 소재로 삼는 것은 금지야.
 - 언어는 각 항목의 language 에 맞게(ko=한국어, en=영어) 자연스럽게.`,
@@ -469,6 +485,7 @@ async function generateCandidates(
     type: QuestionType
   ): PlanQuestion[] => items.map((i) => ({ ...i, type }));
   return {
+    categoryPhrase: out.categoryPhrase,
     confident: out.confident,
     questions: [
       ...asPlan(out.category, "category"),
