@@ -25,6 +25,7 @@ import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { remainingPromptSlots } from "@/lib/brand/prompt-slots";
 import { recordQuestionChange } from "@/lib/brand/question-change-log";
+import { cleanSiteNote } from "@/lib/brand/site-note";
 import { requireOrg, scopedBrandById } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 
@@ -52,12 +53,16 @@ export type SuggestPromptsResult =
       ok: true;
       /** 플랜 상한까지 더 담을 수 있는 개수(저장된 질문을 뺀 값). [추천 구성으로 담기]가 쓴다. */
       remaining: number;
+      /** 사이트에서 읽은 글자가 거의 없어 질문이 일반적일 수 있다 — 화면이 "한 줄 소개" 입력을 보인다. */
+      siteThin?: boolean;
       suggestions: PromptSuggestions;
     }
   | { error: string };
 
 export const suggestPromptsAction = async (input: {
   brandId: string;
+  /** 사이트를 못 읽었을 때 고객이 직접 적은 한두 줄 소개(저장하지 않는다). */
+  siteNote?: string;
 }): Promise<SuggestPromptsResult> => {
   try {
     await requireOrg();
@@ -100,7 +105,17 @@ export const suggestPromptsAction = async (input: {
     const identity = await resolveBrandIdentity(brand.domain, brand.name);
     // 재료: 업종·시장·공식 사이트 문구·별칭·경쟁사(2026-10-13). 브랜드명 단독 입력은 오분류 위험.
     //   사이트를 못 읽어도 제안은 만든다(대표 상품 질문만 비게 된다 — 지어내지 않는다).
-    const site = await readSiteText(brand.domain);
+    const readSite = await readSiteText(brand.domain);
+    const note = cleanSiteNote(input.siteNote);
+    // 고객이 적은 소개는 사이트 재료 앞에 붙인다(고객 본인의 말 — 대표 상품 질문의 근거로도 쓰인다).
+    const site = note
+      ? {
+          ...(readSite ?? {}),
+          bodySnippet: [note, readSite?.bodySnippet].filter(Boolean).join(" "),
+          description: [note, readSite?.description].filter(Boolean).join(" "),
+          thin: false,
+        }
+      : readSite;
     const suggestions = await suggestTrackingPrompts({
       aliases: [...new Set([...aliases, ...identity.brandVariants])],
       brandName: identity.brandName,
@@ -110,7 +125,12 @@ export const suggestPromptsAction = async (input: {
       marketScope,
       site,
     });
-    return { ok: true, remaining, suggestions };
+    return {
+      ok: true,
+      remaining,
+      suggestions,
+      ...(suggestions.siteThin ? { siteThin: true } : {}),
+    };
   } catch (error) {
     log.error("brand.suggest_prompts.failed", {
       brandId: input.brandId,

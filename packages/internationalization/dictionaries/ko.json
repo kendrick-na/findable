@@ -334,7 +334,11 @@
       "viewPlans": "요금제 보기",
       "editorMarketBaseline": "타깃 시장을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요.",
       "competitorCandidatesTitle": "이런 브랜드가 함께 언급됐어요",
-      "competitorCandidatesHint": "누르면 목록에 담겨요. 저장해야 반영되고, 맞지 않으면 담지 마세요. 측정 답변에서 2번 이상 나온 이름이에요."
+      "competitorCandidatesHint": "누르면 목록에 담겨요. 저장해야 반영되고, 맞지 않으면 담지 마세요. 측정 답변에서 2번 이상 나온 이름이에요.",
+      "siteNoteTitle": "홈페이지에서 내용을 거의 읽지 못했어요",
+      "siteNoteHint": "회사나 제품을 한두 줄로 알려 주시면 더 구체적인 질문을 만들어 드려요. 저장되지 않고 질문을 만드는 데만 쓰여요.",
+      "siteNotePlaceholder": "예: 신생아·영유아용 보습 크림을 만드는 스킨케어 브랜드예요",
+      "siteNoteSubmit": "이 소개로 다시 제안받기"
     },
     "content": {
       "navLabel": "내 콘텐츠",
@@ -1196,7 +1200,11 @@
       "saveSelected": "선택한 질문 저장 ({n})",
       "noSuggestions": "질문을 만들 재료가 부족해서 제안하지 못했어요. 직접 추가해 주세요.",
       "industryOtherNote": "업종이 '기타'라 질문 재료가 적어요. 업종을 고르면 더 잘 제안돼요.",
-      "baselineChange": "질문을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요."
+      "baselineChange": "질문을 바꾸면 다음 측정부터 새 기준선이에요. 이전 점수와 직전 대비 비교는 되지 않아요.",
+      "siteNoteTitle": "홈페이지에서 내용을 거의 읽지 못했어요",
+      "siteNoteHint": "회사나 제품을 한두 줄로 알려 주시면 더 구체적인 질문을 만들어 드려요. 저장되지 않고 질문을 만드는 데만 쓰여요.",
+      "siteNotePlaceholder": "예: 신생아·영유아용 보습 크림을 만드는 스킨케어 브랜드예요",
+      "siteNoteSubmit": "이 소개로 다시 제안받기"
     },
     "promptsPage": {
       "metaTitle": "추적 질문 · Findable",

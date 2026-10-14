@@ -62,18 +62,25 @@ export const saveWelcomeQuestions = async (input: {
 };
 
 export const suggestWelcomeQuestions = async (
-  brandId: string
+  brandId: string,
+  siteNote?: string
 ): Promise<
   | { error: string }
-  | { ok: true; prompts: SuggestedPrompt[]; remaining: number }
+  | {
+      ok: true;
+      prompts: SuggestedPrompt[];
+      remaining: number;
+      siteThin?: boolean;
+    }
 > => {
-  const result = await suggestPromptsAction({ brandId });
+  const result = await suggestPromptsAction({ brandId, siteNote });
   return "error" in result
     ? { error: result.error }
     : {
         ok: true,
         prompts: result.suggestions.prompts,
         remaining: result.remaining,
+        ...(result.siteThin ? { siteThin: true } : {}),
       };
 };
 

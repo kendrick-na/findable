@@ -159,10 +159,16 @@ export interface WelcomeActions {
   }) => Promise<{ code?: string; error: string } | { jobId: string; ok: true }>;
   /** 질문 후보 제안(저장 안 함). `remaining` = 더 담을 수 있는 개수. */
   suggest: (
-    brandId: string
+    brandId: string,
+    siteNote?: string
   ) => Promise<
     | { error: string }
-    | { ok: true; prompts: SuggestedPrompt[]; remaining: number }
+    | {
+        ok: true;
+        prompts: SuggestedPrompt[];
+        remaining: number;
+        siteThin?: boolean;
+      }
   >;
 }
 

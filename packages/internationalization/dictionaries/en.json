@@ -334,7 +334,11 @@
       "viewPlans": "View plans",
       "editorMarketBaseline": "Changing the target market starts a new baseline from the next measurement. Comparison with earlier scores won't be shown.",
       "competitorCandidatesTitle": "Brands mentioned alongside yours",
-      "competitorCandidatesHint": "Tap to add to the list. Nothing counts until you save; skip any that don't fit. Names that appeared at least twice in measured answers."
+      "competitorCandidatesHint": "Tap to add to the list. Nothing counts until you save; skip any that don't fit. Names that appeared at least twice in measured answers.",
+      "siteNoteTitle": "We could hardly read your homepage",
+      "siteNoteHint": "Tell us about your company or product in a line or two for more specific questions. It is not stored and is only used to write the questions.",
+      "siteNotePlaceholder": "e.g. A skincare brand making moisturizers for newborns and infants",
+      "siteNoteSubmit": "Suggest again with this"
     },
     "content": {
       "navLabel": "My content",
@@ -1196,7 +1200,11 @@
       "saveSelected": "Save selected ({n})",
       "noSuggestions": "There wasn't enough information to suggest questions. Please add them yourself.",
       "industryOtherNote": "Industry is 'Other', so there is little to build questions from. Pick an industry for better suggestions.",
-      "baselineChange": "Changing questions starts a new baseline from the next measurement. Comparison with earlier scores won't be shown."
+      "baselineChange": "Changing questions starts a new baseline from the next measurement. Comparison with earlier scores won't be shown.",
+      "siteNoteTitle": "We could hardly read your homepage",
+      "siteNoteHint": "Tell us about your company or product in a line or two for more specific questions. It is not stored and is only used to write the questions.",
+      "siteNotePlaceholder": "e.g. A skincare brand making moisturizers for newborns and infants",
+      "siteNoteSubmit": "Suggest again with this"
     },
     "promptsPage": {
       "metaTitle": "Tracked questions · Findable",

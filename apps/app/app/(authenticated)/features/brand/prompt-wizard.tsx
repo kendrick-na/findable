@@ -13,6 +13,7 @@ import {
 } from "@/app/actions/brand/suggest-prompts";
 import type { AppDictionary } from "@/lib/i18n";
 import { QuestionPicker } from "./question-picker";
+import { SiteNoteBox } from "./site-note-box";
 
 /**
  * 프롬프트 자동 제안 마법사 (표준 백로그 1, 2026-07-30) + 직접 추가(2026-08-22).
@@ -65,6 +66,9 @@ export const PromptWizard = ({
   // 플랜 상한에서 이미 저장된 질문을 뺀, 더 담을 수 있는 개수.
   const [maxPick, setMaxPick] = useState(0);
   const [customText, setCustomText] = useState("");
+  // 사이트 글자가 거의 안 읽혔을 때만 "한 줄 소개" 칸을 보인다.
+  const [siteThin, setSiteThin] = useState(false);
+  const [siteNote, setSiteNote] = useState("");
 
   const addCustom = async () => {
     const text = customText.trim();
@@ -117,10 +121,10 @@ export const PromptWizard = ({
     }
   };
 
-  const suggest = async () => {
+  const suggest = async (note?: string) => {
     setPhase("suggesting");
     try {
-      const result = await suggestPromptsAction({ brandId });
+      const result = await suggestPromptsAction({ brandId, siteNote: note });
       if ("error" in result) {
         setPhase("idle");
         toast.error(result.error);
@@ -135,6 +139,7 @@ export const PromptWizard = ({
       setPrompts(next);
       setMaxPick(result.remaining);
       setSelected(new Set());
+      setSiteThin(Boolean(result.siteThin));
       setPhase("review");
     } catch {
       setPhase("idle");
@@ -204,7 +209,7 @@ export const PromptWizard = ({
         <Button
           className="findable-btn-secondary"
           disabled={phase === "suggesting"}
-          onClick={suggest}
+          onClick={() => suggest()}
           size="sm"
           type="button"
           variant="outline"
@@ -300,6 +305,20 @@ export const PromptWizard = ({
         </span>
       </div>
 
+      {siteThin && (
+        <SiteNoteBox
+          busy={phase === "saving"}
+          labels={{
+            hint: t.siteNoteHint,
+            placeholder: t.siteNotePlaceholder,
+            submit: t.siteNoteSubmit,
+            title: t.siteNoteTitle,
+          }}
+          onChange={setSiteNote}
+          onSubmit={() => suggest(siteNote)}
+          value={siteNote}
+        />
+      )}
       <QuestionPicker
         labels={pickerLabels}
         max={maxPick}

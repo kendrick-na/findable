@@ -8,6 +8,7 @@ import {
   QuestionPicker,
   type QuestionPickerLabels,
 } from "../features/brand/question-picker";
+import { SiteNoteBox } from "../features/brand/site-note-box";
 import {
   clearQuestionDraft,
   readQuestionDraft,
@@ -66,6 +67,9 @@ export const WelcomeQuestionStep = ({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [max, setMax] = useState(0);
   const [saving, setSaving] = useState(false);
+  // 사이트 글자가 거의 안 읽혔을 때만 "한 줄 소개" 칸을 보인다(자동 읽기가 실패했을 때의 마지막 안전망).
+  const [siteThin, setSiteThin] = useState(false);
+  const [siteNote, setSiteNote] = useState("");
   const limitReached = questionLimit !== null && savedCount >= questionLimit;
   const viewPlans = {
     label: t.viewPlans,
@@ -92,9 +96,9 @@ export const WelcomeQuestionStep = ({
     }
   }, [brandId, max, phase, prompts, selected]);
 
-  const suggest = async () => {
+  const suggest = async (note?: string) => {
     setPhase("loading");
-    const result = await actions.suggest(brandId);
+    const result = await actions.suggest(brandId, note);
     if ("error" in result) {
       setPhase("idle");
       toast.error(result.error || t.questionFailed);
@@ -103,6 +107,7 @@ export const WelcomeQuestionStep = ({
     setPrompts(result.prompts);
     setMax(result.remaining);
     setSelected(new Set());
+    setSiteThin(Boolean(result.siteThin));
     setPhase("review");
   };
 
@@ -190,6 +195,20 @@ export const WelcomeQuestionStep = ({
           </button>
         </p>
       )}
+      {phase === "review" && siteThin && (
+        <SiteNoteBox
+          busy={false}
+          labels={{
+            hint: t.siteNoteHint as string,
+            placeholder: t.siteNotePlaceholder as string,
+            submit: t.siteNoteSubmit as string,
+            title: t.siteNoteTitle as string,
+          }}
+          onChange={setSiteNote}
+          onSubmit={() => suggest(siteNote)}
+          value={siteNote}
+        />
+      )}
       {phase === "review" && prompts.length > 0 ? (
         <QuestionPicker
           labels={labels}
@@ -208,7 +227,7 @@ export const WelcomeQuestionStep = ({
           <button
             className="w-fit rounded-md border border-[color:var(--findable-hairline,#23252a)] px-3 py-2 font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm disabled:opacity-50"
             disabled={phase === "loading"}
-            onClick={suggest}
+            onClick={() => suggest()}
             type="button"
           >
             {phase === "loading" ? t.questionSuggesting : t.questionSuggest}
