@@ -1,6 +1,7 @@
 import { log } from "@repo/observability/log";
 import { isAllowedByRobots, parseRobotsDisallow } from "./brand-catalog";
 import { assertPublicUrl, normalizePublicUrl } from "./public-url-security";
+import { renderSiteHtml } from "./site-render";
 import { servicePageUrls } from "./site-structure";
 
 /**
@@ -43,6 +44,8 @@ export interface SiteProfile {
   jsonLdFacts: string[];
   /** 읽은 페이지 수(홈 포함). */
   pagesRead?: number;
+  /** 브라우저로 그려서 읽은 결과인가(JS 로 그리는 사이트). */
+  rendered?: boolean;
   siteName: string | null;
   /** 눈에 보이는 글자가 거의 없다(JS 렌더링·차단 의심). */
   thin: boolean;
@@ -284,7 +287,20 @@ export async function readSiteProfile(
       log.warn("audit.site_profile.robots_blocked", { domain });
       return null;
     }
-    const home = extractSiteProfile(homeHtml);
+    let home = extractSiteProfile(homeHtml);
+    // 일반 읽기로 글자가 거의 없으면(JS 로 그리는 사이트) 브라우저로 그려 한 번 더 읽는다(꺼져 있으면 건너뜀).
+    if (home.thin) {
+      const rendered = await renderSiteHtml(domain);
+      if (rendered) {
+        const renderedProfile = extractSiteProfile(rendered);
+        if (
+          !renderedProfile.thin ||
+          renderedProfile.bodySnippet.length > home.bodySnippet.length
+        ) {
+          home = { ...renderedProfile, rendered: true };
+        }
+      }
+    }
     if (!sitemap || SITEMAP_INDEX_RE.test(sitemap)) {
       return { ...home, pagesRead: 1 };
     }

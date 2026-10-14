@@ -40,11 +40,20 @@ export const keys = () =>
         .string()
         .optional()
         .transform((v) => v === "true"),
+      /**
+       * 질문 제안용 사이트 읽기에서 글자가 거의 없는 사이트(JS 로 그리는 SPA)를 브라우저로 그려 읽는 보조 경로.
+       * **기본 off.** 값이 정확히 "true" 일 때만 on. Vercel Preview 에서는 켜져 있어도 쓰지 않는다.
+       */
+      SITE_RENDER_ENABLED: z
+        .string()
+        .optional()
+        .transform((v) => v === "true"),
     },
     runtimeEnv: {
       AUDIT_BRIEFING_IN_MAIN_ENABLED:
         process.env.AUDIT_BRIEFING_IN_MAIN_ENABLED,
       AUDIT_DUAL_WRITE_ENABLED: process.env.AUDIT_DUAL_WRITE_ENABLED,
       PROMPT_ATTEMPT_LEDGER_ENABLED: process.env.PROMPT_ATTEMPT_LEDGER_ENABLED,
+      SITE_RENDER_ENABLED: process.env.SITE_RENDER_ENABLED,
     },
   });
