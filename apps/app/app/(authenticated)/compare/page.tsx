@@ -17,6 +17,7 @@ import { EmptyState } from "../components/empty-state";
 import { Header } from "../components/header";
 import { LockedSurface } from "../components/locked-surface";
 import { CompetitorBoard } from "../features/analysis/competitor-board";
+import { GapPanelServer } from "../features/analysis/gap-panel-server";
 import { selectAnalysisBrandId } from "../lib/analysis-brand-selection";
 import { buildCompetitorAnalysis } from "../lib/analysis-data";
 
@@ -191,6 +192,9 @@ const ComparePage = async ({
         />
         {baselineNotice}
         {content}
+        {isReady && selectedBrandId ? (
+          <GapPanelServer brandId={selectedBrandId} />
+        ) : null}
       </div>
     </>
   );
