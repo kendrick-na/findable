@@ -156,6 +156,7 @@ const renderSetup = async (
           brandName: brand.name,
           domain: brand.domain,
           industry: brand.industry,
+          marketScope: brand.marketScope,
         })
       : [];
 

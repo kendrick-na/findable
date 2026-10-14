@@ -92,3 +92,55 @@ ${text}`,
     return null;
   }
 }
+
+// ── 경쟁사 후보 추출 (2026-10-15 · 경쟁사 시스템 점검) ────────────────────────────────
+// 일반 '나열된 브랜드' 추출과 다른 점: ① 자사(다른 언어 표기 포함)를 빼고 ② 같은 회사의 하위 브랜드·제품 라인은 한 곳으로 합치고
+// ③ 같은 서비스 분야가 아닌 인접 업종(배달앱·결제 대행 등)을 빼고 ④ 지정한 시장의 경쟁사를 우선한다.
+// 운영 점검(12 사례)에서 나온 오류: 당근 → 'Karrot'(자사 영문명) 포함, SK AX → Accenture 4개(하위 브랜드), 토스 → KB스타뱅킹·배달의민족.
+
+const candidateSchema = z.object({
+  competitors: z
+    .array(z.string())
+    .describe(
+      "자사와 같은 서비스 분야에서 직접 경쟁하는 회사·브랜드 이름(회사 단위, 하위 브랜드는 대표 이름 하나로)."
+    )
+    .default([]),
+});
+
+export interface CompetitorExtractContext {
+  /** 서비스 분야 한 줄. */
+  category: string;
+  /** 지정한 시장(예: '한국'). 없으면 시장 우선 규칙을 쓰지 않는다. */
+  market?: string | null;
+  /** 자사 이름·별칭·도메인 줄기 — 어떤 언어 표기든 후보에서 뺀다. */
+  ownNames: readonly string[];
+}
+
+export async function extractCompetitorCandidates(
+  answer: string,
+  ctx: CompetitorExtractContext
+): Promise<string[] | null> {
+  const text = answer.slice(0, MAX_ANSWER_CHARS);
+  if (text.trim().length === 0) {
+    return [];
+  }
+  try {
+    const { object } = await generateObject({
+      model: model(),
+      schema: candidateSchema,
+      prompt: `다음은 '${ctx.category}' 분야의 유명한 서비스를 묻는 질문에 AI가 한 답변이야. 이 중 **자사의 직접 경쟁사 후보**만 뽑아줘.
+자사 이름: ${ctx.ownNames.join(", ")}
+${ctx.market ? `- 대상 시장은 ${ctx.market}이야. 같은 시장에서 활동하는 회사를 우선하고, 해외 회사는 그 시장에서도 실제 경쟁하는 경우만 넣어.\n` : ""}- **자사는 어떤 언어·표기든 넣지 마**(영문명·약칭 포함).
+- 같은 회사의 하위 브랜드·제품 라인·지사는 **대표 이름 하나로만**(예: 'Accenture Song' → 'Accenture').
+- '${ctx.category}'와 같은 서비스를 파는 회사만. 배달·결제·광고 같은 **인접 업종, 매체, 마켓플레이스, AI 서비스(ChatGPT 등)는 넣지 마.**
+- 답변에 적힌 이름만, 적힌 그대로. 최대 8개. 없으면 빈 배열.
+
+[답변]
+${text}`,
+    });
+    return keepNamesPresentInAnswer(object.competitors, text);
+  } catch (error) {
+    log.warn("competitor_candidates.failed", { error: String(error) });
+    return null;
+  }
+}

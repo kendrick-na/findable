@@ -119,13 +119,24 @@ export interface GroundedDeps {
     industry?: string | null;
     site: GroundedSite;
   }) => Promise<string | null>;
-  /** 답변에서 나열된 브랜드 이름. 실패면 null. */
-  extract: (answer: string) => Promise<string[] | null>;
+  /** 답변에서 자사의 직접 경쟁사 후보 이름. 실패면 null. */
+  extract: (
+    answer: string,
+    ctx: {
+      category: string;
+      market?: string | null;
+      ownNames: readonly string[];
+    }
+  ) => Promise<string[] | null>;
   /** 웹 검색이 되는 엔진에 질문해 답변 본문을 받는다. 실패면 null. */
   search: (question: string) => Promise<string | null>;
 }
 
-const MAX_GROUNDED = 6;
+const MAX_GROUNDED = 8;
+const MARKET_TEXT: Record<string, string> = {
+  korea: "한국",
+  global: "해외(글로벌)",
+};
 const NON_IDENTITY_RE = /[^a-z0-9가-힣]/g;
 const compactKey = (v: string) => v.toLowerCase().replace(NON_IDENTITY_RE, "");
 
@@ -136,6 +147,7 @@ export function filterCompetitorCandidates(
 ): string[] {
   const own = ownNames.map(compactKey).filter((k) => k.length >= 2);
   const seen = new Set<string>();
+  const seenFirst = new Set<string>();
   const out: string[] = [];
   for (const raw of names) {
     const name = raw.trim();
@@ -148,11 +160,21 @@ export function filterCompetitorCandidates(
     ) {
       continue;
     }
+    // 같은 회사의 하위 브랜드(첫 단어가 같은 이름: 'Accenture'·'Accenture Song', 'KB국민은행'·'KB스타뱅킹')는 먼저 나온 하나만 남긴다.
+    const first = firstToken(name);
+    if (first.length >= 3 && seenFirst.has(first)) {
+      continue;
+    }
+    seenFirst.add(first);
     seen.add(k);
     out.push(name);
   }
   return out.slice(0, MAX_GROUNDED);
 }
+
+const SPLIT_TOKEN_RE = /[\s·\-_/]+/;
+const firstToken = (name: string) =>
+  compactKey(name.split(SPLIT_TOKEN_RE)[0] ?? "");
 
 const categorySchema = z.object({
   category: z
@@ -163,7 +185,7 @@ const categorySchema = z.object({
     .default(""),
 });
 
-const defaultDeps: GroundedDeps = {
+export const defaultGroundedDeps: GroundedDeps = {
   async categoryOf({ brandName, industry, site }) {
     try {
       const { object } = await generateObject({
@@ -189,9 +211,9 @@ const defaultDeps: GroundedDeps = {
       ? null
       : res.rawResponse;
   },
-  async extract(answer) {
-    const { extractListedBrands } = await import("./answer-brands");
-    return extractListedBrands(answer);
+  async extract(answer, ctx) {
+    const { extractCompetitorCandidates } = await import("./answer-brands");
+    return extractCompetitorCandidates(answer, ctx);
   },
 };
 
@@ -205,28 +227,45 @@ export async function suggestCompetitorsGrounded(
     brandName: string;
     domain: string;
     industry?: string | null;
+    /** 타깃 시장(korea·global·both). 없으면 시장 지정 없이 묻는다. */
+    marketScope?: string | null;
     site: GroundedSite;
   },
-  deps: GroundedDeps = defaultDeps
+  deps: GroundedDeps = defaultGroundedDeps
 ): Promise<string[]> {
   try {
     const category = await deps.categoryOf(input);
     if (!category) {
       return [];
     }
-    const answer = await deps.search(
-      `${category} 분야에서 많이 쓰는 유명한 서비스·브랜드를 5~8곳 알려줘`
-    );
-    if (!answer) {
-      return [];
-    }
-    const brands = await deps.extract(answer);
+    const market = MARKET_TEXT[input.marketScope ?? ""] ?? null;
     const stem = normalizeHost(input.domain).split(".")[0] ?? "";
-    return filterCompetitorCandidates(brands ?? [], [
-      input.brandName,
-      ...(input.aliases ?? []),
-      stem,
-    ]);
+    const own = [input.brandName, ...(input.aliases ?? []), stem].filter(
+      Boolean
+    );
+    const ask = async (marketText: string | null) => {
+      const answer = await deps.search(
+        `${marketText ? `${marketText}에서 ` : ""}${category} 분야에서 비슷한 규모·성격으로 많이 쓰는 유명한 서비스·브랜드를 5~8곳 알려줘`
+      );
+      return answer
+        ? ((await deps.extract(answer, {
+            category,
+            market: marketText,
+            ownNames: own,
+          })) ?? [])
+        : [];
+    };
+    // 시장을 지정하면 ① 그 시장 ② 시장 지정 없음 두 번 묻는다 — 신생·글로벌 카테고리(예: GEO)는 국내 한정으로 물으면 진짜 경쟁사(해외 서비스)가 빠진다.
+    const [local, general] = market
+      ? await Promise.all([ask(market), ask(null)])
+      : [await ask(null), []];
+    const merged: string[] = [];
+    for (let i = 0; i < Math.max(local.length, general.length); i++) {
+      merged.push(
+        ...[local[i], general[i]].filter((n): n is string => Boolean(n))
+      );
+    }
+    return filterCompetitorCandidates(merged, own);
   } catch (error) {
     log.warn("competitor.suggest.grounded_failed", {
       domain: input.domain,

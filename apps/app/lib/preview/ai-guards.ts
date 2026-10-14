@@ -27,7 +27,9 @@ const ENOUGH_FROM_MEMORY = 3;
  *    (2026-10-15: 신생 카테고리는 기억만으로는 항상 0곳이었다). 후보일 뿐 — 저장은 사람이 고른 것만.
  */
 export async function suggestCompetitorsUnlessPreview(
-  input: Parameters<typeof suggestCompetitors>[0]
+  input: Parameters<typeof suggestCompetitors>[0] & {
+    marketScope?: string | null;
+  }
 ): Promise<string[]> {
   if (isVercelPreview()) {
     return [];
