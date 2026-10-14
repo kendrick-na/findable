@@ -74,7 +74,7 @@ const SOCIAL = [
   "linkedin.com",
 ];
 const NEWS_HINT =
-  /(news|press|times|herald|daily|journal|joongang|chosun|donga|hani\.co|khan\.co|hankyung|mk\.co|sedaily|edaily|etnews|zdnet|bloter|platum|venturesquare|thebell|mt\.co|yna\.co|newsis|ohmynews|fnnews|asiae|ytn|sbs\.co|kbs\.co|mbc|jtbc|outstanding|besuccess)/;
+  /(news|press|magazine|gqkorea|esquire|vogue|harpers|highsnobiety|hypebeast|times|herald|daily|journal|joongang|chosun|donga|hani\.co|khan\.co|hankyung|mk\.co|sedaily|edaily|etnews|zdnet|bloter|platum|venturesquare|thebell|mt\.co|yna\.co|newsis|ohmynews|fnnews|asiae|ytn|sbs\.co|kbs\.co|mbc|jtbc|outstanding|besuccess)/;
 const PUBLIC_RE =
   /(\.go\.kr|\.gov$|\.gov\.|\.edu$|\.edu\.|\.ac\.kr|nih\.gov|who\.int)/;
 

@@ -239,7 +239,9 @@ export function buildGapAnalysis(input: {
 }): GapAnalysis {
   const { brandsByKey, competitors, own, rows } = input;
   const canon = canonicalizer(competitors);
-  const ownKeys = [own.name, ...own.variants]
+  const domainStem =
+    own.domain.toLowerCase().replace(WWW_PREFIX_RE, "").split(".")[0] ?? "";
+  const ownKeys = [own.name, ...own.variants, domainStem]
     .map(compact)
     .filter((k) => k.length >= 2);
   const registered = new Set(competitors.map((c) => compact(c.name)));

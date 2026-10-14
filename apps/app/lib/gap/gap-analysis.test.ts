@@ -164,3 +164,20 @@ describe("gapCsv", () => {
     ]);
   });
 });
+
+describe("자사 도메인 줄기", () => {
+  it("영문 상표(도메인 줄기)로 나온 자사 이름은 경쟁사로 세지 않는다", () => {
+    const rows = answerRowsOf({
+      engineResponses: [resp({ engineId: "chatgpt" })],
+    });
+    const out = buildGapAnalysis({
+      rows,
+      brandsByKey: new Map([
+        ["0|chatgpt", ["Nike", "Nike Air Max 270", "Adidas"]],
+      ]),
+      own: { name: "나이키", variants: [], domain: "nike.com" },
+      competitors: [],
+    });
+    expect(out.brandBoard.map((b) => b.name)).toEqual(["Adidas"]);
+  });
+});
