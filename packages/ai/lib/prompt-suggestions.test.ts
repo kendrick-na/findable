@@ -27,7 +27,7 @@ const llm = (over: Record<string, unknown> = {}) => ({
       ),
     ],
     concern: Array.from({ length: 6 }, (_, i) =>
-      item(`피부 고민 ${i} 어떻게 해?`)
+      item(`피부 고민 ${i} 어떤 제품이 좋아?`)
     ),
     representative: [
       { ...item("시카 크림 뭐가 좋아?"), basis: "site" },

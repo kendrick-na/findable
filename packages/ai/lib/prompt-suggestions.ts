@@ -353,7 +353,7 @@ export async function suggestTrackingPrompts(
       confident = confident && round.confident;
       const guarded = guardQuestions(all, ctx);
       const composed = composeWithFixedAlternatives(
-        composeQuestions(guarded.kept, scope),
+        composeQuestions(guarded.kept, scope, { preferListing: true }),
         input,
         scope,
         hasCompetitors
@@ -443,6 +443,11 @@ async function generateCandidates(
 - representative(대표 제품·서비스, 이름 없음, 사이트 문구에 있는 것만): ${want("representative")}
 - alternative(비교·대안): ${hasCompetitors ? want("alternative") : "만들지 마(경쟁사가 없으면 빈 배열)"}
 - brandUnderstanding(브랜드 직접 질문): ${want("brand")}
+
+[질문 형태 — 가장 중요]
+- 이름 없는 질문(category·concern·representative)은 **AI 가 여러 브랜드·서비스를 나열하며 답하게 되는 질문**이어야 해: "~ 추천해줘", "~ 뭐가 좋아?", "~ 중에 어떤 게 나아?", "A 대신 쓸 만한 곳", "~하려면 어떤 서비스를 써야 해?".
+- 개념 설명·정의·차이·방법만 묻는 질문("~이 뭐야?", "~랑 뭐가 달라?", "어떻게 하는 거야?")은 AI 가 브랜드 없이 설명만 하므로 **거의 만들지 마**(전체의 30% 이하).
+- concern(고민)은 고민을 말한 뒤 "그럼 어떤 제품·서비스를 써야 해?"처럼 **해결 수단을 묻는 형태**로 끝내.
 
 [규칙]
 - category·concern·representative 질문에는 **브랜드명·별칭·도메인 이름을 절대 넣지 마.**

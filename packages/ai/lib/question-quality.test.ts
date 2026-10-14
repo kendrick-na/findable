@@ -17,6 +17,8 @@ vi.mock("@repo/observability/log", () => ({
 
 import { suggestTrackingPrompts } from "./prompt-suggestions";
 import {
+  answerKindOf,
+  composeQuestions,
   defaultConsumerQuestions,
   fixedAlternativeQuestions,
   guardQuestions,
@@ -147,6 +149,7 @@ describe("사례 6건 재현 — 가드가 버린다", () => {
       "요즘 AI 검색이 우리 마케팅에 영향을 미친다고들 하던데 정말?",
       "줄기세포 배양액 토너 효과가 좋대, 써본 사람 있어?",
       "이 크림이 인기라 하던데 어때?",
+      "온라인몰 1위라고 한 아기 피부 제품 뭐야?",
     ]) {
       expect(
         reasonOf(q("category", text, { basis: "industry" }), franz),
@@ -340,7 +343,7 @@ const findableInput = {
 };
 const good = (n: number, prefix: string) =>
   Array.from({ length: n }, (_, i) =>
-    item(`${prefix} 도입 질문 ${i} 알려줘`, "industry")
+    item(`${prefix} ${i} 추천해줘`, "industry")
   );
 const llm = (over: Record<string, unknown> = {}) => ({
   object: {
@@ -448,24 +451,24 @@ describe("사이트 재료 — 소제목·FAQ·본문이 질문 재료가 된다
 
   it("소제목에만 있는 말도 대표 상품 질문의 근거가 된다(예전엔 제목 한 줄만 봐서 대표 질문이 줄었다)", async () => {
     h.generateObject.mockResolvedValue(
-      llm({ representative: [{ ...item("초유 보습 크림 어때?", "site") }] })
+      llm({ representative: [{ ...item("초유 보습 크림 추천해줘", "site") }] })
     );
     const withHeading = await suggestTrackingPrompts({
       ...findableInput,
       site: { title: "테스트", headings: ["활성 초유 보습 크림"] },
     });
     expect(withHeading.prompts.map((p) => p.text)).toContain(
-      "초유 보습 크림 어때?"
+      "초유 보습 크림 추천해줘"
     );
     h.generateObject.mockResolvedValue(
-      llm({ representative: [{ ...item("초유 보습 크림 어때?", "site") }] })
+      llm({ representative: [{ ...item("초유 보습 크림 추천해줘", "site") }] })
     );
     const without = await suggestTrackingPrompts({
       ...findableInput,
       site: { title: "테스트" },
     });
     expect(without.prompts.map((p) => p.text)).not.toContain(
-      "초유 보습 크림 어때?"
+      "초유 보습 크림 추천해줘"
     );
   });
 });
@@ -491,5 +494,81 @@ describe("건드리지 않는 것 — 기본 질문 폴백", () => {
       defaultConsumerQuestions({ ...base, industry: "beauty" })
     ).toHaveLength(4);
     expect(defaultConsumerQuestions({ ...base, industry: "other" })).toBeNull();
+  });
+});
+
+describe("답변 유형 — 브랜드가 나열되는 질문 vs 설명만 하는 질문", () => {
+  it("실제 생성물(Findable 자사 · 이름 없는 질문)을 모양으로 가른다", () => {
+    const explain = [
+      "AI 검색 최적화가 일반 SEO랑 다른 건 뭐야?",
+      "GEO 진단이라는 게 정확히 뭐지?",
+      "우리 브랜드 관련 정보를 정리하는 단계가 몇 단계나 되나?",
+      "AI 검색에서 우리 브랜드가 얼마나 언급되고 있는지 어떻게 측정해?",
+    ];
+    const listing = [
+      "AI 검색 모니터링 툴 추천해줄래?",
+      "송금이나 결제 앱 뭐가 좋아?",
+      "라운드랩 대신 쓸 만한 곳",
+      "GEO 진단 서비스 중에 어떤 게 나아?",
+      "What are the best AI visibility tools?",
+    ];
+    for (const text of explain) {
+      expect(answerKindOf(text), text).toBe("explain");
+    }
+    for (const text of listing) {
+      expect(answerKindOf(text), text).toBe("list");
+    }
+  });
+
+  it("설명형이 많이 섞인 후보 8개 → 나열형이 먼저 채워지고 설명형은 30% 이내", () => {
+    const pool = [
+      ...[
+        "SEO랑 뭐가 달라?",
+        "GEO 가 뭐야?",
+        "어떻게 측정해?",
+        "작동 방식이 뭐야?",
+        "단계가 몇 개야?",
+      ].map((t) => q("category", t)),
+      ...[
+        "도구 추천해줘",
+        "서비스 뭐가 좋아?",
+        "대안 알려줘",
+        "비교해 볼 만한 곳 있어?",
+        "어떤 서비스가 나아?",
+        "툴 추천해줄래?",
+        "앱 뭐 써?",
+        "플랫폼 추천해줘",
+      ].map((t) => q("category", t)),
+    ];
+    const out = composeQuestions(pool, "korea", { preferListing: true }).filter(
+      (x) => x.type === "category"
+    );
+    expect(out).toHaveLength(8);
+    expect(
+      out.filter((x) => answerKindOf(x.text) === "explain").length
+    ).toBeLessThanOrEqual(2);
+    expect(out[0]?.text).toBe("도구 추천해줘");
+  });
+
+  it("나열형이 모자라도 설명형으로 채우지 않는다(지어내지 않는다)", () => {
+    const pool = [
+      q("category", "도구 추천해줘"),
+      ...Array.from({ length: 6 }, (_, i) =>
+        q("category", `개념 ${i} 이 뭐야?`)
+      ),
+    ];
+    const out = composeQuestions(pool, "korea", { preferListing: true }).filter(
+      (x) => x.type === "category"
+    );
+    expect(out.length).toBeLessThanOrEqual(1 + Math.floor(8 * 0.3));
+  });
+
+  it("옵션을 안 켜면 기존 동작 그대로(앞에서부터 목표 개수)", () => {
+    const pool = Array.from({ length: 10 }, (_, i) =>
+      q("category", `개념 ${i} 이 뭐야?`)
+    );
+    expect(
+      composeQuestions(pool, "korea").filter((x) => x.type === "category")
+    ).toHaveLength(8);
   });
 });

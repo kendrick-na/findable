@@ -533,7 +533,7 @@ export function fixedAlternativeQuestions(
 
 // ── 질문 속 고유명사·전제 검사 ───────────────────────────────────────────
 const PRESUPPOSITION_RE =
-  /(라고|다고)\s*(했|하던|들었|봤|써\s*있)|했던데|라던데|다던데|들었는데|봤는데|[었았였했겠있없]다는|하던데|좋대|[다라]고들|라는\s*(말|얘기|소문)|\b(i heard|they say|it is said|you said|i read that)\b/i;
+  /(라고|다고)\s*(했|한|하던|들었|봤|써\s*있)|했던데|라던데|다던데|들었는데|봤는데|[었았였했겠있없]다는|하던데|좋대|[다라]고들|라는\s*(말|얘기|소문)|\b(i heard|they say|it is said|you said|i read that)\b/i;
 const ACRONYMS = new Set([
   "ai",
   "api",
@@ -698,26 +698,67 @@ export function guardQuestions(
   return { dropped, kept };
 }
 
+// ── 답변 유형: 브랜드를 나열하는 질문인가 (2026-10-14 · 질문 유형 배합) ───────────
+/**
+ * AI 가 **브랜드를 나열하며 답하는** 질문(추천·비교·대안·순위)인지, 개념을 **설명하며 답하는** 질문(정의·차이·방법)인지.
+ * 설명형은 어느 회사도 답에 안 나와 점수가 항상 0 이라 측정에 소음만 더한다(Peec 연구: 순위·목록·비교형이 브랜드를 더 띄운다).
+ * 모델 자기 신고가 아니라 **글자 모양**으로 판정한다(코드가 모델 출력을 믿지 않는 원칙).
+ */
+export type AnswerKind = "explain" | "list";
+
+const LIST_RE =
+  /추천|뭐가\s*(좋|나아|낫|괜찮|가장)|뭐\s*(있|써|쓰|살|사|좋)|어디가|어디서\s*(사|살|구|구매|구입)|어떤\s*\S+?\s*(을|를|이|가|은|는)?\s*(써|쓰|사|골라|고르|선택|낫|나아|좋)|(도구|서비스|툴|제품|앱|플랫폼|솔루션|업체|곳)[^?]{0,8}(있어|있나|있을까|뭐|어디|필요)|대안|대신|말고|비교|순위|\bvs\b|\b(best|top|recommend|which|alternatives?|compare|versus)\b/i;
+/** 나열형 표지(추천·비교·대안·"~ 도구 있어?")가 **있어야** 나열형이다. 표지가 없으면 설명형으로 본다(엄격 판정). */
+export function answerKindOf(text: string): AnswerKind {
+  return LIST_RE.test(text) ? "list" : "explain";
+}
+
+/** 이름 없는 질문 한 유형·언어에서 설명형이 차지할 수 있는 최대 비율(나머지는 나열형). */
+export const MAX_EXPLAIN_SHARE = 0.3;
+
 /**
  * 유형·언어별 목표 개수만큼 잘라 구성비에 맞춘다. 모자란 칸은 채우지 않는다(지어내지 않는다).
  * 반환 순서는 유형 우선순위 → 언어(ko 먼저).
  */
 export function composeQuestions(
   kept: readonly PlanQuestion[],
-  scope: PlanMarketScope | null | undefined
+  scope: PlanMarketScope | null | undefined,
+  options: { preferListing?: boolean } = {}
 ): PlanQuestion[] {
   const targets = targetCounts(scope);
   const out: PlanQuestion[] = [];
   for (const type of QUESTION_TYPE_PRIORITY) {
     for (const language of ["ko", "en"] as const) {
+      const pool = kept.filter(
+        (q) => q.type === type && q.language === language
+      );
+      const target = targets[type][language];
       out.push(
-        ...kept
-          .filter((q) => q.type === type && q.language === language)
-          .slice(0, targets[type][language])
+        ...(options.preferListing && isNamelessType(type)
+          ? pickListingFirst(pool, target)
+          : pool.slice(0, target))
       );
     }
   }
   return out;
+}
+
+/** 나열형을 먼저 채우고, 설명형은 목표의 30% 이내로만 쓴다(나열형이 모자라도 설명형으로 채우지 않는다). */
+function pickListingFirst(
+  pool: readonly PlanQuestion[],
+  target: number
+): PlanQuestion[] {
+  const listing = pool.filter((q) => answerKindOf(q.text) === "list");
+  const explain = pool.filter((q) => answerKindOf(q.text) === "explain");
+  const explainCap = Math.floor(target * MAX_EXPLAIN_SHARE);
+  const picked = [
+    ...listing.slice(0, target),
+    ...explain.slice(
+      0,
+      Math.min(explainCap, target - Math.min(listing.length, target))
+    ),
+  ];
+  return picked;
 }
 
 /**
