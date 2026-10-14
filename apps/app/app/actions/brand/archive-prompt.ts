@@ -90,8 +90,10 @@ async function run(
   }
 }
 
-export const archivePromptAction = (input: { promptId: string }) =>
-  run(input.promptId, "archived");
+export const archivePromptAction = async (input: {
+  promptId: string;
+}): Promise<ArchivePromptResult> => await run(input.promptId, "archived");
 
-export const restorePromptAction = (input: { promptId: string }) =>
-  run(input.promptId, "restored");
+export const restorePromptAction = async (input: {
+  promptId: string;
+}): Promise<ArchivePromptResult> => await run(input.promptId, "restored");
