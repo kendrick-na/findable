@@ -40,12 +40,17 @@ vi.mock("@repo/ai/lib/content-draft", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   generateContentDraft: h.generateContentDraft,
 }));
-vi.mock("@repo/audit/official-site-identity", () => ({
-  resolveOfficialSiteIdentity: () =>
+vi.mock("@repo/audit/site-profile", () => ({
+  readSiteProfile: () =>
     Promise.resolve({
+      bodySnippet: "",
       description: "민감성 피부 진정 크림",
+      faq: [],
       h1: null,
+      headings: [],
+      jsonLdFacts: [],
       siteName: "테스트",
+      thin: false,
       title: "테스트 | 스킨케어",
     }),
 }));

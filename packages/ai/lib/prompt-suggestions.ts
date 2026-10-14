@@ -122,6 +122,8 @@ export interface SuggestedPrompt {
 export interface PromptSuggestions {
   competitors: string[];
   prompts: SuggestedPrompt[];
+  /** 사이트에서 읽은 글자가 거의 없어 질문이 일반적일 수 있다(화면이 안내할 수 있게 알린다). */
+  siteThin?: boolean;
 }
 
 // 상한: 구성비(8·4·3·2·3 = 20)와 같다. 러너 원가·429 보호는 저장 상한(플랜)과 러너 상한이 맡는다.
@@ -144,6 +146,8 @@ const promptItemSchema = z.object({
   language: z.enum(["ko", "en"]),
   // 이 질문이 나온 재료. 재료에 없는 이름·사실을 지어내지 않았다는 자기 신고이며, 코드가 대조해 거른다.
   basis: z.enum(["brand", "competitor", "industry", "site"]).optional(),
+  // 질문이 브랜드 이름의 뜻을 풀어서(예: 넘버즈인→번호 매긴) 나왔으면 true. true 면 코드가 버린다.
+  fromName: z.boolean().optional(),
 });
 
 const suggestionSchema = z.object({
@@ -197,11 +201,17 @@ export interface SuggestInput {
   language?: "ko" | "en" | "both";
   /** 타깃 시장 — 언어 배분을 정한다. */
   marketScope?: PlanMarketScope | null;
-  /** 공식 사이트가 스스로 쓴 문구. */
+  /** 공식 사이트가 스스로 쓴 문구(제목·설명·H1 + 소제목·FAQ·구조화 데이터·본문 첫머리). */
   site?: {
+    bodySnippet?: string | null;
     description?: string | null;
+    faq?: readonly string[] | null;
     h1?: string | null;
+    headings?: readonly string[] | null;
+    jsonLdFacts?: readonly string[] | null;
     siteName?: string | null;
+    /** 사이트 글자가 거의 안 읽혔다(JS 렌더링·차단 의심) — 재료가 얇다는 신호. */
+    thin?: boolean;
     title?: string | null;
   } | null;
 }
@@ -223,9 +233,39 @@ function scopeOf(input: SuggestInput): PlanMarketScope {
 }
 
 function siteTextOf(site: SuggestInput["site"]): string {
-  return [site?.title, site?.siteName, site?.h1, site?.description]
+  return [
+    site?.title,
+    site?.siteName,
+    site?.h1,
+    site?.description,
+    ...(site?.headings ?? []),
+    ...(site?.faq ?? []),
+    ...(site?.jsonLdFacts ?? []),
+    site?.bodySnippet,
+  ]
     .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
     .join(" ");
+}
+
+/** 프롬프트에 싣는 사이트 재료(길이를 묶는다). */
+function siteMaterialOf(site: SuggestInput["site"]): string {
+  if (!site) {
+    return "없음";
+  }
+  const lines = [
+    [site.title, site.siteName, site.h1, site.description]
+      .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+      .join(" / "),
+    site.headings?.length
+      ? `소제목: ${site.headings.slice(0, 12).join(" · ")}`
+      : "",
+    site.faq?.length ? `사이트 FAQ: ${site.faq.slice(0, 8).join(" · ")}` : "",
+    site.jsonLdFacts?.length
+      ? `구조화 정보: ${site.jsonLdFacts.slice(0, 8).join(" · ")}`
+      : "",
+    site.bodySnippet ? `본문 첫머리: ${site.bodySnippet.slice(0, 900)}` : "",
+  ].filter(Boolean);
+  return lines.length > 0 ? lines.join("\n  ") : "없음";
 }
 
 const PROTOCOL_RE = /^https?:\/\//;
@@ -308,7 +348,7 @@ export async function suggestTrackingPrompts(
     let confident = true;
     // 처음 1번 + 모자라면 1번 더(합쳐서 다시 거른다). 추가 호출은 최대 1회.
     for (let attempt = 0; attempt < 2; attempt++) {
-      const round = await generateCandidates(input, scope, siteText);
+      const round = await generateCandidates(input, scope);
       all = [...all, ...round.questions];
       confident = confident && round.confident;
       const guarded = guardQuestions(all, ctx);
@@ -332,6 +372,7 @@ export async function suggestTrackingPrompts(
         return {
           prompts: composed.slice(0, MAX_PROMPTS).map(toSuggested),
           competitors: [],
+          ...(input.site?.thin ? { siteThin: true } : {}),
         };
       }
     }
@@ -364,8 +405,7 @@ function composeWithFixedAlternatives(
 
 async function generateCandidates(
   input: SuggestInput,
-  scope: PlanMarketScope,
-  siteText: string
+  scope: PlanMarketScope
 ): Promise<{ confident: boolean; questions: PlanQuestion[] }> {
   const targets = targetCounts(scope);
   const want = (type: QuestionType) =>
@@ -390,7 +430,8 @@ async function generateCandidates(
 - 도메인: ${input.domain}
 - 업종: ${label ? label.ko : "알 수 없음"}
 - 타깃 시장: ${MARKET_LABEL[scope]}
-- 공식 사이트 문구: ${siteText || "없음"}
+- 공식 사이트 문구:
+  ${siteMaterialOf(input.site)}
 - 경쟁사: ${hasCompetitors ? (input.competitors ?? []).join(", ") : "없음"}
 
 [업종 틀 — 이 업종 고객이 궁금해하는 것: ${frame.focus}]
@@ -411,6 +452,7 @@ async function generateCandidates(
 - 브랜드 이름의 뜻을 풀어서 질문을 만들지 마(예: 이름이 '넘버즈인'이라고 '번호 매긴 제품'으로 쓰기 금지).
 - "~라고 했는데", "~있다던데"처럼 **들은 이야기를 전제로 까는 문장 금지.** 질문은 전제 없이 바로 묻는다.
 - 각 질문의 basis 에 재료 출처를 적어(brand·competitor·industry·site). 대표 제품 질문은 site 만 가능.
+- 질문이 브랜드 이름의 뜻을 풀어서(이름 속 단어를 번역·설명해서) 나왔으면 fromName=true 로 표시해. 이름 뜻을 질문 소재로 삼는 것은 금지야.
 - 언어는 각 항목의 language 에 맞게(ko=한국어, en=영어) 자연스럽게.`,
   });
   const asPlan = (

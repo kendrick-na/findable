@@ -12,12 +12,12 @@ import {
   suggestTrackingPrompts,
 } from "@repo/ai/lib/prompt-suggestions";
 import { parseKnownCompetitors } from "@repo/audit/competitor-extract";
-import { resolveOfficialSiteIdentity } from "@repo/audit/official-site-identity";
 import { isVercelPreview } from "@repo/audit/preview-guard";
 import {
   activePromptFilter,
   archivedPromptIds,
 } from "@repo/audit/prompt-archive";
+import { readSiteProfile } from "@repo/audit/site-profile";
 import { planCapabilities } from "@repo/auth/plan";
 import { getCurrentPlan } from "@repo/auth/plan-server";
 import { database } from "@repo/database";
@@ -122,26 +122,12 @@ export const suggestPromptsAction = async (input: {
   }
 };
 
-const SITE_READ_TIMEOUT_MS = 8000;
-
-/** 공식 사이트 문구(제목·설명·H1·사이트명). 실패·시간 초과면 null — 제안을 막지 않는다. */
+/**
+ * 공식 사이트 재료(제목·설명·H1 + 소제목·FAQ·구조화 데이터·본문 첫머리). 실패·시간 초과면 null — 제안을 막지 않는다.
+ * 판정 앵커용 `resolveOfficialSiteIdentity` 와 따로 읽는다(판정 코드는 그대로).
+ */
 async function readSiteText(domain: string) {
-  try {
-    const identity = await resolveOfficialSiteIdentity(
-      domain,
-      AbortSignal.timeout(SITE_READ_TIMEOUT_MS)
-    );
-    return identity
-      ? {
-          description: identity.description,
-          h1: identity.h1,
-          siteName: identity.siteName,
-          title: identity.title,
-        }
-      : null;
-  } catch {
-    return null;
-  }
+  return await readSiteProfile(domain);
 }
 
 const stringList = (value: unknown): string[] =>

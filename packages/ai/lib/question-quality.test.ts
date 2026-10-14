@@ -129,6 +129,44 @@ describe("사례 6건 재현 — 가드가 버린다", () => {
     ).toBe("presupposition");
   });
 
+  it("⑤-2 '~만들었다는' 변형 전제도 막는다(실제 재생성에서 새던 것)", () => {
+    expect(
+      reasonOf(
+        q(
+          "representative",
+          "서울대 연구진이 만들었다는 스킨케어 제품 뭐가 있어?",
+          { basis: "site" }
+        ),
+        franz
+      )
+    ).toBe("presupposition");
+  });
+
+  it("⑤-3 재생성에서 새던 변형: '~하던데', '~좋대', '~고들 하던데'", () => {
+    for (const text of [
+      "요즘 AI 검색이 우리 마케팅에 영향을 미친다고들 하던데 정말?",
+      "줄기세포 배양액 토너 효과가 좋대, 써본 사람 있어?",
+      "이 크림이 인기라 하던데 어때?",
+    ]) {
+      expect(
+        reasonOf(q("category", text, { basis: "industry" }), franz),
+        text
+      ).toBe("presupposition");
+    }
+  });
+
+  it("④-2 모델이 '이름 뜻에서 나왔다'고 밝힌 질문은 버린다(근거 검사를 통과하던 '번호 매긴 스킨케어 시스템')", () => {
+    expect(
+      reasonOf(
+        q("category", "번호 매긴 스킨케어 시스템 어때?", {
+          basis: "site",
+          fromName: true,
+        }),
+        numbuzin
+      )
+    ).toBe("name_meaning");
+  });
+
   it("⑥ '지메인' 류 철자 오류 단독 → engine_name", () => {
     expect(
       reasonOf(
@@ -251,6 +289,19 @@ describe("경쟁사가 없을 때 대안 질문은 고정 문형", () => {
     expect(alt[0]?.text).toContain("B2B 소프트웨어");
   });
 
+  it("고정 문장은 업종에 맞는 자연스러운 말이다(금융에 '도입', 뷰티에 '화장품·뷰티 비슷한 곳' 금지)", () => {
+    const all = (k: string) =>
+      fixedAlternativeQuestions(k, "both")
+        .map((x) => x.text)
+        .join(" | ");
+    expect(all("finance")).not.toContain("도입");
+    expect(all("beauty")).not.toContain("화장품·뷰티");
+    expect(all("b2b_saas")).toContain("도입");
+    for (const k of Object.keys(INDUSTRY_QUESTION_LABEL)) {
+      expect(all(k), k).not.toContain("{분야}");
+    }
+  });
+
   it("분야를 모르면 만들지 않는다(지어내지 않는다)", () => {
     expect(fixedAlternativeQuestions("other", "korea")).toEqual([]);
     expect(fixedAlternativeQuestions(null, "korea")).toEqual([]);
@@ -368,6 +419,54 @@ describe("suggestTrackingPrompts — 사고 사례가 최종 후보에 없다", 
     h.generateObject.mockResolvedValue(llm());
     await suggestTrackingPrompts(findableInput);
     expect(h.generateObject).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("사이트 재료 — 소제목·FAQ·본문이 질문 재료가 된다", () => {
+  it("프롬프트에 소제목·FAQ·구조화 정보·본문 첫머리가 실리고, 얇은 사이트는 siteThin 으로 알린다", async () => {
+    h.generateObject.mockResolvedValue(llm());
+    const out = await suggestTrackingPrompts({
+      ...findableInput,
+      site: {
+        ...findableInput.site,
+        headings: ["GEO 브랜드 진단", "AI 검색 모니터링"],
+        faq: ["GEO 가 뭔가요?"],
+        jsonLdFacts: ["AI 검색 최적화 플랫폼"],
+        bodySnippet: "브랜드가 AI 답변에 인용되는지 진단합니다",
+        thin: true,
+      },
+    });
+    const prompt: string = h.generateObject.mock.calls[0]?.[0].prompt;
+    expect(prompt).toContain("소제목: GEO 브랜드 진단 · AI 검색 모니터링");
+    expect(prompt).toContain("사이트 FAQ: GEO 가 뭔가요?");
+    expect(prompt).toContain("구조화 정보: AI 검색 최적화 플랫폼");
+    expect(prompt).toContain(
+      "본문 첫머리: 브랜드가 AI 답변에 인용되는지 진단합니다"
+    );
+    expect(out.siteThin).toBe(true);
+  });
+
+  it("소제목에만 있는 말도 대표 상품 질문의 근거가 된다(예전엔 제목 한 줄만 봐서 대표 질문이 줄었다)", async () => {
+    h.generateObject.mockResolvedValue(
+      llm({ representative: [{ ...item("초유 보습 크림 어때?", "site") }] })
+    );
+    const withHeading = await suggestTrackingPrompts({
+      ...findableInput,
+      site: { title: "테스트", headings: ["활성 초유 보습 크림"] },
+    });
+    expect(withHeading.prompts.map((p) => p.text)).toContain(
+      "초유 보습 크림 어때?"
+    );
+    h.generateObject.mockResolvedValue(
+      llm({ representative: [{ ...item("초유 보습 크림 어때?", "site") }] })
+    );
+    const without = await suggestTrackingPrompts({
+      ...findableInput,
+      site: { title: "테스트" },
+    });
+    expect(without.prompts.map((p) => p.text)).not.toContain(
+      "초유 보습 크림 어때?"
+    );
   });
 });
 

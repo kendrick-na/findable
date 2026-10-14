@@ -47,6 +47,8 @@ export type QuestionBasis = "brand" | "competitor" | "industry" | "site";
 export interface PlanQuestion {
   /** 근거 재료. 대표 상품 질문은 `site` 여야 하고, `competitor` 는 등록 경쟁사가 있을 때만 쓸 수 있다. */
   basis?: QuestionBasis;
+  /** 생성 모델이 "이 질문은 브랜드 이름의 뜻에서 나왔다"고 밝힌 것. true 면 버린다(이름 뜻 풀이 질문). */
+  fromName?: boolean;
   language: QuestionLanguage;
   text: string;
   type: QuestionType;
@@ -277,6 +279,7 @@ export type DropReason =
   | "industry_banned"
   | "length"
   | "name_in_nameless"
+  | "name_meaning"
   | "no_basis"
   | "no_site_evidence"
   | "presupposition"
@@ -316,7 +319,7 @@ function hasSiteEvidence(text: string, siteText: string): boolean {
  * ⚠️ 제안 경로 전용이다 — 기본 질문 폴백(`defaultConsumerQuestions`)은 이 표를 쓰지 않는다.
  */
 export interface IndustryFrame {
-  /** 대안(다른 선택지) 고정 문형 — 등록 경쟁사가 없을 때 모델 대신 쓴다. `{분야}` 는 업종 분야 이름. */
+  /** 대안(다른 선택지) 고정 문형 — 등록 경쟁사가 없을 때 모델 대신 쓴다. 업종별로 손으로 쓴 자연스러운 문장. */
   alternativeForms: { en: readonly string[]; ko: readonly string[] };
   /** 이 업종에서 맞지 않는 질문 패턴(걸리면 버린다). */
   banned: readonly RegExp[];
@@ -331,24 +334,7 @@ export interface IndustryFrame {
 const PURCHASE_RE =
   /(어디서|어디에서)\s*(사|살|구매|구입)|구매처|구입처|배송|택배|매장/;
 
-const BUSINESS_ALTERNATIVES = {
-  ko: [
-    "{분야} 도입 전에 비교해 볼 만한 다른 선택지는 뭐가 있어?",
-    "{분야} 대안으로 많이 쓰는 곳 알려줘",
-  ],
-  en: [
-    "What other {분야} options are worth comparing before adopting one?",
-    "Which alternatives to consider for {분야}?",
-  ],
-} as const;
-
-const GOODS_ALTERNATIVES = {
-  ko: ["{분야} 다른 선택지는 뭐가 있어?", "{분야} 비슷한 곳 더 알려줘"],
-  en: [
-    "What other {분야} options are there?",
-    "Are there other {분야} brands worth considering?",
-  ],
-} as const;
+const forms = (ko: [string, string], en: [string, string]) => ({ ko, en });
 
 const GOODS: IndustryFrame = {
   persona: "소비자",
@@ -359,7 +345,16 @@ const GOODS: IndustryFrame = {
     "{브랜드}는 어떤 곳이야?",
   ],
   banned: [],
-  alternativeForms: GOODS_ALTERNATIVES,
+  alternativeForms: forms(
+    [
+      "다른 브랜드도 비교해 보고 싶은데 뭐가 있어?",
+      "요즘 많이 쓰는 비슷한 브랜드 알려줘",
+    ],
+    [
+      "What other brands are worth comparing?",
+      "Which similar brands are popular right now?",
+    ]
+  ),
 };
 
 const NEUTRAL: IndustryFrame = {
@@ -367,7 +362,16 @@ const NEUTRAL: IndustryFrame = {
   focus: "일반적인 궁금증(구매를 전제하지 않는다)",
   brandExamples: ["{브랜드}는 어떤 곳이야?", "{브랜드} 평판 어때?"],
   banned: [PURCHASE_RE],
-  alternativeForms: GOODS_ALTERNATIVES,
+  alternativeForms: forms(
+    [
+      "비슷한 곳 중에 비교해 볼 만한 다른 선택지 있어?",
+      "대안으로 많이 쓰는 곳 알려줘",
+    ],
+    [
+      "Are there other options worth comparing?",
+      "Which alternatives do people commonly use?",
+    ]
+  ),
 };
 
 export const INDUSTRY_FRAMES: Record<string, IndustryFrame> = {
@@ -385,7 +389,16 @@ export const INDUSTRY_FRAMES: Record<string, IndustryFrame> = {
       "{브랜드} 써 본 사람 후기 어때?",
     ],
     banned: [PURCHASE_RE],
-    alternativeForms: BUSINESS_ALTERNATIVES,
+    alternativeForms: forms(
+      [
+        "도입 전에 비교해 볼 만한 다른 B2B 소프트웨어는 뭐가 있어?",
+        "비슷한 서비스 중에 많이 쓰는 대안 알려줘",
+      ],
+      [
+        "What other B2B software is worth comparing before adopting one?",
+        "Which similar services do teams commonly use instead?",
+      ]
+    ),
   },
   manufacturing: {
     persona: "부품·소재 거래처를 찾는 담당자",
@@ -396,7 +409,16 @@ export const INDUSTRY_FRAMES: Record<string, IndustryFrame> = {
       "{브랜드} 견적 받을 수 있어?",
     ],
     banned: [PURCHASE_RE],
-    alternativeForms: BUSINESS_ALTERNATIVES,
+    alternativeForms: forms(
+      [
+        "비슷한 부품·소재 업체 중에 비교해 볼 만한 곳 있어?",
+        "거래처로 검토할 만한 다른 제조사 알려줘",
+      ],
+      [
+        "Which similar component suppliers are worth comparing?",
+        "What other manufacturers should I consider as a supplier?",
+      ]
+    ),
   },
   finance: {
     persona: "금융 서비스를 고르는 고객",
@@ -407,7 +429,16 @@ export const INDUSTRY_FRAMES: Record<string, IndustryFrame> = {
       "{브랜드} 가입 후기 어때?",
     ],
     banned: [PURCHASE_RE],
-    alternativeForms: BUSINESS_ALTERNATIVES,
+    alternativeForms: forms(
+      [
+        "비슷한 금융 서비스 중에 비교해 볼 만한 다른 곳 있어?",
+        "요즘 많이 쓰는 금융 앱 중에 대안 알려줘",
+      ],
+      [
+        "Which similar financial services are worth comparing?",
+        "What other finance apps are popular right now?",
+      ]
+    ),
   },
   healthcare: {
     persona: "병원·의료 서비스를 찾는 환자",
@@ -418,7 +449,16 @@ export const INDUSTRY_FRAMES: Record<string, IndustryFrame> = {
       "{브랜드} 후기 어때?",
     ],
     banned: [PURCHASE_RE],
-    alternativeForms: GOODS_ALTERNATIVES,
+    alternativeForms: forms(
+      [
+        "비슷한 진료를 하는 다른 병원도 알려줘",
+        "다른 병원이나 의료 서비스와 비교해 보고 싶어",
+      ],
+      [
+        "Which other clinics offer similar care?",
+        "I want to compare this with other healthcare providers.",
+      ]
+    ),
   },
   education: {
     persona: "수강할 곳을 고르는 학습자",
@@ -429,7 +469,16 @@ export const INDUSTRY_FRAMES: Record<string, IndustryFrame> = {
       "{브랜드} 비용은 얼마야?",
     ],
     banned: [PURCHASE_RE],
-    alternativeForms: GOODS_ALTERNATIVES,
+    alternativeForms: forms(
+      [
+        "비슷한 교육 서비스 중에 비교해 볼 만한 다른 곳 있어?",
+        "수강할 만한 다른 교육 과정도 알려줘",
+      ],
+      [
+        "Which similar education services are worth comparing?",
+        "What other courses are worth taking?",
+      ]
+    ),
   },
   content_ip: {
     persona: "콘텐츠를 찾는 이용자",
@@ -440,7 +489,16 @@ export const INDUSTRY_FRAMES: Record<string, IndustryFrame> = {
       "{브랜드} 후기 어때?",
     ],
     banned: [],
-    alternativeForms: GOODS_ALTERNATIVES,
+    alternativeForms: forms(
+      [
+        "비슷한 콘텐츠 중에 다른 추천작 알려줘",
+        "요즘 인기 있는 비슷한 콘텐츠 뭐 있어?",
+      ],
+      [
+        "What similar content would you recommend?",
+        "What similar titles are popular right now?",
+      ]
+    ),
   },
 };
 
@@ -468,14 +526,14 @@ export function fixedAlternativeQuestions(
     forms[language].slice(0, targets[language]).map((form) => ({
       language,
       type: "alternative" as const,
-      text: form.replace("{분야}", label[language]),
+      text: form,
     }))
   );
 }
 
 // ── 질문 속 고유명사·전제 검사 ───────────────────────────────────────────
 const PRESUPPOSITION_RE =
-  /(라고|다고)\s*(했|하던|들었|봤|써\s*있)|했던데|라던데|다던데|들었는데|봤는데|\b(i heard|they say|it is said|you said|i read that)\b/i;
+  /(라고|다고)\s*(했|하던|들었|봤|써\s*있)|했던데|라던데|다던데|들었는데|봤는데|[었았였했겠있없]다는|하던데|좋대|[다라]고들|라는\s*(말|얘기|소문)|\b(i heard|they say|it is said|you said|i read that)\b/i;
 const ACRONYMS = new Set([
   "ai",
   "api",
@@ -583,6 +641,9 @@ export function checkQuestion(
   }
   if (industryFrame(ctx.industry).banned.some((re) => re.test(text))) {
     return "industry_banned";
+  }
+  if (q.fromName === true) {
+    return "name_meaning";
   }
   if (findUnknownProperNoun(text, ctx)) {
     return "unknown_proper_noun";
