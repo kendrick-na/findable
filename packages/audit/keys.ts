@@ -48,6 +48,15 @@ export const keys = () =>
         .string()
         .optional()
         .transform((v) => v === "true"),
+      /**
+       * 질문 사전 실행 검증 플래그. **기본 off.** 켜면 고객이 질문 고르는 화면에서 [미리 돌려 보기]가 나타나고,
+       * 고른 질문(최대 20개)을 엔진 1곳(Gemini)에 1번씩 돌려 브랜드가 나열되는지 보여 준다(저장·점수 반영 없음).
+       * 엔진 호출 한도(Gemini 무료 티어 일 1,500건)를 본 측정과 나눠 쓰므로, 영업 측정이 끝난 뒤 켠다. 값이 정확히 "true" 일 때만 on.
+       */
+      QUESTION_PRERUN_ENABLED: z
+        .string()
+        .optional()
+        .transform((v) => v === "true"),
     },
     runtimeEnv: {
       AUDIT_BRIEFING_IN_MAIN_ENABLED:
@@ -55,5 +64,6 @@ export const keys = () =>
       AUDIT_DUAL_WRITE_ENABLED: process.env.AUDIT_DUAL_WRITE_ENABLED,
       PROMPT_ATTEMPT_LEDGER_ENABLED: process.env.PROMPT_ATTEMPT_LEDGER_ENABLED,
       SITE_RENDER_ENABLED: process.env.SITE_RENDER_ENABLED,
+      QUESTION_PRERUN_ENABLED: process.env.QUESTION_PRERUN_ENABLED,
     },
   });

@@ -1,4 +1,6 @@
 import { inferMarketScope } from "@repo/audit/market-scope";
+import { isQuestionPrerunEnabled } from "@repo/audit/question-prerun";
+import { prerunQuestionsAction } from "@/app/actions/brand/prerun-questions";
 import { updateBrandProfile } from "@/app/actions/brand/update-profile";
 import {
   checkBrandSetup,
@@ -61,6 +63,8 @@ export const WelcomeFlowServer = async ({
       {...props}
       actions={{
         check: checkBrandSetup,
+        // 기능이 켜져 있을 때만 주입한다(꺼져 있으면 버튼 자체가 없다).
+        prerun: isQuestionPrerunEnabled() ? prerunQuestionsAction : undefined,
         save: saveWelcomeQuestions,
         start: startWelcomeMeasurement,
         suggest: suggestWelcomeQuestions,

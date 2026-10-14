@@ -15,6 +15,7 @@ import { ExternalLinkIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { env } from "@/env";
+import { prerunInjection } from "@/lib/brand/prerun-injection";
 import { requireOrg, scopedBrands } from "@/lib/db/scoped";
 import {
   type AppDictionary,
@@ -321,6 +322,7 @@ const BrandPage = async () => {
                     <PromptWizard
                       brandId={brand.id}
                       industry={brand.industry}
+                      onPrerun={prerunInjection()}
                       pickerLabels={dict.questionPicker}
                       t={dict.promptWizard}
                     />

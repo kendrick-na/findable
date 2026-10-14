@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import {
   QuestionPicker,
   type QuestionPickerLabels,
+  type QuestionSignals,
 } from "../features/brand/question-picker";
 import { SiteNoteBox } from "../features/brand/site-note-box";
 import {
@@ -70,6 +71,9 @@ export const WelcomeQuestionStep = ({
   // 사이트 글자가 거의 안 읽혔을 때만 "한 줄 소개" 칸을 보인다(자동 읽기가 실패했을 때의 마지막 안전망).
   const [siteThin, setSiteThin] = useState(false);
   const [siteNote, setSiteNote] = useState("");
+  // 미리 돌려 본 결과(이번 1번 기준 · 저장하지 않는다).
+  const [signals, setSignals] = useState<QuestionSignals>({});
+  const [previewing, setPreviewing] = useState(false);
   const limitReached = questionLimit !== null && savedCount >= questionLimit;
   const viewPlans = {
     label: t.viewPlans,
@@ -109,6 +113,30 @@ export const WelcomeQuestionStep = ({
     setSelected(new Set());
     setSiteThin(Boolean(result.siteThin));
     setPhase("review");
+  };
+
+  const preview = async () => {
+    if (!actions.prerun) {
+      return;
+    }
+    setPreviewing(true);
+    const texts = prompts
+      .filter((_, i) => selected.has(i))
+      .map((p) => p.text.trim());
+    const result = await actions.prerun({ brandId, questions: texts });
+    setPreviewing(false);
+    if ("error" in result) {
+      toast.error(result.error);
+      return;
+    }
+    setSignals(
+      Object.fromEntries(
+        result.signals.map((s) => [
+          s.text,
+          { brandsListed: s.brandsListed, error: s.error, ours: s.ours },
+        ])
+      )
+    );
   };
 
   const next = async () => {
@@ -218,9 +246,12 @@ export const WelcomeQuestionStep = ({
               prev.map((p, i) => (i === index ? { ...p, text } : p))
             )
           }
+          onPreview={actions.prerun ? preview : undefined}
           onSelectedChange={setSelected}
+          previewing={previewing}
           prompts={prompts}
           selected={selected}
+          signals={signals}
         />
       ) : (
         !limitReached && (

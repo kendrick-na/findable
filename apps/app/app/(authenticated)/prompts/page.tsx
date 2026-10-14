@@ -18,6 +18,7 @@ import {
 } from "@/app/actions/brand/archive-prompt";
 import { deletePromptAction } from "@/app/actions/brand/delete-prompt";
 import { editPromptAction } from "@/app/actions/brand/edit-prompt";
+import { prerunInjection } from "@/lib/brand/prerun-injection";
 import { requireOrg, scopedBrands } from "@/lib/db/scoped";
 import { getAppDictionary } from "@/lib/i18n";
 import { Header } from "../components/header";
@@ -257,6 +258,7 @@ const PromptsPage = async () => {
                   <PromptWizard
                     brandId={brand.id}
                     industry={brand.industry}
+                    onPrerun={prerunInjection()}
                     pickerLabels={dict.questionPicker}
                     t={dict.promptWizard}
                   />

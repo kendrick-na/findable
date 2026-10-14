@@ -12,7 +12,7 @@ import {
   suggestPromptsAction,
 } from "@/app/actions/brand/suggest-prompts";
 import type { AppDictionary } from "@/lib/i18n";
-import { QuestionPicker } from "./question-picker";
+import { QuestionPicker, type QuestionSignals } from "./question-picker";
 import { SiteNoteBox } from "./site-note-box";
 
 /**
@@ -47,10 +47,24 @@ const MAX_CUSTOM_PROMPT_LENGTH = 200;
 export const PromptWizard = ({
   brandId,
   industry,
+  onPrerun,
   pickerLabels,
   t,
 }: {
   brandId: string;
+  /** 질문 미리 돌려 보기(저장·점수 반영 없음). 기능이 꺼져 있으면 undefined 라 버튼이 안 보인다. */
+  onPrerun?: (input: { brandId: string; questions: string[] }) => Promise<
+    | { error: string }
+    | {
+        ok: true;
+        signals: Array<{
+          brandsListed: number;
+          error?: boolean;
+          ours: boolean;
+          text: string;
+        }>;
+      }
+  >;
   /** 업종(Industry enum 값). '기타'면 질문 재료가 적다는 안내를 보인다. */
   industry?: string | null;
   /** 사전 `app.questionPicker` — 질문 고르기 화면 문구. */
@@ -69,6 +83,9 @@ export const PromptWizard = ({
   // 사이트 글자가 거의 안 읽혔을 때만 "한 줄 소개" 칸을 보인다.
   const [siteThin, setSiteThin] = useState(false);
   const [siteNote, setSiteNote] = useState("");
+  // 미리 돌려 본 결과(이번 1번 기준 · 저장하지 않는다).
+  const [signals, setSignals] = useState<QuestionSignals>({});
+  const [previewing, setPreviewing] = useState(false);
 
   const addCustom = async () => {
     const text = customText.trim();
@@ -145,6 +162,30 @@ export const PromptWizard = ({
       setPhase("idle");
       toast.error(t.suggestFailed);
     }
+  };
+
+  const preview = async () => {
+    if (!onPrerun) {
+      return;
+    }
+    setPreviewing(true);
+    const texts = prompts
+      .filter((_, i) => selected.has(i))
+      .map((p) => p.text.trim());
+    const result = await onPrerun({ brandId, questions: texts });
+    setPreviewing(false);
+    if ("error" in result) {
+      toast.error(result.error);
+      return;
+    }
+    setSignals(
+      Object.fromEntries(
+        result.signals.map((s) => [
+          s.text,
+          { brandsListed: s.brandsListed, error: s.error, ours: s.ours },
+        ])
+      )
+    );
   };
 
   const edit = (index: number, text: string) =>
@@ -323,9 +364,12 @@ export const PromptWizard = ({
         labels={pickerLabels}
         max={maxPick}
         onEdit={edit}
+        onPreview={onPrerun ? preview : undefined}
         onSelectedChange={setSelected}
+        previewing={previewing}
         prompts={prompts}
         selected={selected}
+        signals={signals}
       />
 
       <p className="text-amber-600 text-xs dark:text-amber-400">

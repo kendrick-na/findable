@@ -1170,7 +1170,9 @@
       "measuringNoEdit": "A measurement is in progress, so questions can't be changed right now. Please try again after it finishes.",
       "restoreNoRoom": "No free question slots to restore this. Archive another question or upgrade your plan.",
       "archiveUnavailable": "Question archiving is being prepared. Please try again shortly.",
-      "archiveFailed": "Couldn't archive or restore. Please try again shortly."
+      "archiveFailed": "Couldn't archive or restore. Please try again shortly.",
+      "prerunDisabled": "Test run isn't available yet.",
+      "prerunFailed": "Couldn't run the test. Please try again shortly."
     },
     "promptWizard": {
       "categoryBrand": "Brand",
@@ -2194,7 +2196,14 @@
       "typeRepresentative": "Signature products",
       "typeAlternative": "Comparisons & alternatives",
       "typeBrand": "About the brand",
-      "typeOther": "Other"
+      "typeOther": "Other",
+      "preview": "Test run",
+      "previewing": "Testing…",
+      "previewNote": "We ask the AI each selected question once. Answers vary between runs, so this is a single sample. Nothing is saved or scored.",
+      "signalListed": "{n} brands listed",
+      "signalNone": "No brands shown",
+      "signalOurs": "Your brand appears",
+      "signalError": "Couldn't check"
     }
   }
 }

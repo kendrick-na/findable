@@ -1170,7 +1170,9 @@
       "measuringNoEdit": "측정이 진행 중이라 지금은 질문을 바꿀 수 없어요. 측정이 끝난 뒤 다시 시도해 주세요.",
       "restoreNoRoom": "질문 칸이 가득 차서 복원할 수 없어요. 다른 질문을 보관하거나 플랜을 올려주세요.",
       "archiveUnavailable": "질문 보관 기능을 준비 중이에요. 잠시 후 다시 시도해 주세요.",
-      "archiveFailed": "보관·복원하지 못했어요. 잠시 후 다시 시도해 주세요."
+      "archiveFailed": "보관·복원하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      "prerunDisabled": "질문 미리 돌려 보기는 아직 쓸 수 없어요.",
+      "prerunFailed": "미리 돌려 보지 못했어요. 잠시 후 다시 시도해 주세요."
     },
     "promptWizard": {
       "categoryBrand": "브랜드",
@@ -2194,7 +2196,14 @@
       "typeRepresentative": "대표 상품",
       "typeAlternative": "비교·대안",
       "typeBrand": "브랜드 이해",
-      "typeOther": "기타"
+      "typeOther": "기타",
+      "preview": "미리 돌려 보기",
+      "previewing": "돌려 보는 중…",
+      "previewNote": "고른 질문을 AI에게 한 번씩 물어봐요. 이번 1번 기준이라 답변은 매번 달라질 수 있어요. 저장하거나 점수에 반영하지 않아요.",
+      "signalListed": "브랜드 {n}개 나열",
+      "signalNone": "브랜드가 안 나와요",
+      "signalOurs": "우리 브랜드 나옴",
+      "signalError": "확인하지 못했어요"
     }
   }
 }

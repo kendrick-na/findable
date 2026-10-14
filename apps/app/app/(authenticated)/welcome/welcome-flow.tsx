@@ -140,6 +140,19 @@ const useSiteReadinessPolling = (
 export interface WelcomeActions {
   /** 지금 설정 상태에서 비어 있는 항목 코드(필수+권장). 읽기 실패면 null. */
   check: (brandId: string) => Promise<{ missing: string[] } | null>;
+  /** 질문 미리 돌려 보기(저장·점수 반영 없음). 기능이 꺼져 있으면 undefined 라 버튼이 안 보인다. */
+  prerun?: (input: { brandId: string; questions: string[] }) => Promise<
+    | { error: string }
+    | {
+        ok: true;
+        signals: Array<{
+          brandsListed: number;
+          error?: boolean;
+          ours: boolean;
+          text: string;
+        }>;
+      }
+  >;
   /** 사람이 고른 질문만 저장한다. 한도 정보(`capped`·`limit`·`code`)를 화면까지 전달한다. */
   save: (input: { brandId: string; prompts: SuggestedPrompt[] }) => Promise<
     | { code?: "prompt_limit"; error: string; limit?: number }

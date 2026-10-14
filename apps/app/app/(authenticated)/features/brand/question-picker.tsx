@@ -25,9 +25,18 @@ import { Input } from "@repo/design-system/components/ui/input";
 export interface QuestionPickerLabels {
   clear: string;
   editAria: string;
+  /** [미리 돌려 보기] 버튼 · 진행 중 · 안내(1번 표본·저장 안 함) */
+  preview?: string;
+  previewing?: string;
+  previewNote?: string;
   recommend: string;
   /** "{n}개 선택 · 최대 {max}개" */
   selectedOfMax: string;
+  /** 미리 돌려 본 결과 배지 */
+  signalError?: string;
+  signalListed?: string;
+  signalNone?: string;
+  signalOurs?: string;
   typeAlternative: string;
   typeBrand: string;
   typeCategory: string;
@@ -37,7 +46,40 @@ export interface QuestionPickerLabels {
   typeRepresentative: string;
 }
 
-const TYPE_LABEL_KEY: Record<QuestionType, keyof QuestionPickerLabels> = {
+/** 미리 돌려 본 결과 배지: 브랜드가 나열되면 중립, 안 나오면 주의, 실패는 흐리게. */
+function signalBadge(
+  signal: QuestionSignals[string] | undefined,
+  labels: QuestionPickerLabels
+) {
+  if (!signal) {
+    return null;
+  }
+  let text: string | undefined;
+  let tone = "text-[color:var(--findable-ink-subtle,#8a8f98)]";
+  if (signal.error) {
+    text = labels.signalError;
+  } else if (signal.brandsListed === 0) {
+    text = labels.signalNone;
+    tone = "text-amber-600 dark:text-amber-400";
+  } else {
+    text = (signal.ours ? labels.signalOurs : labels.signalListed)?.replace(
+      "{n}",
+      String(signal.brandsListed)
+    );
+  }
+  return text ? (
+    <span className={`whitespace-nowrap text-[10px] ${tone}`}>{text}</span>
+  ) : null;
+}
+
+type TypeLabelKey =
+  | "typeAlternative"
+  | "typeBrand"
+  | "typeCategory"
+  | "typeConcern"
+  | "typeRepresentative";
+
+const TYPE_LABEL_KEY: Record<QuestionType, TypeLabelKey> = {
   category: "typeCategory",
   concern: "typeConcern",
   representative: "typeRepresentative",
@@ -45,10 +87,19 @@ const TYPE_LABEL_KEY: Record<QuestionType, keyof QuestionPickerLabels> = {
   brand: "typeBrand",
 };
 
+/** 미리 돌려 본 결과(질문 문구로 찾는다). */
+export type QuestionSignals = Record<
+  string,
+  { brandsListed: number; error?: boolean; ours: boolean }
+>;
+
 export const QuestionPicker = ({
   labels,
   max,
   onEdit,
+  onPreview,
+  previewing = false,
+  signals,
   onSelectedChange,
   prompts,
   selected,
@@ -57,6 +108,10 @@ export const QuestionPicker = ({
   /** 더 담을 수 있는 최대 개수(플랜 상한 − 이미 저장된 질문). */
   max: number;
   onEdit: (index: number, text: string) => void;
+  /** 있으면 [미리 돌려 보기] 버튼을 보인다(기능이 켜진 곳에서만 부모가 넘긴다). */
+  onPreview?: () => void;
+  previewing?: boolean;
+  signals?: QuestionSignals;
   onSelectedChange: (next: Set<number>) => void;
   prompts: SuggestedPrompt[];
   /** 선택한 질문의 **인덱스**(문구를 고쳐도 선택이 유지되도록). */
@@ -113,6 +168,17 @@ export const QuestionPicker = ({
           >
             {labels.recommend}
           </Button>
+          {onPreview && labels.preview ? (
+            <Button
+              disabled={selected.size === 0 || previewing}
+              onClick={onPreview}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {previewing ? labels.previewing : labels.preview}
+            </Button>
+          ) : null}
           <Button
             disabled={selected.size === 0}
             onClick={() => onSelectedChange(new Set())}
@@ -124,6 +190,12 @@ export const QuestionPicker = ({
           </Button>
         </div>
       </div>
+
+      {onPreview && labels.previewNote ? (
+        <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
+          {labels.previewNote}
+        </p>
+      ) : null}
 
       <div className="flex max-h-80 flex-col gap-3 overflow-y-auto pr-1">
         {groups.map((group) => (
@@ -153,6 +225,7 @@ export const QuestionPicker = ({
                       onChange={(e) => onEdit(index, e.target.value)}
                       value={prompt.text}
                     />
+                    {signalBadge(signals?.[prompt.text.trim()], labels)}
                     <span className="text-[10px] text-[color:var(--findable-ink-tertiary,#7e8289)]">
                       {prompt.language === "ko" ? "KO" : "EN"}
                     </span>
