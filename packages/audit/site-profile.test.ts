@@ -4,7 +4,11 @@ vi.mock("@repo/observability/log", () => ({
   log: { warn: vi.fn(), info: vi.fn() },
 }));
 
-import { extractSiteProfile, THIN_SITE_TEXT_CHARS } from "./site-profile";
+import {
+  extractSiteProfile,
+  mergeSiteProfiles,
+  THIN_SITE_TEXT_CHARS,
+} from "./site-profile";
 
 const page = (body: string, head = "") =>
   `<html><head><title>프롬맘 | 아기 보습</title><meta name="description" content="활성 초유로 아기 피부를"><meta property="og:site_name" content="프롬맘">${head}</head><body><header><nav>메뉴 로그인 장바구니</nav></header>${body}<footer>사업자등록번호</footer></body></html>`;
@@ -58,5 +62,33 @@ describe("extractSiteProfile — 질문 제안용 사이트 재료", () => {
 
   it(`눈에 보이는 글자가 ${THIN_SITE_TEXT_CHARS}자 미만이면 thin(JS 렌더링·차단 의심)`, () => {
     expect(extractSiteProfile(page("<div id='root'></div>")).thin).toBe(true);
+  });
+});
+
+describe("mergeSiteProfiles — 홈 + 서비스 페이지", () => {
+  it("서비스 페이지의 소제목·본문이 합쳐지고, 홈이 얇아도 서비스 페이지 글이 있으면 thin 이 아니다", () => {
+    const home = extractSiteProfile(page("<div id='root'></div>"));
+    expect(home.thin).toBe(true);
+    const service = extractSiteProfile(
+      page(
+        `<h1>법인 송금 서비스</h1><h2>수수료 안내</h2><p>${"사업자를 위한 빠른 송금과 정산 서비스입니다. ".repeat(12)}</p>`
+      )
+    );
+    const merged = mergeSiteProfiles(home, [service]);
+    expect(merged.headings).toEqual(
+      expect.arrayContaining(["법인 송금 서비스", "수수료 안내"])
+    );
+    expect(merged.bodySnippet).toContain("법인 송금 서비스: ");
+    expect(merged.thin).toBe(false);
+    expect(merged.pagesRead).toBe(2);
+  });
+
+  it("글자 수 상한을 넘지 않는다", () => {
+    const big = extractSiteProfile(
+      page(`<p>${"가나다라마바사 ".repeat(400)}</p>`)
+    );
+    const merged = mergeSiteProfiles(big, [big, big, big]);
+    expect(merged.bodySnippet.length).toBeLessThanOrEqual(2000);
+    expect(merged.headings.length).toBeLessThanOrEqual(16);
   });
 });

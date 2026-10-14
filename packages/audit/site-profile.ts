@@ -1,5 +1,7 @@
 import { log } from "@repo/observability/log";
+import { isAllowedByRobots, parseRobotsDisallow } from "./brand-catalog";
 import { assertPublicUrl, normalizePublicUrl } from "./public-url-security";
+import { servicePageUrls } from "./site-structure";
 
 /**
  * 질문 제안용 사이트 프로필(2026-10-14).
@@ -21,6 +23,13 @@ const MAX_HEADINGS = 12;
 const MAX_FAQ = 8;
 const BODY_SNIPPET_CHARS = 1200;
 
+/** 홈 말고 더 읽는 서비스 소개 페이지 수(사이트맵 기준). */
+const MAX_EXTRA_PAGES = 3;
+const EXTRA_PAGE_SNIPPET_CHARS = 300;
+const MAX_TOTAL_HEADINGS = 16;
+const MAX_TOTAL_BODY_CHARS = 2000;
+const SITEMAP_INDEX_RE = /<sitemapindex\b/i;
+
 export interface SiteProfile {
   /** 본문 첫머리(눈에 보이는 글자). */
   bodySnippet: string;
@@ -32,6 +41,8 @@ export interface SiteProfile {
   headings: string[];
   /** JSON-LD 의 Organization·Product·Service 이름/설명 조각. */
   jsonLdFacts: string[];
+  /** 읽은 페이지 수(홈 포함). */
+  pagesRead?: number;
   siteName: string | null;
   /** 눈에 보이는 글자가 거의 없다(JS 렌더링·차단 의심). */
   thin: boolean;
@@ -167,14 +178,21 @@ export function extractSiteProfile(html: string): SiteProfile {
   };
 }
 
-async function fetchHtml(initial: URL, signal: AbortSignal): Promise<string> {
+async function fetchText(
+  initial: URL,
+  signal: AbortSignal,
+  kind: "html" | "text"
+): Promise<string> {
   let current = initial;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     await assertPublicUrl(current);
     const response = await fetch(current, {
       cache: "no-store",
       headers: {
-        accept: "text/html,application/xhtml+xml",
+        accept:
+          kind === "html"
+            ? "text/html,application/xhtml+xml"
+            : "text/plain,application/xml,text/xml",
         "user-agent": USER_AGENT,
       },
       redirect: "manual",
@@ -192,6 +210,7 @@ async function fetchHtml(initial: URL, signal: AbortSignal): Promise<string> {
       throw new Error(`HTTP_${response.status}`);
     }
     if (
+      kind === "html" &&
       !(response.headers.get("content-type")?.toLowerCase() ?? "").includes(
         "text/html"
       )
@@ -204,16 +223,82 @@ async function fetchHtml(initial: URL, signal: AbortSignal): Promise<string> {
   throw new Error("REDIRECT_FAILED");
 }
 
-/** 질문 제안용으로 사이트를 한 번 읽는다. 실패·시간 초과면 null(제안을 막지 않는다). */
+const orNull = async (task: Promise<string>): Promise<string | null> =>
+  await task.catch(() => null);
+
+/** 홈 프로필에 서비스 페이지 프로필을 합친다(순수). 글자 수 상한을 지킨다. */
+export function mergeSiteProfiles(
+  home: SiteProfile,
+  extras: readonly SiteProfile[]
+): SiteProfile {
+  const uniq = (items: string[], max: number) =>
+    [...new Set(items)].slice(0, max);
+  const bodySnippet = [
+    home.bodySnippet,
+    ...extras.map((p) =>
+      [p.h1 ?? p.title, p.bodySnippet.slice(0, EXTRA_PAGE_SNIPPET_CHARS)]
+        .filter(Boolean)
+        .join(": ")
+    ),
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, MAX_TOTAL_BODY_CHARS);
+  return {
+    ...home,
+    headings: uniq(
+      [
+        ...home.headings,
+        ...extras.flatMap((p) => [p.h1 ?? "", ...p.headings]),
+      ].filter(Boolean),
+      MAX_TOTAL_HEADINGS
+    ),
+    faq: uniq([...home.faq, ...extras.flatMap((p) => p.faq)], MAX_FAQ),
+    jsonLdFacts: uniq(
+      [...home.jsonLdFacts, ...extras.flatMap((p) => p.jsonLdFacts)],
+      MAX_HEADINGS
+    ),
+    bodySnippet,
+    pagesRead: 1 + extras.length,
+    thin: bodySnippet.replace(SPACE_RE, "").length < THIN_SITE_TEXT_CHARS,
+  };
+}
+
+/**
+ * 질문 제안용으로 사이트를 읽는다: 홈 + 사이트맵의 서비스 소개 페이지 최대 3쪽(robots.txt 금지 경로는 읽지 않는다).
+ * 실패·시간 초과·robots 로 홈이 막힌 경우는 null(제안을 막지 않는다).
+ */
 export async function readSiteProfile(
   domain: string
 ): Promise<SiteProfile | null> {
   try {
-    const html = await fetchHtml(
-      normalizePublicUrl(domain),
-      AbortSignal.timeout(FETCH_TIMEOUT_MS)
+    const origin = normalizePublicUrl(domain).origin;
+    const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+    const [robots, homeHtml, sitemap] = await Promise.all([
+      orNull(fetchText(new URL("/robots.txt", origin), signal, "text")),
+      fetchText(new URL("/", origin), signal, "html"),
+      orNull(fetchText(new URL("/sitemap.xml", origin), signal, "text")),
+    ]);
+    const disallow = robots ? parseRobotsDisallow(robots) : [];
+    if (!isAllowedByRobots("/", disallow)) {
+      log.warn("audit.site_profile.robots_blocked", { domain });
+      return null;
+    }
+    const home = extractSiteProfile(homeHtml);
+    if (!sitemap || SITEMAP_INDEX_RE.test(sitemap)) {
+      return { ...home, pagesRead: 1 };
+    }
+    const host = new URL(origin).host;
+    const urls = servicePageUrls(sitemap, host)
+      .ko.filter((url) => isAllowedByRobots(new URL(url).pathname, disallow))
+      .slice(0, MAX_EXTRA_PAGES);
+    const pages = await Promise.all(
+      urls.map((url) => orNull(fetchText(new URL(url), signal, "html")))
     );
-    return extractSiteProfile(html);
+    return mergeSiteProfiles(
+      home,
+      pages.flatMap((html) => (html ? [extractSiteProfile(html)] : []))
+    );
   } catch (error) {
     log.warn("audit.site_profile.failed", {
       domain,
