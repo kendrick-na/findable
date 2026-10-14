@@ -2205,6 +2205,17 @@
       "signalNone": "브랜드가 안 나와요",
       "signalOurs": "우리 브랜드 나옴",
       "signalError": "확인하지 못했어요"
+    },
+    "questionTypeCard": {
+      "title": "이런 질문에서 얼마나 나오나",
+      "hint": "최근 측정 기준이에요. 작은 브랜드는 이름 없는 질문에서 0%로 시작하는 게 정상이고, 시간에 따른 변화가 중요해요.",
+      "rowNamed": "우리 이름을 넣은 질문",
+      "rowNameless": "이름 없이 추천을 묻는 질문",
+      "counts": "AI 답변 {n}개 중 {m}개에서 나옴",
+      "competitorsAvg": "같은 질문에서 AI가 나열한 다른 브랜드는 평균 {n}곳이에요.",
+      "baselineFirst": "이번이 첫 기준선이에요. 다음 측정부터 변화를 보여 드려요.",
+      "baselineSame": "처음 측정({date}) 대비 이름 없는 질문 노출 {from}% → {to}%",
+      "baselineChanged": "질문이 바뀌어서 처음 측정과 숫자로 비교할 수 없어요."
     }
   }
 }

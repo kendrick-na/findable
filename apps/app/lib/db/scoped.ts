@@ -224,6 +224,26 @@ export async function scopedLatestOrgAudit(brandId?: string) {
   });
 }
 
+/** 이 브랜드의 가장 최근 **완료된** 측정(질문 유형별 카드용). org 소속만. */
+export async function scopedLatestCompletedAudit(brandId: string) {
+  const orgId = await requireOrg();
+  return database.auditJob.findFirst({
+    where: { organizationId: orgId, brandId, status: "completed" },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, createdAt: true, result: true },
+  });
+}
+
+/** 이 브랜드의 가장 처음 **완료된** 측정(첫 기준선). org 소속만. */
+export async function scopedFirstCompletedAudit(brandId: string) {
+  const orgId = await requireOrg();
+  return database.auditJob.findFirst({
+    where: { organizationId: orgId, brandId, status: "completed" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, createdAt: true, result: true },
+  });
+}
+
 /** scopedLatestRunTracking 이 반환하는 행 타입(분석 집계 입력). */
 export type ScopedAnalysisRow = Awaited<
   ReturnType<typeof scopedLatestRunTracking>

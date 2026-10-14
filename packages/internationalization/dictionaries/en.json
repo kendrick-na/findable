@@ -2205,6 +2205,17 @@
       "signalNone": "No brands shown",
       "signalOurs": "Your brand appears",
       "signalError": "Couldn't check"
+    },
+    "questionTypeCard": {
+      "title": "How often you appear by question type",
+      "hint": "Based on the latest run. A small brand starting at 0% on nameless questions is normal; the change over time is what matters.",
+      "rowNamed": "Questions with your brand name",
+      "rowNameless": "Nameless questions asking for recommendations",
+      "counts": "Appeared in {m} of {n} AI answers",
+      "competitorsAvg": "On the same questions, AI listed {n} other brands on average.",
+      "baselineFirst": "This is your first baseline. We'll show the change from the next run.",
+      "baselineSame": "Since the first run ({date}): nameless-question visibility {from}% → {to}%",
+      "baselineChanged": "The questions changed, so the numbers can't be compared with the first run."
     }
   }
 }

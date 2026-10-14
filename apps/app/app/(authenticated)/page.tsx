@@ -47,6 +47,7 @@ import { NextActionsCard } from "./components/next-actions-card";
 import { OnboardingTour } from "./components/onboarding-tour";
 import { PartnerCTA } from "./components/partner-cta";
 import { PromptScoreboard } from "./components/prompt-scoreboard";
+import { QuestionTypeCardServer } from "./components/question-type-card-server";
 import { SovTrendChart } from "./components/sov-trend-chart";
 import { TrendAnnotations } from "./components/trend-annotations";
 import { UpgradeLadder } from "./components/upgrade-ladder";
@@ -609,6 +610,14 @@ const App = async ({ searchParams }: AppProperties) => {
                 />
               </div>
             ) : null}
+
+            {/* 질문 유형별 노출(2026-10-14) — 메인 점수는 그대로 두고, 이름 없는 질문 측정 기록이 있을 때만 카드 하나를 더한다. */}
+            <Suspense fallback={null}>
+              <QuestionTypeCardServer
+                brandId={data.latestBrandId}
+                show={currentRunPublishable}
+              />
+            </Suspense>
 
             {data.latestBrandId && orgId ? (
               <Suspense
