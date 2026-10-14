@@ -30,8 +30,8 @@ const llm = (over: Record<string, unknown> = {}) => ({
       item(`피부 고민 ${i} 어떻게 해?`)
     ),
     representative: [
-      item("시카 크림 뭐가 좋아?"),
-      item("비타민 앰플 추천해줘"),
+      { ...item("시카 크림 뭐가 좋아?"), basis: "site" },
+      { ...item("비타민 앰플 추천해줘"), basis: "site" },
     ],
     alternative: [
       item("라운드랩 대신 쓸 만한 곳"),

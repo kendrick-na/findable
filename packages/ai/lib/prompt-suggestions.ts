@@ -23,7 +23,9 @@ import {
   balanceAxisOfType,
   composeQuestions,
   defaultConsumerQuestions,
+  fixedAlternativeQuestions,
   guardQuestions,
+  industryFrame,
   industryLabel,
   type PlanMarketScope,
   type PlanQuestion,
@@ -128,7 +130,9 @@ const MAX_PROMPTS = Object.values(QUESTION_COMPOSITION).reduce(
   0
 );
 // 유형별로 목표보다 넉넉히 받아 둔다 — 자동 검사에서 버려지는 몫.
-const OVERSHOOT = 2;
+const OVERSHOOT = 3;
+// 거른 뒤 이 수보다 적으면 한 번 더 만들어 합친다(추가 AI 호출 1회 · 2026-10-14 대표 위임 승인).
+const RETRY_BELOW = 14;
 
 /**
  * 질문 1개 = 문장 + 언어. 유형은 배열(유형별 목록)이 정한다 — 질문마다 LLM 이 유형을 고르게 하면
@@ -138,6 +142,8 @@ const OVERSHOOT = 2;
 const promptItemSchema = z.object({
   text: z.string(),
   language: z.enum(["ko", "en"]),
+  // 이 질문이 나온 재료. 재료에 없는 이름·사실을 지어내지 않았다는 자기 신고이며, 코드가 대조해 거른다.
+  basis: z.enum(["brand", "competitor", "industry", "site"]).optional(),
 });
 
 const suggestionSchema = z.object({
@@ -162,13 +168,13 @@ const suggestionSchema = z.object({
   alternative: z
     .array(promptItemSchema)
     .describe(
-      "비교·대안 질문. 경쟁사 이름이 주어졌으면 '[경쟁사] 대신 쓸 만한 곳', '[경쟁사] 말고 뭐 있어?' 형태(우리 브랜드명은 넣지 말 것). 경쟁사가 없으면 '이 분야 다른 선택지' 같은 일반형."
+      "비교·대안 질문. 경쟁사 이름이 주어졌을 때만 '[경쟁사] 대신 쓸 만한 곳', '[경쟁사] 말고 뭐 있어?' 형태로 만든다(우리 브랜드명은 넣지 말 것). 경쟁사가 없으면 빈 배열."
     )
     .default([]),
   brandUnderstanding: z
     .array(promptItemSchema)
     .describe(
-      "브랜드를 직접 묻는 질문. 반드시 브랜드명을 넣을 것. 예: '{브랜드} 후기 어때?', '{브랜드} 어디서 사?', '{브랜드}는 어떤 곳이야?'."
+      "브랜드를 직접 묻는 질문. 반드시 브랜드명을 넣을 것. 예시는 프롬프트의 [업종 틀]을 따른다(업종에 맞지 않는 구매처 질문 금지)."
     )
     .default([]),
   confident: z
@@ -289,75 +295,47 @@ export async function suggestTrackingPrompts(
 ): Promise<PromptSuggestions> {
   const scope = scopeOf(input);
   try {
-    const targets = targetCounts(scope);
-    const want = (type: QuestionType) =>
-      (["ko", "en"] as const)
-        .filter((lang) => targets[type][lang] > 0)
-        .map(
-          (lang) =>
-            `${lang === "ko" ? "한국어" : "영어"} ${targets[type][lang] + OVERSHOOT}개`
-        )
-        .join(" + ");
-    const label = industryLabel(input.industry);
     const siteText = siteTextOf(input.site);
-    const { object: out } = await generateObject({
-      model: suggestModel(),
-      schema: suggestionSchema,
-      prompt: `브랜드를 AI 검색(ChatGPT·Perplexity·네이버 등)에서 추적할 **질문 후보**를 만들어줘.
-질문은 투자자·사업자가 아니라 **소비자·고객이 AI에게 실제로 묻는 말**(반말 대화체)이어야 해.
-
-[재료]
-- 브랜드명: ${input.brandName}${input.aliases?.length ? ` (별칭: ${input.aliases.join(", ")})` : ""}
-- 도메인: ${input.domain}
-- 업종: ${label ? label.ko : "알 수 없음"}
-- 타깃 시장: ${MARKET_LABEL[scope]}
-- 공식 사이트 문구: ${siteText || "없음"}
-- 경쟁사: ${input.competitors?.length ? input.competitors.join(", ") : "없음"}
-
-[만들 개수 — 유형별]
-- category(구매·카테고리, 이름 없음): ${want("category")}
-- concern(고민 해결, 이름 없음): ${want("concern")}
-- representative(대표 제품·서비스, 이름 없음, 사이트 문구에 있는 것만): ${want("representative")}
-- alternative(비교·대안): ${want("alternative")}
-- brandUnderstanding(브랜드 직접 질문): ${want("brand")}
-
-[규칙]
-- category·concern·representative 질문에는 **브랜드명·별칭·도메인 이름을 절대 넣지 마.**
-- 사이트 문구에 없는 제품명·성분·수치·실적은 만들지 마. 재료가 부족하면 개수를 줄이고 confident=false 로 표시해.
-- 언어는 각 항목의 language 에 맞게(ko=한국어, en=영어) 자연스럽게.`,
-    });
-
-    const asPlan = (
-      items: { language: SuggestLanguage; text: string }[],
-      type: QuestionType
-    ): PlanQuestion[] => items.map((i) => ({ ...i, type }));
-    const all = [
-      ...asPlan(out.category, "category"),
-      ...asPlan(out.concern, "concern"),
-      ...asPlan(out.representative, "representative"),
-      ...asPlan(out.alternative, "alternative"),
-      ...asPlan(out.brandUnderstanding, "brand"),
-    ];
-    const guarded = guardQuestions(all, {
+    const ctx = {
       brandNames: brandNamesOf(input),
       competitors: input.competitors,
+      industry: input.industry,
+      requireBasis: true,
       siteText,
-    });
-    if (guarded.dropped.length > 0) {
-      log.info("prompt.suggest.guard_dropped", {
-        brandName: input.brandName,
-        dropped: guarded.dropped.map((d) => d.reason),
-      });
-    }
-    const composed = composeQuestions(guarded.kept, scope);
-    // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
-    if (!out.confident || composed.length < 4) {
-      return staticFallback(input);
-    }
-    return {
-      prompts: composed.slice(0, MAX_PROMPTS).map(toSuggested),
-      competitors: [],
     };
+    const hasCompetitors = (input.competitors?.length ?? 0) > 0;
+    let all: PlanQuestion[] = [];
+    let confident = true;
+    // 처음 1번 + 모자라면 1번 더(합쳐서 다시 거른다). 추가 호출은 최대 1회.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const round = await generateCandidates(input, scope, siteText);
+      all = [...all, ...round.questions];
+      confident = confident && round.confident;
+      const guarded = guardQuestions(all, ctx);
+      const composed = composeWithFixedAlternatives(
+        composeQuestions(guarded.kept, scope),
+        input,
+        scope,
+        hasCompetitors
+      );
+      if (attempt === 0 && guarded.dropped.length > 0) {
+        log.info("prompt.suggest.guard_dropped", {
+          brandName: input.brandName,
+          dropped: guarded.dropped.map((d) => d.reason),
+        });
+      }
+      if (composed.length >= RETRY_BELOW || attempt === 1 || !round.confident) {
+        // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
+        if (!confident || composed.length < 4) {
+          return staticFallback(input);
+        }
+        return {
+          prompts: composed.slice(0, MAX_PROMPTS).map(toSuggested),
+          competitors: [],
+        };
+      }
+    }
+    return staticFallback(input);
   } catch (error) {
     log.warn("prompt.suggest.failed", {
       brandName: input.brandName,
@@ -366,4 +344,91 @@ export async function suggestTrackingPrompts(
     });
     return staticFallback(input);
   }
+}
+
+/** 경쟁사가 없으면 대안 질문은 모델 것을 버리고 코드의 고정 문형으로 채운다. */
+function composeWithFixedAlternatives(
+  composed: PlanQuestion[],
+  input: SuggestInput,
+  scope: PlanMarketScope,
+  hasCompetitors: boolean
+): PlanQuestion[] {
+  if (hasCompetitors) {
+    return composed;
+  }
+  return [
+    ...composed.filter((q) => q.type !== "alternative"),
+    ...fixedAlternativeQuestions(input.industry, scope),
+  ];
+}
+
+async function generateCandidates(
+  input: SuggestInput,
+  scope: PlanMarketScope,
+  siteText: string
+): Promise<{ confident: boolean; questions: PlanQuestion[] }> {
+  const targets = targetCounts(scope);
+  const want = (type: QuestionType) =>
+    (["ko", "en"] as const)
+      .filter((lang) => targets[type][lang] > 0)
+      .map(
+        (lang) =>
+          `${lang === "ko" ? "한국어" : "영어"} ${targets[type][lang] + OVERSHOOT}개`
+      )
+      .join(" + ");
+  const label = industryLabel(input.industry);
+  const frame = industryFrame(input.industry);
+  const hasCompetitors = (input.competitors?.length ?? 0) > 0;
+  const { object: out } = await generateObject({
+    model: suggestModel(),
+    schema: suggestionSchema,
+    prompt: `브랜드를 AI 검색(ChatGPT·Perplexity·네이버 등)에서 추적할 **질문 후보**를 만들어줘.
+질문은 투자자가 아니라 **${frame.persona}가 AI에게 실제로 묻는 말**(대화체)이어야 해.
+
+[재료]
+- 브랜드명: ${input.brandName}${input.aliases?.length ? ` (별칭: ${input.aliases.join(", ")})` : ""}
+- 도메인: ${input.domain}
+- 업종: ${label ? label.ko : "알 수 없음"}
+- 타깃 시장: ${MARKET_LABEL[scope]}
+- 공식 사이트 문구: ${siteText || "없음"}
+- 경쟁사: ${hasCompetitors ? (input.competitors ?? []).join(", ") : "없음"}
+
+[업종 틀 — 이 업종 고객이 궁금해하는 것: ${frame.focus}]
+- 브랜드 직접 질문 예시(브랜드명 자리에 이름을 넣어): ${frame.brandExamples.join(" / ")}
+
+[만들 개수 — 유형별]
+- category(구매·카테고리, 이름 없음): ${want("category")}
+- concern(고민 해결, 이름 없음): ${want("concern")}
+- representative(대표 제품·서비스, 이름 없음, 사이트 문구에 있는 것만): ${want("representative")}
+- alternative(비교·대안): ${hasCompetitors ? want("alternative") : "만들지 마(경쟁사가 없으면 빈 배열)"}
+- brandUnderstanding(브랜드 직접 질문): ${want("brand")}
+
+[규칙]
+- category·concern·representative 질문에는 **브랜드명·별칭·도메인 이름을 절대 넣지 마.**
+- 사이트 문구에 없는 제품명·성분·수치·실적은 만들지 마. 재료가 부족하면 개수를 줄이고 confident=false 로 표시해.
+- **재료에 없는 회사·서비스·제품 이름(고유명사)을 질문에 쓰지 마.** 경쟁사는 위 [경쟁사]에 있는 이름만 쓴다.
+- ChatGPT·Claude·Gemini 같은 **AI 서비스·모델 이름을 질문에 쓰지 마.**
+- 브랜드 이름의 뜻을 풀어서 질문을 만들지 마(예: 이름이 '넘버즈인'이라고 '번호 매긴 제품'으로 쓰기 금지).
+- "~라고 했는데", "~있다던데"처럼 **들은 이야기를 전제로 까는 문장 금지.** 질문은 전제 없이 바로 묻는다.
+- 각 질문의 basis 에 재료 출처를 적어(brand·competitor·industry·site). 대표 제품 질문은 site 만 가능.
+- 언어는 각 항목의 language 에 맞게(ko=한국어, en=영어) 자연스럽게.`,
+  });
+  const asPlan = (
+    items: {
+      basis?: PlanQuestion["basis"];
+      language: SuggestLanguage;
+      text: string;
+    }[],
+    type: QuestionType
+  ): PlanQuestion[] => items.map((i) => ({ ...i, type }));
+  return {
+    confident: out.confident,
+    questions: [
+      ...asPlan(out.category, "category"),
+      ...asPlan(out.concern, "concern"),
+      ...asPlan(out.representative, "representative"),
+      ...asPlan(out.alternative, "alternative"),
+      ...asPlan(out.brandUnderstanding, "brand"),
+    ],
+  };
 }
