@@ -43,12 +43,7 @@ export const GapAnalyzeButton = ({
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <Button
-        disabled={pending}
-        onClick={() => void run()}
-        size="sm"
-        type="button"
-      >
+      <Button disabled={pending} onClick={run} size="sm" type="button">
         {pending ? pendingLabel : label}
       </Button>
       {error ? <p className="text-destructive text-sm">{error}</p> : null}
