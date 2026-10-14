@@ -1263,7 +1263,8 @@
       "archivedHint": "Not measured anymore. Records stay; restore to measure again.",
       "deleteInstead": "Deleting also removes this question's measurement records. Archive it to keep them.",
       "editNewKeeps": "Saving creates a new question and archives the old one. The {n} existing measurement records stay.",
-      "archiveFailed": "Couldn't archive or restore. Please try again shortly."
+      "archiveFailed": "Couldn't archive or restore. Please try again shortly.",
+      "zeroSignalNote": "For reference · No brand appeared in the answers in the latest run. Archive it if you want to take it out of the score."
     },
     "promptResponses": {
       "metaTitle": "AI answers by question · Findable",

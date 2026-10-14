@@ -49,6 +49,8 @@ export interface PromptListItem {
   /** 이 질문으로 측정된 Tracking 행 수 — 삭제 시 함께 사라지는 양. */
   measuredCount: number;
   text: string;
+  /** 최근 측정에서 아직 어떤 브랜드도 답변에 나오지 않은 질문(참고용 표시). */
+  zeroSignal?: boolean;
 }
 
 /**
@@ -127,6 +129,14 @@ function groupByTopic(prompts: PromptListItem[]): Array<{
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
 }
+
+/** 최근 측정에서 아직 어떤 브랜드도 안 나온 질문의 참고 표시(점수·삭제에는 영향 없음). */
+const ZeroSignalNote = ({ show, text }: { show: boolean; text: string }) =>
+  show ? (
+    <span className="text-[10px] text-amber-600 dark:text-amber-400">
+      {text}
+    </span>
+  ) : null;
 
 const ArchiveButton = ({
   disabled,
@@ -401,6 +411,10 @@ export const PromptList = ({
                 : t.notMeasured}
             </span>
           </span>
+          <ZeroSignalNote
+            show={prompt.zeroSignal === true}
+            text={t.zeroSignalNote}
+          />
           {/* 확인 문구는 **버튼 옆이 아니라 항목 안**에 — 무엇이 사라지는지
                   그 질문 바로 아래에서 읽혀야 한다. */}
           {isConfirming ? (
