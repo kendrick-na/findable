@@ -303,23 +303,43 @@ export interface PlanCapabilities {
   autoRefreshHours: RefreshHours;
   // 등록 가능한 브랜드 수. Infinity = 무제한.
   brandLimit: number;
+  // 브랜드 하나에 등록할 수 있는 경쟁사 수 상한(2026-10-15 · 대표 승인 — 경쟁 도구의 공개 수치가 없어 Findable 자체 설계안).
+  //   질문 한도(promptLimit)에는 포함하지 않는다. 이미 상한보다 많이 저장된 브랜드는 줄이지 않아도 되고, 더 늘릴 수만 없다.
+  competitorLimit: number;
   // 마법사로 저장 가능한 추적 프롬프트 상한.
   promptLimit: number;
 }
 
 // blurb 의 약속과 동일 어휘. 바꿀 땐 PLAN_META blurb 도 함께.
 const PLAN_CAPABILITIES: Record<Plan, PlanCapabilities> = {
-  free: { promptLimit: 5, brandLimit: 1, autoRefreshHours: null },
-  starter: { promptLimit: 30, brandLimit: 3, autoRefreshHours: 168 }, // 주간
-  growth: { promptLimit: 150, brandLimit: 5, autoRefreshHours: 24 }, // 데일리
+  free: {
+    promptLimit: 5,
+    brandLimit: 1,
+    competitorLimit: 3,
+    autoRefreshHours: null,
+  },
+  starter: {
+    promptLimit: 30,
+    brandLimit: 3,
+    competitorLimit: 5,
+    autoRefreshHours: 168,
+  }, // 주간
+  growth: {
+    promptLimit: 150,
+    brandLimit: 5,
+    competitorLimit: 10,
+    autoRefreshHours: 24,
+  }, // 데일리
   scale: {
     promptLimit: 500,
     brandLimit: Number.POSITIVE_INFINITY,
+    competitorLimit: 20,
     autoRefreshHours: 24,
   },
   enterprise: {
     promptLimit: 2000,
     brandLimit: Number.POSITIVE_INFINITY,
+    competitorLimit: 20,
     autoRefreshHours: 24,
   },
 };

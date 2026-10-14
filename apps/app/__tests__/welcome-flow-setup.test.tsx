@@ -270,8 +270,8 @@ describe("저장값 우선 · AI 후보는 확인 전엔 저장하지 않는다 
       initialStep: 4,
       suggestedCompetitors: ai,
     });
-    // 화면에는 미리 채워져 보이지만…
-    expect(screen.getByText("AI후보1")).toBeTruthy();
+    // 후보는 칩으로 보이지만(미리 담기지 않는다)…
+    expect(screen.getByText("+ AI후보1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: t.skip }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     // …건너뛰기 저장에는 경쟁사가 없다.
@@ -301,12 +301,40 @@ describe("저장값 우선 · AI 후보는 확인 전엔 저장하지 않는다 
       initialStep: 4,
       suggestedCompetitors: ai,
     });
+    // 후보는 사람이 담아야 한다 — [후보 모두 담기] 후 [다음].
+    fireEvent.click(screen.getByRole("button", { name: t.competitorAddAll }));
     fireEvent.click(screen.getByRole("button", { name: t.next }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(lastSave(onSave).competitors).toEqual(ai);
     fireEvent.click(await screen.findByRole("button", { name: t.quickStart }));
     await waitFor(() => expect(actions.start).toHaveBeenCalled());
     expect(lastSave(onSave).competitors).toEqual(ai);
+  });
+
+  it("🔴 후보를 담지 않고 [다음]을 누르면 아무것도 저장되지 않는다(기본 미선택 — 2026-10-15)", async () => {
+    const { onSave } = renderFlow({
+      actions: makeActions([]),
+      initialStep: 4,
+      suggestedCompetitors: ai,
+    });
+    expect(
+      screen.getByRole("button", { name: t.competitorAddAll })
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: t.next }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(lastSave(onSave).competitors).toEqual([]);
+  });
+
+  it("후보 칩 하나만 눌러 담으면 그 하나만 저장된다", async () => {
+    const { onSave } = renderFlow({
+      actions: makeActions([]),
+      initialStep: 4,
+      suggestedCompetitors: ai,
+    });
+    fireEvent.click(screen.getByText("+ AI후보2"));
+    fireEvent.click(screen.getByRole("button", { name: t.next }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(lastSave(onSave).competitors).toEqual(["AI후보2"]);
   });
 
   it("이미 저장된 질문 수를 5단계에 보여 준다", () => {

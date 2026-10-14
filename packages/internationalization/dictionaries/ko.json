@@ -237,9 +237,9 @@
       "aliasWhyTitle": "왜 물어보나요?",
       "aliasWhyBody": "AI는 같은 브랜드를 한글로도, 영문으로도 부릅니다. 두 표기를 따로 세면 우리 브랜드가 실제보다 적게 나온 것처럼 보여요. 여기 적어두면 하나로 합쳐서 셉니다.",
       "competitorTitle": "이 브랜드들과 비교됩니다",
-      "competitorLede": "AI가 파악한 경쟁 브랜드를 미리 담아뒀어요. 틀린 게 있으면 빼주세요.",
+      "competitorLede": "AI가 찾은 경쟁 후보예요. 맞는 것만 눌러서 담아주세요.",
       "competitorLedeEmpty": "비교할 브랜드를 직접 적어주세요. 비워두고 넘어가도 괜찮아요.",
-      "competitorSuggestion": "더 담을 수 있는 후보",
+      "competitorSuggestion": "경쟁 후보 (눌러서 담기)",
       "competitorLoading": "확인한 업종을 기준으로 실제 경쟁 브랜드를 찾고 있어요…",
       "competitorSelected": "{count}개 선택",
       "competitorAddLabel": "직접 추가",
@@ -338,7 +338,8 @@
       "siteNoteTitle": "홈페이지에서 내용을 거의 읽지 못했어요",
       "siteNoteHint": "회사나 제품을 한두 줄로 알려 주시면 더 구체적인 질문을 만들어 드려요. 저장되지 않고 질문을 만드는 데만 쓰여요.",
       "siteNotePlaceholder": "예: 신생아·영유아용 보습 크림을 만드는 스킨케어 브랜드예요",
-      "siteNoteSubmit": "이 소개로 다시 제안받기"
+      "siteNoteSubmit": "이 소개로 다시 제안받기",
+      "competitorAddAll": "후보 모두 담기"
     },
     "content": {
       "navLabel": "내 콘텐츠",
@@ -1172,7 +1173,8 @@
       "archiveUnavailable": "질문 보관 기능을 준비 중이에요. 잠시 후 다시 시도해 주세요.",
       "archiveFailed": "보관·복원하지 못했어요. 잠시 후 다시 시도해 주세요.",
       "prerunDisabled": "질문 미리 돌려 보기는 아직 쓸 수 없어요.",
-      "prerunFailed": "미리 돌려 보지 못했어요. 잠시 후 다시 시도해 주세요."
+      "prerunFailed": "미리 돌려 보지 못했어요. 잠시 후 다시 시도해 주세요.",
+      "competitorLimit": "경쟁사는 현재 플랜에서 최대 {limit}개까지 등록할 수 있어요."
     },
     "promptWizard": {
       "categoryBrand": "브랜드",

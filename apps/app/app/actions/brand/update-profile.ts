@@ -1,9 +1,12 @@
 "use server";
 
+import { parseKnownCompetitors } from "@repo/audit/competitor-extract";
 import {
   competitorSettingOf,
   NO_COMPETITORS_MARKER,
 } from "@repo/audit/setup-readiness";
+import { planCapabilities } from "@repo/auth/plan";
+import { getCurrentPlan } from "@repo/auth/plan-server";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { revalidatePath } from "next/cache";
@@ -201,6 +204,54 @@ function competitorsToStore(
   return keepNone ? [NO_COMPETITORS_MARKER] : [];
 }
 
+/**
+ * 플랜별 경쟁사 상한(2026-10-15). **새로 늘리는 경우만** 막는다 — 이미 상한보다 많이 저장된 브랜드는 그대로 둘 수 있다.
+ * 플랜을 읽지 못하면 막지 않는다(저장을 못 하게 하는 쪽이 더 나쁘다).
+ */
+async function competitorLimitError(
+  names: string[],
+  existing: unknown,
+  template: string
+): Promise<string | null> {
+  const next = cleanList(names).length;
+  const stored = parseKnownCompetitors(existing).length;
+  if (next <= stored) {
+    return null;
+  }
+  const limit = await getCurrentPlan()
+    .then((plan) => planCapabilities(plan).competitorLimit)
+    .catch(() => Number.POSITIVE_INFINITY);
+  return next > limit ? template.replace("{limit}", String(limit)) : null;
+}
+
+/** 경쟁사 저장값 준비(플랜 상한 확인 포함). 안 보냈으면 건드리지 않는다. */
+async function competitorsForSave(
+  input: UpdateBrandProfileInput,
+  existing: unknown,
+  errors: { competitorLimit: string }
+): Promise<
+  { error: string } | { competitors?: Array<string | { none: true }> }
+> {
+  if (!input.competitors) {
+    return {};
+  }
+  const overLimit = await competitorLimitError(
+    input.competitors,
+    existing,
+    errors.competitorLimit
+  );
+  if (overLimit) {
+    return { error: overLimit };
+  }
+  return {
+    competitors: competitorsToStore(
+      input.competitors,
+      input.noCompetitors,
+      existing
+    ),
+  };
+}
+
 export const updateBrandProfile = async (
   input: UpdateBrandProfileInput
 ): Promise<UpdateBrandProfileResult> => {
@@ -234,13 +285,15 @@ export const updateBrandProfile = async (
   if (input.entityVariants) {
     data.entityVariants = cleanList(input.entityVariants);
   }
-  if (input.competitors) {
-    data.competitors = competitorsToStore(
-      input.competitors,
-      input.noCompetitors,
-      owned.competitors
-    );
+  const competitors = await competitorsForSave(
+    input,
+    owned.competitors,
+    errorsT
+  );
+  if ("error" in competitors) {
+    return competitors;
   }
+  Object.assign(data, competitors);
   // 유효 enum 일 때만 저장한다 — 아니면 건드리지 않아 자동 추정이 그대로 산다.
   const scope = toMarketScope(input.marketScope);
   if (scope) {

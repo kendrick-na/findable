@@ -237,9 +237,9 @@
       "aliasWhyTitle": "Why do we ask?",
       "aliasWhyBody": "AI refers to the same brand in both Korean and English. Counting the two spellings separately makes your brand look less visible than it is. List them here and we count them as one.",
       "competitorTitle": "You are compared against these brands",
-      "competitorLede": "We've pre-filled competitors AI identified. Remove any that don't fit.",
+      "competitorLede": "These are competitor candidates the AI found. Tap the ones that fit to add them.",
       "competitorLedeEmpty": "Add the brands you want to compare against. You can leave this empty and move on.",
-      "competitorSuggestion": "More candidates you can add",
+      "competitorSuggestion": "Candidates (tap to add)",
       "competitorLoading": "Finding real competitors using the industry you confirmed…",
       "competitorSelected": "{count} selected",
       "competitorAddLabel": "Add your own",
@@ -338,7 +338,8 @@
       "siteNoteTitle": "We could hardly read your homepage",
       "siteNoteHint": "Tell us about your company or product in a line or two for more specific questions. It is not stored and is only used to write the questions.",
       "siteNotePlaceholder": "e.g. A skincare brand making moisturizers for newborns and infants",
-      "siteNoteSubmit": "Suggest again with this"
+      "siteNoteSubmit": "Suggest again with this",
+      "competitorAddAll": "Add all candidates"
     },
     "content": {
       "navLabel": "My content",
@@ -1172,7 +1173,8 @@
       "archiveUnavailable": "Question archiving is being prepared. Please try again shortly.",
       "archiveFailed": "Couldn't archive or restore. Please try again shortly.",
       "prerunDisabled": "Test run isn't available yet.",
-      "prerunFailed": "Couldn't run the test. Please try again shortly."
+      "prerunFailed": "Couldn't run the test. Please try again shortly.",
+      "competitorLimit": "Your plan allows up to {limit} competitors."
     },
     "promptWizard": {
       "categoryBrand": "Brand",

@@ -459,8 +459,21 @@ const CompetitorStep = ({
             (competitors 에서 빼면 이 filter 가 다시 여기 보여준다). */}
     {suggestedCompetitors.length > 0 && (
       <div className="flex flex-col gap-2">
-        <span className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+        <span className="flex flex-wrap items-center gap-2 text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
           {t.competitorSuggestion}
+          <button
+            className="rounded-md border border-[color:var(--findable-hairline,#23252a)] px-2 py-0.5 font-medium text-[color:var(--findable-ink,#f7f8f8)] text-xs"
+            onClick={() => {
+              setNoCompetitors(false);
+              setCompetitors((p) => [
+                ...p,
+                ...suggestedCompetitors.filter((name) => !p.includes(name)),
+              ]);
+            }}
+            type="button"
+          >
+            {t.competitorAddAll}
+          </button>
         </span>
         <div className="flex flex-wrap gap-1.5">
           {suggestedCompetitors
@@ -536,19 +549,13 @@ const hasStoredCompetitorSetting = (stored: string[], none: boolean): boolean =>
 /**
  * 4단계 경쟁사 칸의 처음 값. **저장된 값이 항상 먼저다**(2026-10-13):
  *  · 저장된 경쟁사가 있으면 그것, '없음'을 저장했으면 빈 목록 — AI 후보로 덮어쓰지 않는다.
- *  · 아무것도 저장 안 한 첫 설정일 때만 AI 후보를 미리 채워 **보여 준다**(2026-08-21 결정).
- *    이 값은 사용자가 4단계 [다음]으로 확인하기 전에는 저장되지 않는다(`competitorsConfirmed`).
+ *  · 아무것도 저장 안 한 첫 설정이면 빈 목록 — AI 후보는 미리 담지 않고 칩으로만 보여 준다(2026-10-15, 2026-08-21 결정을 바꿈).
+ *    담은 값은 사용자가 4단계 [다음]으로 확인하기 전에는 저장되지 않는다(`competitorsConfirmed`).
  */
-const getInitialCompetitors = (
-  initialCompetitors: string[],
-  initialNoCompetitors: boolean,
-  suggestedCompetitors: string[]
-) => {
-  if (initialCompetitors.length > 0) {
-    return initialCompetitors;
-  }
-  return initialNoCompetitors ? [] : suggestedCompetitors;
-};
+const getInitialCompetitors = (initialCompetitors: string[]) =>
+  // 🔴 2026-10-15(👤 결정 변경) — AI 후보는 **더 이상 미리 담지 않는다**. 후보는 아래 점선 칩으로 보여 주고
+  //   사람이 눌러서(또는 [후보 모두 담기]) 담은 것만 확정한다. 점검에서 후보가 가끔 틀렸다(인접 업종·분야 빗나감).
+  initialCompetitors;
 
 export const WelcomeFlow = ({
   actions,
@@ -582,11 +589,7 @@ export const WelcomeFlow = ({
   //   하나씩 X로 빼기 쉽고(ChipList), 잘못된 제안은 그대로 두는 게 아니라
   //   지우는 게 기본 동작이 되도록 안내 문구(competitorLede)를 맞춘다.
   const [competitors, setCompetitors] = useState<string[]>(
-    getInitialCompetitors(
-      initialCompetitors,
-      initialNoCompetitors,
-      suggestedCompetitors
-    )
+    getInitialCompetitors(initialCompetitors)
   );
   // 경쟁사를 **사용자가 확인했는지**. 저장돼 있거나 4단계 [다음]을 눌렀을 때만 true —
   //   건너뛰기·「기본값으로 바로 측정」에서는 AI 후보를 확정 저장하지 않는다.
