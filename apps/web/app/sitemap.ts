@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { env } from "@/env";
 import {
+  counterpartSlug,
   getPublicPublisherByDomain,
   listAllPublishedContentForDiscovery,
   listPublishedContent,
@@ -89,7 +90,7 @@ const DEFAULT_LOCALE = "en";
  *     거짓 `lastmod` 는 없느니만 못하다(구글이 사이트 전체의 lastmod 를 불신하게 된다).
  */
 const STATIC_PATHS: readonly { lastModified: string; path: string }[] = [
-  { path: "/", lastModified: "2026-09-25" },
+  { path: "/", lastModified: "2026-10-15" }, // 서비스명·GEO 라벨, 푸터 소개 변경
   // 🟡 2026-08-19(👤 결정 A): 무료 진단은 **동선에서 뺐다**(랜딩 CTA → `/sign-up`).
   //   페이지는 남기므로 사이트맵에도 남긴다 — 다만 신규 유입 설계의 기준점은 아니다.
   { path: "/audit", lastModified: "2026-08-22" },
@@ -220,10 +221,38 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
           ])
       ).values(),
     ];
-    const postEntries = visible.map((post) => ({
-      url: localizedUrl(post.locale, `/p/${post.publisher.slug}/${post.slug}`),
-      lastModified: post.updatedAt,
-    }));
+    // 🔴 2026-10-15: 글에도 hreflang(상대 언어 글)을 사이트맵에 싣는다. 상대 언어 글이
+    //   실제로 공개되어 있을 때만 — 없는 주소를 짝으로 신고하면 구글이 쌍 전체를 무시한다.
+    const availablePosts = new Set(
+      visible.map((p) => `${p.publisher.slug}:${p.locale}:${p.slug}`)
+    );
+    const postEntries = visible.map((post) => {
+      const self = post.locale as (typeof LOCALES)[number];
+      const other = self === "ko" ? "en" : "ko";
+      const otherSlug = counterpartSlug(self, post.slug);
+      const hasOther = availablePosts.has(
+        `${post.publisher.slug}:${other}:${otherSlug}`
+      );
+      const urlOf = (locale: string, slug: string) =>
+        localizedUrl(locale, `/p/${post.publisher.slug}/${slug}`);
+      const selfUrl = urlOf(self, post.slug);
+      const otherUrl = urlOf(other, otherSlug);
+      return {
+        url: selfUrl,
+        lastModified: post.updatedAt,
+        ...(hasOther
+          ? {
+              alternates: {
+                languages: {
+                  [self]: selfUrl,
+                  [other]: otherUrl,
+                  "x-default": self === "en" ? selfUrl : otherUrl,
+                },
+              },
+            }
+          : {}),
+      };
+    });
     return [...staticEntries, ...publisherEntries, ...postEntries];
   } catch {
     // 빌드·일시 DB 장애 때 정적 사이트맵 전체를 500으로 만들지 않는다.

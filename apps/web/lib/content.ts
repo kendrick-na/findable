@@ -23,6 +23,38 @@ export const DISCOVERABLE_PUBLISHER_WHERE = {
   OR: [{ slug: "findable" }, { verifiedAt: { not: null } }],
 };
 
+/**
+ * 한국어·영어 글의 슬러그가 **서로 다른** 번역 쌍.
+ *   [ko 슬러그, en 슬러그]. 그 외 글은 두 언어가 같은 슬러그를 쓴다.
+ *
+ * 🔴 2026-10-15: 이 쌍들의 hreflang 이 상대 언어의 **같은 슬러그**(없는 주소)를 가리켜
+ *   하나는 404, 하나는 301 이었다(실측). 구글은 깨진 hreflang 쌍을 무시한다.
+ *   ⚠️ 새 글의 ko·en 슬러그를 다르게 짓는다면 여기에 한 줄 추가한다. 같게 지으면 필요 없다.
+ */
+const TRANSLATION_SLUG_PAIRS: readonly (readonly [string, string])[] = [
+  [
+    "seo와-geo의-차이-검색-순위와-ai-답변-노출을-함께-높이는-방법-mtfct1xy",
+    "seo-vs-geo-search-rankings-ai-visibility",
+  ],
+  [
+    "ai-검색-최적화-우리-브랜드-정보를-정리하는-7단계-mti7yxab",
+    "new-blog-post-draft-mtmpt3um",
+  ],
+];
+
+/** 이 글의 상대 언어 글 슬러그. 번역 쌍 표에 없으면 같은 슬러그다. */
+export function counterpartSlug(locale: "ko" | "en", slug: string): string {
+  for (const [koSlug, enSlug] of TRANSLATION_SLUG_PAIRS) {
+    if (locale === "ko" && slug === koSlug) {
+      return enSlug;
+    }
+    if (locale === "en" && slug === enSlug) {
+      return koSlug;
+    }
+  }
+  return slug;
+}
+
 export function isPublisherIndexable(publisher: {
   slug: string;
   verifiedAt: Date | null;
@@ -112,6 +144,9 @@ export function listRelatedContent(input: {
   return database.content.findMany({
     where: {
       ...publicWhere,
+      // 🔴 2026-10-15: 확인되지 않은 발행처(내부 테스트 등)의 글을 "이어 읽기"로 추천하지 않는다.
+      //   [실측] 공식 글 4개 하단에 "Findable OAuth Verification" 글이 추천으로 노출되고 있었다.
+      publisher: DISCOVERABLE_PUBLISHER_WHERE,
       id: { not: input.contentId },
       locale: input.locale,
       OR: [

@@ -1,4 +1,8 @@
-import { getPublicPublisher, listPublishedContent } from "@/lib/content";
+import {
+  getPublicPublisher,
+  isPublisherIndexable,
+  listPublishedContent,
+} from "@/lib/content";
 import { articleCanonicalUrl, publisherCanonicalUrl } from "@/lib/public-url";
 import { buildRssXml, RSS_HEADERS } from "@/lib/rss";
 
@@ -24,7 +28,8 @@ export async function GET(
   const { locale, publisherSlug } = await params;
   const normalizedLocale = locale.startsWith("ko") ? "ko" : "en";
   const publisher = await getPublicPublisher(publisherSlug);
-  if (!publisher) {
+  // 확인되지 않은 발행처(내부 테스트 등)는 피드로 알리지 않는다(2026-10-15, 사이트맵 제외와 짝).
+  if (!(publisher && isPublisherIndexable(publisher))) {
     return new Response("Not found", { status: 404 });
   }
 

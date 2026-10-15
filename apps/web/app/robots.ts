@@ -107,8 +107,10 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
           "/api/",
           "/audit/*", // 개인 진단 결과(`/audit/<jobId>`) — 위 주석 참고
           "/ko/audit/*",
+          "/en/audit/*", // 2026-10-15: AI 봇 규칙에는 있었는데 일반 규칙에서 빠져 있었다
           "/checkout/", // 결제 완료 화면
           "/ko/checkout/",
+          "/en/checkout/",
           "/logo-preview", // 내부 확인용
           "/ko/logo-preview",
           "/en/logo-preview",

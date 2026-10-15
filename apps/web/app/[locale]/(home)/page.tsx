@@ -100,8 +100,10 @@ const Home = async ({ params }: HomeProps) => {
               : []),
             "4명의 자율 에이전트 기반 GEO 측정·최적화",
           ],
+          // 🔴 2026-10-15: 같은 조직이 별도 노드로 갈라지지 않게 `@id` 로 아래 Organization 과 잇는다.
           provider: {
             "@type": "Organization",
+            "@id": `${siteOrigin}/#organization`,
             name: "Findable",
             alternateName: ["파인더블", "Findable Korea"],
             url: siteUrl,

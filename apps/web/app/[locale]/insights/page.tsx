@@ -12,8 +12,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { NewsletterSubscribe } from "@/components/content/newsletter-subscribe";
 import { listPublishedContent } from "@/lib/content";
-import { PublicLandingHeader } from "../components/public-landing-header";
 import { FooterCTA } from "../(home)/components/footer-cta";
+import { PublicLandingHeader } from "../components/public-landing-header";
 
 export const dynamic = "force-dynamic";
 const TYPES = ["all", "research", "guide", "case_study", "analysis"] as const;
@@ -47,12 +47,18 @@ function coverFor(post: { coverImageUrl: string | null; contentType: string }) {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ q?: string; type?: string }>;
 }): Promise<Metadata> {
-  const { locale } = await params;
+  const [{ locale }, query] = await Promise.all([params, searchParams]);
   const ko = locale.startsWith("ko");
+  // 🔴 2026-10-15: 필터·검색 결과 주소(`?type=`, `?q=`)는 색인하지 않는다(링크는 따라가게 둔다).
+  //   [실측] Search Console 이 `/en/insights?type=guide` 를 발견·크롤했다 — 같은 목록의 변형일 뿐이다.
+  const isFiltered = Boolean(query.type || query.q);
   return createMetadata({
+    ...(isFiltered ? { robots: { index: false, follow: true } } : {}),
     title: ko
       ? "Findable 인사이트 | SEO·GEO·AI 검색 가시성 리서치"
       : "Findable Insights — SEO & GEO Research",

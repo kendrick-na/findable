@@ -38,6 +38,9 @@ export const generateMetadata = async ({
       ? "Findable이 AI 답변 4곳과 네이버·다음 검색 노출에서 측정한 우리 브랜드의 Share of Voice·인용 순위·sentiment 결과입니다."
       : "Your brand's Share of Voice, citation rank, and sentiment across 4 AI engines plus Naver and Daum search.",
     image: ogUrl,
+    // 개인 진단 결과는 색인하지 않는다(2026-10-15). robots.txt 만으로는 직접 링크로
+    // 발견된 주소를 막지 못한다 — 페이지 자체에도 noindex 를 건다.
+    robots: { index: false, follow: false },
   });
 };
 

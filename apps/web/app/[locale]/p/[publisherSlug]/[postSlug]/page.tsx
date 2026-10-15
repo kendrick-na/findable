@@ -7,6 +7,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MarkdownArticle } from "@/components/content/markdown-article";
 import {
+  counterpartSlug,
   getPublishedContent,
   isPublisherIndexable,
   listAllPublishedContentForDiscovery,
@@ -108,7 +109,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
           }),
         },
       }
-    : undefined;
+    : {
+        // 🔴 2026-10-15: ko·en 슬러그가 다른 번역 쌍은 상대 언어의 **같은 슬러그**(없는 주소)를
+        //   hreflang 으로 가리켜 404·301 이었다. 번역 쌍 표(`counterpartSlug`)로 실제 짝을 가리킨다.
+        languages: (() => {
+          const koSlug =
+            locale === "ko" ? post.slug : counterpartSlug("en", post.slug);
+          const enSlug =
+            locale === "en" ? post.slug : counterpartSlug("ko", post.slug);
+          const urlFor = (target: "ko" | "en", slug: string) =>
+            siteArticleUrl({
+              locale: target,
+              postSlug: encodeURI(slug),
+              publisherSlug: post.publisher.slug,
+            });
+          return {
+            ko: urlFor("ko", koSlug),
+            en: urlFor("en", enSlug),
+            "x-default": urlFor("en", enSlug),
+          };
+        })(),
+      };
 
   return createMetadata({
     title: post.seoTitle ?? post.title,

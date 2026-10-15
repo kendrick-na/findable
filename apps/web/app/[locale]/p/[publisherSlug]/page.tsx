@@ -56,11 +56,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       : { robots: { index: false, follow: false } }),
     // 📡 피드 자동발견(feed discovery) — 브라우저·리더·네이버 서치어드바이저가
     //   페이지에서 바로 RSS 주소를 찾을 수 있게 한다(퍼블리셔 단위 피드는 2026-09-02 신설).
-    alternates: {
-      types: {
-        "application/rss+xml": `${sitePublisherUrl(normalizedLocale, publisher.slug)}/rss.xml`,
-      },
-    },
+    // 확인되지 않은 발행처는 피드 자동발견도 숨긴다(그 피드는 404 다).
+    ...(isPublisherIndexable(publisher)
+      ? {
+          alternates: {
+            types: {
+              "application/rss+xml": `${sitePublisherUrl(normalizedLocale, publisher.slug)}/rss.xml`,
+            },
+          },
+        }
+      : {}),
   });
 }
 
