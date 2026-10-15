@@ -375,3 +375,11 @@
 .fr12 .hero.rev .big .v {
   white-space: nowrap;
 }
+
+/* 표지 한 줄 결론 아래 보조 문구(config.headlines.cover_sub) — 직접 지정할 때만 나온다. */
+.fr12 .verdict.hook .ssub {
+  margin-top: 1.4mm;
+  font-size: 8.6pt;
+  line-height: 1.5;
+  color: var(--mut);
+}

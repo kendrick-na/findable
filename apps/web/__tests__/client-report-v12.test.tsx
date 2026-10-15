@@ -180,3 +180,90 @@ describe("v12 웹 템플릿", () => {
     expect(css).not.toContain("file:///");
   });
 });
+
+// ── 2026-10-16 표지 직접 문구·매출 범위·분수 표기(대표 승인) — 필드가 있을 때만 적용, 없으면 기존 그대로 ──
+describe("v12 템플릿 — 표지 문구·분수 표기(선택 필드)", () => {
+  const withConfig = (extra: Record<string, unknown>) => ({
+    ...sample,
+    config: { ...sample.config, ...extra },
+  });
+  const text = (html: string) => html.replaceAll("<!-- -->", "");
+
+  it("headlines.cover 가 없으면 기존 자동 한 줄 결론 그대로(회귀 0)", () => {
+    const html = text(render(false, sample));
+    expect(html).toContain("AI에게 노우버스를 물으면");
+    expect(html).not.toContain('class="ssub"');
+  });
+
+  it("headlines.cover·cover_sub 가 있으면 자동 문장 대신 그것을 표지 큰 문구로 쓴다", () => {
+    const html = text(
+      render(
+        false,
+        withConfig({
+          headlines: {
+            ...(sample.config.headlines ?? {}),
+            cover:
+              "AI에 이름 없이 추천을 물으면, 노우버스는 <b>68번 중 0번</b>도 나오지 않습니다",
+            cover_sub: "이름을 알려 주면 대체로 맞게 답합니다",
+          },
+        })
+      )
+    );
+    expect(html).toContain("<b>68번 중 0번</b>");
+    expect(html).not.toContain("AI에게 노우버스를 물으면");
+    expect(html).toContain('class="ssub"');
+    expect(html).toContain("이름을 알려 주면 대체로 맞게 답합니다");
+  });
+
+  it("headlines.cover 의 스크립트·허용 밖 태그는 글자로 찍힌다", () => {
+    const html = render(
+      false,
+      withConfig({ headlines: { cover: "<script>alert(1)</script>안녕" } })
+    );
+    expect(html).not.toContain("<script>alert(1)</script>");
+  });
+
+  it("headlines.revenue_range 문자열이 표지 매출 문구에 그대로 보인다(확인된 연매출이 있을 때만)", () => {
+    const html = text(
+      render(
+        false,
+        withConfig({
+          headlines: { revenue_range: "190.9~211.2억 원" },
+        })
+      )
+    );
+    expect(html).toContain("연 약 190.9~211.2억 원");
+    const cfg = Object.fromEntries(
+      Object.entries(sample.config).filter(([k]) => k !== "revenue_opportunity")
+    );
+    const noRev = text(
+      render(false, {
+        ...sample,
+        config: { ...cfg, headlines: { revenue_range: "190.9~211.2억 원" } },
+      })
+    );
+    expect(noRev).not.toContain("190.9~211.2억");
+  });
+
+  it("display.fractions=true 면 점유·출처·엔진 막대가 분수로 나오고, 없으면 % 그대로", () => {
+    const off = text(render(false, sample));
+    const on = text(
+      render(false, withConfig({ display: { fractions: true } }))
+    );
+    // 순위표 .p 칸
+    const rankCells = (h: string) =>
+      [...h.matchAll(/<span class="p">([^<]*)<\/span>/g)].map((m) => m[1]);
+    expect(rankCells(off).every((v) => v?.endsWith("%"))).toBe(true);
+    expect(rankCells(on).length).toBeGreaterThan(0);
+    expect(rankCells(on).every((v) => /^\d+\/\d+$/.test(v ?? ""))).toBe(true);
+    // 출처 범례(.ch-legend b)
+    const legend = (h: string) =>
+      [...h.matchAll(/<span class="ch-[a-z]+"[^>]*>[^<]*<b>([^<]*)<\/b>/g)].map(
+        (m) => m[1]
+      );
+    expect(legend(off).every((v) => v?.endsWith("%"))).toBe(true);
+    expect(legend(on).every((v) => /^\d+\/\d+$/.test(v ?? ""))).toBe(true);
+    // AI가 관여하는 구매 비중 7%는 설문 비율이라 분수로 바꾸지 않는다.
+    expect(on).toContain("7%");
+  });
+});
