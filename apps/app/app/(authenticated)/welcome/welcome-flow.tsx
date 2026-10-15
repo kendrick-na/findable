@@ -549,13 +549,21 @@ const hasStoredCompetitorSetting = (stored: string[], none: boolean): boolean =>
 /**
  * 4단계 경쟁사 칸의 처음 값. **저장된 값이 항상 먼저다**(2026-10-13):
  *  · 저장된 경쟁사가 있으면 그것, '없음'을 저장했으면 빈 목록 — AI 후보로 덮어쓰지 않는다.
- *  · 아무것도 저장 안 한 첫 설정이면 빈 목록 — AI 후보는 미리 담지 않고 칩으로만 보여 준다(2026-10-15, 2026-08-21 결정을 바꿈).
- *    담은 값은 사용자가 4단계 [다음]으로 확인하기 전에는 저장되지 않는다(`competitorsConfirmed`).
+ *  · 아무것도 저장 안 한 첫 설정일 때만 AI 후보를 미리 채워 **보여 준다**(2026-08-21 결정).
+ *    이 값은 사용자가 4단계 [다음]으로 확인하기 전에는 저장되지 않는다(`competitorsConfirmed`).
+ *  🔴 2026-10-15 — 같은 날 '기본 미선택'으로 바꿨다가 대표가 되돌렸다("처음부터 선택 안 해두면 기능을 맛볼 수 없다").
+ *    대신 후보 정확도(인접 업종 걸러내기)를 올려 틀린 후보가 미리 체크되지 않게 한다. 고객은 X로 뺄 수 있다.
  */
-const getInitialCompetitors = (initialCompetitors: string[]) =>
-  // 🔴 2026-10-15(👤 결정 변경) — AI 후보는 **더 이상 미리 담지 않는다**. 후보는 아래 점선 칩으로 보여 주고
-  //   사람이 눌러서(또는 [후보 모두 담기]) 담은 것만 확정한다. 점검에서 후보가 가끔 틀렸다(인접 업종·분야 빗나감).
-  initialCompetitors;
+const getInitialCompetitors = (
+  initialCompetitors: string[],
+  initialNoCompetitors: boolean,
+  suggestedCompetitors: string[]
+) => {
+  if (initialCompetitors.length > 0) {
+    return initialCompetitors;
+  }
+  return initialNoCompetitors ? [] : suggestedCompetitors;
+};
 
 export const WelcomeFlow = ({
   actions,
@@ -589,7 +597,11 @@ export const WelcomeFlow = ({
   //   하나씩 X로 빼기 쉽고(ChipList), 잘못된 제안은 그대로 두는 게 아니라
   //   지우는 게 기본 동작이 되도록 안내 문구(competitorLede)를 맞춘다.
   const [competitors, setCompetitors] = useState<string[]>(
-    getInitialCompetitors(initialCompetitors)
+    getInitialCompetitors(
+      initialCompetitors,
+      initialNoCompetitors,
+      suggestedCompetitors
+    )
   );
   // 경쟁사를 **사용자가 확인했는지**. 저장돼 있거나 4단계 [다음]을 눌렀을 때만 true —
   //   건너뛰기·「기본값으로 바로 측정」에서는 AI 후보를 확정 저장하지 않는다.

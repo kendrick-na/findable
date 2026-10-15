@@ -150,18 +150,21 @@ const renderSetup = async (
   //   저장된 경쟁사가 있거나 '없음'을 저장했으면 후보가 필요 없다 — 호출 자체를 하지 않는다(원가·덮어쓰기 방지).
   const storedCompetitors = stringList(brand.competitors);
   const noneSaved = competitorSettingOf(brand.competitors).kind === "none";
+  const plan = await getCurrentPlan();
   const suggestedCompetitors =
     opts.step < 5 && storedCompetitors.length === 0 && !noneSaved
-      ? await suggestCompetitorsUnlessPreview({
-          brandName: brand.name,
-          domain: brand.domain,
-          industry: brand.industry,
-          marketScope: brand.marketScope,
-        })
+      ? (
+          await suggestCompetitorsUnlessPreview({
+            brandName: brand.name,
+            domain: brand.domain,
+            industry: brand.industry,
+            marketScope: brand.marketScope,
+          })
+        ).slice(0, planCapabilities(plan).competitorLimit)
       : [];
 
   // 플랜의 추적 질문 상한 — 5단계가 한도에 닿은 사람에게 AI 제안 대신 안내를 보이게 한다(원가 보호).
-  const promptLimit = planCapabilities(await getCurrentPlan()).promptLimit;
+  const promptLimit = planCapabilities(plan).promptLimit;
   const questionLimit = Number.isFinite(promptLimit) ? promptLimit : null;
   const archivedIds = await archivedPromptIds([brand.id]);
   const savedQuestionCount = await database.prompt.count({

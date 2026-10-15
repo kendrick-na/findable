@@ -116,6 +116,43 @@ export interface CompetitorExtractContext {
   ownNames: readonly string[];
 }
 
+const primarySchema = z.object({
+  keep: z
+    .array(z.string())
+    .describe("주력 사업이 이 분야인 회사 이름(입력에 있던 그대로)")
+    .default([]),
+});
+
+/**
+ * 2차 판정(2026-10-15): 후보마다 '주력 사업이 이 분야 자체인가'만 따로 본다.
+ * 1차 추출은 호출마다 흔들려서(실측: 같은 브랜드에 범용 SEO·마케팅 스위트가 3번 중 2번 섞임) 같은 기준으로 한 번 더 거른다.
+ * 판정이 실패하거나 전부 탈락시키면 1차 결과를 그대로 쓴다(후보를 통째로 잃지 않는다).
+ */
+export async function keepPrimaryBusiness(
+  names: readonly string[],
+  category: string
+): Promise<string[]> {
+  try {
+    const { object } = await generateObject({
+      model: model(),
+      schema: primarySchema,
+      prompt: `아래 회사 중, 주력 사업(대표 제품)이 '${category}' 자체인 회사만 골라줘.
+- 다른 분야가 본업인 회사는 빼. 예: 범용 검색엔진 최적화(SEO)·콘텐츠 마케팅·웹 트래픽 분석·광고 통합 스위트가 본업이고 '${category}'는 부가 기능인 회사.
+- 단, '${category}'만 전담하는 별도 제품·브랜드를 따로 운영하는 회사는 남겨.
+- 확신이 없으면 빼지 말고 남겨.
+- 입력에 있던 이름 그대로만 답해.
+
+${names.join("\n")}`,
+    });
+    const allowed = new Set(names);
+    const kept = names.filter((n) => allowed.has(n) && object.keep.includes(n));
+    return kept.length > 0 ? kept : [...names];
+  } catch (error) {
+    log.warn("competitor_primary_business.failed", { error: String(error) });
+    return [...names];
+  }
+}
+
 export async function extractCompetitorCandidates(
   answer: string,
   ctx: CompetitorExtractContext
@@ -132,13 +169,18 @@ export async function extractCompetitorCandidates(
 자사 이름: ${ctx.ownNames.join(", ")}
 ${ctx.market ? `- 대상 시장은 ${ctx.market}이야. 같은 시장에서 활동하는 회사를 우선하고, 해외 회사는 그 시장에서도 실제 경쟁하는 경우만 넣어.\n` : ""}- **자사는 어떤 언어·표기든 넣지 마**(영문명·약칭 포함).
 - 같은 회사의 하위 브랜드·제품 라인·지사는 **대표 이름 하나로만**(예: 'Accenture Song' → 'Accenture').
-- '${ctx.category}'와 같은 서비스를 파는 회사만. 배달·결제·광고 같은 **인접 업종, 매체, 마켓플레이스, AI 서비스(ChatGPT 등)는 넣지 마.**
+- '${ctx.category}'가 **주력 사업**인 회사만. 배달·결제·광고 같은 **인접 업종, 매체, 마켓플레이스, AI 서비스(ChatGPT 등)는 넣지 마.**
+- 주력이 다른 분야(예: 범용 검색 최적화·마케팅 분석·웹 트래픽 분석 스위트)인데 '${ctx.category}'는 부가 기능인 회사는 넣지 마. 단, 그 분야만 전담하는 별도 제품·브랜드가 있으면 그 이름은 넣어도 돼.
+- 가장 직접적인 경쟁사부터 순서대로.
 - 답변에 적힌 이름만, 적힌 그대로. 최대 8개. 없으면 빈 배열.
 
 [답변]
 ${text}`,
     });
-    return keepNamesPresentInAnswer(object.competitors, text);
+    const present = keepNamesPresentInAnswer(object.competitors, text);
+    return present.length > 1
+      ? await keepPrimaryBusiness(present, ctx.category)
+      : present;
   } catch (error) {
     log.warn("competitor_candidates.failed", { error: String(error) });
     return null;

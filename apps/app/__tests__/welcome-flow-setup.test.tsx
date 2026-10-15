@@ -270,8 +270,8 @@ describe("저장값 우선 · AI 후보는 확인 전엔 저장하지 않는다 
       initialStep: 4,
       suggestedCompetitors: ai,
     });
-    // 후보는 칩으로 보이지만(미리 담기지 않는다)…
-    expect(screen.getByText("+ AI후보1")).toBeTruthy();
+    // 후보는 미리 체크돼 보이지만(2026-10-15 되돌림)…
+    expect(screen.getByText("AI후보1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: t.skip }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     // …건너뛰기 저장에는 경쟁사가 없다.
@@ -301,8 +301,7 @@ describe("저장값 우선 · AI 후보는 확인 전엔 저장하지 않는다 
       initialStep: 4,
       suggestedCompetitors: ai,
     });
-    // 후보는 사람이 담아야 한다 — [후보 모두 담기] 후 [다음].
-    fireEvent.click(screen.getByRole("button", { name: t.competitorAddAll }));
+    // 후보는 미리 체크돼 있고, [다음]으로 확인해야 저장된다.
     fireEvent.click(screen.getByRole("button", { name: t.next }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(lastSave(onSave).competitors).toEqual(ai);
@@ -311,27 +310,28 @@ describe("저장값 우선 · AI 후보는 확인 전엔 저장하지 않는다 
     expect(lastSave(onSave).competitors).toEqual(ai);
   });
 
-  it("🔴 후보를 담지 않고 [다음]을 누르면 아무것도 저장되지 않는다(기본 미선택 — 2026-10-15)", async () => {
+  it("🔴 후보는 미리 체크돼 있고 [다음]을 누르면 그대로 저장된다(2026-10-15 대표가 기본 미선택을 되돌림)", async () => {
     const { onSave } = renderFlow({
       actions: makeActions([]),
       initialStep: 4,
       suggestedCompetitors: ai,
     });
-    expect(
-      screen.getByRole("button", { name: t.competitorAddAll })
-    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: t.next }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
-    expect(lastSave(onSave).competitors).toEqual([]);
+    expect(lastSave(onSave).competitors).toEqual(ai);
   });
 
-  it("후보 칩 하나만 눌러 담으면 그 하나만 저장된다", async () => {
+  it("미리 체크된 후보를 X로 빼면 남은 것만 저장된다", async () => {
     const { onSave } = renderFlow({
       actions: makeActions([]),
       initialStep: 4,
       suggestedCompetitors: ai,
     });
-    fireEvent.click(screen.getByText("+ AI후보2"));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: (t.removeItem ?? "").replace("{item}", "AI후보1"),
+      })
+    );
     fireEvent.click(screen.getByRole("button", { name: t.next }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(lastSave(onSave).competitors).toEqual(["AI후보2"]);

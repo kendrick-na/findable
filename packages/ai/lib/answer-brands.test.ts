@@ -11,7 +11,11 @@ vi.mock("@repo/observability/log", () => ({
   log: { warn: vi.fn(), info: vi.fn() },
 }));
 
-import { extractListedBrands, keepNamesPresentInAnswer } from "./answer-brands";
+import {
+  extractListedBrands,
+  keepNamesPresentInAnswer,
+  keepPrimaryBusiness,
+} from "./answer-brands";
 
 const table =
   "| 브랜드 | 특징 |\n|---|---|\n| **이즈앤트리 (Isntree)** | 성분 중심 |\n| **토리든 (Torriden)** | 수분 |\n| **라운드랩** | 세라마이드 |";
@@ -75,5 +79,31 @@ describe("extractListedBrands", () => {
   it("호출 실패는 null — 0개로 단정하지 않는다", async () => {
     h.generateObject.mockRejectedValue(new Error("429"));
     expect(await extractListedBrands(table)).toBeNull();
+  });
+});
+
+describe("keepPrimaryBusiness", () => {
+  it("판정 결과로 걸러내되 입력에 없던 이름은 못 넣는다", async () => {
+    h.generateObject.mockResolvedValueOnce({
+      object: { keep: ["Profound", "Peec AI", "지어낸이름"] },
+    } as never);
+    expect(
+      await keepPrimaryBusiness(
+        ["Profound", "Semrush", "Peec AI"],
+        "AI 검색 가시성 서비스"
+      )
+    ).toEqual(["Profound", "Peec AI"]);
+  });
+  it("전부 탈락시키거나 실패하면 1차 결과를 그대로 쓴다", async () => {
+    h.generateObject.mockResolvedValueOnce({ object: { keep: [] } } as never);
+    expect(await keepPrimaryBusiness(["A사", "B사"], "분야")).toEqual([
+      "A사",
+      "B사",
+    ]);
+    h.generateObject.mockRejectedValueOnce(new Error("x"));
+    expect(await keepPrimaryBusiness(["A사", "B사"], "분야")).toEqual([
+      "A사",
+      "B사",
+    ]);
   });
 });
