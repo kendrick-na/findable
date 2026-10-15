@@ -133,3 +133,24 @@
 .fr12 .l2act .l2tbl { font-size: 9.6pt; }
 .fr12 .l2act .l2tbl td { padding-top: 1.2mm; padding-bottom: 1.2mm; }
 .fr12 .l2act .l2tbl th { padding-top: 1.6mm; padding-bottom: 1.6mm; font-size: 9pt; }
+
+/* 3쪽: 범위 표기처럼 긴 값은 글자를 줄여 카드 안에 넣는다(최소 21pt) */
+.fr12 .l2kpi .v.long { font-size: 21pt; letter-spacing: -0.035em; white-space: normal; line-height: 1.2; }
+/* 6쪽: 내 순위 칸 강조(기존 .tbl.topics .selfc 는 이 표에 적용되지 않으므로 같은 모양을 준다) */
+.fr12 .l2topics .selfc { font-weight: 800; color: var(--or-t); background: var(--or-s); }
+/* 9쪽: 확인 내용 열 */
+.fr12 .l2tbl .l2note { font-size: 8.8pt; line-height: 1.45; color: var(--ink2); }
+/* 10쪽: 본문 9pt 이상(분량이 넘치면 행간·열 간격으로 맞춘다) */
+.fr12 .l2method li { font-size: 9pt; line-height: 1.5; }
+.fr12 .l2qall { font-size: 9pt; line-height: 1.45; }
+
+/* 3쪽 카드 라벨은 한 줄 */
+.fr12 .l2kpi .k { white-space: nowrap; }
+/* 9쪽: 확인 내용 열이 늘어난 만큼 원인 목록·할 일 카드를 줄여 한 쪽에 넣는다 */
+.fr12 .l2act .l2causes { margin-top: 1mm; }
+.fr12 .l2act .l2causes li { margin-bottom: 1.4mm; }
+.fr12 .l2act .l2causes p { font-size: 9pt; line-height: 1.45; }
+.fr12 .l2act .l2tbl td { padding-top: .9mm; padding-bottom: .9mm; }
+.fr12 .l2act .plan-item { padding-top: 1.6mm; padding-bottom: 1.6mm; }
+.fr12 .l2act .l2poc { margin-top: 2.6mm; }
+.fr12 .l2act .hd { margin-bottom: 4mm; }

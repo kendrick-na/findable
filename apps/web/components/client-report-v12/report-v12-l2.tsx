@@ -92,6 +92,9 @@ interface Ctx {
 const RANGE_WON_RE = /\s*원$/;
 const MAX_RANK_ROWS = 8;
 const MAX_TOP_SITES = 5;
+/** 카드 값이 이 글자 수를 넘으면(범위 표기 등) 글자를 줄여 카드 안에 넣는다. */
+const LONG_KPI_VALUE = 11;
+const UNVERIFIED_RE = /확인하지 못|확인되지 않|미확인|확인 필요/;
 
 const asFraction = (k: number, n: number) => `${k}/${n}`;
 
@@ -285,7 +288,17 @@ function Kpi({
   return (
     <div className="l2kpi">
       <div className="k">{label}</div>
-      <div className={hot ? "v hot" : "v"}>{value}</div>
+      <div
+        className={[
+          "v",
+          hot ? "hot" : "",
+          value.length > LONG_KPI_VALUE ? "long" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {value}
+      </div>
       {note ? <div className="n" {...rich(note)} /> : null}
       {basis ? <div className="b">{basis}</div> : null}
     </div>
@@ -333,7 +346,7 @@ function NumbersPage({ x, n, total }: { x: Ctx; n: number; total: number }) {
           <Kpi
             basis={`질문 ${share.questions}개 × AI ${s.engines_total}곳 = 답변 ${share.answers}건`}
             hot
-            label="이름 없이 물었을 때"
+            label="이름 없이 물으면"
             note={nm?.nameless_note}
             value={asFraction(x.selfMentions, share.answers)}
           />
@@ -497,7 +510,7 @@ function NamelessPage({ x, n, total }: { x: Ctx; n: number; total: number }) {
   return (
     <section className="page rv l2">
       <Head sec="이름 없이 물으면" />
-      <div className="kicker">이름 없이 물었을 때</div>
+      <div className="kicker">이름 없이 물으면</div>
       <Title>
         <span
           {...rich(
@@ -512,7 +525,7 @@ function NamelessPage({ x, n, total }: { x: Ctx; n: number; total: number }) {
             {x.selfMentions}
             <small>/ {share.answers}건</small>
           </div>
-          <div className="t">{c.brand}가 나온 답변</div>
+          <div className="t">{iga(c.brand)} 나온 답변</div>
         </div>
       </div>
       <h3 className="sq">
@@ -599,7 +612,7 @@ function TopicsPage({ x, n, total }: { x: Ctx; n: number; total: number }) {
                   {t.top[i] ?? <span className="zero">–</span>}
                 </td>
               ))}
-              <td className={`c${t.self_rank ? "selfc" : ""}`}>
+              <td className={t.self_rank ? "c selfc" : "c"}>
                 {t.self_rank ? (
                   `${t.self_rank}위`
                 ) : (
@@ -751,7 +764,7 @@ function FormulaRows({ x }: { x: Ctx }) {
       <div className="formula">
         <i>×</i>
         <div>
-          <span>이름 없이 물었을 때 맞게 나오지 않은 비율</span>
+          <span>이름 없이 물으면 맞게 나오지 않은 비율</span>
           <b>{missText}</b>
         </div>
         <i>=</i>
@@ -770,6 +783,11 @@ function RevenuePage({ x, n, total }: { x: Ctx; n: number; total: number }) {
     return null;
   }
   const basis = L.p8?.basis ?? revenue.basis.slice(0, 3);
+  // 범위 표기일 때는 월 환산도 범위 문자열(revenue_range_monthly)이 있을 때만 — 하한값만 보이는 것을 막는다.
+  const H = c.headlines ?? {};
+  const monthlyText = x.revenueRange
+    ? (H.revenue_range_monthly ?? null)
+    : krw(revenue.missedMonthly);
   return (
     <section className="page rv l2">
       <Head sec="매출 기회" />
@@ -790,6 +808,7 @@ function RevenuePage({ x, n, total }: { x: Ctx; n: number; total: number }) {
             <small>원 / 연</small>
           </div>
           <div className="t">빠졌을 수 있는 매출(추정)</div>
+          {monthlyText ? <div className="m">월 약 {monthlyText}</div> : null}
         </div>
         <FormulaRows x={x} />
       </div>
@@ -822,8 +841,9 @@ function SiteChecks({ x }: { x: Ctx }) {
     <table className="tbl l2tbl tight">
       <tbody>
         <tr>
-          <th>점검 항목</th>
-          <th style={{ width: "26mm" }}>상태</th>
+          <th style={{ width: "46mm" }}>점검 항목</th>
+          <th style={{ width: "22mm" }}>상태</th>
+          <th>확인 내용</th>
         </tr>
         {x.c.site_checks.map((k) => (
           <tr key={k.item}>
@@ -831,6 +851,7 @@ function SiteChecks({ x }: { x: Ctx }) {
             <td>
               <span className={`st ${k.state}`}>{ST_NAME[k.state]}</span>
             </td>
+            <td className="l2note" {...rich(k.note)} />
           </tr>
         ))}
       </tbody>
@@ -848,7 +869,12 @@ function PlanColumns({ x }: { x: Ctx }) {
             <span>{what}</span>
           </div>
           {x.c.playbook
-            .filter((p) => p.p === grp && p.kind !== "한계")
+            .filter(
+              (p) =>
+                p.p === grp &&
+                p.kind !== "한계" &&
+                !p.h.startsWith("보장하지 않는")
+            )
             .map((p, i) => (
               <div className="plan-item" key={p.h}>
                 <h4>
@@ -865,6 +891,9 @@ function PlanColumns({ x }: { x: Ctx }) {
 
 function ActionPage({ x, n, total }: { x: Ctx; n: number; total: number }) {
   const { c, L } = x;
+  const unverified = c.site_checks.filter((k) =>
+    UNVERIFIED_RE.test(k.note)
+  ).length;
   return (
     <section className="page rv l2 l2act">
       <Head sec="원인과 할 일" />
@@ -880,7 +909,15 @@ function ActionPage({ x, n, total }: { x: Ctx; n: number; total: number }) {
           </li>
         ))}
       </ol>
-      <h3 className="sq">홈페이지 기본 점검</h3>
+      <h3 className="sq">
+        홈페이지 기본 점검
+        <span className="sub">
+          {c.site_checked_at || c.measured_at} 확인
+          {unverified > 0
+            ? ` · 확인하지 못한 항목 ${unverified}개는 “확인 못 함”으로 적었습니다`
+            : ""}
+        </span>
+      </h3>
       <SiteChecks x={x} />
       <h3 className="sq">할 일</h3>
       <PlanColumns x={x} />

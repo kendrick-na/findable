@@ -485,4 +485,53 @@ describe("v12 레이아웃 v2", () => {
     expect(src).toContain("ClientReportV12L2");
     expect(src).toContain("<ClientReportV12 data");
   });
+
+  it("긴 카드 값(범위 표기)은 long 클래스로 글자를 줄이고, 짧은 값은 그대로", async () => {
+    const html = await renderL2({
+      layout_v2: l2Copy,
+      headlines: { revenue_range: "190.9~211.2억 원" },
+    });
+    expect(html).toContain('class="v long"');
+    const short = await renderL2({ layout_v2: l2Copy });
+    expect(short).not.toContain('class="v long"');
+  });
+
+  it("5쪽 라벨 조사·3쪽 라벨 문구: 받침 있는 이름은 '이', 라벨은 '이름 없이 물으면'", async () => {
+    const html = await renderL2({ layout_v2: l2Copy, brand: "넘버즈인" });
+    expect(html).toContain("넘버즈인이 나온 답변");
+    expect(html).not.toContain("넘버즈인가 나온");
+    expect(html).toContain("이름 없이 물으면");
+    expect(html).not.toContain("이름 없이 물었을 때");
+  });
+
+  it("9쪽 홈페이지 점검: 확인 내용 열과 점검일이 있다", async () => {
+    const html = await renderL2({ layout_v2: l2Copy });
+    expect(html).toContain("<th>확인 내용</th>");
+    expect(html).toContain("홈페이지 기본 점검");
+    expect(html).toContain(" 확인");
+  });
+
+  it("8쪽 월 환산: 범위 문자열이 있으면 월 범위가 있을 때만, 없으면 월 값", async () => {
+    const withRange = await renderL2({
+      layout_v2: l2Copy,
+      headlines: {
+        revenue_range: "190.9~211.2억 원",
+        revenue_range_monthly: "15.9~17.6억 원",
+      },
+    });
+    expect(withRange).toContain("월 약 15.9~17.6억 원");
+    const rangeNoMonthly = await renderL2({
+      layout_v2: l2Copy,
+      headlines: { revenue_range: "190.9~211.2억 원" },
+    });
+    expect(rangeNoMonthly).not.toContain('class="m">월 약');
+    const plain = await renderL2({ layout_v2: l2Copy });
+    expect(plain).toContain('class="m">월 약');
+  });
+
+  it("6쪽 내 순위 칸은 가운데 정렬(c)과 강조(selfc) 클래스가 공백으로 나뉜다", async () => {
+    const html = await renderL2({ layout_v2: l2Copy });
+    expect(html).not.toContain('class="cselfc"');
+    expect(html).toContain("순위 밖");
+  });
 });
