@@ -146,6 +146,20 @@ const HAS_SCHEME = /^https?:\/\//i;
 const asUrl = (domain: string) =>
   HAS_SCHEME.test(domain) ? domain : `https://${domain}`;
 
+/** 별칭에서 브랜드 이름과 같은 값(대소문자 무시)과 중복을 뺀다. */
+const distinctAliases = (brand: BrandIdentity): string[] => {
+  const seen = new Set([brand.name.trim().toLowerCase()]);
+  const out: string[] = [];
+  for (const alias of brand.aliases) {
+    const key = alias.trim().toLowerCase();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      out.push(alias);
+    }
+  }
+  return out;
+};
+
 /** schema.org `Organization` JSON-LD. 확인된 항목만 넣는다. */
 export function buildOrganizationJsonLd(
   brand: BrandIdentity,
@@ -161,8 +175,9 @@ export function buildOrganizationJsonLd(
   if (brand.legalName) {
     ld.legalName = brand.legalName;
   }
-  if (brand.aliases.length > 0) {
-    ld.alternateName = brand.aliases;
+  const aliases = distinctAliases(brand);
+  if (aliases.length > 0) {
+    ld.alternateName = aliases;
   }
   if (ok.has("oneLiner")) {
     ld.description = sheet.oneLiner;
@@ -190,8 +205,9 @@ export function buildLlmsText(
   if (brand.legalName) {
     facts.push(`- Legal name: ${brand.legalName}`);
   }
-  if (brand.aliases.length > 0) {
-    facts.push(`- Also written as: ${brand.aliases.join(", ")}`);
+  const aliases = distinctAliases(brand);
+  if (aliases.length > 0) {
+    facts.push(`- Also written as: ${aliases.join(", ")}`);
   }
   if (ok.has("operator")) {
     facts.push(`- Operated by: ${sheet.operator}`);

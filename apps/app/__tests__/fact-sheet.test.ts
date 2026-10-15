@@ -85,4 +85,13 @@ describe("확인된 사실만 반영", () => {
     expect(text).toContain("What we offer: Widgets for small shops");
     expect(text).not.toContain("Operated by");
   });
+  test("별칭에서 브랜드 이름과 같은 값·중복은 뺀다", () => {
+    const b = { ...brand, aliases: ["acme", "Acme KR", "acme kr"] };
+    expect(buildOrganizationJsonLd(b, EMPTY_FACT_SHEET).alternateName).toEqual([
+      "Acme KR",
+    ]);
+    expect(buildLlmsText(b, EMPTY_FACT_SHEET)).toContain(
+      "Also written as: Acme KR\n"
+    );
+  });
 });

@@ -221,113 +221,113 @@ export const FactSheetCard = ({
   );
 
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-[color:var(--findable-hairline,#23252a)] p-4">
-      <div className="flex flex-col gap-1">
-        <h3 className="font-medium text-[color:var(--findable-ink,#f7f8f8)]">
-          {t.title}
-        </h3>
+    <details className="rounded-xl border border-[color:var(--findable-hairline,#23252a)] p-4">
+      <summary className="cursor-pointer font-medium text-[color:var(--findable-ink,#f7f8f8)]">
+        {t.title}
+      </summary>
+      <div className="mt-4 flex flex-col gap-4">
         <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
           {t.lede}
         </p>
-      </div>
 
-      {row("oneLiner", t.oneLiner, t.oneLinerHint)}
-      {row("operator", t.operator, t.operatorHint)}
-      {row("scope", t.scope, t.scopeHint)}
+        {row("oneLiner", t.oneLiner, t.oneLinerHint)}
+        {row("operator", t.operator, t.operatorHint)}
+        {row("scope", t.scope, t.scopeHint)}
 
-      <details className="flex flex-col gap-4">
-        <summary className="cursor-pointer text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-          {t.more}
-        </summary>
-        <div className="mt-3 flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <label
-              className="flex flex-col gap-1 text-sm"
-              htmlFor={`fact-profiles-${brandId}`}
-            >
-              <span className="text-[color:var(--findable-ink,#f7f8f8)]">
-                {t.profiles}
-              </span>
-              <span className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
-                {t.profilesHint}
-              </span>
-            </label>
-            <Textarea
-              id={`fact-profiles-${brandId}`}
-              onChange={(e) => setProfilesText(e.target.value)}
-              rows={3}
-              value={profilesText}
-            />
-            <FieldHead
-              checkboxId={`fact-ok-profiles-${brandId}`}
-              confirmed={sheet.confirmed.profiles === true}
-              evidence={undefined}
-              fieldKey="profiles"
-              needsEvidence={false}
-              onConfirm={(v) => setConfirmed("profiles", v)}
-              onEvidence={() => undefined}
-              t={t}
-            />
+        <details className="flex flex-col gap-4">
+          <summary className="cursor-pointer text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+            {t.more}
+          </summary>
+          <div className="mt-3 flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <label
+                className="flex flex-col gap-1 text-sm"
+                htmlFor={`fact-profiles-${brandId}`}
+              >
+                <span className="text-[color:var(--findable-ink,#f7f8f8)]">
+                  {t.profiles}
+                </span>
+                <span className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
+                  {t.profilesHint}
+                </span>
+              </label>
+              <Textarea
+                id={`fact-profiles-${brandId}`}
+                onChange={(e) => setProfilesText(e.target.value)}
+                rows={3}
+                value={profilesText}
+              />
+              <FieldHead
+                checkboxId={`fact-ok-profiles-${brandId}`}
+                confirmed={sheet.confirmed.profiles === true}
+                evidence={undefined}
+                fieldKey="profiles"
+                needsEvidence={false}
+                onConfirm={(v) => setConfirmed("profiles", v)}
+                onEvidence={() => undefined}
+                t={t}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label
+                className="text-[color:var(--findable-ink,#f7f8f8)] text-sm"
+                htmlFor={`fact-founded-${brandId}`}
+              >
+                {t.foundedYear}
+              </label>
+              <Input
+                id={`fact-founded-${brandId}`}
+                inputMode="numeric"
+                onChange={(e) =>
+                  setField(
+                    "foundedYear",
+                    e.target.value === "" ? null : Number(e.target.value)
+                  )
+                }
+                value={sheet.foundedYear ?? ""}
+              />
+              <FieldHead
+                checkboxId={`fact-ok-foundedYear-${brandId}`}
+                confirmed={sheet.confirmed.foundedYear === true}
+                evidence={sheet.evidence.foundedYear}
+                fieldKey="foundedYear"
+                needsEvidence
+                onConfirm={(v) => setConfirmed("foundedYear", v)}
+                onEvidence={(v) => setEvidence("foundedYear", v)}
+                t={t}
+              />
+            </div>
+            {row("disambiguation", t.disambiguation, t.disambiguationHint)}
           </div>
-          <div className="flex flex-col gap-2">
-            <label
-              className="text-[color:var(--findable-ink,#f7f8f8)] text-sm"
-              htmlFor={`fact-founded-${brandId}`}
-            >
-              {t.foundedYear}
-            </label>
-            <Input
-              id={`fact-founded-${brandId}`}
-              inputMode="numeric"
-              onChange={(e) =>
-                setField(
-                  "foundedYear",
-                  e.target.value === "" ? null : Number(e.target.value)
-                )
-              }
-              value={sheet.foundedYear ?? ""}
-            />
-            <FieldHead
-              checkboxId={`fact-ok-foundedYear-${brandId}`}
-              confirmed={sheet.confirmed.foundedYear === true}
-              evidence={sheet.evidence.foundedYear}
-              fieldKey="foundedYear"
-              needsEvidence
-              onConfirm={(v) => setConfirmed("foundedYear", v)}
-              onEvidence={(v) => setEvidence("foundedYear", v)}
-              t={t}
-            />
-          </div>
-          {row("disambiguation", t.disambiguation, t.disambiguationHint)}
+        </details>
+
+        <div>
+          <button
+            className="rounded-md bg-[color:var(--findable-primary,#ff7a4d)] px-4 py-2 font-medium text-black text-sm disabled:opacity-60"
+            disabled={saving}
+            onClick={save}
+            type="button"
+          >
+            {saving ? t.saving : t.save}
+          </button>
         </div>
-      </details>
 
-      <div>
-        <button
-          className="rounded-md bg-[color:var(--findable-primary,#ff7a4d)] px-4 py-2 font-medium text-black text-sm disabled:opacity-60"
-          disabled={saving}
-          onClick={save}
-          type="button"
-        >
-          {saving ? t.saving : t.save}
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-3 border-[color:var(--findable-hairline,#23252a)] border-t pt-4">
-        <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
-          {t.previewTitle}
-        </span>
-        <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
-          {t.previewNote}
-        </p>
-        {ok.size === 0 ? (
-          <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm">
-            {t.previewEmpty}
+        <div className="flex flex-col gap-3 border-[color:var(--findable-hairline,#23252a)] border-t pt-4">
+          <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+            {t.previewTitle}
+          </span>
+          <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+            {t.previewNote}
           </p>
-        ) : null}
-        <CopyBox label={t.jsonLdTitle} t={t} text={jsonLd} />
-        <CopyBox label={t.llmsTitle} t={t} text={llms} />
+          {ok.size === 0 ? (
+            <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-sm">
+              {t.previewEmpty}
+            </p>
+          ) : null}
+          <CopyBox label={t.jsonLdTitle} t={t} text={jsonLd} />
+          <CopyBox label={t.llmsTitle} t={t} text={llms} />
+        </div>
       </div>
-    </section>
+    </details>
   );
 };
