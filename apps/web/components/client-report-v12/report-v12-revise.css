@@ -383,3 +383,61 @@
   line-height: 1.5;
   color: var(--mut);
 }
+
+/* 표지: 「Q. …」 질문 영역이 위 결론 박스(문구·매출·숫자 칸)와 겹치지 않게 박스 바로 아래 흐름으로 둔다. */
+.fr12 .cover .answers {
+  position: relative;
+  left: 2mm;
+  top: auto;
+  margin-top: 7mm;
+}
+
+/* 주제 표가 길 때(10행 이상) 행 높이를 줄인다. */
+.fr12 .tbl.topics.dense td {
+  padding: 2.2mm 2mm;
+}
+.fr12 .tbl.topics.denser td {
+  padding: 1.3mm 2mm;
+  font-size: 8pt;
+}
+.fr12 .tbl.topics.denser .qcell {
+  font-size: 7.8pt;
+}
+
+/*
+ * 쪽 맞춤(fit1~fit4) — 본문이 푸터를 넘을 때만 FIT_SCRIPT 가 붙인다(report-v12.tsx).
+ * 단계가 올라갈수록 각주·표·간격을 더 줄인다. 클래스가 없으면 아무것도 바뀌지 않는다.
+ */
+.fr12 .page.fit1 .hd { margin-bottom: 5mm; }
+.fr12 .page.fit1 .notes { font-size: 6.8pt; line-height: 1.45; padding-top: 2.5mm; margin-bottom: 6mm; }
+.fr12 .page.fit1 .ins { margin-top: 3mm; padding-top: 2.4mm; }
+.fr12 .page.fit1 .ins div { font-size: 8.2pt; line-height: 1.5; }
+.fr12 .page.fit1 h3.sq { margin: 4.2mm 0 2mm; }
+.fr12 .page.fit1 .tbl td { padding-top: 1.6mm; padding-bottom: 1.6mm; }
+.fr12 .page.fit1 .qall { font-size: 8.4pt; gap: 1mm 8mm; }
+
+.fr12 .page.fit2 .hd { margin-bottom: 3mm; }
+.fr12 .page.fit2 .notes { font-size: 6.3pt; line-height: 1.4; padding-top: 1.6mm; margin-bottom: 5mm; }
+.fr12 .page.fit2 .ins div { font-size: 7.8pt; line-height: 1.45; }
+.fr12 .page.fit2 .ins div:before { font-size: 14pt; }
+.fr12 .page.fit2 h1.sec { font-size: 21pt; }
+.fr12 .page.fit2 .deck { font-size: 9.4pt; line-height: 1.55; margin-top: 2.4mm; }
+.fr12 .page.fit2 .tbl td { padding-top: 1.1mm; padding-bottom: 1.1mm; }
+.fr12 .page.fit2 .tbl, .fr12 .page.fit2 .tbl.topics td { font-size: 7.9pt; }
+.fr12 .page.fit2 .facts li, .fr12 .page.fit2 .basis li { line-height: 1.45; }
+.fr12 .page.fit2 .qall { font-size: 7.8pt; gap: .6mm 8mm; }
+
+.fr12 .page.fit3 .notes { font-size: 5.9pt; line-height: 1.35; margin-bottom: 4mm; }
+.fr12 .page.fit3 .ins { margin-top: 2mm; padding-top: 1.6mm; }
+.fr12 .page.fit3 .ins div { font-size: 7.3pt; line-height: 1.4; }
+.fr12 .page.fit3 h1.sec { font-size: 18.5pt; }
+.fr12 .page.fit3 .kicker { margin-bottom: 1.5mm; }
+.fr12 .page.fit3 .tbl td, .fr12 .page.fit3 .tbl.topics td { padding-top: .7mm; padding-bottom: .7mm; font-size: 7.3pt; }
+.fr12 .page.fit3 .tbl th { padding-top: 1.4mm; padding-bottom: 1.4mm; font-size: 7.4pt; }
+.fr12 .page.fit3 h3.sq { margin: 3mm 0 1.4mm; font-size: 10.5pt; }
+
+.fr12 .page.fit4 .notes { font-size: 5.5pt; line-height: 1.3; margin-bottom: 3mm; }
+.fr12 .page.fit4 .tbl td, .fr12 .page.fit4 .tbl.topics td { padding-top: .35mm; padding-bottom: .35mm; font-size: 6.8pt; }
+.fr12 .page.fit4 .ins div { font-size: 6.9pt; }
+.fr12 .page.fit4 h1.sec { font-size: 16pt; }
+.fr12 .page.fit4 .qall { font-size: 7pt; }
