@@ -33,6 +33,10 @@ export const INTERNAL_STATUS_NOTE = "내부 시안 · 외부 발송 금지";
 /** 마지막 행동 — 메일 본문의 「15분 통화」와 같은 말이어야 한다. */
 export const CALL_CTA = "15분 결과 설명 통화 요청하기";
 const CONTACT_EMAIL = "contact@findable.co.kr";
+/** 대표 확정 E7(2026-10-14 체크리스트): 20분 결과 리뷰 문구와 연락처(전화 포함). `display.cta_v2` 로만 켠다 — 기존 발행본은 그대로. */
+export const CALL_CTA_V2 = "20분 결과 리뷰 요청 →";
+export const CTA_V2_HEADLINE = "이 결과를 20분 함께 확인해 볼까요?";
+const CONTACT_PHONE = "010-8958-2547";
 
 /**
  * 원본 템플릿은 autoescape=False 라 문구 속 `<b>`·`<em>`·`<br>` 가 서식으로 찍힌다.
@@ -88,6 +92,67 @@ export function krw(won: number): string {
 
 export const REVENUE_LABEL = "AI 추천에서 빠져서 놓치는 매출";
 
+/**
+ * 한국어 조사 고르기 — 이름 끝 글자의 받침 유무로 이/가·은/는·을/를 중 하나를 붙인다.
+ * 한글은 정확히 판정한다. 영문은 읽는 소리로 본다: l·m·n·r(엘·엠·엔·알)만 받침이 있고 나머지(Findable·Profound·COSRX·AI)는 없다.
+ * 숫자는 영·일·삼·육·칠·팔만 받침이 있다. 모르는 글자는 받침 없음.
+ */
+const WORD_CHAR_RE = /[0-9A-Za-z\uAC00-\uD7A3]/;
+const DIGIT_RE = /[0-9]/;
+function hasBatchim(word: string): boolean {
+  const last = [...word.trim()].reverse().find((ch) => WORD_CHAR_RE.test(ch));
+  if (!last) {
+    return false;
+  }
+  const code = last.charCodeAt(0);
+  if (code >= 0xac_00 && code <= 0xd7_a3) {
+    return (code - 0xac_00) % 28 !== 0;
+  }
+  if (DIGIT_RE.test(last)) {
+    return "013678".includes(last);
+  }
+  return "lmnrLMNR".includes(last);
+}
+export const iga = (name: string) => `${name}${hasBatchim(name) ? "이" : "가"}`;
+export const eunneun = (name: string) =>
+  `${name}${hasBatchim(name) ? "은" : "는"}`;
+export const eulreul = (name: string) =>
+  `${name}${hasBatchim(name) ? "을" : "를"}`;
+
+/**
+ * 쪽 맞춤 — 본문이 푸터를 넘으면 fit1~fit4 클래스를 순서대로 붙여 글자·여백을 줄인다(report-v12-revise.css).
+ * 인쇄(PDF)도 웹 화면을 그대로 찍으므로 같은 규칙이 적용된다. 스크립트가 없으면 기존 모양 그대로다.
+ */
+const FIT_SCRIPT = `(function(){function over(p){var ft=p.querySelector('.ft');if(!ft)return -1;var top=ft.getBoundingClientRect().top-6;var m=0;var all=p.querySelectorAll('*');for(var i=0;i<all.length;i++){var el=all[i];if(el.closest('.ft'))continue;if(getComputedStyle(el).position==='absolute')continue;var r=el.getBoundingClientRect();if(!r.width||!r.height)continue;if(r.bottom>m)m=r.bottom}return m-top}function fit(){var pages=document.querySelectorAll('.fr12 .page');for(var i=0;i<pages.length;i++){var p=pages[i];p.classList.remove('fit1','fit2','fit3','fit4');for(var k=1;k<=4;k++){if(over(p)<=0)break;p.classList.add('fit'+k)}}}function run(){try{fit()}catch(e){}}run();document.addEventListener('DOMContentLoaded',run);window.addEventListener('load',run);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(run)})();`;
+
+const RANGE_WON_RE = /\s*원$/;
+
+/** 매출 쪽 「정확히 소개하지 못한 비율」 표기. 분수 모드: 저장된 분자·분모 → 측정 계산분(bad_n/n) → 그 외는 %. */
+function missRatioText(
+  revenue: {
+    measured: boolean;
+    miss_den?: number;
+    miss_num?: number;
+    missPct: number;
+  },
+  fractions: boolean,
+  s: { bad_n: number; n: number }
+): string {
+  if (fractions) {
+    if (
+      typeof revenue.miss_num === "number" &&
+      typeof revenue.miss_den === "number" &&
+      revenue.miss_den > 0
+    ) {
+      return `${revenue.miss_num}/${revenue.miss_den}`;
+    }
+    if (revenue.measured) {
+      return `${s.bad_n}/${s.n}`;
+    }
+  }
+  return `${revenue.missPct}%`;
+}
+
 /** 점유 쪽 제목 기본 문장. 분수 표기면 비율 대신 "답변 N건 중 K건". */
 function shareTitleDefault(
   brand: string,
@@ -96,12 +161,12 @@ function shareTitleDefault(
   fractions: boolean
 ): string {
   if (!self) {
-    return `구매 질문에서 ${brand}는 추천되지 않았습니다`;
+    return `구매 질문에서 ${eunneun(brand)} 추천되지 않았습니다`;
   }
   if (fractions) {
-    return `구매 질문 답변 ${answers}건 중 ${brand}가 추천된 건 ${self.mentions}건입니다`;
+    return `구매 질문 답변 ${answers}건 중 ${iga(brand)} 추천된 건 ${self.mentions}건입니다`;
   }
-  return `구매 질문에서 ${brand}가 추천된 비율은 ${pyRound(self.pct)}%입니다`;
+  return `구매 질문에서 ${iga(brand)} 추천된 비율은 ${pyRound(self.pct)}%입니다`;
 }
 
 /** 출처 종류 막대 칸 값. 분수 표기면 "n/전체", 아니면 반올림한 %. */
@@ -183,6 +248,9 @@ interface RevenueOpportunity {
   /** 근거 목록(출처 문장). */
   basis: string[];
   future?: string;
+  /** 놓치는 비율을 분수로 보일 때(display.fractions) 분자·분모 — 예: 47/56. 둘 다 있을 때만 쓴다. */
+  miss_den?: number;
+  miss_num?: number;
   /** AI가 정확히 소개하지 못한 비율(%). */
   miss_pct?: number;
   /** 놓치는 매출(원/연). */
@@ -201,7 +269,7 @@ interface Cfg {
   brand_en?: string;
   category_share?: CategoryShare;
   causes: { h: string; p: string }[];
-  display?: { fractions?: boolean };
+  display?: { cta_v2?: boolean; fractions?: boolean };
   domain: string;
   headlines?: Record<string, string>;
   insights_accuracy: string[];
@@ -318,6 +386,7 @@ export function ClientReportV12({
   const H = c.headlines ?? {};
   // 대표 확정 규칙(분수 표기): 새 리포트만 config.display.fractions=true 로 켠다. 없으면 기존 % 표기 그대로.
   const fractions = c.display?.fractions === true;
+  const ctaV2 = c.display?.cta_v2 === true;
   const stale = c.stale === true;
   // 발송 승인 전: 무조건 내부 시안. 승인 후: 원본 템플릿 기본값(status_note 없음)과 같게.
   const statusNote = sendApproved ? undefined : INTERNAL_STATUS_NOTE;
@@ -337,6 +406,15 @@ export function ClientReportV12({
   const share = c.category_share?.brands?.length ? c.category_share : null;
   const topics = c.topic_winners?.length ? c.topic_winners : null;
   const revenue = missedRevenue(c.revenue_opportunity, s);
+  const revenueRange = revenue ? (H.revenue_range ?? null) : null;
+  const missText = revenue ? missRatioText(revenue, fractions, s) : "";
+  // 범위 표기일 때 월 환산은 범위 문자열(revenue_range_monthly)이 있을 때만 보인다 — 하한값만 보이는 걸 막는다.
+  let monthlyText: string | null = null;
+  if (revenue) {
+    monthlyText = revenueRange
+      ? (H.revenue_range_monthly ?? null)
+      : krw(revenue.missedMonthly);
+  }
 
   const order: PageId[] = [
     "cover",
@@ -365,7 +443,7 @@ export function ClientReportV12({
   );
 
   const titles: Partial<Record<PageId, string>> = {
-    accuracy: `AI는 ${c.brand}를 정확히 알고 있을까`,
+    accuracy: `AI는 ${eulreul(c.brand)} 정확히 알고 있을까`,
     matrix: "질문별·AI별 답변 결과",
     share: "이름 없이 물으면 누가 추천될까",
     topics: "주제별로 누가 1위일까",
@@ -424,10 +502,10 @@ export function ClientReportV12({
   // 순위표만 있으면 「그래서 뭐?」가 남는다 → 저장된 숫자로 바로 계산되는 해석 두 줄을 붙인다(추측 없음).
   const shareInsights: string[] = share
     ? ((c.insights_share as string[] | undefined) ?? [
-        `1위 <b>${shareTop?.name}</b>는 답변 ${share.answers}건 중 ${shareTop?.mentions}건에서 추천됐고, ${c.brand}는 ${selfMentions}건이었습니다.`,
+        `1위 <b>${shareTop?.name}</b>는 답변 ${share.answers}건 중 ${shareTop?.mentions}건에서 추천됐고, ${eunneun(c.brand)} ${selfMentions}건이었습니다.`,
         selfRank !== null && selfRank <= 3
-          ? `${c.brand}는 3위 안에 들어 있습니다. 1위와의 차이는 추천 <b>${(shareTop?.mentions ?? 0) - selfMentions}건</b>입니다.`
-          : `${c.brand}가 3위 안에 들려면 추천이 <b>${(shareThird?.mentions ?? 0) - selfMentions + 1}건</b> 더 필요합니다.`,
+          ? `${eunneun(c.brand)} 3위 안에 들어 있습니다. 1위와의 차이는 추천 <b>${(shareTop?.mentions ?? 0) - selfMentions}건</b>입니다.`
+          : `${iga(c.brand)} 3위 안에 들려면 추천이 <b>${(shareThird?.mentions ?? 0) - selfMentions + 1}건</b> 더 필요합니다.`,
       ])
     : [];
   const topicWins = new Map<string, number>();
@@ -440,7 +518,7 @@ export function ClientReportV12({
   const topicInsights: string[] = topics
     ? ((c.insights_topics as string[] | undefined) ??
       [
-        `${c.brand}가 1위인 주제는 <b>${topics.filter((t) => t.self_rank === 1).length}개</b>, 3위 안에 든 주제는 ${topics.filter((t) => t.self_rank !== null && t.self_rank <= 3).length}개입니다.`,
+        `${iga(c.brand)} 1위인 주제는 <b>${topics.filter((t) => t.self_rank === 1).length}개</b>, 3위 안에 든 주제는 ${topics.filter((t) => t.self_rank !== null && t.self_rank <= 3).length}개입니다.`,
         topicLeader
           ? `가장 많은 주제에서 1위에 오른 브랜드는 <b>${topicLeader[0]}</b>(${topicLeader[1]}개 주제)입니다.`
           : "",
@@ -463,7 +541,7 @@ export function ClientReportV12({
             p: "AI가 브랜드를 빼먹거나 다른 회사로 착각하는 건 제품이 나빠서가 아니라 <b>인용할 근거가 웹에 없기 때문</b>입니다. 특히 한국어는 AI 답변의 바탕이 되는 공개 웹 데이터의 <b>0.84%</b>뿐이라(Common Crawl 기준), 한국 브랜드일수록 근거가 부족합니다.",
           },
           {
-            h: `그래서 AI가 ${c.brand}를 어떻게 말하는지 직접 물어봤습니다`,
+            h: `그래서 AI가 ${eulreul(c.brand)} 어떻게 말하는지 직접 물어봤습니다`,
             p: `${engineNames} <b>AI ${s.engines_total}곳</b>에 질문 ${s.nq}개를 묻고, 돌아온 <b>답변 ${s.n}건을 한 건씩 읽어</b> 정확한지, 다른 회사로 착각했는지, 어떤 출처를 근거로 삼았는지 확인했습니다. AI 답변은 물을 때마다 달라지기 때문에(같은 질문을 3번 물어 추천 목록이 똑같았던 경우는 36개 중 4개), 마지막 장의 계획대로 <b>같은 조건으로 다시 측정</b>해 변화를 확인합니다.`,
           },
         ];
@@ -497,6 +575,7 @@ export function ClientReportV12({
 
   return (
     <>
+      <script {...{ dangerouslySetInnerHTML: { __html: FIT_SCRIPT } }} />
       {/* 01 표지 */}
       <section className="page cover rv">
         <img alt="" className="fbig" src={`${A}/F_cream.png`} />
@@ -518,7 +597,7 @@ export function ClientReportV12({
             </>
           ) : (
             <div className="s">
-              AI에게 {c.brand}를 물으면{" "}
+              AI에게 {eulreul(c.brand)} 물으면{" "}
               <em>
                 {wrongOf10 === 0
                   ? "대부분 맞는 답"
@@ -678,7 +757,7 @@ export function ClientReportV12({
           <span
             {...rich(
               H.p4 ??
-                `AI 답변 ${s.n}개 중 ${s.ok_n}개만 ${c.brand}를 정확히 설명했습니다`
+                `AI 답변 ${s.n}개 중 ${s.ok_n}개만 ${eulreul(c.brand)} 정확히 설명했습니다`
             )}
           />
           <Dot />
@@ -697,8 +776,16 @@ export function ClientReportV12({
               <span>{s.bad_parts}</span>
             </li>
             <li>
-              AI {s.engines_total}곳 중 <b>{s.engines_correct}곳</b>만 한 번
-              이상 정답을 냈습니다
+              {s.engines_correct === s.engines_total ? (
+                <>
+                  AI {s.engines_total}곳 <b>모두</b> 한 번 이상 정답을 냈습니다
+                </>
+              ) : (
+                <>
+                  AI {s.engines_total}곳 중 <b>{s.engines_correct}곳</b>만 한 번
+                  이상 정답을 냈습니다
+                </>
+              )}
               <span>{s.correct_engine_names}</span>
             </li>
             <li>
@@ -947,12 +1034,15 @@ export function ClientReportV12({
             <span
               {...rich(
                 H.topics ??
-                  `${topics.length}개 주제 중 ${c.brand}가 3위 안에 든 주제는 ${topics.filter((t) => t.self_rank !== null && t.self_rank <= 3).length}개입니다`
+                  `${topics.length}개 주제 중 ${iga(c.brand)} 3위 안에 든 주제는 ${topics.filter((t) => t.self_rank !== null && t.self_rank <= 3).length}개입니다`
               )}
             />
             <Dot />
           </h1>
-          <table className="tbl topics" style={{ marginTop: "7mm" }}>
+          <table
+            className={`tbl topics${topics.length > 9 ? "dense" : ""}${topics.length > 14 ? "denser" : ""}`}
+            style={{ marginTop: "7mm" }}
+          >
             <tbody>
               <tr>
                 <th style={{ width: "30mm" }}>주제</th>
@@ -1191,7 +1281,7 @@ export function ClientReportV12({
             <span
               {...rich(
                 H.revenue ??
-                  `${c.brand}가 AI 추천에서 빠져서 놓치는 매출, 연 약 ${krw(revenue.missedAnnual)}`
+                  `${iga(c.brand)} AI 추천에서 빠져서 놓치는 매출, 연 약 ${krw(revenue.missedAnnual)}`
               )}
             />
             <Dot />
@@ -1199,11 +1289,15 @@ export function ClientReportV12({
           <div className="hero rev">
             <div className="big">
               <div className="v">
-                {krw(revenue.missedAnnual).replace("\u00a0원", "")}
+                {revenueRange
+                  ? revenueRange.replace(RANGE_WON_RE, "")
+                  : krw(revenue.missedAnnual).replace("\u00a0원", "")}
                 <small>원 / 연</small>
               </div>
               <div className="t">{REVENUE_LABEL}(추정)</div>
-              <div className="m">월 약 {krw(revenue.missedMonthly)}</div>
+              {monthlyText ? (
+                <div className="m">월 약 {monthlyText}</div>
+              ) : null}
             </div>
             <div className="formula-rows">
               <div className="formula">
@@ -1227,11 +1321,7 @@ export function ClientReportV12({
                 <i>×</i>
                 <div>
                   <span>AI가 정확히 소개하지 못한 비율</span>
-                  <b>
-                    {fractions && revenue.measured
-                      ? `${s.bad_n}/${s.n}`
-                      : `${revenue.missPct}%`}
-                  </b>
+                  <b>{missText}</b>
                   <em>
                     {revenue.measured
                       ? `AI 답변 ${s.n}건 중 정확 ${s.ok_n}건`
@@ -1241,14 +1331,14 @@ export function ClientReportV12({
                 <i>=</i>
                 <div className="res">
                   <span>{REVENUE_LABEL}</span>
-                  <b>연 {krw(revenue.missedAnnual)}</b>
+                  <b>연 {revenueRange ?? krw(revenue.missedAnnual)}</b>
                 </div>
               </div>
             </div>
           </div>
           <p className="rsub">
             고객이 AI에게 물었을 때, {c.brand} 대신 다른 브랜드가 추천되거나{" "}
-            {c.brand}가 잘못 소개된 만큼입니다. (추정)
+            {iga(c.brand)} 잘못 소개된 만큼입니다. (추정)
           </p>
           {revenue.support ? (
             <div className="support">
@@ -1264,10 +1354,8 @@ export function ClientReportV12({
             ))}
             {revenue.measured ? (
               <li>
-                AI가 정확히 소개하지 못한 비율{" "}
-                {fractions ? `${s.bad_n}/${s.n}` : `${revenue.missPct}%`}:
-                Findable 측정 — AI 답변 {s.n}건 중 {s.ok_n}건만 {c.brand}를
-                정확히 설명·추천
+                AI가 정확히 소개하지 못한 비율 {missText}: Findable 측정 — AI
+                답변 {s.n}건 중 {s.ok_n}건만 {eulreul(c.brand)} 정확히 설명·추천
               </li>
             ) : null}
           </ul>
@@ -1277,8 +1365,8 @@ export function ClientReportV12({
             </div>
           ) : null}
           <div className="notes">
-            추정치입니다. AI가 {c.brand}를 정확히 소개할 때 이 매출을 더 많이
-            가져올 수 있다는 뜻이지, 매출 증가를 보장하지 않습니다.
+            추정치입니다. AI가 {eulreul(c.brand)} 정확히 소개할 때 이 매출을 더
+            많이 가져올 수 있다는 뜻이지, 매출 증가를 보장하지 않습니다.
           </div>
           {foot("revenue")}
         </section>
@@ -1290,7 +1378,9 @@ export function ClientReportV12({
         <div className="kicker">{titles.causes}</div>
         <h1 className="sec">
           <span
-            {...rich(H.p8 ?? `AI가 ${c.brand}를 놓치는 이유는 세 가지입니다`)}
+            {...rich(
+              H.p8 ?? `AI가 ${eulreul(c.brand)} 놓치는 이유는 세 가지입니다`
+            )}
           />
           <Dot />
         </h1>
@@ -1395,9 +1485,15 @@ export function ClientReportV12({
         <img alt="Findable" className="fb" src={`${A}/F_mark.png`} />
         <div>
           <h2>
-            결과가 궁금하시면
-            <br />
-            15분만 시간을 내 주세요.
+            {ctaV2 ? (
+              CTA_V2_HEADLINE
+            ) : (
+              <>
+                결과가 궁금하시면
+                <br />
+                15분만 시간을 내 주세요.
+              </>
+            )}
           </h2>
           <p>
             AI 답변 원문을 함께 보면서 {c.brand}에 맞는 개선 순서를
@@ -1406,9 +1502,13 @@ export function ClientReportV12({
             받으신 메일에 회신하시거나 아래 주소로 연락 주세요.
           </p>
           <a className="url" href={`mailto:${CONTACT_EMAIL}`}>
-            {CALL_CTA}
+            {ctaV2 ? CALL_CTA_V2 : CALL_CTA}
           </a>
-          <div className="mail">{CONTACT_EMAIL} · findable.co.kr</div>
+          <div className="mail">
+            {ctaV2
+              ? `${CONTACT_EMAIL} · ${CONTACT_PHONE}`
+              : `${CONTACT_EMAIL} · findable.co.kr`}
+          </div>
         </div>
         <div className="meta">
           <span>

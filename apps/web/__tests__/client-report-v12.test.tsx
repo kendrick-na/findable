@@ -11,8 +11,17 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const { CALL_CTA, ClientReportV12, INTERNAL_STATUS_NOTE, V12_TEMPLATE_MD5 } =
-  await import("../components/client-report-v12/report-v12");
+const {
+  CALL_CTA,
+  CALL_CTA_V2,
+  CTA_V2_HEADLINE,
+  ClientReportV12,
+  eulreul,
+  eunneun,
+  iga,
+  INTERNAL_STATUS_NOTE,
+  V12_TEMPLATE_MD5,
+} = await import("../components/client-report-v12/report-v12");
 
 const FIX = join(import.meta.dirname, "fixtures/client-report");
 const fixture = JSON.parse(
@@ -265,5 +274,118 @@ describe("v12 템플릿 — 표지 문구·분수 표기(선택 필드)", () => 
     expect(legend(on).every((v) => /^\d+\/\d+$/.test(v ?? ""))).toBe(true);
     // AI가 관여하는 구매 비중 7%는 설문 비율이라 분수로 바꾸지 않는다.
     expect(on).toContain("7%");
+  });
+});
+
+// ── 2026-10-16 PDF 점검 결함 7건 수정 ──
+describe("v12 템플릿 — PDF 점검 결함 수정", () => {
+  const text = (html: string) => html.replaceAll("<!-- -->", "");
+  const withConfig = (extra: Record<string, unknown>) => ({
+    ...sample,
+    config: { ...sample.config, ...extra },
+  });
+
+  it("조사: 받침 유무로 이/가·은/는·을/를을 고른다(한글·영문·숫자)", () => {
+    expect(iga("넘버즈인")).toBe("넘버즈인이");
+    expect(iga("프란츠")).toBe("프란츠가");
+    expect(iga("프롬맘")).toBe("프롬맘이");
+    expect(eulreul("넘버즈인")).toBe("넘버즈인을");
+    expect(eulreul("프란츠")).toBe("프란츠를");
+    expect(eunneun("프롬맘")).toBe("프롬맘은");
+    expect(eunneun("노우버스")).toBe("노우버스는");
+    // 영문: l·m·n·r 만 받침 소리가 있다
+    expect(iga("Findable")).toBe("Findable가");
+    expect(iga("Wall")).toBe("Wall이");
+    expect(eulreul("Peec AI")).toBe("Peec AI를");
+    // 숫자(삼=받침, 이=없음)
+    expect(iga("A3")).toBe("A3이");
+    expect(iga("B2")).toBe("B2가");
+    // 끝에 기호가 있어도 마지막 글자(주)로 판단
+    expect(iga("프롬맘(주)")).toBe("프롬맘(주)가");
+  });
+
+  it("받침 있는 이름도 문장 조사가 맞게 나온다", () => {
+    const html = text(
+      render(false, {
+        ...sample,
+        config: { ...sample.config, brand: "넘버즈인" },
+      })
+    );
+    expect(html).not.toContain("넘버즈인를");
+    expect(html).not.toContain("넘버즈인가 ");
+    expect(html).toContain("넘버즈인을");
+  });
+
+  it("display.cta_v2 가 없으면 기존 CTA, 켜면 20분 리뷰 문구·전화 포함", () => {
+    const off = text(render(false, sample));
+    expect(off).toContain(CALL_CTA);
+    expect(off).toContain("15분만 시간을 내 주세요");
+    expect(off).not.toContain("010-8958-2547");
+    const on = text(render(false, withConfig({ display: { cta_v2: true } })));
+    expect(on).toContain(CTA_V2_HEADLINE);
+    expect(on).toContain(CALL_CTA_V2);
+    expect(on).toContain("contact@findable.co.kr · 010-8958-2547");
+    expect(on).not.toContain("15분");
+  });
+
+  it("매출 쪽 놓치는 비율: 분수 모드에서 miss_num/miss_den 이 있으면 분수, 없으면 기존 %", () => {
+    const rev = {
+      ...sample.config.revenue_opportunity,
+      miss_den: 56,
+      miss_num: 47,
+    };
+    const on = text(
+      render(
+        false,
+        withConfig({ display: { fractions: true }, revenue_opportunity: rev })
+      )
+    );
+    expect(on).toContain("<b>47/56</b>");
+    const off = text(render(false, withConfig({ revenue_opportunity: rev })));
+    expect(off).not.toContain("47/56");
+    expect(off).toContain(`${sample.config.revenue_opportunity.miss_pct}%`);
+  });
+
+  it("매출 범위: 큰 숫자·결과 칸에 범위, 월 환산은 범위 문자열이 있을 때만(하한값만 보이지 않게)", () => {
+    const base = { headlines: { revenue_range: "190.9~211.2억 원" } };
+    const noMonthly = text(render(false, withConfig(base)));
+    expect(noMonthly).toContain("190.9~211.2억<small>원 / 연</small>");
+    expect(noMonthly).toContain("연 190.9~211.2억 원");
+    expect(noMonthly).not.toContain('class="m">월 약');
+    const withMonthly = text(
+      render(
+        false,
+        withConfig({
+          headlines: {
+            revenue_range: "190.9~211.2억 원",
+            revenue_range_monthly: "15.9~17.6억 원",
+          },
+        })
+      )
+    );
+    expect(withMonthly).toContain('class="m">월 약 15.9~17.6억 원');
+  });
+
+  it("AI 4곳 모두 정답이면 '모두' 문장, 아니면 기존 '중 N곳만' 문장", () => {
+    const html = text(render(false, sample));
+    const s = sample.computed.s;
+    if (s.engines_correct === s.engines_total) {
+      expect(html).toContain(
+        `AI ${s.engines_total}곳 <b>모두</b> 한 번 이상 정답을 냈습니다`
+      );
+    } else {
+      expect(html).toContain(`<b>${s.engines_correct}곳</b>만 한 번`);
+    }
+    // 전원 정답 데이터로 바꿔 '모두' 문장 확인
+    const all = JSON.parse(JSON.stringify(sample));
+    all.computed.s.engines_correct = all.computed.s.engines_total;
+    const allHtml = text(render(false, all));
+    expect(allHtml).toContain("<b>모두</b> 한 번 이상 정답을 냈습니다");
+    expect(allHtml).not.toContain("곳</b>만 한 번");
+  });
+
+  it("쪽 맞춤 스크립트: 푸터를 넘는 쪽에 fit1~fit4 를 붙이는 코드가 한 번 들어 있다", () => {
+    const html = render(false, sample);
+    expect(html.split("classList.add('fit'+k)").length - 1).toBe(1);
   });
 });
