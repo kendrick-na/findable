@@ -1615,7 +1615,8 @@
       "noteStrong": "relative measure",
       "noteAfter": " built from the order AI lists brands in its answers. It isn't real market share — it means “how often, and in what position, you appear in AI answers”.",
       "lowSample": " This sample is only {n} answers, so the ranking may change — keep measuring.",
-      "flat": " This time there's barely any difference between brands — read it as “names mentioned together” rather than a ranking."
+      "flat": " This time there's barely any difference between brands — read it as “names mentioned together” rather than a ranking.",
+      "aiNote": "This ranking counts brands listed in {n} AI answers (tables and sentences included), by number of answers. There is no average rank."
     },
     "sourcesPage": {
       "metaTitle": "Cited sources · Findable",
