@@ -40,6 +40,9 @@ const TRANSLATION_SLUG_PAIRS: readonly (readonly [string, string])[] = [
     "ai-검색-최적화-우리-브랜드-정보를-정리하는-7단계-mti7yxab",
     "new-blog-post-draft-mtmpt3um",
   ],
+  // 슬러그 끝이 `-ko`/`-en` 으로 다른 쌍 — 첫 푸시 뒤 라이브 검증(hreflang 대상 6개 404)에서 발견.
+  ["google-discover-blog-visibility-ko", "google-discover-blog-visibility-en"],
+  ["faq-schema-ai-search-visibility-ko", "faq-schema-ai-search-visibility-en"],
 ];
 
 /** 이 글의 상대 언어 글 슬러그. 번역 쌍 표에 없으면 같은 슬러그다. */
