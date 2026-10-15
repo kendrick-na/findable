@@ -61,9 +61,11 @@ export const Footer = ({ locale = "ko" }: FooterProps) => {
   const isKo = locale.startsWith("ko");
   const lp = isKo ? "/ko" : "";
   const COLS = isKo ? COLS_KO(lp) : COLS_EN(lp);
+  // 👤 2026-10-15 대표 승인 기준 문장 — "측정만이 아니라 개선까지"를 한 문장으로.
+  //   (홈 메타 설명은 별도 확정 문구라 건드리지 않는다.)
   const tagline = isKo
-    ? "AI 답변 속 우리 브랜드를 보이게 만드는, 네이버까지 진단하는 GEO 플랫폼."
-    : "The GEO platform that diagnoses Naver too, making your brand visible inside AI answers.";
+    ? "Findable(파인더블)은 AI 검색 시대에, 우리 브랜드가 ChatGPT·네이버 AI 브리핑 같은 AI 답변에 나오도록 측정하고, 고칠 곳을 찾아 개선까지 돕는 GEO(생성형 엔진 최적화) 서비스입니다."
+    : "Findable is a GEO (generative engine optimization) service that measures how your brand appears in AI answers such as ChatGPT and Naver AI Briefing, finds what to fix, and helps you improve it.";
   const betaLabel = isKo ? "v1.0 베타 운영 중" : "v1.0 beta, running now";
   const closingLine = isKo
     ? "AI가 우리 브랜드를 먼저 답하게."
@@ -116,7 +118,7 @@ export const Footer = ({ locale = "ko" }: FooterProps) => {
               />
             </Link>
             <p
-              className="mt-5 max-w-[280px] text-[13px] leading-[1.6]"
+              className="mt-5 max-w-[340px] text-[13px] leading-[1.6]"
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               {tagline}

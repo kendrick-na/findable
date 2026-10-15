@@ -60,6 +60,12 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
   // secondary CTA는 primary(진단)와 목적지가 겹치지 않게 요금제로 분리.
   const ctaSecondary = isKo ? "요금제 보기" : "See pricing";
   const enginesLabel = isKo ? "진단 대상 AI" : "Engines covered";
+  // 🔴 첫 화면에 서비스 이름과 분야(GEO)가 없었다(2026-10-15 원인조사). 같은 이름의 다른
+  //   서비스(findable.live·findableapp.com·파인더블 랩 등)와 구분되도록 라벨 한 줄로 밝힌다.
+  //   👤 문구 확정: 대표 승인(2026-10-15). 과장 표현("최초" 등) 없음.
+  const eyebrow = isKo
+    ? "Findable(파인더블) · GEO 서비스"
+    : "Findable · GEO service";
   return (
     <section className="relative w-full overflow-hidden bg-[var(--findable-canvas)] text-[var(--findable-ink)]">
       {/* 상단 atmospheric 라벤더 글로우 (Resend 패턴) */}
@@ -76,6 +82,14 @@ export const Hero = ({ dictionary: _, locale = "ko" }: HeroProps) => {
 
       {/* HERO CONTENT */}
       <div className="relative z-10 mx-auto flex max-w-[1200px] flex-col items-center px-8 pt-16 pb-12 text-center md:pt-24 md:pb-14">
+        {/* 서비스 이름·분야 라벨 — H1 위의 작은 한 줄 */}
+        <p
+          className="mb-5 text-[13px] text-[var(--findable-ink-muted)] tracking-[0.02em]"
+          style={{ fontFamily: "var(--findable-font-sans)", fontWeight: 500 }}
+        >
+          {eyebrow}
+        </p>
+
         {/* H1 — Toss 톤 명사구 단언 */}
         <h1
           className="max-w-[1100px]"
