@@ -9,6 +9,7 @@ import {
   isPublisherIndexable,
   listPublishedContent,
 } from "@/lib/content";
+import { formatDisplayDate } from "@/lib/format-date";
 import {
   articleCanonicalUrl,
   publisherCanonicalUrl,
@@ -158,7 +159,7 @@ export default async function PublisherPage({ params }: Props) {
               href={`${prefix}/p/${publisher.slug}/${post.slug}`}
             >
               <time className="text-[var(--findable-ink-tertiary)] text-xs">
-                {post.publishedAt?.toLocaleDateString(locale)}
+                {formatDisplayDate(post.publishedAt, locale)}
               </time>
               <h2 className="mt-3 text-balance font-semibold text-2xl tracking-tight group-hover:text-[var(--findable-primary)]">
                 {post.title}

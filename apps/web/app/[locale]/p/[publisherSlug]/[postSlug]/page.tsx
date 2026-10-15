@@ -13,6 +13,7 @@ import {
   listAllPublishedContentForDiscovery,
   listRelatedContent,
 } from "@/lib/content";
+import { formatDisplayDate } from "@/lib/format-date";
 import {
   articleCanonicalUrl,
   customDomainArticleUrl,
@@ -383,7 +384,7 @@ export default async function ArticlePage({ params }: Props) {
                       {post.publisher.name}
                     </span>
                     <time className="mt-0.5 block text-[11px] text-black/40">
-                      {post.publishedAt?.toLocaleDateString(input.locale)}
+                      {formatDisplayDate(post.publishedAt, input.locale)}
                     </time>
                   </span>
                 </Link>
@@ -399,7 +400,7 @@ export default async function ArticlePage({ params }: Props) {
                     <span aria-hidden>·</span>
                     <span>
                       {input.locale.startsWith("ko") ? "측정 기준" : "Measured"}{" "}
-                      {post.sourceMeasuredAt.toLocaleDateString(input.locale)}
+                      {formatDisplayDate(post.sourceMeasuredAt, input.locale)}
                     </span>
                   </>
                 ) : null}

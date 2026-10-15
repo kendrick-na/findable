@@ -12,6 +12,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { NewsletterSubscribe } from "@/components/content/newsletter-subscribe";
 import { listPublishedContent } from "@/lib/content";
+import { formatDisplayDate } from "@/lib/format-date";
 import { FooterCTA } from "../(home)/components/footer-cta";
 import { PublicLandingHeader } from "../components/public-landing-header";
 
@@ -264,7 +265,8 @@ export default async function PublicInsightsPage({
                 </div>
                 <div className="mt-8 flex items-center justify-between border-white/10 border-t pt-5 text-white/38 text-xs">
                   <time>
-                    {featured.publishedAt?.toLocaleDateString(
+                    {formatDisplayDate(
+                      featured.publishedAt,
                       ko ? "ko-KR" : "en-US"
                     )}
                   </time>
@@ -300,7 +302,8 @@ export default async function PublicInsightsPage({
                       </h2>
                       <div className="mt-4 flex items-center gap-3 text-white/35 text-xs">
                         <time>
-                          {post.publishedAt?.toLocaleDateString(
+                          {formatDisplayDate(
+                            post.publishedAt,
                             ko ? "ko-KR" : "en-US"
                           )}
                         </time>

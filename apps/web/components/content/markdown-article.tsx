@@ -29,7 +29,7 @@ export function MarkdownArticle({ markdown }: { markdown: string }) {
       components={{
         a: ({ children, href }) => (
           <a
-            className="font-medium text-[var(--findable-primary)] underline decoration-current/30 underline-offset-4 hover:decoration-current"
+            className="break-words font-medium text-[var(--findable-primary)] underline decoration-current/30 underline-offset-4 hover:decoration-current"
             href={href}
             rel="noreferrer"
             target="_blank"
