@@ -71,6 +71,44 @@ const MARKDOWN_PUNCTUATION_RE = /[#*_>`[\]()|-]/g;
 const REMOTE_IMAGE_RE = /^https?:\/\//;
 const WHITESPACE_RE = /\s+/;
 
+/**
+ * hreflang 대체 언어 — 상대 언어 글이 **실제로 공개돼 있을 때만** 짝으로 알린다(2026-10-16).
+ * 없는 주소(404)를 짝으로 신고하면 구글이 언어 클러스터를 무시한다. 짝이 없으면 자기 언어만 알린다.
+ * 사이트맵의 판단(`app/sitemap.ts`)과 같은 규칙이다.
+ */
+async function ownedLanguageAlternates({
+  locale,
+  post,
+}: {
+  locale: "ko" | "en";
+  post: NonNullable<Awaited<ReturnType<typeof getPublishedContent>>>;
+}): Promise<Record<string, string>> {
+  const other = locale === "ko" ? "en" : "ko";
+  const otherSlug = counterpartSlug(locale, post.slug);
+  const urlFor = (target: "ko" | "en", slug: string) =>
+    siteArticleUrl({
+      locale: target,
+      postSlug: encodeURI(slug),
+      publisherSlug: post.publisher.slug,
+    });
+  const selfUrl = urlFor(locale, post.slug);
+  const counterpart = await getPublishedContent({
+    locale: other,
+    postSlug: otherSlug,
+    publisherSlug: post.publisher.slug,
+  }).catch(() => null);
+  if (!counterpart) {
+    return { [locale]: selfUrl, "x-default": selfUrl };
+  }
+  const koSlug = locale === "ko" ? post.slug : otherSlug;
+  const enSlug = locale === "en" ? post.slug : otherSlug;
+  return {
+    ko: urlFor("ko", koSlug),
+    en: urlFor("en", enSlug),
+    "x-default": urlFor("en", enSlug),
+  };
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const input = await params;
   const post = await getPublishedContent(input);
@@ -112,23 +150,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     : {
         // 🔴 2026-10-15: ko·en 슬러그가 다른 번역 쌍은 상대 언어의 **같은 슬러그**(없는 주소)를
         //   hreflang 으로 가리켜 404·301 이었다. 번역 쌍 표(`counterpartSlug`)로 실제 짝을 가리킨다.
-        languages: (() => {
-          const koSlug =
-            locale === "ko" ? post.slug : counterpartSlug("en", post.slug);
-          const enSlug =
-            locale === "en" ? post.slug : counterpartSlug("ko", post.slug);
-          const urlFor = (target: "ko" | "en", slug: string) =>
-            siteArticleUrl({
-              locale: target,
-              postSlug: encodeURI(slug),
-              publisherSlug: post.publisher.slug,
-            });
-          return {
-            ko: urlFor("ko", koSlug),
-            en: urlFor("en", enSlug),
-            "x-default": urlFor("en", enSlug),
-          };
-        })(),
+        languages: await ownedLanguageAlternates({
+          locale,
+          post,
+        }),
       };
 
   return createMetadata({
