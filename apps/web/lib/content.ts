@@ -9,6 +9,27 @@ const publicWhere = {
   publisher: { suspendedAt: null },
 };
 
+/**
+ * 🔴 검색엔진·AI 에 **발견용으로 알릴 발행처**(2026-10-15 원인조사).
+ *   Findable 본인(`findable`) 이거나 운영자가 확인한 발행처(`verifiedAt`)만이다.
+ *   [실측] 내부 테스트 발행처 `findable-oauth-verification-af8297f3`(이름 "Findable OAuth
+ *   Verification", `verifiedAt` 없음)의 글·목록 4개 주소가 사이트맵에 실려 구글이 크롤링했고,
+ *   ChatGPT·Claude 는 그 이름을 "구글 OAuth 인증 대행"으로 오해했다.
+ *   ⚠️ 페이지 자체는 그대로 열린다(링크 공유 가능) — 사이트맵·RSS·llms.txt·뉴스맵 노출과
+ *     색인만 막는다. 새 고객 발행처는 `verifiedAt` 이 찍혀야 발견용으로 노출된다.
+ */
+export const DISCOVERABLE_PUBLISHER_WHERE = {
+  suspendedAt: null,
+  OR: [{ slug: "findable" }, { verifiedAt: { not: null } }],
+};
+
+export function isPublisherIndexable(publisher: {
+  slug: string;
+  verifiedAt: Date | null;
+}): boolean {
+  return publisher.slug === "findable" || publisher.verifiedAt !== null;
+}
+
 // Keep the first published article reachable while moving its Unicode slug to
 // an ASCII canonical URL. Some search inspection crawlers still return 404 for
 // the encoded Korean path even though normal browsers receive 200.
@@ -172,7 +193,7 @@ export function getPublishedContentByDomain(input: {
 
 export function listAllPublishedContentForDiscovery() {
   return database.content.findMany({
-    where: publicWhere,
+    where: { ...publicWhere, publisher: DISCOVERABLE_PUBLISHER_WHERE },
     orderBy: { publishedAt: "desc" },
     select: {
       locale: true,

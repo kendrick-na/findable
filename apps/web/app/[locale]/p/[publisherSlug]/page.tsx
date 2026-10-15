@@ -4,7 +4,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NewsletterSubscribe } from "@/components/content/newsletter-subscribe";
-import { getPublicPublisher, listPublishedContent } from "@/lib/content";
+import {
+  getPublicPublisher,
+  isPublisherIndexable,
+  listPublishedContent,
+} from "@/lib/content";
 import {
   articleCanonicalUrl,
   publisherCanonicalUrl,
@@ -46,6 +50,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         : `Insights published by ${publisher.name} on Findable, with measurement basis and publication dates.`),
     locale: normalizedLocale,
     pathname: `/p/${publisher.slug}`,
+    // 확인되지 않은 발행처(내부 테스트 등)의 목록은 색인하지 않는다 — 사이트맵 제외와 짝.
+    ...(isPublisherIndexable(publisher)
+      ? {}
+      : { robots: { index: false, follow: false } }),
     // 📡 피드 자동발견(feed discovery) — 브라우저·리더·네이버 서치어드바이저가
     //   페이지에서 바로 RSS 주소를 찾을 수 있게 한다(퍼블리셔 단위 피드는 2026-09-02 신설).
     alternates: {

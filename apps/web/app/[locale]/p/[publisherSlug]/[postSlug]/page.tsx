@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import { MarkdownArticle } from "@/components/content/markdown-article";
 import {
   getPublishedContent,
+  isPublisherIndexable,
   listAllPublishedContentForDiscovery,
   listRelatedContent,
 } from "@/lib/content";
@@ -117,6 +118,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     locale,
     pathname: `/p/${post.publisher.slug}/${post.slug}`,
     ...(alternates ? { alternates } : {}),
+    // 확인되지 않은 발행처(내부 테스트 등)의 글은 색인하지 않는다 — 사이트맵 제외와 짝.
+    ...(isPublisherIndexable(post.publisher)
+      ? {}
+      : { robots: { index: false, follow: false } }),
     openGraph: {
       type: "article",
       url: canonical,

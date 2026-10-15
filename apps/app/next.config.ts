@@ -20,6 +20,20 @@ nextConfig.outputFileTracingIncludes = {
   ],
 };
 
+// 🔴 로그인 후 앱(`app.findable.co.kr`)은 검색 대상이 아니다(2026-10-15 원인조사).
+//   [실측] Search Console 에 `app.` 의 `/sign-in`·`/billing`·`_next/static/*.js` 가
+//   "크롤링됨-색인 안 함" 으로 잡혀 있고 구글 `site:` 결과에 `app.…/sign-up`("Create an account")
+//   이 우리 홈과 같이 나온다. `robots.txt` 로 막으면 구글이 noindex 를 읽지 못해 이미 알려진
+//   주소가 남으므로, **크롤은 허용하고 noindex 헤더로 색인만 거부**한다(구글 권장 방식).
+const baseHeaders = nextConfig.headers;
+nextConfig.headers = async () => [
+  ...(baseHeaders ? await baseHeaders() : []),
+  {
+    source: "/:path*",
+    headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+  },
+];
+
 if (env.VERCEL) {
   nextConfig = withSentry(nextConfig);
 }
