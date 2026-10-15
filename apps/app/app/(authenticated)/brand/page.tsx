@@ -27,6 +27,7 @@ import { publicReportUrl } from "@/lib/public-report";
 import { Header } from "../components/header";
 import { AssignBrandForm } from "../features/brand/assign-brand-form";
 import { BrandProfileEditorServer } from "../features/brand/brand-profile-editor-server";
+import { FactSheetCardServer } from "../features/brand/fact-sheet-card-server";
 import { PromptWizard } from "../features/brand/prompt-wizard";
 import { StartTrackingButton } from "../features/brand/start-tracking-button";
 
@@ -341,6 +342,14 @@ const BrandPage = async () => {
                       suggestedBusinessNumber={footerBusinessNumber(
                         latestByDomain.get(brand.domain)?.result
                       )}
+                    />
+                    {/* G1 「내 브랜드 정보」— 파일럿 조직에만 보인다(껍데기가 스스로 판단). */}
+                    <FactSheetCardServer
+                      aliases={brand.entityVariants}
+                      brandId={brand.id}
+                      domain={brand.domain}
+                      legalName={brand.legalName}
+                      name={brand.name}
                     />
                   </li>
                 );
