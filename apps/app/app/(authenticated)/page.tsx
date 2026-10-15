@@ -19,6 +19,7 @@ import { env } from "@/env";
 import {
   scopedAnnotations,
   scopedLatestRunTracking,
+  scopedLatestSiteReadinessRun,
   scopedTracking,
 } from "@/lib/db/scoped";
 import {
@@ -49,6 +50,7 @@ import { PartnerCTA } from "./components/partner-cta";
 import { PromptScoreboard } from "./components/prompt-scoreboard";
 import { QuestionTypeCardServer } from "./components/question-type-card-server";
 import { SovTrendChart } from "./components/sov-trend-chart";
+import { TodayView } from "./components/today-view";
 import { TrendAnnotations } from "./components/trend-annotations";
 import { UpgradeLadder } from "./components/upgrade-ladder";
 import { TruthMirrorSection } from "./features/analysis/truth-mirror-section";
@@ -60,6 +62,14 @@ import {
   invalidTrackingRunTimes,
   trackingRunSearchSamplingVersions,
 } from "./lib/dashboard-data";
+import {
+  isTodayViewEnabled,
+  shouldWarnMissingSources,
+  summarizeEngineSources,
+  summarizeReadiness,
+  todayDelta,
+  todayFirst,
+} from "./lib/today-view";
 import { buildTruthMirrorData } from "./lib/truth-mirror-data";
 import { getPrimaryEmail } from "./lib/user";
 
@@ -78,7 +88,8 @@ export const metadata: Metadata = {
 
 interface AppProperties {
   // D10: 어떤 브랜드를 볼지. Next.js 16 이라 Promise 로 받는다(search/page.tsx 관례와 동일).
-  searchParams: Promise<{ brand?: string }>;
+  // `view=old` — 「오늘」 파일럿 조직이 예전 대시보드로 돌아오는 되돌리기 장치.
+  searchParams: Promise<{ brand?: string; view?: string }>;
 }
 
 const DashboardNoResultState = ({
@@ -196,7 +207,7 @@ function withoutInvalidRuns<T extends { brandId: string; trackedAt: Date }>(
 }
 
 const App = async ({ searchParams }: AppProperties) => {
-  const { brand: selectedBrandId } = await searchParams;
+  const { brand: selectedBrandId, view } = await searchParams;
   const user = await currentUser();
   const email = user ? getPrimaryEmail(user) : null;
   const { orgId } = await auth();
@@ -439,6 +450,67 @@ const App = async ({ searchParams }: AppProperties) => {
   const annotations = data.latestBrandId
     ? await scopedAnnotations(data.latestBrandId)
     : [];
+
+  // 「오늘」 화면(파일럿) — 설계안 0단계. 🔴 숫자는 위에서 이미 계산된 `data` 를 그대로 쓴다.
+  //   조건을 못 채우면(측정 전·진행 중·값 없음) **기존 대시보드로 떨어진다** — 빈 상태·오류 상태는
+  //   예전 화면이 이미 다룬다(새로 만들지 않는다). 꺼져 있는 조직은 이 블록을 지나치지 않는다.
+  if (
+    isTodayViewEnabled({
+      orgId,
+      pilotOrgIdsRaw: process.env.TODAY_VIEW_ORG_IDS,
+      view,
+    }) &&
+    !newerJobWithoutTracking &&
+    hasData &&
+    hasUsableResult &&
+    data.latestSov !== null
+  ) {
+    const [engines, readinessRun] = await Promise.all([
+      database.engine.findMany({ select: { id: true, name: true } }),
+      data.latestBrandId
+        ? scopedLatestSiteReadinessRun(data.latestBrandId)
+        : null,
+    ]);
+    const readinessReport = readinessRun?.report as {
+      checks?: { status: string }[];
+    } | null;
+    const conditions = summarizeEngineSources(
+      latestRun,
+      new Map(engines.map((engine) => [engine.id, engine.name]))
+    );
+    return (
+      <>
+        <Header
+          page={dict.today.headerTitle}
+          pages={["Findable"]}
+          showMetric={false}
+        />
+        <div className="flex flex-1 flex-col gap-6 p-6 pt-2">
+          <TodayView
+            basis={{
+              prompts: data.promptScores.length,
+              engines: data.coverage?.total ?? null,
+              runs: data.totalCount,
+            }}
+            brandId={data.latestBrandId}
+            brandName={data.latestBrandName}
+            conditions={conditions}
+            coverage={data.coverage}
+            delta={todayDelta({
+              deltaPoints: data.sovDeltaPoints,
+              blockedReason: data.comparisonBlockedReason,
+            })}
+            first={todayFirst(data.promptScores)}
+            oldViewHref="/?view=old"
+            site={summarizeReadiness(readinessReport?.checks)}
+            sov={data.latestSov}
+            t={dict.today}
+            warnMissingSources={shouldWarnMissingSources(conditions)}
+          />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
