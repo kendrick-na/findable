@@ -156,7 +156,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         }),
       };
 
-  return createMetadata({
+  const metadata = createMetadata({
     title: post.seoTitle ?? post.title,
     description:
       post.seoDescription ?? post.excerpt ?? post.bodyMarkdown.slice(0, 160),
@@ -177,6 +177,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       tags: post.tags,
     },
   });
+  // 🔴 `createMetadata` 는 호출부 `alternates` 를 기본 hreflang(ko·en·x-default)과 **깊게 병합**해서
+  //   위에서 뺀 `en` 이 다시 살아난다(2026-10-16 라이브 실측: 영어판 없는 글의 head 에 404 주소가 남음).
+  //   → 병합이 끝난 뒤 `languages` 를 **통째로 교체**한다.
+  return {
+    ...metadata,
+    alternates: { ...metadata.alternates, ...alternates },
+  };
 }
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: article metadata, evidence UI, and related content are intentionally rendered together on the server.
