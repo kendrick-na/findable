@@ -14,6 +14,7 @@
 import { log } from "@repo/observability/log";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { findEngineName } from "./engine-names";
 import {
   HELPER_GATEWAY_MODEL_ID,
   letsurModelWithFallback,
@@ -136,6 +137,8 @@ const MAX_PROMPTS = Object.values(QUESTION_COMPOSITION).reduce(
 const OVERSHOOT = 3;
 // 거른 뒤 이 수보다 적으면 한 번 더 만들어 합친다(추가 AI 호출 1회 · 2026-10-14 대표 위임 승인).
 const RETRY_BELOW = 14;
+// 사이트 글이 이만큼은 있어야 "대표 상품 0개"를 재시도 사유로 본다(글이 없는 사이트에서 헛호출 방지).
+const MIN_SITE_TEXT_FOR_REPRESENTATIVE_RETRY = 300;
 
 /**
  * 질문 1개 = 문장 + 언어. 유형은 배열(유형별 목록)이 정한다 — 질문마다 LLM 이 유형을 고르게 하면
@@ -343,7 +346,10 @@ export async function suggestTrackingPrompts(
   const scope = scopeOf(input);
   try {
     const siteText = siteTextOf(input.site);
+    // 사이트 글이 AI 엔진 이름을 직접 쓰는 브랜드(사업이 AI 검색)만 질문의 엔진 이름을 허용한다.
+    const allowEngineNames = findEngineName(siteText) !== null;
     const ctx = {
+      allowEngineNames,
       brandNames: brandNamesOf(input),
       competitors: input.competitors,
       industry: input.industry,
@@ -353,12 +359,16 @@ export async function suggestTrackingPrompts(
     const hasCompetitors = (input.competitors?.length ?? 0) > 0;
     let all: PlanQuestion[] = [];
     let confident = true;
+    // 첫 결과가 이미 충분했고 대표 상품만 비어서 다시 만드는 경우 — 두 번째 응답의 "확신 없음"이 멀쩡한 첫 결과를 버리게 하면 안 된다.
+    let representativeOnlyRetry = false;
     let categoryPhrase: string | null = null;
     // 처음 1번 + 모자라면 1번 더(합쳐서 다시 거른다). 추가 호출은 최대 1회.
     for (let attempt = 0; attempt < 2; attempt++) {
       const round = await generateCandidates(input, scope);
       all = [...all, ...round.questions];
-      confident = confident && round.confident;
+      confident = representativeOnlyRetry
+        ? confident
+        : confident && round.confident;
       categoryPhrase ??= vetCategoryPhrase(round.categoryPhrase, ctx);
       const guarded = guardQuestions(all, ctx);
       const composed = composeWithFixedAlternatives(
@@ -368,13 +378,21 @@ export async function suggestTrackingPrompts(
         hasCompetitors,
         categoryPhrase
       );
-      if (attempt === 0 && guarded.dropped.length > 0) {
-        log.info("prompt.suggest.guard_dropped", {
-          brandName: input.brandName,
-          dropped: guarded.dropped.map((d) => d.reason),
-        });
+      logGuardDropped(attempt, input.brandName, guarded.dropped);
+      const missingRepresentative = shouldRetryForRepresentative(
+        attempt,
+        input,
+        siteText,
+        composed
+      );
+      if (missingRepresentative && composed.length >= RETRY_BELOW) {
+        representativeOnlyRetry = true;
       }
-      if (composed.length >= RETRY_BELOW || attempt === 1 || !round.confident) {
+      if (
+        (composed.length >= RETRY_BELOW && !missingRepresentative) ||
+        attempt === 1 ||
+        !round.confident
+      ) {
         // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
         if (!confident || composed.length < 4) {
           return staticFallback(input);
@@ -395,6 +413,40 @@ export async function suggestTrackingPrompts(
     });
     return staticFallback(input);
   }
+}
+
+/** 사이트 글이 충분한데 대표 상품 질문이 하나도 안 남았으면 한 번 더 만든다(실측: 같은 사이트가 0~3개로 흔들림). */
+function shouldRetryForRepresentative(
+  attempt: number,
+  input: SuggestInput,
+  siteText: string,
+  composed: readonly PlanQuestion[]
+): boolean {
+  return (
+    attempt === 0 &&
+    input.site?.thin !== true &&
+    siteText.length >= MIN_SITE_TEXT_FOR_REPRESENTATIVE_RETRY &&
+    !composed.some((c) => c.type === "representative")
+  );
+}
+
+/** 가드가 버린 사유를 남긴다. 대표 상품이 왜 비었는지 보려고 그 유형의 사유·문장도 함께(모델이 만든 질문 문장뿐, 고객 정보 없음). */
+function logGuardDropped(
+  attempt: number,
+  brandName: string,
+  dropped: readonly { reason: string; text: string; type: QuestionType }[]
+) {
+  if (dropped.length === 0) {
+    return;
+  }
+  log.info("prompt.suggest.guard_dropped", {
+    attempt,
+    brandName,
+    dropped: dropped.map((d) => d.reason),
+    droppedRepresentative: dropped
+      .filter((d) => d.type === "representative")
+      .map((d) => ({ reason: d.reason, text: d.text })),
+  });
 }
 
 /** 경쟁사가 없으면 대안 질문은 모델 것을 버리고 코드의 고정 문형으로 채운다. */
@@ -468,7 +520,11 @@ async function generateCandidates(
 - category·concern·representative 질문에는 **브랜드명·별칭·도메인 이름을 절대 넣지 마.**
 - 사이트 문구에 없는 제품명·성분·수치·실적은 만들지 마. 재료가 부족하면 개수를 줄이고 confident=false 로 표시해.
 - **재료에 없는 회사·서비스·제품 이름(고유명사)을 질문에 쓰지 마.** 경쟁사는 위 [경쟁사]에 있는 이름만 쓴다.
-- ChatGPT·Claude·Gemini 같은 **AI 서비스·모델 이름을 질문에 쓰지 마.**
+${
+  findEngineName(siteTextOf(input.site)) !== null
+    ? "- 이 브랜드의 사업이 AI 검색이라 질문에 ChatGPT·Perplexity·네이버 AI 같은 이름이 자연스러우면 써도 돼(특히 concern). 단 브랜드명은 넣지 마."
+    : "- ChatGPT·Claude·Gemini 같은 **AI 서비스·모델 이름을 질문에 쓰지 마.**"
+}
 - 브랜드 이름의 뜻을 풀어서 질문을 만들지 마(예: 이름이 '넘버즈인'이라고 '번호 매긴 제품'으로 쓰기 금지).
 - "~라고 했는데", "~있다던데"처럼 **들은 이야기를 전제로 까는 문장 금지.** 질문은 전제 없이 바로 묻는다.
 - categoryPhrase 에는 이 브랜드가 속한 **서비스 분야 이름**을 한 줄로 적어(고유명사·AI 서비스 이름 금지). 다른 선택지를 묻는 고정 질문에 쓰인다.

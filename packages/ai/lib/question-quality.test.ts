@@ -635,3 +635,109 @@ describe("대안 고정 문형에 서비스 분야 이름 넣기(2026-10-15 · I
     ).toContain("B2B 소프트웨어");
   });
 });
+
+describe("AI 검색 업종 — 엔진 이름 허용·대표 상품 재시도(2026-10-16)", () => {
+  const engineQuestion = q(
+    "concern",
+    "퍼플렉시티나 네이버 AI에서 경쟁사는 나오는데 우리는 왜 안 나와? 어떤 도구를 써야 해?",
+    { basis: "industry" }
+  );
+  it("기본은 엔진 이름이 든 질문을 버린다", () => {
+    expect(reasonOf(engineQuestion, findable)).toBe("engine_name");
+  });
+  it("allowEngineNames 면 통과한다(다른 가드는 그대로)", () => {
+    expect(
+      reasonOf(engineQuestion, { ...findable, allowEngineNames: true })
+    ).toBeNull();
+    // 전제 문장·브랜드 이름 혼입은 여전히 막는다.
+    expect(
+      reasonOf(q("concern", "챗지피티에서 Findable 어떻게 써야 해?"), {
+        ...findable,
+        allowEngineNames: true,
+      })
+    ).toBe("name_in_nameless");
+  });
+
+  const longSite = {
+    ...findableInput.site,
+    bodySnippet:
+      "ChatGPT·Perplexity·네이버 AI 답변에서 우리 브랜드가 인용되는지 진단하는 GEO 플랫폼입니다. ".repeat(
+        5
+      ),
+  };
+  it("사이트 글에 엔진 이름이 있으면 프롬프트가 엔진 이름을 허용한다", async () => {
+    h.generateObject.mockResolvedValue(llm());
+    await suggestTrackingPrompts({ ...findableInput, site: longSite });
+    const prompt: string = h.generateObject.mock.calls[0]?.[0].prompt;
+    expect(prompt).toContain("써도 돼");
+    expect(prompt).not.toContain("AI 서비스·모델 이름을 질문에 쓰지 마");
+  });
+  it("사이트 글이 충분한데 대표 상품이 하나도 안 남으면 한 번 더 만든다", async () => {
+    const noRep = llm({ representative: [] });
+    h.generateObject.mockResolvedValueOnce(noRep).mockResolvedValueOnce(llm());
+    const { prompts } = await suggestTrackingPrompts({
+      ...findableInput,
+      site: longSite,
+    });
+    expect(h.generateObject).toHaveBeenCalledTimes(2);
+    expect(prompts.some((p) => p.type === "representative")).toBe(true);
+  });
+  it("사이트 글이 짧으면 대표 상품이 없어도 재시도하지 않는다(헛호출 방지)", async () => {
+    h.generateObject.mockResolvedValue(llm({ representative: [] }));
+    await suggestTrackingPrompts(findableInput);
+    expect(h.generateObject).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("대표 상품 근거 — 조사가 붙은 한글 낱말(2026-10-16)", () => {
+  const ctx: PlanGuardContext = {
+    brandNames: ["넘버즈인", "numbuzin"],
+    competitors: [],
+    industry: "beauty",
+    requireBasis: true,
+    siteText:
+      "넘버즈인 공식몰 1번 말끔 순삭 클렌징오일 200ml 토너패드 본품 2종 1+1 1번 진정 맑게담은 청초토너 300ml",
+  };
+  const rep = (text: string) => q("representative", text, { basis: "site" });
+  it("사이트에 있는 상품 낱말에 조사가 붙어도 근거로 인정한다", () => {
+    expect(
+      reasonOf(rep("토너패드는 몇 매 들어있는 게 보통이야?"), ctx)
+    ).toBeNull();
+    expect(
+      reasonOf(rep("클렌징오일로 더블 클렌징할 때 뭐가 좋아?"), ctx)
+    ).toBeNull();
+  });
+  it("사이트에 없는 상품은 여전히 근거 없음", () => {
+    expect(reasonOf(rep("선크림은 얼마나 발라야 돼?"), ctx)).toBe(
+      "no_site_evidence"
+    );
+    expect(reasonOf(rep("립밤 뭐가 좋아?"), ctx)).toBe("no_site_evidence");
+  });
+});
+
+describe("대표 상품 재시도 부작용 방지(2026-10-16)", () => {
+  it("대표 상품만 비어 다시 만든 두 번째 응답이 '확신 없음'이어도 첫 결과를 버리지 않는다", async () => {
+    const longSite = {
+      ...findableInput.site,
+      bodySnippet: "AI 검색 모니터링 GEO 진단 플랫폼입니다. ".repeat(20),
+    };
+    h.generateObject
+      .mockResolvedValueOnce(llm({ representative: [] }))
+      .mockResolvedValueOnce(
+        llm({
+          category: [],
+          concern: [],
+          representative: [],
+          brandUnderstanding: [],
+          alternative: [],
+          confident: false,
+        })
+      );
+    const { prompts } = await suggestTrackingPrompts({
+      ...findableInput,
+      site: longSite,
+    });
+    expect(h.generateObject).toHaveBeenCalledTimes(2);
+    expect(prompts.length).toBeGreaterThanOrEqual(14);
+  });
+});
