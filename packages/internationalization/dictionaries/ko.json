@@ -849,7 +849,7 @@
     },
     "today": {
       "headerTitle": "오늘",
-      "question": "AI에게 물어볼 때, {brand}은(는) 얼마나 나올까요?",
+      "question": "AI에게 물어볼 때, {brand} 브랜드는 얼마나 나올까요?",
       "questionNoBrand": "AI에게 물어볼 때, 우리 브랜드는 얼마나 나올까요?",
       "heroValueNote": "AI 답변에 우리가 나오는 비율",
       "engines": "엔진 {total}곳 중 {mentioned}곳에서 나와요",
