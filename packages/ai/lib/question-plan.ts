@@ -260,6 +260,12 @@ const GENERIC_TOKENS = new Set([
 ]);
 
 export interface PlanGuardContext {
+  /**
+   * true 면 질문에 AI 엔진 이름(ChatGPT·퍼플렉시티 등)이 들어가도 버리지 않는다(2026-10-16).
+   * 사업이 AI 검색 자체라서 사이트 글이 엔진 이름을 직접 쓰는 브랜드(예: Findable)의 고민형 질문이 엔진 이름 때문에
+   * 계속 버려졌다(실측: 폐기 사유 전부 engine_name). 제안 경로만 켠다 — 사이트 글에 엔진 이름이 있을 때만.
+   */
+  allowEngineNames?: boolean;
   /** 우리 이름·별칭·사이트명·도메인 이름(질문에 들어가면 이름 없는 질문이 아니다). */
   brandNames: readonly string[];
   /** 승인·등록된 경쟁사 이름(있으면 비교·대안 질문에 쓸 수 있다). */
@@ -301,15 +307,22 @@ function hasSiteEvidence(text: string, siteText: string): boolean {
   return text
     .toLowerCase()
     .split(TOKEN_SPLIT_RE)
-    .filter(
-      (token) =>
-        !GENERIC_TOKENS.has(token) &&
-        token.length >=
-          (HANGUL_RE.test(token)
-            ? MIN_HANGUL_TOKEN_LENGTH
-            : MIN_ENGLISH_TOKEN_LENGTH)
-    )
-    .some((token) => site.includes(token));
+    .filter((token) => !GENERIC_TOKENS.has(token))
+    .some((token) => tokenInSite(token, site));
+}
+
+/**
+ * 질문 낱말 하나가 사이트 글에 있는가. 한글은 조사가 붙은 채로("토너패드는"·"클렌징오일로") 오므로 끝 1~2글자를 뗀 형태도 본다.
+ * (실측 2026-10-16: 사이트에 "토너패드"가 있는데 "토너패드는"이라서 대표 상품 질문이 no_site_evidence 로 계속 버려졌다.)
+ * 뗀 형태도 최소 길이를 지킨다 — 짧은 낱말이 우연히 맞는 걸 막는다.
+ */
+function tokenInSite(token: string, site: string): boolean {
+  const isHangul = HANGUL_RE.test(token);
+  const min = isHangul ? MIN_HANGUL_TOKEN_LENGTH : MIN_ENGLISH_TOKEN_LENGTH;
+  const forms = isHangul
+    ? [token, token.slice(0, -1), token.slice(0, -2)]
+    : [token];
+  return forms.some((form) => form.length >= min && site.includes(form));
 }
 
 // ── 업종별 질문 틀 (2026-10-14 · 대표 확인용 표는 docs 에 같이 제출) ─────────────
@@ -711,7 +724,7 @@ export function checkQuestion(
   if (text.length < MIN_QUESTION_LENGTH || text.length > MAX_QUESTION_LENGTH) {
     return "length";
   }
-  if (findEngineName(text)) {
+  if (ctx.allowEngineNames !== true && findEngineName(text)) {
     return "engine_name";
   }
   if (PRESUPPOSITION_RE.test(text)) {
