@@ -59,7 +59,10 @@ interface FooterProps {
 
 export const Footer = ({ locale = "ko" }: FooterProps) => {
   const isKo = locale.startsWith("ko");
-  const lp = isKo ? "/ko" : "";
+  // 🔴 영어도 `/en` 접두사를 붙인다(2026-10-15). 접두사 없는 `/pricing`·`/contact`·`/legal/*`·`/` 는
+  //   방문자 국가로 언어가 바뀌는 주소라 307 로 `/ko/…` 에 튕긴다(실측). 영어 페이지를 읽는
+  //   크롤러·사용자가 한국어로 가고, 구글에 `/`·`/research/…` 가 별도 주소로 색인되던 원인이다.
+  const lp = isKo ? "/ko" : "/en";
   const COLS = isKo ? COLS_KO(lp) : COLS_EN(lp);
   // 👤 2026-10-15 대표 승인 기준 문장 — "측정만이 아니라 개선까지"를 한 문장으로.
   //   (홈 메타 설명은 별도 확정 문구라 건드리지 않는다.)
@@ -100,7 +103,7 @@ export const Footer = ({ locale = "ko" }: FooterProps) => {
             <Link
               aria-label="Findable"
               className="inline-flex items-baseline text-[var(--findable-ink)] transition hover:opacity-80"
-              href={lp || "/"}
+              href={lp}
             >
               <span
                 className="text-[26px] leading-none"

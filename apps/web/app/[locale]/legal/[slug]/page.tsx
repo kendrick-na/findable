@@ -328,7 +328,8 @@ export const generateMetadata = async ({
 const LegalPage = async ({ params }: LegalPageProps) => {
   const { slug, locale } = await params;
   const isKo = locale.startsWith("ko");
-  const lp = isKo ? "/ko" : "";
+  // 영어도 `/en` 접두사 — 접두사 없는 주소는 방문자 국가로 언어가 바뀐다(2026-10-15, footer.tsx 참고).
+  const lp = isKo ? "/ko" : "/en";
   const page = (isKo ? PAGES_KO : PAGES_EN)[slug];
   if (!page) {
     notFound();
@@ -342,7 +343,7 @@ const LegalPage = async ({ params }: LegalPageProps) => {
       <div className="mx-auto max-w-3xl px-6 py-24">
         <Link
           className="inline-flex items-center gap-1.5 text-[13px] text-[var(--findable-ink-muted)] transition hover:text-[var(--findable-ink)]"
-          href={lp || "/"}
+          href={lp}
           style={{ fontFamily: "var(--findable-font-sans)" }}
         >
           <ArrowLeft className="h-3.5 w-3.5" />

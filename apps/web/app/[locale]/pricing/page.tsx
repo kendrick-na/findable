@@ -269,7 +269,8 @@ const PricingPage = async ({ params }: PricingPageProps) => {
   const { locale } = await params;
   const dictionary = await getDictionary(locale);
   const isKo = locale.startsWith("ko");
-  const lp = isKo ? "/ko" : "";
+  // 영어도 `/en` 접두사 — 접두사 없는 주소는 방문자 국가로 언어가 바뀐다(2026-10-15, footer.tsx 참고).
+  const lp = isKo ? "/ko" : "/en";
   // 👤 2026-10-07 CEO 결정 — 무료 진단 숨김 시 Free Audit 등급·FAQ 첫 문항·부제를 뺀다.
   //   (부제는 "무료 진단으로 시작해서…" 라 대체 문구 없이 숨긴다.)
   const freeAuditPublic = freeAuditPublicEnabled();
