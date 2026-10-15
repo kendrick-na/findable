@@ -88,6 +88,31 @@ export function krw(won: number): string {
 
 export const REVENUE_LABEL = "AI 추천에서 빠져서 놓치는 매출";
 
+/** 점유 쪽 제목 기본 문장. 분수 표기면 비율 대신 "답변 N건 중 K건". */
+function shareTitleDefault(
+  brand: string,
+  answers: number,
+  self: { mentions: number; pct: number } | undefined,
+  fractions: boolean
+): string {
+  if (!self) {
+    return `구매 질문에서 ${brand}는 추천되지 않았습니다`;
+  }
+  if (fractions) {
+    return `구매 질문 답변 ${answers}건 중 ${brand}가 추천된 건 ${self.mentions}건입니다`;
+  }
+  return `구매 질문에서 ${brand}가 추천된 비율은 ${pyRound(self.pct)}%입니다`;
+}
+
+/** 출처 종류 막대 칸 값. 분수 표기면 "n/전체", 아니면 반올림한 %. */
+function channelValue(
+  ch: { n: number; pct: number },
+  total: number,
+  fractions: boolean
+): string {
+  return fractions ? `${ch.n}/${total}` : `${pyRound(ch.pct)}%`;
+}
+
 /**
  * 놓치는 매출 = 연매출 × 7% × (1 − 정확 노출률). 저장값 우선, 없으면 측정(bad_n / n)으로 계산.
  * 확인된 연매출(출처 포함)이 없거나 놓치는 매출이 0 이하이면 null — 돈 문장을 통째로 뺀다.
@@ -176,6 +201,7 @@ interface Cfg {
   brand_en?: string;
   category_share?: CategoryShare;
   causes: { h: string; p: string }[];
+  display?: { fractions?: boolean };
   domain: string;
   headlines?: Record<string, string>;
   insights_accuracy: string[];
@@ -290,10 +316,13 @@ export function ClientReportV12({
   const { s, answers, per_q, channels, top } = data.computed;
   const engines = [...data.computed.engines].sort(byEngine);
   const H = c.headlines ?? {};
+  // 대표 확정 규칙(분수 표기): 새 리포트만 config.display.fractions=true 로 켠다. 없으면 기존 % 표기 그대로.
+  const fractions = c.display?.fractions === true;
   const stale = c.stale === true;
   // 발송 승인 전: 무조건 내부 시안. 승인 후: 원본 템플릿 기본값(status_note 없음)과 같게.
   const statusNote = sendApproved ? undefined : INTERNAL_STATUS_NOTE;
   const officialPct = s.cites_total ? pyFloatStr(s.official_pct) : "0";
+  const officialN = channels.find((ch) => ch.id === "official")?.n ?? 0;
   // 질문 언어는 실제 질문 원문에서 판정한다(한글 포함=한국어). 전부 한국어면 '(영어)' 문구를 쓰지 않는다.
   const isKoQuestion = (t: string) => HANGUL_RE.test(t);
   const enQuestionNos = per_q
@@ -480,26 +509,44 @@ export function ClientReportV12({
         <div className="csub" {...rich(str(c, "cover_sub"))} />
         <div className="verdict hook">
           <div className="l">한 줄 결론</div>
-          <div className="s">
-            AI에게 {c.brand}를 물으면{" "}
-            <em>
-              {wrongOf10 === 0
-                ? "대부분 맞는 답"
-                : `10번 중 ${wrongOf10}번은 틀린 답`}
-            </em>
-            이 나옵니다.
-          </div>
+          {H.cover ? (
+            <>
+              <div className="s" {...rich(H.cover)} />
+              {H.cover_sub ? (
+                <div className="ssub" {...rich(H.cover_sub)} />
+              ) : null}
+            </>
+          ) : (
+            <div className="s">
+              AI에게 {c.brand}를 물으면{" "}
+              <em>
+                {wrongOf10 === 0
+                  ? "대부분 맞는 답"
+                  : `10번 중 ${wrongOf10}번은 틀린 답`}
+              </em>
+              이 나옵니다.
+            </div>
+          )}
           {revenue ? (
             <div className="money">
-              {REVENUE_LABEL} <b>연 약 {krw(revenue.missedAnnual)}</b>{" "}
-              <small>월 약 {krw(revenue.missedMonthly)}</small>
+              {REVENUE_LABEL}{" "}
+              {H.revenue_range ? (
+                <b>연 약 {H.revenue_range}</b>
+              ) : (
+                <>
+                  <b>연 약 {krw(revenue.missedAnnual)}</b>{" "}
+                  <small>월 약 {krw(revenue.missedMonthly)}</small>
+                </>
+              )}
             </div>
           ) : null}
           <div className="nums">
             {revenue ? (
               <div>
                 <b className="hot">
-                  연 {krw(revenue.missedAnnual).replace("\u00a0원", "")}
+                  연{" "}
+                  {H.revenue_range ??
+                    krw(revenue.missedAnnual).replace("\u00a0원", "")}
                 </b>
                 {REVENUE_LABEL}(추정)
               </div>
@@ -694,7 +741,9 @@ export function ClientReportV12({
                     <div className="track">
                       {e.rate ? <i style={{ width: `${e.rate}%` }} /> : null}
                     </div>
-                    <span className={e.rate ? "" : "zero"}>{e.rate}%</span>
+                    <span className={e.rate ? "" : "zero"}>
+                      {fractions ? `${e.ok}/${e.n}` : `${e.rate}%`}
+                    </span>
                   </div>
                 </td>
                 <td className="c">
@@ -811,9 +860,12 @@ export function ClientReportV12({
             <span
               {...rich(
                 H.share ??
-                  (selfShare
-                    ? `구매 질문에서 ${c.brand}가 추천된 비율은 ${pyRound(selfShare.pct)}%입니다`
-                    : `구매 질문에서 ${c.brand}는 추천되지 않았습니다`)
+                  shareTitleDefault(
+                    c.brand,
+                    share.answers,
+                    selfShare,
+                    fractions
+                  )
               )}
             />
             <Dot />
@@ -825,8 +877,8 @@ export function ClientReportV12({
           <div className="hero">
             <div className="big">
               <div className="v">
-                {selfShare ? `${pyRound(selfShare.pct)}` : "0"}
-                <small>%</small>
+                {fractions ? selfMentions : pyRound(selfShare?.pct ?? 0)}
+                <small>{fractions ? `/ ${share.answers}건` : "%"}</small>
               </div>
               <div className="t">
                 {c.brand} 추천 비율
@@ -836,7 +888,10 @@ export function ClientReportV12({
             <ul className="facts">
               <li>
                 1위는 <b>{share.brands[0]?.name}</b>(
-                {pyRound(share.brands[0]?.pct ?? 0)}%)입니다
+                {fractions
+                  ? `${share.brands[0]?.mentions ?? 0}/${share.answers}`
+                  : `${pyRound(share.brands[0]?.pct ?? 0)}%`}
+                )입니다
               </li>
               <li>
                 실제로 물어본 질문 예
@@ -861,7 +916,11 @@ export function ClientReportV12({
                 <div className="track">
                   <i style={{ width: `${Math.min(100, b.pct)}%` }} />
                 </div>
-                <span className="p">{pyRound(b.pct)}%</span>
+                <span className="p">
+                  {fractions
+                    ? `${b.mentions}/${share.answers}`
+                    : `${pyRound(b.pct)}%`}
+                </span>
               </div>
             ))}
           </div>
@@ -1019,7 +1078,9 @@ export function ClientReportV12({
           <span
             {...rich(
               H.p7 ??
-                `AI가 근거로 삼은 출처 중 공식 사이트는 ${officialPct}%뿐입니다`
+                (fractions
+                  ? `AI가 근거로 삼은 출처 ${s.cites_total}건 중 공식 사이트는 ${officialN}건뿐입니다`
+                  : `AI가 근거로 삼은 출처 중 공식 사이트는 ${officialPct}%뿐입니다`)
             )}
           />
           <Dot />
@@ -1034,7 +1095,7 @@ export function ClientReportV12({
               key={ch.id}
               style={{ flex: ch.n }}
             >
-              {ch.pct >= 12 ? `${pyRound(ch.pct)}%` : null}
+              {ch.pct >= 12 ? channelValue(ch, s.cites_total, fractions) : null}
             </div>
           ))}
         </div>
@@ -1042,7 +1103,11 @@ export function ClientReportV12({
           {shownChannels.map((ch) => (
             <span className={`ch-${ch.id}`} key={ch.id}>
               {ch.name}
-              <b>{pyFloatStr(ch.pct)}%</b>
+              <b>
+                {fractions
+                  ? `${ch.n}/${s.cites_total}`
+                  : `${pyFloatStr(ch.pct)}%`}
+              </b>
             </span>
           ))}
         </div>
@@ -1162,7 +1227,11 @@ export function ClientReportV12({
                 <i>×</i>
                 <div>
                   <span>AI가 정확히 소개하지 못한 비율</span>
-                  <b>{revenue.missPct}%</b>
+                  <b>
+                    {fractions && revenue.measured
+                      ? `${s.bad_n}/${s.n}`
+                      : `${revenue.missPct}%`}
+                  </b>
                   <em>
                     {revenue.measured
                       ? `AI 답변 ${s.n}건 중 정확 ${s.ok_n}건`
@@ -1195,8 +1264,10 @@ export function ClientReportV12({
             ))}
             {revenue.measured ? (
               <li>
-                AI가 정확히 소개하지 못한 비율 {revenue.missPct}%: Findable 측정
-                — AI 답변 {s.n}건 중 {s.ok_n}건만 {c.brand}를 정확히 설명·추천
+                AI가 정확히 소개하지 못한 비율{" "}
+                {fractions ? `${s.bad_n}/${s.n}` : `${revenue.missPct}%`}:
+                Findable 측정 — AI 답변 {s.n}건 중 {s.ok_n}건만 {c.brand}를
+                정확히 설명·추천
               </li>
             ) : null}
           </ul>
