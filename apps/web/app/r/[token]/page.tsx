@@ -10,6 +10,7 @@ import { after } from "next/server";
 import { ClientReport } from "@/components/client-report/client-report";
 import { ClientReportDisclosureNotice } from "@/components/client-report/client-report-disclosure";
 import { ClientReportV12 } from "@/components/client-report-v12/report-v12";
+import { ClientReportV12L2 } from "@/components/client-report-v12/report-v12-l2";
 import {
   loadClientReport,
   recordClientReportView,
@@ -117,7 +118,12 @@ export default async function ClientReportPage({
           </div>
         )}
         <main className="fr12">
-          <ClientReportV12 data={data} sendApproved={sendApproved} />
+          {(data.config as { display?: { layout_v2?: boolean } }).display
+            ?.layout_v2 === true ? (
+            <ClientReportV12L2 data={data} sendApproved={sendApproved} />
+          ) : (
+            <ClientReportV12 data={data} sendApproved={sendApproved} />
+          )}
         </main>
       </div>
     );

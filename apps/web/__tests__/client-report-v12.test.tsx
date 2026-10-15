@@ -389,3 +389,100 @@ describe("v12 템플릿 — PDF 점검 결함 수정", () => {
     expect(html.split("classList.add('fit'+k)").length - 1).toBe(1);
   });
 });
+
+// ── 레이아웃 v2(display.layout_v2) — 2026-10-16 ──
+describe("v12 레이아웃 v2", () => {
+  const text = (html: string) => html.replaceAll("<!-- -->", "");
+  const l2Copy = {
+    cover: {
+      main: "AI에 추천을 물었더니, <b>노우버스</b>는 16번 중 <b>0번</b> 나왔습니다",
+      sub: "이름을 알려 주면 대체로 맞게 답합니다.",
+      revenue: "빠졌을 수 있는 매출, 연 약 0.5억 원 (추정)",
+    },
+    method: {
+      sections: [{ h: "측정 방법", items: ["질문마다 1번씩 물었습니다."] }],
+    },
+  };
+  async function renderL2(config: Record<string, unknown>, approved = false) {
+    const { ClientReportV12L2 } = await import(
+      "../components/client-report-v12/report-v12-l2"
+    );
+    const data = parseClientReportData({
+      ...sample,
+      config: { ...sample.config, ...config },
+    });
+    if (data?.schemaVersion !== 2) {
+      throw new Error("sample 은 v2 여야 한다");
+    }
+    return text(
+      renderToStaticMarkup(
+        createElement(ClientReportV12L2, { data, sendApproved: approved })
+      )
+    );
+  }
+
+  it("11쪽: 표지·보는 법·핵심 숫자·이름 알려 주면·이름 없이·주제별·AI 모습·매출·할 일·측정 방법·문의", async () => {
+    const html = await renderL2({
+      layout_v2: l2Copy,
+      display: { layout_v2: true },
+    });
+    expect(html.match(/<section class="page/g)).toHaveLength(11);
+    expect(html).toContain("<b>0번</b> 나왔습니다");
+    expect(html).toContain("이름을 알려 주면 대체로 맞게 답합니다.");
+    // 푸터 쪽 번호 /11, 뒷표지 CTA v2(20분·전화)
+    expect(html).toContain("02 / 11");
+    expect(html).toContain("10 / 11");
+    expect(html).toContain(CTA_V2_HEADLINE);
+    expect(html).toContain("010-8958-2547");
+    expect(html).not.toContain("15분");
+  });
+
+  it("자동 글자 축소 스크립트·fit 클래스를 쓰지 않는다", async () => {
+    const html = await renderL2({ layout_v2: l2Copy });
+    expect(html).not.toContain("classList.add('fit'");
+    expect(html).not.toContain("fit1");
+  });
+
+  it("내부 시안 표기는 발송 승인 전 모든 쪽에, 승인 후에는 없다", async () => {
+    const before = await renderL2({ layout_v2: l2Copy });
+    expect(
+      before.split(INTERNAL_STATUS_NOTE).length - 1
+    ).toBeGreaterThanOrEqual(10);
+    const after = await renderL2({ layout_v2: l2Copy }, true);
+    expect(after).not.toContain(INTERNAL_STATUS_NOTE);
+  });
+
+  it("문구 키가 없어도 저장된 숫자로 만든 기본 문장으로 11쪽이 나온다", async () => {
+    const html = await renderL2({});
+    expect(html.match(/<section class="page/g)).toHaveLength(11);
+    expect(html).toContain("AI에 추천을 물었더니");
+    expect(html).toContain("나왔습니다");
+  });
+
+  it("점유·주제·매출 데이터가 없으면 그 쪽만 빠지고 쪽 번호는 실제 쪽 수로 매긴다", async () => {
+    const html = await renderL2({
+      category_share: undefined,
+      topic_winners: undefined,
+      revenue_opportunity: undefined,
+    });
+    expect(html.match(/<section class="page/g)).toHaveLength(8);
+    expect(html).toContain("02 / 08");
+    expect(html).not.toContain("빠졌을 수 있는 매출");
+  });
+
+  it("'놓치는 매출'(손실 단정) 문구를 쓰지 않는다 — 확정 규칙 E3", async () => {
+    const html = await renderL2({ layout_v2: l2Copy });
+    expect(html).not.toContain("놓치는 매출");
+    expect(html).toContain("빠졌을 수 있는 매출");
+  });
+
+  it("쪽 전환 코드: 플래그가 있을 때만 L2, 기본은 기존 12쪽", () => {
+    const src = readFileSync(
+      join(import.meta.dirname, "../app/r/[token]/page.tsx"),
+      "utf8"
+    );
+    expect(src).toContain("layout_v2");
+    expect(src).toContain("ClientReportV12L2");
+    expect(src).toContain("<ClientReportV12 data");
+  });
+});

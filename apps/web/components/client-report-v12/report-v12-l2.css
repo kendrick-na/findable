@@ -1,0 +1,84 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: 쪽마다 서로 다른 부모 아래의 같은 이름(.k·.v·.q·.e·.row)이라 선언 순서가 결과에 영향을 주지 않는다 */
+/*
+ * v12 레이아웃 v2(config.display.layout_v2) 전용 — 이 파일은 `.l2` 쪽과 표지(`.l2c`)에만 적용된다.
+ * 🔴 자동 글자 축소를 쓰지 않는다. 본문 9pt 이상 · 캡션/각주 7pt 이상. 넘치면 문장을 줄인다.
+ */
+.fr12 .l2 .hd { margin-bottom: 6mm; }
+.fr12 .l2 .kicker { margin-bottom: 2mm; }
+.fr12 .l2 h1.sec.l2h { font-size: 22pt; line-height: 1.32; max-width: 178mm; margin-top: 1mm; }
+.fr12 .l2 h3.sq { margin: 6mm 0 2.6mm; }
+.fr12 .l2 .notes.l2cap { font-size: 7.4pt; line-height: 1.5; margin-bottom: 8mm; padding-top: 3mm; }
+.fr12 .l2 .deck.l2deck { font-size: 10pt; line-height: 1.6; margin-top: 3mm; }
+
+/* 표지 */
+.fr12 .l2c .l2main { font-size: 44pt; font-weight: 800; line-height: 1.2; letter-spacing: -0.045em; margin-top: 22mm; max-width: 168mm; position: relative; }
+.fr12 .l2c .l2main b { color: var(--or-t); font-weight: 800; }
+.fr12 .l2c .l2sub { font-size: 13pt; line-height: 1.6; color: var(--ink2); margin-top: 8mm; max-width: 150mm; position: relative; }
+.fr12 .l2c .l2rev { font-size: 11pt; font-weight: 700; margin-top: 10mm; padding: 3.2mm 5mm; background: #fff; border-radius: 3mm; display: inline-block; position: relative; }
+
+/* 2쪽 보는 법 */
+.fr12 .l2kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin-top: 6mm; }
+.fr12 .l2kinds > div { background: var(--bg2); border-radius: 3mm; padding: 5mm; }
+.fr12 .l2kinds .k { font-size: 9pt; font-weight: 700; color: var(--or-t); }
+.fr12 .l2kinds .v { font-size: 14pt; font-weight: 800; margin-top: 1.6mm; letter-spacing: -0.02em; }
+.fr12 .l2kinds .q { font-size: 10pt; color: var(--ink2); margin-top: 2mm; line-height: 1.55; }
+.fr12 .l2terms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; }
+.fr12 .l2terms > div { border-top: 2px solid var(--ink); padding-top: 3mm; }
+.fr12 .l2terms b { font-size: 11.5pt; font-weight: 800; }
+.fr12 .l2terms p { font-size: 10pt; line-height: 1.6; color: var(--ink2); margin-top: 1.6mm; }
+.fr12 .l2order { font-size: 11pt; font-weight: 700; line-height: 1.8; color: var(--ink2); }
+
+/* 3쪽 핵심 숫자 */
+.fr12 .l2kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin-top: 6mm; }
+.fr12 .l2kpi { background: #fff; border: 1px solid var(--line); border-top: 2px solid var(--ink); padding: 5mm 5mm 4.4mm; }
+.fr12 .l2kpi .k { font-size: 9pt; font-weight: 700; color: var(--ink2); }
+.fr12 .l2kpi .v { font-size: 32pt; font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; margin-top: 2mm; }
+.fr12 .l2kpi .v.hot { color: var(--or-t); }
+.fr12 .l2kpi .n { font-size: 9.6pt; color: var(--mut); margin-top: 2.2mm; line-height: 1.55; }
+.fr12 .l2eng { display: flex; flex-direction: column; gap: 2.4mm; }
+.fr12 .l2eng .row { display: grid; grid-template-columns: 38mm 1fr auto; align-items: center; gap: 4mm; border: 1px solid var(--line); border-radius: 3mm; padding: 4.4mm 5mm; font-size: 10pt; }
+.fr12 .l2eng .row .e { display: flex; align-items: center; font-weight: 700; }
+
+/* 표 공통 */
+.fr12 .l2tbl { font-size: 9.6pt; }
+.fr12 .l2tbl th { font-size: 9pt; }
+.fr12 .l2tbl td { padding-top: 3.2mm; padding-bottom: 3.2mm; }
+.fr12 .l2matrix .qcell { font-size: 9.6pt; color: var(--ink2); }
+.fr12 .l2topics td { padding-top: 3.8mm; padding-bottom: 3.8mm; }
+.fr12 .l2topics.dense td { padding-top: 1.5mm; padding-bottom: 1.5mm; }
+.fr12 .l2insight { margin-top: 6mm; background: var(--bg2); border-radius: 3mm; padding: 5mm 6mm; font-size: 10.2pt; line-height: 1.65; color: var(--ink2); }
+
+/* 7쪽 AI가 그린 모습 */
+.fr12 .l2faces { display: grid; grid-template-columns: 58mm 1fr; gap: 5mm; margin-top: 4mm; }
+.fr12 .l2real { background: var(--cream); border-radius: 3mm; padding: 4.4mm; font-size: 9.2pt; line-height: 1.55; color: var(--ink2); }
+.fr12 .l2real .k { font-weight: 800; color: var(--ink); margin-bottom: 1.8mm; }
+.fr12 .l2real ul { padding-left: 4mm; margin: 0; }
+.fr12 .l2real li { margin-bottom: 1.6mm; color: var(--ink2); }
+.fr12 .l2frow { display: grid; grid-template-columns: 34mm 1fr; gap: 3mm; padding: 3mm 0; border-bottom: 1px solid var(--line); font-size: 9.2pt; line-height: 1.5; }
+.fr12 .l2frow .e { display: flex; align-items: center; font-weight: 700; }
+.fr12 .l2frow .l2q { color: var(--ink2); }
+.fr12 .l2tbl .eng-list { font-size: 8.4pt; color: var(--ink2); }
+
+/* 9쪽 원인·할 일 */
+.fr12 .l2causes { margin: 2mm 0 0 5mm; font-size: 10pt; line-height: 1.55; }
+.fr12 .l2causes li { margin-bottom: 2.4mm; }
+.fr12 .l2causes b { font-weight: 800; }
+.fr12 .l2causes p { font-size: 9.2pt; color: var(--ink2); margin-top: .6mm; line-height: 1.55; }
+.fr12 .l2plan .plan-item h4 { font-size: 9.4pt; line-height: 1.45; }
+.fr12 .l2poc { display: flex; flex-wrap: wrap; gap: 2mm 6mm; margin-top: 4mm; font-size: 9pt; color: var(--ink2); }
+.fr12 .l2poc b { font-weight: 800; color: var(--ink); }
+.fr12 .l2poc i { font-style: normal; font-weight: 700; }
+
+/* 10쪽 측정 방법과 한계 — 캡션 성격의 쪽이라 8pt */
+.fr12 .l2m h1.sec.l2h { font-size: 19pt; }
+.fr12 .l2method { columns: 2; column-gap: 8mm; margin-top: 4mm; }
+.fr12 .l2method > div { break-inside: avoid; margin-bottom: 3.4mm; }
+.fr12 .l2method h4 { font-size: 9.4pt; font-weight: 800; margin-bottom: 1mm; }
+.fr12 .l2method ul { padding-left: 3.6mm; }
+.fr12 .l2method li { font-size: 8.8pt; line-height: 1.55; color: var(--ink2); margin-bottom: .8mm; }
+.fr12 .l2qh { font-size: 9.4pt; font-weight: 800; margin: 3mm 0 1.4mm; }
+.fr12 .l2qall { columns: 2; column-gap: 8mm; padding-left: 4mm; font-size: 8.6pt; line-height: 1.55; color: var(--ink2); }
+.fr12 .l2qall li { break-inside: avoid; margin-bottom: .6mm; }
+
+/* 8쪽 근거 목록 */
+.fr12 .l2 .basis li { font-size: 10pt; line-height: 1.65; }
