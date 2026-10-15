@@ -8,7 +8,10 @@
 // 디자인 톤: hero.tsx와 동일한 --findable-* CSS 변수 + fadeup 애니메이션
 
 import { database } from "@repo/database";
-import { auditJobNotInternal } from "@repo/database/internal-orgs";
+import {
+  auditJobNotInternal,
+  auditJobNotTeam,
+} from "@repo/database/internal-orgs";
 import { log } from "@repo/observability/log";
 import { unstable_cache } from "next/cache";
 import Link from "next/link";
@@ -29,8 +32,11 @@ const getLiveStats = unstable_cache(
 
     try {
       // 공개 카운터 — 내부 조직(영업 전용) 측정·브랜드는 고객 숫자가 아니라 뺀다(2026-10-07 검수).
+      // 🔴 2026-10-15: 대표 본인·팀·QA 조직의 진단(322/424건)도 뺀다 — `auditJobNotTeam`.
+      //   OR 두 개를 한 where 에 펼치면 뒤가 앞을 덮으므로 AND 로 묶는다.
       const customerCompleted = {
         ...auditJobNotInternal,
+        AND: [auditJobNotTeam],
         status: "completed" as const,
       };
       const [auditCount, distinctDomains] = await Promise.all([
@@ -140,8 +146,8 @@ export async function LiveCounter({ locale = "ko" }: LiveCounterProps) {
     ? "측정한 것만 이야기합니다"
     : "We only talk about what we measured";
   const labels = isKo
-    ? ["진단 완료", "추적 브랜드", "측정 데이터셋"]
-    : ["audits run", "brands tracked", "open dataset"];
+    ? ["진단 완료", "진단한 도메인", "측정 데이터셋"]
+    : ["audits run", "domains audited", "open dataset"];
   const numLocale = isKo ? "ko-KR" : "en-US";
 
   return (

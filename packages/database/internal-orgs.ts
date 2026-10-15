@@ -43,6 +43,41 @@ export const auditJobNotInternal: {
   ],
 };
 
+/**
+ * 홈 **공개 카운터에서만** 빼는 우리 팀·테스트 조직(2026-10-15 대표 위임 점검).
+ *
+ * 🔴 왜: 공개 카운터 「진단 완료」 424건 중 **322건(76%)이 대표 본인·팀·QA 계정의 진단**이었다
+ *   (영업 전용 내부 조직 `INTERNAL_ORG_IDS` 에 안 들어 있어 집계에 남았다). 외부(무료 진단 64 +
+ *   타 조직 38)는 102건·33개 도메인. 외부 제출(투자·지원사업 심사)에서 "고객 이용 실적"으로 읽히면
+ *   부풀린 숫자가 된다 — 이 저장소가 반복해 온 사고 유형.
+ *
+ * ⚠️ `INTERNAL_ORG_IDS` 에 **넣지 않는다**: 그 목록은 정기 자동 측정·결제 만료·안내 메일에서 조직을
+ *   빼는 데 쓰이는데, 이 조직들(특히 Indigochild's Organization)은 실제로 Findable 자체 측정을 돌린다.
+ *   카운터 표시만 빼는 별도 목록이다. 새 팀·테스트 조직을 만들면 여기에 추가한다.
+ * ⚠️ 무료 진단(`organizationId` null)은 외부로 센다 — 팀원이 무료 진단을 돌렸다면 구분이 불가능하다.
+ */
+export const PUBLIC_COUNTER_EXCLUDED_ORG_IDS: readonly string[] = [
+  "org_3H1hu6UtLJpiYCcPjFm5hgjU1qn", // Indigochild's Organization (대표, growth)
+  "org_3IHag8VM4C4v3xBkAvqQHfb7pkP", // Indigochild's Organization (free)
+  "org_3HOuTrT1HV6gBbe4phX7Y9RlNuy", // Indigochild 인디고차일드
+  "org_3HgeLCQ6OcUCL8RNYjP3qTX0Nat", // My Organization (QA, growth)
+  "org_3IHOMGUWcWAEXjexlO0OS6zuE8C", // My Organization (팀)
+  "org_3I2ctt3yY1e1uPyEdxs8Erze5DM", // My Organization (팀)
+  "org_3JgFruHNFiSl2PWuCKPhEdbiAPW", // My Organization (결제 테스트)
+  "org_3IWYGGnsLLXV5yeI1yeZDeCA4sM", // Findable E2E QA
+  "org_3IIiKCIthFgAbXCw7QsEFXnvLA2", // Findable Demo
+];
+
+/** AuditJob where 조각 — 공개 카운터용: 팀·테스트 조직 제외(무료 진단은 남김). `AND` 로 묶어 쓴다. */
+export const auditJobNotTeam: {
+  OR: [{ organizationId: null }, { organizationId: { notIn: string[] } }];
+} = {
+  OR: [
+    { organizationId: null },
+    { organizationId: { notIn: [...PUBLIC_COUNTER_EXCLUDED_ORG_IDS] } },
+  ],
+};
+
 /** AuditJob where 조각 — 내부 조직(영업) 측정만 */
 export const auditJobInternal: { organizationId: { in: string[] } } = {
   organizationId: { in: [...INTERNAL_ORG_IDS] },
