@@ -90,6 +90,9 @@ describe("buildGapAnalysis", () => {
     );
     expect(out.brandBoard.some((b) => b.name === "Findable")).toBe(false);
   });
+  it("우리가 나온 답변 수를 센다", () => {
+    expect(out.ownAnswers).toBe(1);
+  });
   it("질문 빈틈: 우리가 한 번도 안 나온 질문만", () => {
     expect(out.questionGaps).toHaveLength(1);
     expect(out.questionGaps[0]?.promptText).toContain("가시성");
@@ -134,6 +137,7 @@ describe("gapCsv", () => {
       {
         analyzed: 1,
         total: 1,
+        ownAnswers: 0,
         brandBoard: [
           { name: "=HYPERLINK(x)", answers: 2, isRegistered: false },
         ],
@@ -179,5 +183,32 @@ describe("자사 도메인 줄기", () => {
       competitors: [],
     });
     expect(out.brandBoard.map((b) => b.name)).toEqual(["Adidas"]);
+  });
+});
+
+describe("aiRankingRows", () => {
+  it("우리 행을 합쳐 많이 나온 순으로, 비율은 분석한 답변 수 기준", async () => {
+    const { aiRankingRows } = await import("./ai-ranking");
+    const data = {
+      analyzed: 10,
+      total: 10,
+      ownAnswers: 4,
+      brandBoard: [
+        { name: "A", answers: 8, isRegistered: false },
+        { name: "B", answers: 2, isRegistered: false },
+      ],
+      questionGaps: [],
+      sourceGaps: [],
+    };
+    expect(
+      aiRankingRows(data, "우리").map((r) => [r.name, r.shareOfVoice, r.mine])
+    ).toEqual([
+      ["A", 80, false],
+      ["우리", 40, true],
+      ["B", 20, false],
+    ]);
+    expect(
+      aiRankingRows({ ...data, ownAnswers: 0 }, "우리").some((r) => r.mine)
+    ).toBe(false);
   });
 });

@@ -10,6 +10,8 @@
 
 import { cn } from "@repo/design-system/lib/utils";
 import { ChevronDownIcon } from "lucide-react";
+import { type AiRankingRow, aiRankingRows } from "@/lib/gap/ai-ranking";
+import type { GapAnalysis } from "@/lib/gap/gap-analysis";
 import type { AppDictionary } from "@/lib/i18n";
 import type { CompetitorAnalysis } from "../../lib/analysis-data";
 import { isMyBrand } from "../../lib/analysis-data";
@@ -23,11 +25,18 @@ const LOW_CONFIDENCE_SAMPLE = 10;
 // 화면에 세우는 최대 경쟁사 수. 롱테일(1회 언급)은 노이즈라 자른다.
 const MAX_ROWS = 10;
 
+type BoardRow =
+  | AiRankingRow
+  | { averageRank: number; mine: boolean; name: string; shareOfVoice: number };
+
 export const CompetitorBoard = ({
+  aiBoard,
   data,
   relativeTime,
   t,
 }: {
+  /** 답변 분석(AI 브랜드 추출)이 끝났으면 이 값으로 순위표를 그린다. 없으면 기존 번호 목록 집계. */
+  aiBoard?: GapAnalysis | null;
   data: CompetitorAnalysis;
   /** 사전 `app.competitorBoard`. */
   t: AppDictionary["competitorBoard"];
@@ -35,11 +44,18 @@ export const CompetitorBoard = ({
   relativeTime: RelativeTimeLabels;
 }) => {
   const { landscape, brandName, measuredAt, responsesParsed } = data;
-  const rows = landscape.ranking.slice(0, MAX_ROWS);
+  const useAi = Boolean(aiBoard && aiBoard.analyzed > 0);
+  const rows: BoardRow[] =
+    useAi && aiBoard
+      ? aiRankingRows(aiBoard, brandName).slice(0, MAX_ROWS)
+      : landscape.ranking.slice(0, MAX_ROWS).map((row) => ({
+          ...row,
+          mine: isMyBrand(row.name, brandName),
+        }));
   const topShare = rows[0]?.shareOfVoice ?? 0;
-  const myRank = landscape.ranking.findIndex((row) =>
-    isMyBrand(row.name, brandName)
-  );
+  const myRank = rows.findIndex((row) => row.mine);
+  const brandCount =
+    useAi && aiBoard ? aiBoard.brandBoard.length : landscape.ranking.length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -56,7 +72,7 @@ export const CompetitorBoard = ({
         <SummaryCard
           hint={t.brandsHint}
           label={t.brands}
-          value={t.brandsValue.replace("{n}", String(landscape.ranking.length))}
+          value={t.brandsValue.replace("{n}", String(brandCount))}
         />
         <SummaryCard
           hint={t.lastHint.replace("{n}", String(responsesParsed))}
@@ -77,7 +93,7 @@ export const CompetitorBoard = ({
 
         <div className="flex flex-col gap-3">
           {rows.map((row, index) => {
-            const mine = isMyBrand(row.name, brandName);
+            const mine = row.mine;
             // 1위 대비 상대 폭 — 절대 %는 옆에 숫자로 보여주므로 막대는 비교용.
             const width =
               topShare > 0 ? (row.shareOfVoice / topShare) * 100 : 0;
@@ -113,56 +129,76 @@ export const CompetitorBoard = ({
                   {row.shareOfVoice}%
                 </span>
                 <span className="hidden w-20 shrink-0 whitespace-nowrap text-right text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs tabular-nums sm:inline">
-                  {t.averageRank.replace("{n}", String(row.averageRank))}
+                  {row.averageRank === undefined
+                    ? ""
+                    : t.averageRank.replace("{n}", String(row.averageRank))}
                 </span>
               </div>
             );
           })}
         </div>
 
-        {/* 🔴 왼쪽 번호(등장률 순위)와 오른쪽 "평균 N위"가 다른 지표라는 걸
-            설명한다 — dashboard-kpis.tsx의 MetricGlossary와 같은 이유로
-            details를 쓴다(툴팁은 터치 없음·행마다 아이콘은 인터랙티브 과다).
-            오른쪽 지표 자체가 `sm:` 이상에서만 보이므로(모바일은 좁아서 뺐다),
-            이 뜻풀이도 같은 뷰포트에서만 보인다 — 화면에 없는 지표를 설명하면
-            더 헷갈린다. */}
-        <details className="group hidden sm:block">
-          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs hover:text-[color:var(--findable-ink-subtle,#8a8f98)]">
-            <span className="[&::-webkit-details-marker]:hidden">
-              {t.glossaryToggle}
-            </span>
-            <ChevronDownIcon
-              aria-hidden="true"
-              className="size-3 transition-transform group-open:rotate-180"
-            />
-          </summary>
-          <p className="mt-2 border-[color:var(--findable-hairline,#26292e)] border-l-2 pl-3 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-            {t.glossary}
+        {useAi && aiBoard ? (
+          <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
+            {t.aiNote.replace("{n}", String(aiBoard.analyzed))}
           </p>
-        </details>
-
-        {!landscape.brandInRanking && (
-          <p className="rounded border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-300/90 text-sm">
-            {landscape.brandFound ? t.foundNotRanked : t.notFound}
-          </p>
+        ) : (
+          <LegacyNotes landscape={landscape} t={t} />
         )}
-
-        <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
-          {t.noteBefore}
-          <strong>{t.noteStrong}</strong>
-          {t.noteAfter}
-          {landscape.sampleSize < LOW_CONFIDENCE_SAMPLE &&
-            t.lowSample.replace("{n}", String(landscape.sampleSize))}
-          {/* 🔴 변별력 없는 분포 고지 (2026-08-06 세션N-7)
-              무료 진단(www)은 이 경우 섹션을 **숨긴다**. 여기는 경쟁 비교 **전용 페이지**라
-              숨기면 빈 화면이 되므로, 대신 "순위로 읽지 말라"고 명시한다(같은 판정·다른 처방).
-              실측: 라이브 5건 중 3건이 사실상 동률이었다(전원 2% 등). */}
-          {!landscape.discriminative && t.flat}
-        </p>
       </div>
     </div>
   );
 };
+
+const LegacyNotes = ({
+  landscape,
+  t,
+}: {
+  landscape: CompetitorAnalysis["landscape"];
+  t: AppDictionary["competitorBoard"];
+}) => (
+  <>
+    {/* 🔴 왼쪽 번호(등장률 순위)와 오른쪽 "평균 N위"가 다른 지표라는 걸
+        설명한다 — dashboard-kpis.tsx의 MetricGlossary와 같은 이유로
+        details를 쓴다(툴팁은 터치 없음·행마다 아이콘은 인터랙티브 과다).
+        오른쪽 지표 자체가 `sm:` 이상에서만 보이므로(모바일은 좁아서 뺐다),
+        이 뜻풀이도 같은 뷰포트에서만 보인다 — 화면에 없는 지표를 설명하면
+        더 헷갈린다. */}
+    <details className="group hidden sm:block">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs hover:text-[color:var(--findable-ink-subtle,#8a8f98)]">
+        <span className="[&::-webkit-details-marker]:hidden">
+          {t.glossaryToggle}
+        </span>
+        <ChevronDownIcon
+          aria-hidden="true"
+          className="size-3 transition-transform group-open:rotate-180"
+        />
+      </summary>
+      <p className="mt-2 border-[color:var(--findable-hairline,#26292e)] border-l-2 pl-3 text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
+        {t.glossary}
+      </p>
+    </details>
+
+    {!landscape.brandInRanking && (
+      <p className="rounded border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-300/90 text-sm">
+        {landscape.brandFound ? t.foundNotRanked : t.notFound}
+      </p>
+    )}
+
+    <p className="text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs leading-relaxed">
+      {t.noteBefore}
+      <strong>{t.noteStrong}</strong>
+      {t.noteAfter}
+      {landscape.sampleSize < LOW_CONFIDENCE_SAMPLE &&
+        t.lowSample.replace("{n}", String(landscape.sampleSize))}
+      {/* 🔴 변별력 없는 분포 고지 (2026-08-06 세션N-7)
+          무료 진단(www)은 이 경우 섹션을 **숨긴다**. 여기는 경쟁 비교 **전용 페이지**라
+          숨기면 빈 화면이 되므로, 대신 "순위로 읽지 말라"고 명시한다(같은 판정·다른 처방).
+          실측: 라이브 5건 중 3건이 사실상 동률이었다(전원 2% 등). */}
+      {!landscape.discriminative && t.flat}
+    </p>
+  </>
+);
 
 const SummaryCard = ({
   label,

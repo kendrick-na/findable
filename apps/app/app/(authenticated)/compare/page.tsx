@@ -11,6 +11,7 @@ import {
   scopedLatestOrgAudit,
   scopedLatestRunTracking,
 } from "@/lib/db/scoped";
+import { loadGap } from "@/lib/gap/load-gap";
 import { type AppDictionary, getAppDictionary } from "@/lib/i18n";
 import { AnalysisBrandPicker } from "../components/analysis-brand-picker";
 import { EmptyState } from "../components/empty-state";
@@ -132,6 +133,7 @@ const ComparePage = async ({
       })
     : false;
   const analysis = isReady ? buildCompetitorAnalysis(rows) : null;
+  const gap = await loadGap(selectedBrandId, isReady);
   let content = (
     <NeedsMeasurement
       common={dict.common}
@@ -142,6 +144,7 @@ const ComparePage = async ({
   if (analysis) {
     content = (
       <CompetitorBoard
+        aiBoard={gap?.data ?? null}
         data={analysis}
         relativeTime={dict.relativeTime}
         t={dict.competitorBoard}
@@ -192,8 +195,8 @@ const ComparePage = async ({
         />
         {baselineNotice}
         {content}
-        {isReady && selectedBrandId ? (
-          <GapPanelServer brandId={selectedBrandId} />
+        {gap && selectedBrandId ? (
+          <GapPanelServer brandId={selectedBrandId} data={gap.data} />
         ) : null}
       </div>
     </>

@@ -110,6 +110,8 @@ export interface GapAnalysis {
   /** 분석에 쓴 답변 수 / 전체 AI 답변 수. */
   analyzed: number;
   brandBoard: BrandCount[];
+  /** 분석한 답변 중 우리 브랜드가 나온 답변 수. */
+  ownAnswers: number;
   questionGaps: QuestionGap[];
   sourceGaps: SourceGap[];
   total: number;
@@ -254,6 +256,7 @@ export function buildGapAnalysis(input: {
   const board: Named = new Map();
   const byPrompt = new Map<string, PromptAgg>();
   const sources = new Map<string, SourceAgg>();
+  let ownAnswers = 0;
 
   for (const row of analyzedRows) {
     const others = new Map<string, string>();
@@ -267,6 +270,7 @@ export function buildGapAnalysis(input: {
       others.set(compact(name), name);
     }
     const oursPresent = row.brandMentioned || namedOurs;
+    ownAnswers += oursPresent ? 1 : 0;
     const prompt = byPrompt.get(row.promptText) ?? {
       answers: 0,
       oursPresent: 0,
@@ -285,6 +289,7 @@ export function buildGapAnalysis(input: {
   return {
     analyzed: analyzedRows.length,
     total: rows.length,
+    ownAnswers,
     brandBoard: [...board.entries()]
       .map(([k, v]) => ({
         name: v.display,
