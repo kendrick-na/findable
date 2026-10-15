@@ -1,3 +1,4 @@
+import { compareFactSheetWithSite } from "@/app/actions/brand/compare-fact-sheet";
 import { saveBrandFactSheet } from "@/app/actions/brand/save-fact-sheet";
 import { loadFactSheet } from "@/lib/brand/fact-sheet-store";
 import { requireOrg } from "@/lib/db/scoped";
@@ -56,6 +57,7 @@ export const FactSheetCardServer = async ({
       brand={{ aliases: toStrings(aliases), legalName, name, url: domain }}
       brandId={brandId}
       initial={loaded.sheet}
+      onCompare={compareFactSheetWithSite}
       onSave={saveBrandFactSheet}
       t={t}
     />

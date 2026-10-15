@@ -11,6 +11,7 @@ const brand = {
   name: "Acme",
   url: "acme.example",
 };
+const onCompare = async () => ({ error: "x" });
 const onSave = async () => ({ ok: true }) as const;
 
 describe("FactSheetCard 렌더", () => {
@@ -20,11 +21,13 @@ describe("FactSheetCard 렌더", () => {
         brand={brand}
         brandId="b1"
         initial={EMPTY_FACT_SHEET}
+        onCompare={onCompare}
         onSave={onSave}
         t={ko.app.factSheet}
       />
     );
     expect(html).toContain("내 브랜드 정보");
+    expect(html).toContain("사이트와 비교하기");
     expect(html).toContain("아직 확인한 사실이 없어요");
     expect(html).toContain("사이트에는 자동으로 올라가지 않아요");
     expect(html).not.toMatch(/\{[a-zA-Z]+\}/);
@@ -41,6 +44,7 @@ describe("FactSheetCard 렌더", () => {
         brand={brand}
         brandId="b1"
         initial={initial}
+        onCompare={onCompare}
         onSave={onSave}
         t={en.app.factSheet}
       />

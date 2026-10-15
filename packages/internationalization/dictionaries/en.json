@@ -909,7 +909,21 @@
       "llmsTitle": "llms.txt text",
       "copy": "Copy",
       "copied": "Copied",
-      "previewEmpty": "No confirmed facts yet. Fill in a field and check “Confirmed”."
+      "previewEmpty": "No confirmed facts yet. Fill in a field and check “Confirmed”.",
+      "compareButton": "Compare with my site",
+      "comparing": "Reading your site…",
+      "compareTitle": "Compare with site",
+      "compareHint": "Reads the company name and business registration number on your homepage once and compares them with the values entered under “Company info” above. Nothing is saved.",
+      "compareFailed": "Could not compare. Please try again shortly.",
+      "siteNotRead": "Could not read your site. Please check that the address opens.",
+      "labelLegalName": "Company name",
+      "labelBusinessNumber": "Business registration number",
+      "statusMatch": "Matches your site",
+      "statusDiffers": "Differs from your site",
+      "statusNotFound": "Not found on your site",
+      "statusNotEntered": "Not entered yet (add it under “Company info” above)",
+      "valueMine": "Yours",
+      "valueSite": "Site"
     },
     "nextActions": {
       "title": "View your action plan",

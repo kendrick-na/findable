@@ -5,6 +5,7 @@ import { Input } from "@repo/design-system/components/ui/input";
 import { toast } from "@repo/design-system/components/ui/sonner";
 import { Textarea } from "@repo/design-system/components/ui/textarea";
 import { useMemo, useState } from "react";
+import type { CompareFactSheetResult } from "@/app/actions/brand/compare-fact-sheet";
 import {
   type BrandIdentity,
   buildLlmsText,
@@ -16,6 +17,7 @@ import {
   normalizeFactSheet,
   usableFacts,
 } from "@/lib/brand/fact-sheet";
+import type { CompareItem } from "@/lib/brand/fact-sheet-compare";
 
 /**
  * 「내 브랜드 정보」(G1) 입력 카드 — 순수 뷰. 서버액션은 주입받는다(Storybook 보호, N-44 패턴).
@@ -25,6 +27,7 @@ export interface FactSheetCardProps {
   brand: BrandIdentity;
   brandId: string;
   initial: FactSheetData;
+  onCompare: (brandId: string) => Promise<CompareFactSheetResult>;
   onSave: (
     brandId: string,
     input: FactSheetData
@@ -116,10 +119,106 @@ const CopyBox = ({
   </div>
 );
 
+const STATUS_KEY = {
+  differs: "statusDiffers",
+  match: "statusMatch",
+  notEntered: "statusNotEntered",
+  notFound: "statusNotFound",
+} as const;
+
+const CompareRow = ({
+  item,
+  label,
+  t,
+}: {
+  item: CompareItem;
+  label: string;
+  t: Record<string, string>;
+}) => (
+  <li className="flex flex-col gap-1 text-sm">
+    <span className="text-[color:var(--findable-ink,#f7f8f8)]">
+      {label} — {t[STATUS_KEY[item.status]]}
+    </span>
+    {item.status === "differs" && (
+      <span className="text-[color:var(--findable-ink-subtle,#8a8f98)]">
+        {t.valueMine}: {item.mine} · {t.valueSite}: {item.site}
+      </span>
+    )}
+  </li>
+);
+
+const ComparePanel = ({
+  brandId,
+  onCompare,
+  t,
+}: {
+  brandId: string;
+  onCompare: (brandId: string) => Promise<CompareFactSheetResult>;
+  t: Record<string, string>;
+}) => {
+  const [busy, setBusy] = useState(false);
+  const [out, setOut] = useState<CompareFactSheetResult | null>(null);
+  const run = async () => {
+    setBusy(true);
+    const r = await onCompare(brandId).catch(
+      () => ({ error: t.compareFailed }) as CompareFactSheetResult
+    );
+    setBusy(false);
+    setOut(r);
+  };
+  return (
+    <div className="flex flex-col gap-2 border-[color:var(--findable-hairline,#23252a)] border-t pt-4">
+      <span className="font-medium text-[color:var(--findable-ink,#f7f8f8)] text-sm">
+        {t.compareTitle}
+      </span>
+      <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-sm">
+        {t.compareHint}
+      </p>
+      <div>
+        <button
+          className="rounded-md border border-[color:var(--findable-hairline,#23252a)] px-3 py-1 text-[color:var(--findable-ink,#f7f8f8)] text-sm disabled:opacity-60"
+          disabled={busy}
+          onClick={run}
+          type="button"
+        >
+          {busy ? t.comparing : t.compareButton}
+        </button>
+      </div>
+      {out && "error" in out && (
+        <p className="text-amber-600 text-sm dark:text-amber-400">
+          {out.error}
+        </p>
+      )}
+      {out && "ok" in out && (
+        <>
+          {!out.siteRead && (
+            <p className="text-amber-600 text-sm dark:text-amber-400">
+              {t.siteNotRead}
+            </p>
+          )}
+          <ul className="flex flex-col gap-2">
+            <CompareRow
+              item={out.result.legalName}
+              label={t.labelLegalName}
+              t={t}
+            />
+            <CompareRow
+              item={out.result.businessNumber}
+              label={t.labelBusinessNumber}
+              t={t}
+            />
+          </ul>
+        </>
+      )}
+    </div>
+  );
+};
+
 export const FactSheetCard = ({
   brand,
   brandId,
   initial,
+  onCompare,
   onSave,
   t,
 }: FactSheetCardProps) => {
@@ -327,6 +426,7 @@ export const FactSheetCard = ({
           <CopyBox label={t.jsonLdTitle} t={t} text={jsonLd} />
           <CopyBox label={t.llmsTitle} t={t} text={llms} />
         </div>
+        <ComparePanel brandId={brandId} onCompare={onCompare} t={t} />
       </div>
     </details>
   );

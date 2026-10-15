@@ -909,7 +909,21 @@
       "llmsTitle": "llms.txt 문안",
       "copy": "복사",
       "copied": "복사했어요",
-      "previewEmpty": "아직 확인한 사실이 없어요. 칸을 채우고 「확인함」을 체크해 주세요."
+      "previewEmpty": "아직 확인한 사실이 없어요. 칸을 채우고 「확인함」을 체크해 주세요.",
+      "compareButton": "사이트와 비교하기",
+      "comparing": "사이트를 읽는 중…",
+      "compareTitle": "사이트와 비교",
+      "compareHint": "홈페이지에 적힌 상호·사업자등록번호를 한 번 읽어 위 「회사 정보」에 적은 값과 견줘요. 저장은 하지 않아요.",
+      "compareFailed": "비교하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      "siteNotRead": "사이트를 읽지 못했어요. 주소가 열리는지 확인해 주세요.",
+      "labelLegalName": "상호",
+      "labelBusinessNumber": "사업자등록번호",
+      "statusMatch": "사이트와 같아요",
+      "statusDiffers": "사이트와 달라요",
+      "statusNotFound": "사이트에서 찾지 못했어요",
+      "statusNotEntered": "아직 입력하지 않았어요 (위 「회사 정보」에 적어 주세요)",
+      "valueMine": "내 입력",
+      "valueSite": "사이트"
     },
     "nextActions": {
       "title": "개선 실행 계획 보기",
