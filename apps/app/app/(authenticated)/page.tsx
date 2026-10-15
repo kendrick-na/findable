@@ -19,7 +19,6 @@ import { env } from "@/env";
 import {
   scopedAnnotations,
   scopedLatestRunTracking,
-  scopedLatestSiteReadinessRun,
   scopedTracking,
 } from "@/lib/db/scoped";
 import {
@@ -62,11 +61,11 @@ import {
   invalidTrackingRunTimes,
   trackingRunSearchSamplingVersions,
 } from "./lib/dashboard-data";
+import { loadTodaySiteSummary } from "./lib/today-readiness";
 import {
   isTodayViewEnabled,
   shouldWarnMissingSources,
   summarizeEngineSources,
-  summarizeReadiness,
   todayDelta,
   todayFirst,
 } from "./lib/today-view";
@@ -465,15 +464,10 @@ const App = async ({ searchParams }: AppProperties) => {
     hasUsableResult &&
     data.latestSov !== null
   ) {
-    const [engines, readinessRun] = await Promise.all([
+    const [engines, siteSummary] = await Promise.all([
       database.engine.findMany({ select: { id: true, name: true } }),
-      data.latestBrandId
-        ? scopedLatestSiteReadinessRun(data.latestBrandId)
-        : null,
+      loadTodaySiteSummary(data.latestBrandId),
     ]);
-    const readinessReport = readinessRun?.report as {
-      checks?: { status: string }[];
-    } | null;
     const conditions = summarizeEngineSources(
       latestRun,
       new Map(engines.map((engine) => [engine.id, engine.name]))
@@ -502,7 +496,7 @@ const App = async ({ searchParams }: AppProperties) => {
             })}
             first={todayFirst(data.promptScores)}
             oldViewHref="/?view=old"
-            site={summarizeReadiness(readinessReport?.checks)}
+            site={siteSummary}
             sov={data.latestSov}
             t={dict.today}
             warnMissingSources={shouldWarnMissingSources(conditions)}

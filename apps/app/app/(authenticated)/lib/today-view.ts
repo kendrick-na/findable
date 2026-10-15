@@ -102,18 +102,54 @@ export function shouldWarnMissingSources(lines: EngineSourceLine[]): boolean {
 }
 
 export interface TodayReadinessCheck {
+  id?: string;
   status: string;
 }
 
 export interface SiteSummary {
   fail: number;
+  /** 지난 점검에는 문제·주의가 아니었는데 이번에 문제·주의가 된 항목 수. 비교할 지난 점검이 없으면 null. */
+  newIssues: number | null;
   total: number;
   warning: number;
 }
 
+const isIssue = (status: string) => status === "fail" || status === "warning";
+
+/**
+ * 지난 점검 대비 새로 생긴 문제·주의 수. 같은 항목 id 가 양쪽에 있고 지난번엔 문제가 아니었던 것만 센다.
+ * 지난 점검이 없거나 항목 id 로 맞출 수 없으면 null(0 이라고 말하지 않는다). 새 항목(지난번에 없던 점검)은 세지 않는다.
+ */
+export function newIssuesSince(
+  current: TodayReadinessCheck[] | null | undefined,
+  previous: TodayReadinessCheck[] | null | undefined
+): number | null {
+  if (!(current && previous) || current.length === 0 || previous.length === 0) {
+    return null;
+  }
+  const before = new Map<string, string>();
+  for (const check of previous) {
+    if (check.id) {
+      before.set(check.id, check.status);
+    }
+  }
+  if (before.size === 0) {
+    return null;
+  }
+  let count = 0;
+  for (const check of current) {
+    const was = check.id ? before.get(check.id) : undefined;
+    if (was !== undefined && isIssue(check.status) && !isIssue(was)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 /** 사이트 점검 결과 합계. 점검이 없으면 null(0 이라고 말하지 않는다). */
 export function summarizeReadiness(
-  checks: TodayReadinessCheck[] | null | undefined
+  checks: TodayReadinessCheck[] | null | undefined,
+  previous?: TodayReadinessCheck[] | null
 ): SiteSummary | null {
   if (!checks || checks.length === 0) {
     return null;
@@ -122,6 +158,7 @@ export function summarizeReadiness(
     total: checks.length,
     fail: checks.filter((check) => check.status === "fail").length,
     warning: checks.filter((check) => check.status === "warning").length,
+    newIssues: newIssuesSince(checks, previous),
   };
 }
 

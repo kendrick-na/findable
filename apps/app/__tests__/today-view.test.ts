@@ -2,6 +2,7 @@ import { PUBLIC_COUNTER_EXCLUDED_ORG_IDS } from "@repo/database/internal-orgs";
 import { describe, expect, test } from "vitest";
 import {
   isTodayViewEnabled,
+  newIssuesSince,
   shouldWarnMissingSources,
   summarizeEngineSources,
   summarizeReadiness,
@@ -109,7 +110,7 @@ describe("사이트 점검 요약", () => {
         { status: "warning" },
         { status: "info" },
       ])
-    ).toEqual({ total: 5, fail: 1, warning: 2 });
+    ).toEqual({ total: 5, fail: 1, warning: 2, newIssues: null });
   });
 });
 
@@ -160,5 +161,52 @@ describe("먼저 살펴볼 질문", () => {
     expect(todayFirst([{ text: "q1", hit: 7, total: 7 }])).toEqual({
       kind: "allHit",
     });
+  });
+});
+
+describe("newIssuesSince — 지난 점검 대비 새로 생긴 문제", () => {
+  const prev = [
+    { id: "https", status: "pass" },
+    { id: "aiBots", status: "pass" },
+    { id: "sitemap", status: "warning" },
+  ];
+  test("지난번엔 통과였는데 이번에 문제·주의가 된 것만 센다", () => {
+    const now = [
+      { id: "https", status: "pass" },
+      { id: "aiBots", status: "fail" },
+      { id: "sitemap", status: "fail" },
+    ];
+    expect(newIssuesSince(now, prev)).toBe(1);
+  });
+  test("지난 점검이 없으면 null(0 이라고 말하지 않는다)", () => {
+    expect(newIssuesSince([{ id: "a", status: "fail" }], null)).toBeNull();
+    expect(newIssuesSince([{ id: "a", status: "fail" }], [])).toBeNull();
+  });
+  test("항목 id 로 맞출 수 없으면 null", () => {
+    expect(
+      newIssuesSince([{ status: "fail" }], [{ status: "pass" }])
+    ).toBeNull();
+  });
+  test("지난번에 없던 새 점검 항목은 세지 않는다", () => {
+    expect(
+      newIssuesSince(
+        [
+          { id: "https", status: "pass" },
+          { id: "brandNew", status: "fail" },
+        ],
+        [{ id: "https", status: "pass" }]
+      )
+    ).toBe(0);
+  });
+  test("summarizeReadiness 가 newIssues 를 함께 돌려준다", () => {
+    expect(
+      summarizeReadiness(
+        [{ id: "a", status: "fail" }],
+        [{ id: "a", status: "pass" }]
+      )
+    ).toEqual({ fail: 1, newIssues: 1, total: 1, warning: 0 });
+    expect(
+      summarizeReadiness([{ id: "a", status: "pass" }])?.newIssues
+    ).toBeNull();
   });
 });

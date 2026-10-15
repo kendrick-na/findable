@@ -21,7 +21,7 @@ const base = {
     total: 7,
   } as const,
   oldViewHref: "/?view=old",
-  site: { total: 18, fail: 1, warning: 2 },
+  site: { total: 18, fail: 1, warning: 2, newIssues: 1 },
   sov: 25,
   warnMissingSources: true,
 };
@@ -40,6 +40,7 @@ describe("TodayView 렌더", () => {
     expect(html).toContain("응답 12개 중 출처가 붙은 응답 0개");
     expect(html).toContain("웹 검색 없이 답했을 수 있어요");
     expect(html).toContain("점검 18개 중 문제 1개 · 주의 2개");
+    expect(html).toContain("지난 점검보다 새로 생긴 문제·주의 1개");
     expect(html).toContain("/?view=old");
     // 치환 안 된 자리표시자가 남으면 안 된다
     expect(html).not.toMatch(/\{[a-zA-Z]+\}/);

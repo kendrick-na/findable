@@ -869,6 +869,8 @@
       "conditionsNote": "출처가 한 번도 안 붙은 엔진은 웹 검색 없이 답했을 수 있어요. 그러면 새로운 브랜드는 낮게 나올 수 있어요.",
       "siteTitle": "사이트 상태",
       "siteSummary": "점검 {total}개 중 문제 {fail}개 · 주의 {warning}개",
+      "siteNew": "지난 점검보다 새로 생긴 문제·주의 {count}개",
+      "siteNoNew": "지난 점검 이후 새로 생긴 문제는 없어요",
       "siteNone": "아직 사이트 점검 전이에요",
       "siteCta": "사이트 점검 보기",
       "moreTitle": "더 보기",

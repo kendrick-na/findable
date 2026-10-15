@@ -869,6 +869,8 @@
       "conditionsNote": "An engine that never showed sources may have answered without web search. A new brand can score low in that case.",
       "siteTitle": "Site status",
       "siteSummary": "{total} checks: {fail} failed, {warning} to review",
+      "siteNew": "{count} new issues or warnings since the last check",
+      "siteNoNew": "No new issues since the last check",
       "siteNone": "No site check yet",
       "siteCta": "See site check",
       "moreTitle": "More",

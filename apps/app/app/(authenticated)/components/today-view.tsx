@@ -166,6 +166,13 @@ export const TodayView = ({
               })
             : t.siteNone}
         </p>
+        {site && site.newIssues !== null ? (
+          <p className={`mt-1 text-sm ${muted}`}>
+            {site.newIssues > 0
+              ? fill(t.siteNew, { count: site.newIssues })
+              : t.siteNoNew}
+          </p>
+        ) : null}
         <Link
           className="mt-2 inline-block text-[color:var(--findable-primary,#ff7a4d)] text-sm"
           href="/site-audit"
