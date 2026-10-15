@@ -72,6 +72,16 @@ AI 답변에서 브랜드가 등장한 방식과 인용 출처를 측정하고 �
 - [K-뷰티 GEO 리포트 2026 Q2](${origin}/ko/report/k-beauty-geo-2026q2): 실측 기반 산업 리포트
 - [사례](${origin}/ko/case/a-brand)
 
+## 검색·AI 가이드 (용어집)
+
+- [검색·AI 가이드 전체](${origin}/ko/glossary): SEO·GEO·AEO와 AI 검색 가시성 용어 13개
+- [GEO란 무엇인가](${origin}/ko/glossary/geo)
+- [AI 검색 가시성](${origin}/ko/glossary/ai-search-visibility)
+- [AI 인용](${origin}/ko/glossary/ai-citation)
+- [브랜드 엔티티](${origin}/ko/glossary/brand-entity)
+- [브랜드 이름 충돌](${origin}/ko/glossary/brand-name-collision)
+- [네이버 AI 브리핑](${origin}/ko/glossary/naver-ai-briefing)
+
 ## Optional
 
 - [개인정보처리방침](${origin}/ko/legal/privacy)

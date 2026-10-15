@@ -2,61 +2,20 @@ import { JsonLd } from "@repo/seo/json-ld";
 import { createMetadata } from "@repo/seo/metadata";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PublicLandingHeader } from "../components/public-landing-header";
+import { GLOSSARY_EN, GLOSSARY_KO, GLOSSARY_SLUGS } from "@/lib/glossary";
 import { FooterCTA } from "../(home)/components/footer-cta";
+import { PublicLandingHeader } from "../components/public-landing-header";
 
-const TERMS = [
-  {
-    slug: "seo",
-    title: "SEO란 무엇인가",
-    description:
-      "검색엔진이 웹페이지를 발견하고 이해하도록 돕는 최적화의 기본 개념.",
-  },
-  {
-    slug: "geo",
-    title: "GEO란 무엇인가",
-    description: "생성형 AI 답변에서 브랜드와 콘텐츠가 발견되고 인용되는 구조.",
-  },
-  {
-    slug: "aeo",
-    title: "AEO란 무엇인가",
-    description:
-      "검색엔진과 답변 엔진이 질문에 대한 콘텐츠를 선택하도록 돕는 방법.",
-  },
-  {
-    slug: "ai-search-visibility",
-    title: "AI 검색 가시성이란 무엇인가",
-    description:
-      "AI 답변에서 브랜드가 언급·설명·인용되는 정도를 측정하는 개념.",
-  },
-] as const;
+// 용어 데이터는 `lib/glossary.ts` 한 곳에 있다(2026-10-15 — 13개로 확장).
+const toCards = (dictionary: typeof GLOSSARY_KO) =>
+  GLOSSARY_SLUGS.map((slug) => ({
+    slug,
+    title: dictionary[slug].title,
+    description: dictionary[slug].short,
+  }));
 
-const EN_TERMS = [
-  {
-    slug: "seo",
-    title: "What is SEO?",
-    description:
-      "The basics of helping search engines discover and understand your pages.",
-  },
-  {
-    slug: "geo",
-    title: "What is GEO?",
-    description:
-      "How brands and content are found, described, and cited in generative AI answers.",
-  },
-  {
-    slug: "aeo",
-    title: "What is AEO?",
-    description:
-      "How to make content useful as a direct answer to a searcher's question.",
-  },
-  {
-    slug: "ai-search-visibility",
-    title: "What is AI search visibility?",
-    description:
-      "A way to observe when and how AI answers mention, describe, or cite a brand.",
-  },
-] as const;
+const TERMS = toCards(GLOSSARY_KO);
+const EN_TERMS = toCards(GLOSSARY_EN);
 
 const COMPARISON = [
   ["SEO", "검색 결과", "페이지 순위·클릭·오가닉 트래픽"],
@@ -68,8 +27,16 @@ const COMPARISON = [
 const EN_COMPARISON = [
   ["SEO", "Search results", "Page visibility, clicks, and organic traffic"],
   ["AEO", "Direct answers", "Selection as a relevant answer to a question"],
-  ["GEO", "Generative AI answers", "Brand mentions, descriptions, and citations"],
-  ["AI search visibility", "AI answers", "Visibility and answer quality by question"],
+  [
+    "GEO",
+    "Generative AI answers",
+    "Brand mentions, descriptions, and citations",
+  ],
+  [
+    "AI search visibility",
+    "AI answers",
+    "Visibility and answer quality by question",
+  ],
 ] as const;
 
 const FAQS = [
@@ -107,6 +74,10 @@ const QUESTIONS = [
   ["AI 검색에 브랜드가 인용되지 않는 이유는?", "ai-search-visibility"],
   ["AEO는 어떻게 시작하나요?", "aeo"],
   ["검색 노출과 AI 노출을 어떻게 함께 측정하나요?", "seo"],
+  ["브랜드 이름이 다른 서비스와 같으면 어떻게 하나요?", "brand-name-collision"],
+  ["네이버 AI 브리핑에는 어떻게 나오나요?", "naver-ai-briefing"],
+  ["AI 크롤러는 허용해야 하나요?", "ai-crawlers"],
+  ["AI가 우리 글을 인용하게 하려면?", "ai-citation"],
 ] as const;
 
 const EN_QUESTIONS = [
@@ -114,6 +85,10 @@ const EN_QUESTIONS = [
   ["Why isn't my brand cited in AI answers?", "ai-search-visibility"],
   ["How do I get started with AEO?", "aeo"],
   ["How do I measure search and AI visibility together?", "seo"],
+  ["What if another service shares my brand name?", "brand-name-collision"],
+  ["How do I appear in Naver AI Briefing?", "naver-ai-briefing"],
+  ["Should I allow AI crawlers?", "ai-crawlers"],
+  ["How do I get AI to cite my pages?", "ai-citation"],
 ] as const;
 
 export async function generateMetadata({
@@ -212,13 +187,17 @@ export default async function GlossaryPage({
               <thead className="bg-white/[0.04] text-white/60">
                 <tr>
                   <th className="px-4 py-3">{ko ? "개념" : "Concept"}</th>
-                  <th className="px-4 py-3">{ko ? "주요 표면" : "Primary surface"}</th>
-                  <th className="px-4 py-3">{ko ? "핵심 관찰 지표" : "Key metrics"}</th>
+                  <th className="px-4 py-3">
+                    {ko ? "주요 표면" : "Primary surface"}
+                  </th>
+                  <th className="px-4 py-3">
+                    {ko ? "핵심 관찰 지표" : "Key metrics"}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {comparison.map(([term, surface, metric]) => (
-                  <tr className="border-t border-white/10" key={term}>
+                  <tr className="border-white/10 border-t" key={term}>
                     <th className="px-4 py-4 font-medium">{term}</th>
                     <td className="px-4 py-4 text-white/65">{surface}</td>
                     <td className="px-4 py-4 text-white/65">{metric}</td>
@@ -243,7 +222,7 @@ export default async function GlossaryPage({
             ))}
           </div>
         </section>
-        <section className="mt-20 border-t border-white/10 pt-8">
+        <section className="mt-20 border-white/10 border-t pt-8">
           <p className="text-sm text-white/45">
             {ko ? "관련 인사이트" : "Related insights"}
           </p>
@@ -252,7 +231,9 @@ export default async function GlossaryPage({
               className="text-[#ff7a4d] hover:underline"
               href={`${prefix}/insights`}
             >
-              {ko ? "SEO·GEO 사례와 분석 보기 →" : "Browse SEO and GEO analysis →"}
+              {ko
+                ? "SEO·GEO 사례와 분석 보기 →"
+                : "Browse SEO and GEO analysis →"}
             </Link>
           </div>
         </section>

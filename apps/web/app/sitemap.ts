@@ -7,6 +7,7 @@ import {
   listPublishedContent,
 } from "@/lib/content";
 import { freeAuditPublicEnabled } from "@/lib/free-audit";
+import { GLOSSARY_SLUGS, GLOSSARY_UPDATED } from "@/lib/glossary";
 import { isCanonicalOnSite } from "@/lib/public-url";
 
 /**
@@ -95,11 +96,13 @@ const STATIC_PATHS: readonly { lastModified: string; path: string }[] = [
   { path: "/pricing", lastModified: "2026-08-22" },
   { path: "/contact", lastModified: "2026-09-02" },
   { path: "/insights", lastModified: "2026-08-31" },
-  { path: "/glossary", lastModified: "2026-09-25" },
-  { path: "/glossary/seo", lastModified: "2026-09-25" },
-  { path: "/glossary/geo", lastModified: "2026-09-25" },
-  { path: "/glossary/aeo", lastModified: "2026-09-25" },
-  { path: "/glossary/ai-search-visibility", lastModified: "2026-09-25" },
+  // 용어집: 용어 목록·날짜는 `lib/glossary.ts` 한 곳이 정한다(2026-10-15 — 13개로 확장,
+  //   새 용어를 추가하면 여기를 고칠 필요가 없다).
+  { path: "/glossary", lastModified: GLOSSARY_UPDATED },
+  ...GLOSSARY_SLUGS.map((slug) => ({
+    path: `/glossary/${slug}`,
+    lastModified: GLOSSARY_UPDATED,
+  })),
   // 🔴 2026-08-17 세션N-38 — `/synergy` 는 **페이지째 삭제**됐다(👤 *"필요 없어"*).
   //   N-34 는 *"제안 자산일 수 있어 색인만 끊는다"* 로 남겼으나, D2SF(5월 신청)가 끝났고
   //   진입 경로도 0 이라 유지 근거가 사라졌다. 백업만 남긴다.
