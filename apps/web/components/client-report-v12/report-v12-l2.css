@@ -82,3 +82,54 @@
 
 /* 8쪽 근거 목록 */
 .fr12 .l2 .basis li { font-size: 10pt; line-height: 1.65; }
+
+/* ── 여백 보정(2026-10-16 관제탑 지시): 내용 추가 없이 글자·카드·간격을 키워 쪽을 채운다. 본문 10~11pt ── */
+.fr12 .l2c .cmeta .sm { display: block; font-size: 8.4pt; font-weight: 500; color: var(--mut); margin-top: .8mm; }
+.fr12 .l2c .cmeta > div:last-child { max-width: 96mm; }
+.fr12 .l2kpi .b { font-size: 8.8pt; color: var(--mut); margin-top: 3mm; padding-top: 2.4mm; border-top: 1px solid var(--line); }
+
+.fr12 .l2 h1.sec.l2h { margin-bottom: 4mm; }
+/* 2쪽 */
+.fr12 .l2kinds { margin-top: 9mm; gap: 7mm; }
+.fr12 .l2kinds > div { padding: 8mm 7mm; }
+.fr12 .l2kinds .k { font-size: 10pt; }
+.fr12 .l2kinds .v { font-size: 17pt; margin-top: 3mm; }
+.fr12 .l2kinds .q { font-size: 11pt; margin-top: 3.4mm; }
+.fr12 .l2 h3.sq { margin: 8mm 0 3.6mm; font-size: 13pt; }
+.fr12 .l2how h3.sq { margin: 11mm 0 4.4mm; font-size: 13.5pt; }
+.fr12 .l2act h3.sq { margin: 5mm 0 2.4mm; font-size: 12pt; }
+.fr12 .l2terms { gap: 7mm; }
+.fr12 .l2terms > div { padding-top: 4.4mm; }
+.fr12 .l2terms b { font-size: 13pt; }
+.fr12 .l2terms p { font-size: 11pt; line-height: 1.7; margin-top: 2.6mm; }
+.fr12 .l2order { font-size: 12pt; line-height: 2; }
+.fr12 .l2 .deck.l2deck { font-size: 11.5pt; margin-top: 4mm; }
+/* 3쪽 */
+.fr12 .l2kpis { gap: 5mm; margin-top: 9mm; }
+.fr12 .l2kpi { padding: 7mm 6mm 6mm; }
+.fr12 .l2kpi .k { font-size: 10.5pt; }
+.fr12 .l2kpi .v { font-size: 31pt; margin-top: 3mm; white-space: nowrap; }
+.fr12 .l2kpi .n { font-size: 10.6pt; margin-top: 3mm; }
+.fr12 .l2eng { gap: 4mm; }
+.fr12 .l2eng .row { padding: 6mm 6mm; font-size: 11pt; gap: 5mm; grid-template-columns: 42mm 1fr auto; }
+.fr12 .l2 .lb { font-size: 9.4pt; }
+/* 4쪽 */
+.fr12 .l2tbl { font-size: 10.6pt; }
+.fr12 .l2tbl th { font-size: 9.6pt; padding-top: 3.2mm; padding-bottom: 3.2mm; }
+.fr12 .l2tbl td { padding-top: 4.6mm; padding-bottom: 4.6mm; }
+.fr12 .l2matrix .qcell { font-size: 10.6pt; }
+.fr12 .l2insight { font-size: 11pt; padding: 6mm 7mm; margin-top: 9mm; }
+/* 5쪽 */
+.fr12 .l2 .hero .big .v { font-size: 56pt; }
+.fr12 .l2 .rank .row { padding: 3.8mm 0; font-size: 11.4pt; grid-template-columns: 9mm 50mm 1fr 18mm; }
+.fr12 .l2 .rank .track { height: 3.6mm; }
+/* 6쪽 */
+.fr12 .l2topics td { padding-top: 5.4mm; padding-bottom: 5.4mm; font-size: 10.6pt; }
+.fr12 .l2topics.dense td { padding-top: 1.7mm; padding-bottom: 1.7mm; font-size: 9.6pt; }
+.fr12 .l2topics .qcell { font-size: 10pt; }
+/* 8쪽 */
+.fr12 .l2 .basis li { font-size: 11pt; line-height: 1.75; margin-bottom: 2.4mm; }
+/* 9쪽은 표·카드·목록이 한 쪽에 모두 있어 4쪽보다 촘촘하게 */
+.fr12 .l2act .l2tbl { font-size: 9.6pt; }
+.fr12 .l2act .l2tbl td { padding-top: 1.2mm; padding-bottom: 1.2mm; }
+.fr12 .l2act .l2tbl th { padding-top: 1.6mm; padding-bottom: 1.6mm; font-size: 9pt; }

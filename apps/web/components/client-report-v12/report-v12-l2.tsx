@@ -131,8 +131,6 @@ function coverRevenueDefault(x: Ctx): string | null {
 
 function CoverPage({ x }: { x: Ctx }) {
   const { c, L, s, share } = x;
-  const questions = s.nq + (share?.questions ?? 0);
-  const answers = s.n + (share?.answers ?? 0);
   const revenueLine = L.cover?.revenue ?? coverRevenueDefault(x);
   return (
     <section className="page cover rv l2c">
@@ -161,9 +159,19 @@ function CoverPage({ x }: { x: Ctx }) {
         </div>
         <div>
           분석 답변
-          <b>
-            질문 {questions}개 × AI {s.engines_total}곳 = 답변 {answers}건
-          </b>
+          {share ? (
+            <>
+              <b>
+                이름 없이 묻는 질문 {share.questions}개 × AI {s.engines_total}곳
+                = 답변 {share.answers}건
+              </b>
+              <span className="sm">이름을 넣은 질문 {s.nq}개는 별도</span>
+            </>
+          ) : (
+            <b>
+              질문 {s.nq}개 × AI {s.engines_total}곳 = 답변 {s.n}건
+            </b>
+          )}
         </div>
       </div>
     </section>
@@ -228,7 +236,7 @@ function HowPage({
     L.how?.order ??
     `${pad2(pageNo("numbers"))}쪽 핵심 숫자 → ${pad2(pageNo("known"))}쪽 이름을 알려 주면 → ${x.share ? `${pad2(pageNo("nameless"))}쪽 이름 없이 물으면 → ` : ""}${x.revenue ? `${pad2(pageNo("revenue"))}쪽 매출 → ` : ""}${pad2(pageNo("action"))}쪽 할 일`;
   return (
-    <section className="page rv l2">
+    <section className="page rv l2 l2how">
       <Head sec="보는 법" />
       <div className="kicker">이 리포트 보는 법</div>
       <Title>
@@ -265,8 +273,10 @@ function Kpi({
   label,
   value,
   note,
+  basis,
   hot,
 }: {
+  basis?: string;
   hot?: boolean;
   label: string;
   note: string | undefined;
@@ -277,6 +287,7 @@ function Kpi({
       <div className="k">{label}</div>
       <div className={hot ? "v hot" : "v"}>{value}</div>
       {note ? <div className="n" {...rich(note)} /> : null}
+      {basis ? <div className="b">{basis}</div> : null}
     </div>
   );
 }
@@ -313,12 +324,14 @@ function NumbersPage({ x, n, total }: { x: Ctx; n: number; total: number }) {
       </Title>
       <div className="l2kpis">
         <Kpi
+          basis={`질문 ${s.nq}개 × AI ${s.engines_total}곳 = 답변 ${s.n}건`}
           label="이름을 알려 줬을 때"
           note={nm?.name_note}
           value={asFraction(s.ok_n, s.n)}
         />
         {share ? (
           <Kpi
+            basis={`질문 ${share.questions}개 × AI ${s.engines_total}곳 = 답변 ${share.answers}건`}
             hot
             label="이름 없이 물었을 때"
             note={nm?.nameless_note}
@@ -597,7 +610,13 @@ function TopicsPage({ x, n, total }: { x: Ctx; n: number; total: number }) {
           ))}
         </tbody>
       </table>
-      <Caption text={L.p6?.caption} />
+      <Caption
+        text={
+          wide || L.p6?.caption?.includes("10쪽")
+            ? L.p6?.caption
+            : `${L.p6?.caption ?? ""} 실제 질문은 10쪽 질문 목록을 보세요.`.trim()
+        }
+      />
       <Foot
         c={c}
         n={n}
@@ -847,7 +866,7 @@ function PlanColumns({ x }: { x: Ctx }) {
 function ActionPage({ x, n, total }: { x: Ctx; n: number; total: number }) {
   const { c, L } = x;
   return (
-    <section className="page rv l2">
+    <section className="page rv l2 l2act">
       <Head sec="원인과 할 일" />
       <div className="kicker">확인한 사실과 할 일</div>
       <Title>
