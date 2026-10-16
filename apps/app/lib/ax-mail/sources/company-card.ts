@@ -7,6 +7,7 @@ import { fetchMfdsCosmetics, type MfdsPage } from "./mfds-cosmetics";
 import { fetchNpsWorkplace, type NpsWorkplace } from "./nps-workplace";
 import { fetchNtsStatus, type NtsStatus } from "./nts-status";
 import { type DartCompany, type DartResult, fetchDart } from "./opendart";
+import { fetchAuditRevenue } from "./opendart-audit";
 
 /**
  * 회사 카드 — 무료 공공 API 5종을 합쳐 「이 회사가 누구인지」 한 장으로.
@@ -14,13 +15,15 @@ import { type DartCompany, type DartResult, fetchDart } from "./opendart";
  * 원칙(대표 규칙 「사실 관계 — 절대 규칙」과 같은 결):
  *  - 모든 칸은 { value, source, fetchedAt, asOf } — **어디서 언제 가져왔는지** 없이 값만 두지 않는다.
  *  - 소스가 비면 칸도 null. 다른 칸으로 추정해서 채우지 않는다(예: 직원수로 매출 추정 금지).
- *  - 매출은 DART 사업보고서에서만, 사업연도·접수번호와 함께. 비상장 중소기업은 대부분 null 이 정상이다.
+ *  - 매출은 DART 사업보고서(없으면 감사보고서 원문)에서만, 사업연도·접수번호와 함께. 비공시 중소기업은 대부분 null 이 정상이다.
  *  - 「직원수」(금융위 종업원수)와 「국민연금 가입자수」는 뜻이 달라 칸을 나눈다.
  *  - 연락처(contacts)는 도메인이 있을 때만 — 회사 홈페이지에 **공개된** 문의·제휴 메일(`./contact-email.ts`).
  *    후보마다 찾은 페이지 주소·시각이 붙는다(수신 근거 ④ public_contact 에 그대로 남긴다).
  */
 
 export type CardSource = "nts" | "fsc" | "nps" | "mfds" | "opendart" | "input";
+
+export type RevenueBasis = "business_report" | "audit_report";
 
 export interface Fact<T> {
   /** 원천 자료의 기준일(있을 때만). fetchedAt 은 「우리가 가져온 시각」 */
@@ -82,6 +85,8 @@ export interface CompanyCard {
   representative: Fact<string> | null;
   revenue: Fact<{
     amount: number;
+    /** business_report 사업보고서 주요계정 / audit_report 감사보고서 원문 */
+    basis: RevenueBasis;
     currency: string | null;
     fiscalYear: string;
     fsDiv: string | null;
@@ -369,6 +374,7 @@ export function mergeCompanyCard(
       ? fact(
           {
             amount: revenue.amount,
+            basis: revenue.basis ?? "business_report",
             currency: revenue.currency,
             fiscalYear: revenue.fiscalYear,
             fsDiv: revenue.fsDiv,
@@ -381,6 +387,34 @@ export function mergeCompanyCard(
       : null,
     sources,
     taxType: fact(nts?.taxType, "nts", fetchedAt),
+  };
+}
+
+/**
+ * 사업보고서에 매출이 없는 외감 비상장 → 감사보고서 원문에서 읽는다(연결 우선).
+ * 회사가 DART 에서 확정(company)된 경우에만 부른다 — 동명 후보(ambiguous)에는 쓰지 않는다.
+ */
+async function withAuditRevenue(
+  dart: DartResult | null,
+  options: { now: Date; signal?: AbortSignal; timeoutMs?: number }
+): Promise<DartResult | null> {
+  if (!dart?.company || dart.revenue) {
+    return dart;
+  }
+  const audit = await fetchAuditRevenue(dart.company.corpCode, options);
+  if (!audit) {
+    return dart;
+  }
+  return {
+    ...dart,
+    revenue: {
+      amount: audit.amount,
+      basis: audit.basis,
+      currency: "KRW",
+      fiscalYear: audit.fiscalYear,
+      fsDiv: audit.fsDiv,
+      receiptNo: audit.receiptNo,
+    },
   };
 }
 
@@ -412,7 +446,14 @@ export async function buildCompanyCard(
   ]);
   return mergeCompanyCard(
     query,
-    { contacts, fsc, mfds, nps, nts, opendart },
+    {
+      contacts,
+      fsc,
+      mfds,
+      nps,
+      nts,
+      opendart: await withAuditRevenue(opendart, { ...common, now }),
+    },
     now.toISOString()
   );
 }

@@ -60,6 +60,8 @@ export interface DartCompany {
 export interface DartRevenue {
   /** 원 단위 */
   amount: number;
+  /** 어디서 읽었나 — 없으면 사업보고서 주요계정 API */
+  basis?: "business_report" | "audit_report";
   currency: string | null;
   /** 사업연도 */
   fiscalYear: string;

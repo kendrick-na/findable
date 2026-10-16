@@ -541,6 +541,7 @@ describe("회사 카드 병합", () => {
       source: "opendart",
       value: {
         amount: 333_605_938_000_000,
+        basis: "business_report",
         currency: "KRW",
         fiscalYear: "2025",
         fsDiv: "CFS",
