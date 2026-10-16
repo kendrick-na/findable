@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RevenueLinkPanel } from "./revenue-link-panel";
 
 type Result =
   | { kind: "idle" }
@@ -159,6 +160,12 @@ export function IssueForm({
           value={reviewText}
         />
       </label>
+      <RevenueLinkPanel
+        auditJobId={auditJobId}
+        disabled={!validId}
+        onApply={setReviewText}
+        reviewText={reviewText}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <button
           className="min-h-9 rounded-md border border-[color:var(--findable-hairline,#23252a)] px-4 text-sm disabled:opacity-50"

@@ -16,8 +16,12 @@ const FS_LABEL = { CFS: "연결", OFS: "별도" } as const;
 
 export function revenueSourceLabel(
   revenue: NonNullable<CompanyCard["revenue"]>["value"],
-  companyName: string
+  companyName: string,
+  sourceNote?: string | null
 ): string {
+  if (revenue.basis === "input") {
+    return `${companyName} 직접 입력 ${revenue.fiscalYear}년${sourceNote ? ` (출처: ${sourceNote})` : ""}`;
+  }
   const kind = revenue.basis === "audit_report" ? "감사보고서" : "사업보고서";
   const fs =
     revenue.fsDiv === "CFS" || revenue.fsDiv === "OFS"
@@ -27,20 +31,29 @@ export function revenueSourceLabel(
   return `금융감독원 전자공시(DART) ${companyName} ${fs}${kind}(${revenue.fiscalYear}.12)${receipt} · 공시 원문 기준`;
 }
 
+export function confirmedRevenueFromValue(
+  value: NonNullable<CompanyCard["revenue"]>["value"],
+  companyName: string,
+  sourceNote?: string | null
+): ConfirmedRevenue | null {
+  const year = Number(value.fiscalYear);
+  if (!(Number.isInteger(year) && value.amount > 0)) {
+    return null;
+  }
+  return {
+    annual: value.amount,
+    source: revenueSourceLabel(value, companyName, sourceNote),
+    year,
+  };
+}
+
 export function confirmedRevenueFromCard(
   card: Pick<CompanyCard, "revenue">,
   companyName: string
 ): ConfirmedRevenue | null {
-  const fact = card.revenue;
-  const year = fact ? Number(fact.value.fiscalYear) : Number.NaN;
-  if (!(fact && Number.isInteger(year) && fact.value.amount > 0)) {
-    return null;
-  }
-  return {
-    annual: fact.value.amount,
-    source: revenueSourceLabel(fact.value, companyName),
-    year,
-  };
+  return card.revenue
+    ? confirmedRevenueFromValue(card.revenue.value, companyName)
+    : null;
 }
 
 export function revenueOpportunityFromCard(

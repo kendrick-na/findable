@@ -23,7 +23,7 @@ import { fetchAuditRevenue } from "./opendart-audit";
 
 export type CardSource = "nts" | "fsc" | "nps" | "mfds" | "opendart" | "input";
 
-export type RevenueBasis = "business_report" | "audit_report";
+export type RevenueBasis = "business_report" | "audit_report" | "input";
 
 export interface Fact<T> {
   /** 원천 자료의 기준일(있을 때만). fetchedAt 은 「우리가 가져온 시각」 */
