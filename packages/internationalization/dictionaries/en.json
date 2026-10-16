@@ -2137,7 +2137,8 @@
         "employeeCount": "Employees (pension enrolees)",
         "foundedOn": "Founded",
         "products": "Products",
-        "subIndustry": "Sub-sector"
+        "subIndustry": "Sub-sector",
+        "revenue": "Annual revenue"
       },
       "sources": {
         "venture": "Ministry of SMEs and Startups venture company list",
@@ -2272,7 +2273,30 @@
       "nextDraft": "An approved report is ready. Write the draft e-mail.",
       "nextDone": "Draft saved — check it in Gmail drafts and send it yourself.",
       "sourcesShow": "Show sources",
-      "sourcesHide": "Hide sources"
+      "sourcesHide": "Hide sources",
+      "revenue": {
+        "title": "Annual revenue",
+        "none": "Not confirmed",
+        "lookup": "Find in filings",
+        "looking": "Looking…",
+        "lookupNone": "Not found in filings. Enter it below with a source.",
+        "lookupDone": "Loaded from filings.",
+        "manual": "Enter manually",
+        "manualHide": "Close",
+        "amount": "Amount",
+        "unitEok": "100M KRW",
+        "unitWon": "KRW",
+        "source": "Source (required)",
+        "sourcePlaceholder": "e.g. NICE Information 2025",
+        "year": "Fiscal year (required)",
+        "save": "Save",
+        "saving": "Saving…",
+        "saved": "Saved.",
+        "errAmount": "Check the amount.",
+        "errYear": "Check the fiscal year.",
+        "errSource": "Enter a source of at least 2 characters (numbers without a source are not saved).",
+        "help": "Filing-based values come from FSS electronic disclosure. Manually entered values carry the source you type."
+      }
     },
     "questionPicker": {
       "clear": "Clear all",

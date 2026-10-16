@@ -251,6 +251,30 @@ export interface CompanyCardData {
   }[];
 }
 
+const WON_PER_EOK = 100_000_000;
+const WON_PER_MAN = 10_000;
+const FS_TEXT: Record<string, string> = { CFS: "연결", OFS: "별도" };
+
+/** 연매출 한 줄 — 「약 3,249.6억 원 · 2025 연결 · 공시 기준」. 공시 값은 「공시 기준」, 직접 입력은 「직접 입력」을 붙인다. */
+export function revenueFactText(v: Record<string, unknown>): string | null {
+  const amount = typeof v.amount === "number" ? v.amount : Number.NaN;
+  if (!(Number.isFinite(amount) && amount > 0)) {
+    return null;
+  }
+  let money: string;
+  if (amount >= WON_PER_EOK) {
+    money = `약 ${(amount / WON_PER_EOK).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억 원`;
+  } else {
+    money = `약 ${Math.round(amount / WON_PER_MAN).toLocaleString("ko-KR")}만 원`;
+  }
+  const year = typeof v.fiscalYear === "string" ? v.fiscalYear : "";
+  const fs = FS_TEXT[String(v.fsDiv)] ?? "";
+  const basis = v.basis === "input" ? "직접 입력" : "공시 기준";
+  return [money, [year, fs].filter(Boolean).join(" "), basis]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function objectFactText(
   field: string,
   v: Record<string, unknown>
@@ -265,6 +289,8 @@ function objectFactText(
       return String(v.domain ?? v.storeUrl ?? v.raw ?? "—");
     case "employeeCount":
       return String(v.count ?? "—");
+    case "revenue":
+      return revenueFactText(v);
     default:
       return null;
   }

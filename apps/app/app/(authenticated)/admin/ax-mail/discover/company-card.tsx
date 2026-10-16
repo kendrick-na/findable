@@ -3,12 +3,15 @@
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Checkbox } from "@repo/design-system/components/ui/checkbox";
+import { Input } from "@repo/design-system/components/ui/input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import {
   addCompaniesToSalesList,
   findCompanyContacts,
+  lookupCompanyRevenue,
+  saveCompanyRevenue,
   setSalesLeadStatus,
 } from "@/app/actions/admin/sales-discovery";
 import type {
@@ -143,6 +146,154 @@ function Facts({ card, labels }: { card: CompanyCardData; labels: Labels }) {
         )}
       </dl>
     </>
+  );
+}
+
+/** 연매출 한 줄 — 값이 있으면 위 목록에 「공시 기준/직접 입력」과 함께 보이고, 여기서는 찾기·입력만 한다. */
+function RevenueRow({
+  card,
+  labels,
+}: {
+  card: CompanyCardData;
+  labels: Labels;
+}) {
+  const router = useRouter();
+  const text = labels.revenue;
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [amount, setAmount] = useState("");
+  const [unit, setUnit] = useState<"eok" | "won">("eok");
+  const [source, setSource] = useState("");
+  const [year, setYear] = useState(String(new Date().getFullYear() - 1));
+  const [pending, startTransition] = useTransition();
+  const hasRevenue = card.facts.some((f) => f.field === "revenue");
+
+  const lookup = () =>
+    startTransition(async () => {
+      try {
+        const result = await lookupCompanyRevenue(card.company.id);
+        if (!result.ok) {
+          setMessage(labels.errors[result.error]);
+          return;
+        }
+        setMessage(result.found ? text.lookupDone : text.lookupNone);
+        setOpen(!result.found);
+        router.refresh();
+      } catch {
+        setMessage(labels.errors.unexpected);
+      }
+    });
+
+  const save = () =>
+    startTransition(async () => {
+      try {
+        const result = await saveCompanyRevenue({
+          amount: Number(amount.replaceAll(",", "")),
+          companyId: card.company.id,
+          fiscalYear: Number(year),
+          source,
+          unit,
+        });
+        if (result.ok) {
+          setMessage(text.saved);
+          setOpen(false);
+          setAmount("");
+          setSource("");
+          router.refresh();
+          return;
+        }
+        const reason = "reason" in result ? result.reason : null;
+        const reasonText = {
+          amount: text.errAmount,
+          source: text.errSource,
+          year: text.errYear,
+        };
+        setMessage(reason ? reasonText[reason] : labels.errors[result.error]);
+      } catch {
+        setMessage(labels.errors.unexpected);
+      }
+    });
+
+  return (
+    <div className="mt-3 border-[color:var(--findable-hairline,#23252a)] border-t pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={`text-xs ${subtle}`}>
+          {text.title}
+          {hasRevenue ? "" : ` · ${text.none}`}
+        </span>
+        <span className="flex gap-1.5">
+          <Button
+            disabled={pending}
+            onClick={lookup}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {pending ? text.looking : text.lookup}
+          </Button>
+          <Button
+            aria-expanded={open}
+            disabled={pending}
+            onClick={() => setOpen((v) => !v)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {open ? text.manualHide : text.manual}
+          </Button>
+        </span>
+      </div>
+      {message && (
+        <output className={`mt-2 block text-xs ${subtle}`}>{message}</output>
+      )}
+      {open && (
+        <div className="mt-2 space-y-2" data-testid="revenue-form">
+          <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2">
+            <Input
+              aria-label={text.amount}
+              inputMode="decimal"
+              onChange={(event) => setAmount(event.target.value)}
+              placeholder={text.amount}
+              value={amount}
+            />
+            <select
+              aria-label={text.amount}
+              className="rounded-md border border-[color:var(--findable-hairline,#23252a)] bg-black/20 px-2 text-sm"
+              onChange={(event) => setUnit(event.target.value as "eok" | "won")}
+              value={unit}
+            >
+              <option value="eok">{text.unitEok}</option>
+              <option value="won">{text.unitWon}</option>
+            </select>
+          </div>
+          <Input
+            aria-label={text.source}
+            maxLength={80}
+            onChange={(event) => setSource(event.target.value)}
+            placeholder={`${text.source} — ${text.sourcePlaceholder}`}
+            value={source}
+          />
+          <Input
+            aria-label={text.year}
+            inputMode="numeric"
+            onChange={(event) => setYear(event.target.value)}
+            placeholder={text.year}
+            value={year}
+          />
+          <Button
+            disabled={
+              pending || !amount.trim() || !source.trim() || !year.trim()
+            }
+            onClick={save}
+            size="sm"
+            type="button"
+          >
+            {pending ? text.saving : text.save}
+          </Button>
+          <p className={`text-xs ${subtle}`}>{text.help}</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -573,6 +724,7 @@ export function CompanyCard({
 
       <section className={panel}>
         <Facts card={card} labels={labels} />
+        <RevenueRow card={card} labels={labels} />
         <p className={`mt-3 text-xs ${subtle}`}>
           {labels.lastMeasure}:{" "}
           {card.lastJob

@@ -821,7 +821,9 @@ describe("④ 게이트 — 관리자 · 플래그 (소스 검사)", () => {
       "addCompaniesToSalesList",
       "findCompanyContacts",
       "ingestDiscoverySources",
+      "lookupCompanyRevenue",
       "measureCompany",
+      "saveCompanyRevenue",
       "saveSegment",
       "setSalesLeadStatus",
     ]);

@@ -2137,7 +2137,8 @@
         "employeeCount": "직원 수(국민연금 가입자)",
         "foundedOn": "설립일",
         "products": "주생산품·취급품목",
-        "subIndustry": "세부 분야"
+        "subIndustry": "세부 분야",
+        "revenue": "연매출"
       },
       "sources": {
         "venture": "중소벤처기업부 벤처기업명단",
@@ -2272,7 +2273,30 @@
       "nextDraft": "발송 승인된 리포트가 있어요. 메일 초안을 쓰세요.",
       "nextDone": "메일 초안까지 끝났어요 — Gmail 초안함에서 확인한 뒤 직접 보내세요.",
       "sourcesShow": "출처 보기",
-      "sourcesHide": "출처 숨기기"
+      "sourcesHide": "출처 숨기기",
+      "revenue": {
+        "title": "연매출",
+        "none": "확인 안 됨",
+        "lookup": "공시에서 찾기",
+        "looking": "찾는 중…",
+        "lookupNone": "공시에서 찾지 못했어요. 아래에 출처와 함께 직접 입력해 주세요.",
+        "lookupDone": "공시에서 가져왔어요.",
+        "manual": "직접 입력",
+        "manualHide": "입력 닫기",
+        "amount": "금액",
+        "unitEok": "억 원",
+        "unitWon": "원",
+        "source": "출처 (필수)",
+        "sourcePlaceholder": "예: NICE평가정보 2025",
+        "year": "사업연도 (필수)",
+        "save": "저장",
+        "saving": "저장 중…",
+        "saved": "저장했어요.",
+        "errAmount": "금액을 다시 확인해 주세요.",
+        "errYear": "사업연도를 다시 확인해 주세요.",
+        "errSource": "출처를 2자 이상 적어 주세요(출처 없는 숫자는 저장하지 않아요).",
+        "help": "공시 기준 값은 금융감독원 전자공시에서 가져온 값입니다. 직접 입력한 값은 입력한 출처가 그대로 붙습니다."
+      }
     },
     "questionPicker": {
       "clear": "모두 해제",

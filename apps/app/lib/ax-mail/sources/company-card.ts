@@ -394,7 +394,7 @@ export function mergeCompanyCard(
  * 사업보고서에 매출이 없는 외감 비상장 → 감사보고서 원문에서 읽는다(연결 우선).
  * 회사가 DART 에서 확정(company)된 경우에만 부른다 — 동명 후보(ambiguous)에는 쓰지 않는다.
  */
-async function withAuditRevenue(
+export async function withAuditRevenue(
   dart: DartResult | null,
   options: { now: Date; signal?: AbortSignal; timeoutMs?: number }
 ): Promise<DartResult | null> {

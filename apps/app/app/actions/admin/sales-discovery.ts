@@ -30,7 +30,15 @@ import {
   isEmptyFilter,
   SALES_LEAD_STATUSES,
 } from "@/lib/ax-mail/discovery/view";
+import { withAuditRevenue } from "@/lib/ax-mail/sources/company-card";
+import {
+  disclosedRevenueRow,
+  type ManualRevenueUnit,
+  parseManualRevenue,
+  type RevenueFactRow,
+} from "@/lib/ax-mail/sources/company-revenue";
 import { findContactEmails } from "@/lib/ax-mail/sources/contact-email";
+import { fetchDart } from "@/lib/ax-mail/sources/opendart";
 import { runMeasureOne } from "./measure";
 
 /**
@@ -359,4 +367,129 @@ export async function ingestDiscoverySources(): Promise<
   });
   revalidatePath(DISCOVER_PATH);
   return { ok: true, results: guarded.value };
+}
+
+// ── 연매출(회사 카드 한 줄) ────────────────────────────────────────────────
+
+function revenueUpsertArgs(companyId: string, row: RevenueFactRow, now: Date) {
+  const key = {
+    asOf: row.asOf,
+    companyId,
+    field: row.field,
+    source: row.source,
+  };
+  const value = row.value as unknown as Prisma.InputJsonValue;
+  return {
+    create: { ...key, fetchedAt: now, sourceRef: row.sourceRef, value },
+    update: { fetchedAt: now, sourceRef: row.sourceRef, value },
+    where: { companyId_field_source_asOf: key },
+  };
+}
+
+export type RevenueActionResult =
+  | { ok: true; found: boolean }
+  | Failure
+  | { ok: false; error: "invalid"; reason: "amount" | "year" | "source" };
+
+/**
+ * [공시에서 찾기] — DART 사업보고서 → 없으면 감사보고서 원문(연결 우선). 찾으면 CompanyFact(revenue)로 저장.
+ * 못 찾으면 아무것도 쓰지 않는다(found:false) — 화면이 직접 입력을 안내한다.
+ */
+export async function lookupCompanyRevenue(
+  companyId: string
+): Promise<RevenueActionResult> {
+  await requireAdmin();
+  if (!idSchema.safeParse(companyId).success) {
+    return { ok: false, error: "invalid" };
+  }
+  const guarded = await withDiscovery(async () => {
+    const company = await database.company.findUnique({
+      where: { id: companyId },
+      select: { businessNumber: true, legalName: true },
+    });
+    if (!company) {
+      return { kind: "not_found" as const };
+    }
+    const now = new Date();
+    const dart = await withAuditRevenue(
+      await fetchDart(
+        { businessNumber: company.businessNumber, name: company.legalName },
+        { now }
+      ),
+      { now }
+    );
+    if (!dart?.revenue) {
+      return { kind: "none" as const };
+    }
+    await database.companyFact.upsert(
+      revenueUpsertArgs(companyId, disclosedRevenueRow(dart.revenue), now)
+    );
+    return { kind: "saved" as const };
+  });
+  if (guarded.state !== "ready") {
+    return blocked(guarded.state);
+  }
+  if (guarded.value.kind === "not_found") {
+    return { ok: false, error: "not_found" };
+  }
+  revalidatePath(DISCOVER_PATH);
+  return { ok: true, found: guarded.value.kind === "saved" };
+}
+
+interface ManualRevenueInput {
+  amount: number;
+  companyId: string;
+  fiscalYear: number;
+  source: string;
+  unit: ManualRevenueUnit;
+}
+
+const manualRevenueSchema = z.object({
+  amount: z.number().finite(),
+  companyId: idSchema,
+  fiscalYear: z.number().int(),
+  source: z.string(),
+  unit: z.enum(["eok", "won"]),
+});
+
+/** 직접 입력 — 금액·출처·사업연도 셋 다 필수(parseManualRevenue). 입력자·시각은 로그에 남긴다(값에는 개인정보 없음). */
+export async function saveCompanyRevenue(
+  input: ManualRevenueInput
+): Promise<RevenueActionResult> {
+  const adminId = await requireAdmin();
+  const parsed = manualRevenueSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "invalid" };
+  }
+  const now = new Date();
+  const manual = parseManualRevenue(parsed.data, now);
+  if (!manual.ok) {
+    return { ok: false, error: "invalid", reason: manual.reason };
+  }
+  const guarded = await withDiscovery(async () => {
+    const exists = await database.company.findUnique({
+      where: { id: parsed.data.companyId },
+      select: { id: true },
+    });
+    if (!exists) {
+      return false;
+    }
+    await database.companyFact.upsert(
+      revenueUpsertArgs(parsed.data.companyId, manual.row, now)
+    );
+    return true;
+  });
+  if (guarded.state !== "ready") {
+    return blocked(guarded.state);
+  }
+  if (!guarded.value) {
+    return { ok: false, error: "not_found" };
+  }
+  log.info("[sales-discovery] revenue entered", {
+    adminId,
+    companyId: parsed.data.companyId,
+    fiscalYear: manual.row.asOf,
+  });
+  revalidatePath(DISCOVER_PATH);
+  return { ok: true, found: true };
 }
