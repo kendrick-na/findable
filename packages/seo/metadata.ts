@@ -260,7 +260,12 @@ export const createMetadata = ({
   //     (그 실측이 이번에 파일을 `app/` 루트로 옮기려던 시도를 막아줬다 — 옮기기만
   //      하면 이 줄의 URL 이 404 가 됐다.)
   // ──────────────────────────────────────────────────────────────────
-  const ogImageUrl = image ?? `${siteOrigin}/opengraph-image.png`;
+  // 🔴 2026-10-16 기본 공유 이미지를 **새 파일명** `og-default-v2.png` 로 바꿨다.
+  //   `opengraph-image.png` 는 next-forge 템플릿 그림이 9/8 병합에서 되살아나 라이브로 나갔다
+  //   (9/6 에 한 번 고친 것이 `dc41bba0` 병합으로 되돌아감). 카카오·페이스북은 이미지 **주소** 로
+  //   미리보기를 오래 캐시하므로, 주소를 바꿔야 재수집 시 확실히 새 그림이 나온다.
+  //   옛 `opengraph-image.png` 도 같은 새 그림으로 덮어써 어디에도 템플릿이 남지 않게 했다.
+  const ogImageUrl = image ?? `${siteOrigin}/og-default-v2.png`;
 
   if (metadata.openGraph) {
     metadata.openGraph.images = [
