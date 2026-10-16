@@ -25,13 +25,13 @@ describe("public search identity contract", () => {
     expect(home).toContain("description: dictionary.web.home.meta.description");
     expect(home).toContain("https://www.linkedin.com/company/findableglobal/");
     expect(home).toContain("https://medium.com/@findableglobal");
-    expect(home).toContain('logo: `${siteOrigin}/apple-icon.png`');
+    expect(home).toContain("logo: `${siteOrigin}/apple-icon.png`");
   });
 
   it("advertises only a sitemap with actual URLs when no news was published", () => {
     const robots = read("apps/web/app/robots.ts");
-    expect(robots).toContain('sitemap: `${publicOrigin}/sitemap.xml`');
-    expect(robots).not.toContain('`${publicOrigin}/news-sitemap.xml`');
+    expect(robots).toContain("sitemap: `${publicOrigin}/sitemap.xml`");
+    expect(robots).not.toContain("`${publicOrigin}/news-sitemap.xml`");
   });
 
   it("keeps test and customer publishers out of Findable's official hub", () => {
@@ -47,6 +47,12 @@ describe("public search identity contract", () => {
     expect(read("apps/web/app/sitemap.ts")).not.toContain(
       'path: "/ai-instructions"'
     );
+  });
+
+  it("points the public AI fact sheet at the official Korean and English intro posts", () => {
+    const facts = read("apps/web/app/ai-instructions/route.ts");
+    expect(facts).toContain("/ko/p/findable/what-is-findable");
+    expect(facts).toContain("/en/p/findable/what-is-findable");
   });
 
   it("does not redirect the published English article to a nonexistent slug", () => {
