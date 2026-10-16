@@ -32,17 +32,17 @@ export const V12_TEMPLATE_MD5 = "cac3c89ebdc7b4ba1f8d6e46dbe4f3f7";
 export const INTERNAL_STATUS_NOTE = "내부 시안 · 외부 발송 금지";
 /** 마지막 행동 — 메일 본문의 「15분 통화」와 같은 말이어야 한다. */
 export const CALL_CTA = "15분 결과 설명 통화 요청하기";
-const CONTACT_EMAIL = "contact@findable.co.kr";
+export const CONTACT_EMAIL = "contact@findable.co.kr";
 /** 대표 확정 E7(2026-10-14 체크리스트): 20분 결과 리뷰 문구와 연락처(전화 포함). `display.cta_v2` 로만 켠다 — 기존 발행본은 그대로. */
 export const CALL_CTA_V2 = "20분 결과 리뷰 요청 →";
 export const CTA_V2_HEADLINE = "이 결과를 20분 함께 확인해 볼까요?";
-const CONTACT_PHONE = "010-8958-2547";
+export const CONTACT_PHONE = "010-8958-2547";
 
 /**
  * 원본 템플릿은 autoescape=False 라 문구 속 `<b>`·`<em>`·`<br>` 가 서식으로 찍힌다.
  * 웹은 DB 값이므로 기존 리포트와 같은 safeInline(허용 태그만)으로 같은 결과를 낸다.
  */
-const rich = (html: string | undefined) => ({
+export const rich = (html: string | undefined) => ({
   dangerouslySetInnerHTML: { __html: safeInline(plain(html ?? "")) },
 });
 
@@ -77,8 +77,8 @@ function questionLangLabelOf(enCount: number, total: number): string {
 export function plain(text: string): string {
   return PLAIN_TERMS.reduce((t, [re, to]) => t.replace(re, to), text);
 }
-const A = "/report-assets";
-const pad2 = (n: number) => String(n).padStart(2, "0");
+export const A = "/report-assets";
+export const pad2 = (n: number) => String(n).padStart(2, "0");
 const TRAILING_ZERO_RE = /\.0$/;
 
 /** 원 단위 금액 → 「4,235만 원」「72.6억 원」. */
@@ -263,13 +263,13 @@ interface RevenueOpportunity {
   support?: { label: string; monthly: number; note: string };
 }
 
-interface Cfg {
+export interface Cfg {
   audit_id: string;
   brand: string;
   brand_en?: string;
   category_share?: CategoryShare;
   causes: { h: string; p: string }[];
-  display?: { cta_v2?: boolean; fractions?: boolean };
+  display?: { cta_v2?: boolean; fractions?: boolean; layout_v2?: boolean };
   domain: string;
   headlines?: Record<string, string>;
   insights_accuracy: string[];
@@ -299,14 +299,16 @@ const engineRank = (id: string) => {
   return i === -1 ? ENGINE_ORDER.length : i;
 };
 /** 모든 쪽에서 AI 순서를 같게(ChatGPT→Claude→Perplexity→Gemini…). */
-const byEngine = <T extends { engine?: string; id?: string }>(a: T, b: T) =>
-  engineRank(a.engine ?? a.id ?? "") - engineRank(b.engine ?? b.id ?? "");
+export const byEngine = <T extends { engine?: string; id?: string }>(
+  a: T,
+  b: T
+) => engineRank(a.engine ?? a.id ?? "") - engineRank(b.engine ?? b.id ?? "");
 
-function Mono({ e }: { e: string }) {
+export function Mono({ e }: { e: string }) {
   return <span className="mono">{ENGINE_MONO[e as EngineId]}</span>;
 }
 
-function Head({ sec }: { sec: string }) {
+export function Head({ sec }: { sec: string }) {
   return (
     <div className="hd">
       <img alt="Findable" src={`${A}/Findable.png`} />
@@ -318,11 +320,11 @@ function Head({ sec }: { sec: string }) {
   );
 }
 
-function Dot() {
+export function Dot() {
   return <span className="dot">.</span>;
 }
 
-function Foot({
+export function Foot({
   c,
   n,
   total,
@@ -348,8 +350,8 @@ function Foot({
   );
 }
 
-const ST_NAME = { ok: "양호", warn: "보완 필요", bad: "부족" } as const;
-const PLAN_GROUPS: [string, string, string][] = [
+export const ST_NAME = { ok: "양호", warn: "보완 필요", bad: "부족" } as const;
+export const PLAN_GROUPS: [string, string, string][] = [
   ["P0", "이번 주", "바로 고칠 것"],
   ["P1", "20일 안", "외부에 알릴 것"],
   ["P2", "다시 측정", "효과 확인"],
@@ -1040,7 +1042,14 @@ export function ClientReportV12({
             <Dot />
           </h1>
           <table
-            className={`tbl topics${topics.length > 9 ? "dense" : ""}${topics.length > 14 ? "denser" : ""}`}
+            className={[
+              "tbl",
+              "topics",
+              topics.length > 9 ? "dense" : "",
+              topics.length > 14 ? "denser" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             style={{ marginTop: "7mm" }}
           >
             <tbody>
