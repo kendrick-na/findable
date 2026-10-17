@@ -70,11 +70,16 @@ function makeErrorResponse(
 function makeEmptySearchResponse(
   engineId: EngineId,
   prompt: string,
-  durationMs: number
+  durationMs: number,
+  options: { includeQuery?: boolean } = {}
 ): EngineResponse {
   return {
     engineId,
-    rawResponse: `검색 결과가 없습니다.\n질의: ${prompt.slice(0, 200)}`,
+    // 질의를 글에 넣지 않는 쪽(다음)은 브랜드 이름 질문의 이름이 "근거 글"에 들어가 언급으로 읽히는 일을 막는다.
+    rawResponse:
+      options.includeQuery === false
+        ? "검색 결과가 없습니다."
+        : `검색 결과가 없습니다.\n질의: ${prompt.slice(0, 200)}`,
     brandMentioned: false,
     mentionPosition: null,
     mentionListSize: null,
@@ -347,6 +352,8 @@ export const daumAdapter: EngineAdapter = async (query) => {
 
   try {
     // 카카오 검색 헬퍼 — 주어진 쿼리로 web·blog·cafe 3개 동시 호출.
+    // 요청이 실제로 실패한 횟수(HTTP 오류·네트워크 오류). 0 이면 "검색은 정상인데 결과가 0건"이다(2026-10-18 ⑤).
+    let kakaoFailures = 0;
     const searchKakao = async (q: string): Promise<DaumSearchDoc[]> => {
       const endpoints = ["web", "blog", "cafe"];
       const res = await Promise.allSettled(
@@ -357,6 +364,7 @@ export const daumAdapter: EngineAdapter = async (query) => {
             signal: query.signal,
           });
           if (!resp.ok) {
+            kakaoFailures += 1;
             return [];
           }
           const data = (await resp.json()) as { documents?: DaumSearchDoc[] };
@@ -366,6 +374,7 @@ export const daumAdapter: EngineAdapter = async (query) => {
       if (query.signal?.aborted) {
         throw query.signal.reason ?? new DOMException("Aborted", "AbortError");
       }
+      kakaoFailures += res.filter((r) => r.status === "rejected").length;
       return res.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
     };
 
@@ -384,6 +393,18 @@ export const daumAdapter: EngineAdapter = async (query) => {
     ]);
 
     if (promptDocs.length === 0 && brandDocs.length === 0) {
+      // 검색 요청이 모두 정상이었는데 문서가 0건이면 "측정 실패"가 아니라 "다음에서 안 나옴(미노출)"이다.
+      //   (진단: 측정 못 함 칸 5개가 전부 다음 이름 질문의 0건 응답이었다.) 요청이 하나라도 실패했으면 예전처럼 오류.
+      if (kakaoFailures === 0) {
+        return makeEmptySearchResponse(
+          "daum",
+          query.prompt,
+          Date.now() - start,
+          {
+            includeQuery: false,
+          }
+        );
+      }
       return makeErrorResponse(
         "daum",
         "Daum/Kakao 검색 결과 없음",
