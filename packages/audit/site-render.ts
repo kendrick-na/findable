@@ -30,6 +30,20 @@ export function isSiteRenderEnabled(
   return keys().SITE_RENDER_ENABLED === true && !isVercelPreview(env);
 }
 
+/**
+ * 지금 렌더링이 왜 켜져 있거나 꺼져 있는지(로그·점검용). 측정을 로컬에서 돌릴 때 운영과 설정이 달라
+ * 글자가 적은 JS 사이트가 불리해지는 것을 **눈에 보이게** 하려는 용도다(2026-10-18, 진단 ID I-05 등).
+ *  - enabled: 켜짐 · flag_off: 플래그 미설정 · vercel_preview: 켜져 있어도 Preview 에서는 안 돈다.
+ */
+export function siteRenderStatus(
+  env: Record<string, string | undefined> = process.env
+): "enabled" | "flag_off" | "vercel_preview" {
+  if (keys().SITE_RENDER_ENABLED !== true) {
+    return "flag_off";
+  }
+  return isVercelPreview(env) ? "vercel_preview" : "enabled";
+}
+
 /** 요청 주소가 사설망·로컬이면 true(브라우저가 내부망을 찌르지 못하게). */
 export function isBlockedRequestUrl(raw: string): boolean {
   try {
