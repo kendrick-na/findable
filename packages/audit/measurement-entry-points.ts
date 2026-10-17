@@ -123,4 +123,12 @@ export const MEASUREMENT_ENTRY_POINTS: readonly MeasurementEntryPoint[] = [
       reason: "브랜드를 만들 뿐 측정은 시작하지 않는다. 측정은 A 를 거친다",
     },
   },
+  {
+    code: "I",
+    file: "apps/app/lib/audit-queue/worker.ts",
+    label:
+      "입장 관리 일꾼 — 상한 때문에 대기하던 측정을 시작한다(A 가 만든 job, 시작 직전에 준비도를 다시 읽는다)",
+    sites: ["runAuditJob"],
+    policy: { policy: "gated" },
+  },
 ];
