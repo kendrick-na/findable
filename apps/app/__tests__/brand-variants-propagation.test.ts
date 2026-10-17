@@ -6,6 +6,11 @@ const START_TRACKING = readFileSync(
   join(process.cwd(), "app/actions/brand/start-tracking.ts"),
   "utf8"
 );
+// 러너 입력은 start-tracking 과 대기 줄 일꾼이 같은 함수로 만든다(안정성 U2).
+const RUN_INPUT_BUILDER = readFileSync(
+  join(process.cwd(), "lib/audit-queue/run-input.ts"),
+  "utf8"
+);
 const AUTO_REFRESH = readFileSync(
   join(process.cwd(), "app/api/cron/auto-refresh-tracking/route.ts"),
   "utf8"
@@ -34,7 +39,8 @@ const DATA_PANEL = readFileSync(
 describe("브랜드 별칭과 운영자 리포트 경로", () => {
   it("수동 재측정이 저장된 브랜드 별칭을 러너에 전달한다", () => {
     expect(START_TRACKING).toContain("entityVariants: true");
-    expect(START_TRACKING).toContain("brandVariants:");
+    expect(START_TRACKING).toContain("buildOrgRunInput(");
+    expect(RUN_INPUT_BUILDER).toContain("brandVariants:");
   });
 
   it("앱 자동 재측정도 저장된 브랜드 별칭을 러너에 전달한다", () => {
