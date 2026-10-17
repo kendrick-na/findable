@@ -1,7 +1,7 @@
 import { log } from "@repo/observability/log";
 import { isAllowedByRobots, parseRobotsDisallow } from "./brand-catalog";
 import { assertPublicUrl, normalizePublicUrl } from "./public-url-security";
-import { renderSiteHtml } from "./site-render";
+import { renderSiteHtml, siteRenderStatus } from "./site-render";
 import { servicePageUrls } from "./site-structure";
 
 /**
@@ -13,7 +13,16 @@ import { servicePageUrls } from "./site-structure";
  * 판정·측정 코드는 건드리지 않으려고 이 모듈은 **질문 제안 경로만** 쓴다.
  */
 
-const FETCH_TIMEOUT_MS = 8000;
+/**
+ * 시간 제한은 단계별로 따로 둔다(2026-10-18). 예전엔 홈·robots·사이트맵·서비스 쪽이 **한 개의 8초**를 나눠 썼다 —
+ * 홈페이지 한 쪽이 7.8MB(이미지가 글 안에 박힘)라 내려받는 데만 11초가 걸려 전부 포기됐다(진단 ID I-27).
+ * 홈은 앞 500KB만 읽고 끊으므로(`readLimitedText`) 큰 페이지도 몇 초 안에 끝난다.
+ */
+const HOME_TIMEOUT_MS = 8000;
+const AUX_TIMEOUT_MS = 4000;
+const EXTRA_PAGE_TIMEOUT_MS = 4000;
+/** 모든 단계를 합친 상한 — 단계마다 제한이 있어도 전체가 끝없이 늘어나지 않게 한다. */
+const OVERALL_TIMEOUT_MS = 16_000;
 const MAX_REDIRECTS = 3;
 const MAX_BYTES = 500_000;
 const USER_AGENT =
@@ -181,6 +190,47 @@ export function extractSiteProfile(html: string): SiteProfile {
   };
 }
 
+/**
+ * 응답 본문을 앞 `maxBytes` 만 읽고 **그 자리에서 끊는다**(나머지는 받지 않는다).
+ * 예전엔 `arrayBuffer()` 로 통째로 받은 뒤 잘라서, 7.8MB 페이지는 시간 제한 안에 끝나지 않았다.
+ * 본문 스트림이 없으면(테스트·특수 응답) 기존처럼 통째로 읽고 자른다.
+ */
+export async function readLimitedText(
+  response: {
+    arrayBuffer(): Promise<ArrayBuffer>;
+    body: { getReader(): ReadableStreamDefaultReader<Uint8Array> } | null;
+  },
+  maxBytes: number
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const buffer = await response.arrayBuffer();
+    return new TextDecoder().decode(buffer.slice(0, maxBytes));
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (total < maxBytes) {
+    const { done, value } = await reader.read();
+    if (done || !value) {
+      break;
+    }
+    chunks.push(value);
+    total += value.byteLength;
+  }
+  await reader.cancel().catch(() => undefined);
+  const merged = new Uint8Array(Math.min(total, maxBytes));
+  let offset = 0;
+  for (const chunk of chunks) {
+    const room = merged.byteLength - offset;
+    if (room <= 0) {
+      break;
+    }
+    merged.set(chunk.subarray(0, room), offset);
+    offset += Math.min(chunk.byteLength, room);
+  }
+  return new TextDecoder().decode(merged);
+}
+
 async function fetchText(
   initial: URL,
   signal: AbortSignal,
@@ -220,14 +270,18 @@ async function fetchText(
     ) {
       throw new Error("NOT_HTML");
     }
-    const buffer = await response.arrayBuffer();
-    return new TextDecoder().decode(buffer.slice(0, MAX_BYTES));
+    return await readLimitedText(response, MAX_BYTES);
   }
   throw new Error("REDIRECT_FAILED");
 }
 
 const orNull = async (task: Promise<string>): Promise<string | null> =>
   await task.catch(() => null);
+
+/** 단계별 제한(`ms`)과 전체 상한(`overall`) 중 먼저 오는 쪽에서 멈추는 신호. */
+function stageSignal(ms: number, overall: AbortSignal): AbortSignal {
+  return AbortSignal.any([AbortSignal.timeout(ms), overall]);
+}
 
 /** 홈 프로필에 서비스 페이지 프로필을 합친다(순수). 글자 수 상한을 지킨다. */
 export function mergeSiteProfiles(
@@ -279,18 +333,26 @@ export function alternateOrigin(origin: string): string {
 /** 홈을 읽는다. 연결 자체가 안 되면(주소 해석 실패 등) apex ↔ www 짝 주소로 한 번 더 시도한다. */
 async function fetchHome(
   origin: string,
-  signal: AbortSignal
+  overall: AbortSignal
 ): Promise<{ html: string; origin: string }> {
   try {
     return {
-      html: await fetchText(new URL("/", origin), signal, "html"),
+      html: await fetchText(
+        new URL("/", origin),
+        stageSignal(HOME_TIMEOUT_MS, overall),
+        "html"
+      ),
       origin,
     };
   } catch (error) {
     const alt = alternateOrigin(origin);
     try {
       return {
-        html: await fetchText(new URL("/", alt), signal, "html"),
+        html: await fetchText(
+          new URL("/", alt),
+          stageSignal(HOME_TIMEOUT_MS, overall),
+          "html"
+        ),
         origin: alt,
       };
     } catch {
@@ -308,11 +370,23 @@ export async function readSiteProfile(
 ): Promise<SiteProfile | null> {
   try {
     const requested = normalizePublicUrl(domain).origin;
-    const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-    const { html: homeHtml, origin } = await fetchHome(requested, signal);
+    const overall = AbortSignal.timeout(OVERALL_TIMEOUT_MS);
+    const { html: homeHtml, origin } = await fetchHome(requested, overall);
     const [robots, sitemap] = await Promise.all([
-      orNull(fetchText(new URL("/robots.txt", origin), signal, "text")),
-      orNull(fetchText(new URL("/sitemap.xml", origin), signal, "text")),
+      orNull(
+        fetchText(
+          new URL("/robots.txt", origin),
+          stageSignal(AUX_TIMEOUT_MS, overall),
+          "text"
+        )
+      ),
+      orNull(
+        fetchText(
+          new URL("/sitemap.xml", origin),
+          stageSignal(AUX_TIMEOUT_MS, overall),
+          "text"
+        )
+      ),
     ]);
     const disallow = robots ? parseRobotsDisallow(robots) : [];
     if (!isAllowedByRobots("/", disallow)) {
@@ -322,6 +396,14 @@ export async function readSiteProfile(
     let home = extractSiteProfile(homeHtml);
     // 일반 읽기로 글자가 거의 없으면(JS 로 그리는 사이트) 브라우저로 그려 한 번 더 읽는다(꺼져 있으면 건너뜀).
     if (home.thin) {
+      const renderStatus = siteRenderStatus();
+      if (renderStatus !== "enabled") {
+        // 운영은 켜져 있는데 로컬 측정은 꺼져 있던 불일치를 로그에서 바로 찾게 한다(진단 ID I-05).
+        log.info("audit.site_profile.thin_without_render", {
+          domain,
+          renderStatus,
+        });
+      }
       const rendered = await renderSiteHtml(origin);
       if (rendered) {
         const renderedProfile = extractSiteProfile(rendered);
@@ -341,7 +423,15 @@ export async function readSiteProfile(
       .ko.filter((url) => isAllowedByRobots(new URL(url).pathname, disallow))
       .slice(0, MAX_EXTRA_PAGES);
     const pages = await Promise.all(
-      urls.map((url) => orNull(fetchText(new URL(url), signal, "html")))
+      urls.map((url) =>
+        orNull(
+          fetchText(
+            new URL(url),
+            stageSignal(EXTRA_PAGE_TIMEOUT_MS, overall),
+            "html"
+          )
+        )
+      )
     );
     return mergeSiteProfiles(
       home,

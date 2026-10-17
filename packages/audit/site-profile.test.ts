@@ -8,6 +8,7 @@ import {
   alternateOrigin,
   extractSiteProfile,
   mergeSiteProfiles,
+  readLimitedText,
   THIN_SITE_TEXT_CHARS,
 } from "./site-profile";
 
@@ -103,5 +104,80 @@ describe("alternateOrigin — apex ↔ www", () => {
     expect(alternateOrigin("http://example.com:8080")).toBe(
       "http://www.example.com:8080"
     );
+  });
+});
+
+describe("readLimitedText — 큰 페이지는 앞부분만 읽고 끊는다(I-27: 7.8MB 홈페이지)", () => {
+  const stream = (chunkBytes: number, chunks: number) => {
+    let pulled = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= chunks) {
+          controller.close();
+          return;
+        }
+        pulled += 1;
+        controller.enqueue(new Uint8Array(chunkBytes).fill(97)); // 'a'
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    return {
+      body,
+      arrayBuffer: () => Promise.reject(new Error("통째로 읽으면 안 된다")),
+      state: () => ({ cancelled, pulled }),
+    };
+  };
+
+  it("상한(500KB)까지만 읽고 스트림을 취소한다 — 나머지는 받지 않는다", async () => {
+    const res = stream(64 * 1024, 120); // 7.5MB 분량
+    const text = await readLimitedText(res, 500_000);
+    expect(text.length).toBe(500_000);
+    const { cancelled, pulled } = res.state();
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(20); // 8개 남짓만 받고 끊음(120개 전부 아님)
+  });
+
+  it("상한보다 작은 페이지는 통째로 같은 글자(정상 사이트 결과 불변)", async () => {
+    const html = "<html><title>작은 페이지</title></html>";
+    const bytes = new TextEncoder().encode(html);
+    const res = {
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes.subarray(0, 10));
+          controller.enqueue(bytes.subarray(10));
+          controller.close();
+        },
+      }),
+      arrayBuffer: () => Promise.reject(new Error("unused")),
+    };
+    expect(await readLimitedText(res, 500_000)).toBe(html);
+  });
+
+  it("본문 스트림이 없으면 예전처럼 통째로 읽고 자른다", async () => {
+    const bytes = new TextEncoder().encode("가나다라마바사");
+    const res = {
+      body: null,
+      arrayBuffer: () => Promise.resolve(bytes.buffer as ArrayBuffer),
+    };
+    expect(await readLimitedText(res, 500_000)).toBe("가나다라마바사");
+  });
+
+  it("한글이 상한 경계에서 잘려도 깨진 글자 하나로 끝난다(오류 없음)", async () => {
+    const bytes = new TextEncoder().encode("가".repeat(10)); // 30바이트
+    const res = {
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      }),
+      arrayBuffer: () => Promise.reject(new Error("unused")),
+    };
+    const text = await readLimitedText(res, 10);
+    expect(text.startsWith("가가가")).toBe(true);
+    expect(text.length).toBeLessThanOrEqual(5);
   });
 });
