@@ -1,4 +1,5 @@
 import { type AuditStatus, database } from "@repo/database";
+import { isStabilityFlagOn } from "./stability-flags";
 
 export const AUDIT_JOB_STALE_AFTER_MS = 6 * 60 * 1000;
 export const AUDIT_JOB_QUEUE_STALE_AFTER_MS = 30 * 60 * 1000;
@@ -108,6 +109,23 @@ export async function reconcileStaleAuditJob(job: {
       createdAt: { lt: staleBefore },
     };
   })();
+  // U3(STABILITY_RESUME_STUCK_ENABLED): 받아 둔 답이 있는 processing 은 실패 대신 이어가기 대기로
+  //   (정리 cron 과 같은 판정·같은 조건). 꺼짐이면 이 블록은 실행되지 않아 기존과 같다.
+  //   순환 import 를 피하려고 켜졌을 때만 동적으로 불러온다.
+  if (
+    job.status === "processing" &&
+    isStabilityFlagOn("STABILITY_RESUME_STUCK_ENABLED")
+  ) {
+    const { resumeStuckAuditJob } = await import("./resume-stuck");
+    const resumed = await resumeStuckAuditJob({
+      jobId: job.id,
+      now: expiredAt,
+      staleWhere: { email: job.email, ...staleWhere },
+    });
+    if (resumed.resumed) {
+      return "queued";
+    }
+  }
   const expired = await database.auditJob.updateMany({
     where: {
       id: job.id,
