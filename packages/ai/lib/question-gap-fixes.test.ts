@@ -63,9 +63,10 @@ const TEN_INDUSTRIES = Object.keys(INDUSTRY_QUESTION_LABEL);
 const FLAGS = [
   "QUESTION_OTHER_FALLBACK_ENABLED",
   "QUESTION_BRAND_GUARANTEE_ENABLED",
+  "QUESTION_SOFT_CONFIDENCE_ENABLED",
 ] as const;
-const flagsOn = () => {
-  for (const f of FLAGS) {
+const flagsOn = (...only: (typeof FLAGS)[number][]) => {
+  for (const f of only.length > 0 ? only : FLAGS) {
     vi.stubEnv(f, "true");
   }
 };
@@ -159,7 +160,7 @@ describe("③ 업종 '기타'도 사이트 근거 분야 이름으로 질문을 
   });
 
   it("플래그 켜짐: 사이트와 대조 통과한 분야 이름으로 기본 질문 4개(이름 없는 3 + 이름 1)", async () => {
-    flagsOn();
+    flagsOn("QUESTION_OTHER_FALLBACK_ENABLED");
     h.generateObject.mockResolvedValue(unsure());
     const out = await suggestTrackingPrompts(otherInput);
     expect(out.prompts.map((p) => p.text)).toEqual([
@@ -172,7 +173,7 @@ describe("③ 업종 '기타'도 사이트 근거 분야 이름으로 질문을 
   });
 
   it("분야 이름이 사이트와 안 맞으면(지어낸 말) 업종 other 는 여전히 빈 목록 — 지어내지 않는다", async () => {
-    flagsOn();
+    flagsOn("QUESTION_OTHER_FALLBACK_ENABLED");
     h.generateObject.mockResolvedValue(
       llm({ categoryPhrase: "우주 광산 채굴 장비 대여", confident: false })
     );
@@ -181,7 +182,7 @@ describe("③ 업종 '기타'도 사이트 근거 분야 이름으로 질문을 
   });
 
   it("생성 호출 자체가 실패하면(분야 이름 없음) 예전처럼 빈 목록", async () => {
-    flagsOn();
+    flagsOn("QUESTION_OTHER_FALLBACK_ENABLED");
     h.generateObject.mockRejectedValue(new Error("boom"));
     expect((await suggestTrackingPrompts(otherInput)).prompts).toEqual([]);
   });
@@ -209,7 +210,7 @@ describe("③ 업종 '기타'도 사이트 근거 분야 이름으로 질문을 
     );
     const off = await suggestTrackingPrompts(otherInput);
     expect(off.prompts.some((p) => p.type === "alternative")).toBe(false);
-    flagsOn();
+    flagsOn("QUESTION_OTHER_FALLBACK_ENABLED");
     h.generateObject.mockResolvedValue(
       llm({ categoryPhrase: "민감성 피부 보습 크림" })
     );
@@ -230,7 +231,7 @@ describe("⑥ 이름 질문 보장", () => {
   });
 
   it("플래그 켜짐: 이름 질문 0개일 때만 고정 문형 3개를 채우고 총합은 20을 넘지 않는다", async () => {
-    flagsOn();
+    flagsOn("QUESTION_BRAND_GUARANTEE_ENABLED");
     h.generateObject.mockResolvedValue(noBrand());
     const out = await suggestTrackingPrompts({ ...base, industry: "beauty" });
     const brand = out.prompts
@@ -246,7 +247,7 @@ describe("⑥ 이름 질문 보장", () => {
   });
 
   it("이름 질문이 이미 있으면 손대지 않는다", async () => {
-    flagsOn();
+    flagsOn("QUESTION_BRAND_GUARANTEE_ENABLED");
     h.generateObject.mockResolvedValue(llm());
     const out = await suggestTrackingPrompts({ ...base, industry: "beauty" });
     expect(
@@ -268,5 +269,47 @@ describe("⑥ 이름 질문 보장", () => {
     expect(both.map((q) => q.language)).toContain("ko");
     expect(both.every((q) => q.text.includes("Franz"))).toBe(true);
     expect(fixedBrandQuestions(" ", "korea")).toEqual([]);
+  });
+});
+
+describe("⑨ '확신 없음'이어도 검사를 통과한 질문이 충분하면 버리지 않는다(52곳 재현 진단)", () => {
+  const unsure = (over: Record<string, unknown> = {}) =>
+    llm({ confident: false, ...over });
+
+  it("플래그 꺼짐(기본): 확신 없음이면 통과한 질문을 버리고 업종 기본 4개 — 예전 그대로", async () => {
+    h.generateObject.mockResolvedValue(unsure());
+    const out = await suggestTrackingPrompts({ ...base, industry: "beauty" });
+    expect(out.prompts).toHaveLength(4);
+    expect(out.lowConfidence).toBeUndefined();
+  });
+
+  it("플래그 켜짐: 통과한 질문이 8개 이상이면 그대로 쓰고 lowConfidence 표시", async () => {
+    flagsOn("QUESTION_SOFT_CONFIDENCE_ENABLED");
+    h.generateObject.mockResolvedValue(unsure());
+    const out = await suggestTrackingPrompts({ ...base, industry: "beauty" });
+    expect(out.prompts.length).toBeGreaterThanOrEqual(8);
+    expect(out.lowConfidence).toBe(true);
+  });
+
+  it("플래그 켜짐이라도 통과한 질문이 8개 미만이면 예전처럼 기본 4개", async () => {
+    flagsOn("QUESTION_SOFT_CONFIDENCE_ENABLED");
+    h.generateObject.mockResolvedValue(
+      unsure({
+        category: [item("보습 크림 추천해줘"), item("수분 크림 뭐가 좋아?")],
+        concern: [item("피부 당길 때 어떤 제품 써야 해?")],
+        representative: [],
+        brandUnderstanding: [item("프란츠 후기 어때?")],
+      })
+    );
+    const out = await suggestTrackingPrompts({ ...base, industry: "beauty" });
+    expect(out.prompts).toHaveLength(4);
+    expect(out.lowConfidence).toBeUndefined();
+  });
+
+  it("확신 있는 정상 결과는 플래그와 무관하게 lowConfidence 가 붙지 않는다", async () => {
+    flagsOn("QUESTION_SOFT_CONFIDENCE_ENABLED");
+    h.generateObject.mockResolvedValue(llm());
+    const out = await suggestTrackingPrompts({ ...base, industry: "beauty" });
+    expect(out.lowConfidence).toBeUndefined();
   });
 });

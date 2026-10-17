@@ -61,10 +61,15 @@ export type SuggestLanguage = "ko" | "en";
  * 질문 생성 보강 플래그(2026-10-18, 진단 ③⑥) — **기본 꺼짐**. 켜지 않으면 출력은 예전과 같다.
  *  - QUESTION_OTHER_FALLBACK_ENABLED: 업종 `other`·미지정일 때 사이트 근거 분야 이름으로 기본·대안 질문을 만든다.
  *  - QUESTION_BRAND_GUARANTEE_ENABLED: 생성기가 이름 질문을 하나도 못 냈을 때 코드가 고정 문형으로 채운다.
+ *  - QUESTION_SOFT_CONFIDENCE_ENABLED: 생성기가 "확신 없음"이어도 검사를 통과한 질문이 충분하면(8개 이상) 버리지 않고 쓴다
+ *    (진단 재현: 통과한 12~16개를 통째로 버리고 업종 기본 4개로 물러나던 경로).
  */
 const ON_VALUES = new Set(["1", "true"]);
 export function isQuestionFlagOn(
-  name: "QUESTION_BRAND_GUARANTEE_ENABLED" | "QUESTION_OTHER_FALLBACK_ENABLED",
+  name:
+    | "QUESTION_BRAND_GUARANTEE_ENABLED"
+    | "QUESTION_OTHER_FALLBACK_ENABLED"
+    | "QUESTION_SOFT_CONFIDENCE_ENABLED",
   env: Record<string, string | undefined> = process.env
 ): boolean {
   return ON_VALUES.has((env[name] ?? "").trim().toLowerCase());
@@ -138,6 +143,11 @@ export interface SuggestedPrompt {
 
 export interface PromptSuggestions {
   competitors: string[];
+  /**
+   * 생성기가 "재료가 부족해 추측했다"고 했지만 검사를 통과한 질문이 충분해 그대로 쓴 경우(플래그 QUESTION_SOFT_CONFIDENCE_ENABLED).
+   * 화면은 읽지 않는다 — 로그·진단용 신호다.
+   */
+  lowConfidence?: boolean;
   prompts: SuggestedPrompt[];
   /** 사이트에서 읽은 글자가 거의 없어 질문이 일반적일 수 있다(화면이 안내할 수 있게 알린다). */
   siteThin?: boolean;
@@ -152,6 +162,8 @@ const MAX_PROMPTS = Object.values(QUESTION_COMPOSITION).reduce(
 const OVERSHOOT = 3;
 // 거른 뒤 이 수보다 적으면 한 번 더 만들어 합친다(추가 AI 호출 1회 · 2026-10-14 대표 위임 승인).
 const RETRY_BELOW = 14;
+// "확신 없음"이어도 검사를 통과한 질문이 이만큼 있으면 버리지 않는다(플래그 켜짐일 때만).
+const SOFT_CONFIDENT_MIN_QUESTIONS = 8;
 // 사이트 글이 이만큼은 있어야 "대표 상품 0개"를 재시도 사유로 본다(글이 없는 사이트에서 헛호출 방지).
 const MIN_SITE_TEXT_FOR_REPRESENTATIVE_RETRY = 300;
 
@@ -427,14 +439,7 @@ export async function suggestTrackingPrompts(
         !round.confident
       ) {
         // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
-        if (!confident || composed.length < 4) {
-          return staticFallback(input, categoryPhrase);
-        }
-        return {
-          prompts: composed.slice(0, MAX_PROMPTS).map(toSuggested),
-          competitors: [],
-          ...(input.site?.thin ? { siteThin: true } : {}),
-        };
+        return finalizeSuggestions(input, composed, confident, categoryPhrase);
       }
     }
     return staticFallback(input, categoryPhrase);
@@ -480,6 +485,29 @@ function logGuardDropped(
       .filter((d) => d.type === "representative")
       .map((d) => ({ reason: d.reason, text: d.text })),
   });
+}
+
+/** 마지막 결정: 확신 있고 충분하면 생성 결과, 아니면 업종·분야 이름 기반 기본 질문(진단 ⑨: 확신 없음이어도 충분하면 선택적으로 유지). */
+function finalizeSuggestions(
+  input: SuggestInput,
+  composed: PlanQuestion[],
+  confident: boolean,
+  categoryPhrase: string | null
+): PromptSuggestions {
+  const softConfident =
+    !confident &&
+    isQuestionFlagOn("QUESTION_SOFT_CONFIDENCE_ENABLED") &&
+    composed.length >= SOFT_CONFIDENT_MIN_QUESTIONS;
+  // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
+  if (!(confident || softConfident) || composed.length < 4) {
+    return staticFallback(input, categoryPhrase);
+  }
+  return {
+    prompts: composed.slice(0, MAX_PROMPTS).map(toSuggested),
+    competitors: [],
+    ...(softConfident ? { lowConfidence: true } : {}),
+    ...(input.site?.thin ? { siteThin: true } : {}),
+  };
 }
 
 /**
