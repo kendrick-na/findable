@@ -107,6 +107,29 @@ export function createMemoryJobStore(): MemoryJobStore {
         Promise.resolve(
           [...rows.values()].find((row) => matchesWhere(row, where)) ?? null
         ),
+      // 정리 cron(resumeStuckProcessingJobs)이 후보를 훑는 데 쓴다. orderBy 는 단일 키 오름/내림차순만.
+      findMany: ({
+        where,
+        orderBy,
+        take,
+      }: {
+        orderBy?: Record<string, "asc" | "desc">;
+        take?: number;
+        where?: Row;
+      }) => {
+        let list = [...rows.values()].filter((row) =>
+          matchesWhere(row, where ?? {})
+        );
+        const [key, direction] = Object.entries(orderBy ?? {})[0] ?? [];
+        if (key) {
+          const at = (row: Row) =>
+            row[key] instanceof Date ? (row[key] as Date).getTime() : 0;
+          list = list.sort((a, b) =>
+            direction === "desc" ? at(b) - at(a) : at(a) - at(b)
+          );
+        }
+        return Promise.resolve(take === undefined ? list : list.slice(0, take));
+      },
     },
     // runner.ts updatePostprocessing: jsonb_set(stage) guarded by the previous status.
     // 파라미터: stage, status, jobId, previousStatus.
