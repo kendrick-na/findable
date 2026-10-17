@@ -24,6 +24,10 @@ import {
   publicAuditResult,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import {
+  publicErrorMessage,
+  sanitizeResultErrorsForCustomer,
+} from "@repo/audit/public-error-message";
 import { isUsableRun, scoreOf } from "@repo/audit/run-quality";
 import { searchSamplingVersionOf } from "@repo/audit/search-sampling-version";
 import { reconcileStaleAuditJob } from "@repo/audit/stale-job";
@@ -229,13 +233,17 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       pdfOutdated,
       metricBasisChanged,
       adviceBasisChanged,
-      result: safeResult,
+      // 플래그 꺼짐이면 입력 그대로(같은 참조) — 켜짐이면 엔진 칸 오류 원문이 사전 문장으로 바뀐다.
+      result: sanitizeResultErrorsForCustomer(
+        safeResult,
+        job.language !== "en"
+      ),
       crewStatus: job.crewStatus,
       crewResult: publishable ? sanitizeStoredCrewResult(job.crewResult) : null,
       crewOutdated: !publishable && Boolean(job.crewResult),
       crewStartedAt: job.crewStartedAt?.toISOString() ?? null,
       crewCompletedAt: job.crewCompletedAt?.toISOString() ?? null,
-      errorMessage: job.errorMessage,
+      errorMessage: publicErrorMessage(job.errorMessage, job.language !== "en"),
       createdAt: job.createdAt.toISOString(),
       completedAt: job.completedAt?.toISOString() ?? null,
       // 투두 #59: "지난번보다 나아졌나". 첫 측정이면 전부 null·totalRuns=1.
