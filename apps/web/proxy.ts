@@ -20,6 +20,7 @@ import {
   isClientReportPagePath,
 } from "./lib/client-report-path";
 import { isPreviewStubPublicRequest } from "./lib/preview-audit-stub-proxy";
+import { isWellKnownPath } from "./lib/well-known-path";
 
 const SEARCH_CRAWLER_USER_AGENT =
   /Googlebot|Google-InspectionTool|AdsBot-Google|Bingbot|NaverBot|Yeti|Daumoa/i;
@@ -202,7 +203,9 @@ const clerkProxy = authMiddleware(async (_auth, request, event) => {
     pathname === "/api" ||
     pathname.startsWith("/api/") ||
     pathname === "/trpc" ||
-    pathname.startsWith("/trpc/")
+    pathname.startsWith("/trpc/") ||
+    // `/.well-known/*` 는 로케일 접두사를 붙이면 안 된다(도메인 인증·OAuth 메타데이터).
+    isWellKnownPath(pathname)
   ) {
     return headersResponse;
   }

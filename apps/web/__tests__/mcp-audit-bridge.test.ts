@@ -57,17 +57,18 @@ function goodMetrics() {
 
 function makeDeps(over: Partial<BridgeDeps> = {}) {
   const tasks: Array<() => Promise<void>> = [];
+  type Aj = BridgeDeps["db"]["auditJob"];
   const db = {
     auditJob: {
-      count: vi.fn(async () => 0),
-      create: vi.fn(async () => ({ id: JOB_ID })),
-      findFirst: vi.fn(async () => null),
-      findUnique: vi.fn(async () => null),
+      count: vi.fn<Aj["count"]>(async () => 0),
+      create: vi.fn<Aj["create"]>(async () => ({ id: JOB_ID })),
+      findFirst: vi.fn<Aj["findFirst"]>(async () => null),
+      findUnique: vi.fn<Aj["findUnique"]>(async () => null),
     },
   };
   const deps: BridgeDeps = {
     after: (t) => tasks.push(t),
-    db: db as unknown as BridgeDeps["db"],
+    db,
     findCachedByDomain: vi.fn(async () => null),
     isDailyBudgetExhausted: vi.fn(async () => false),
     log: { error: vi.fn(), info: vi.fn() },
