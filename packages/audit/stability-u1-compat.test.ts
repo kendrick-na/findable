@@ -25,6 +25,7 @@ const context = {
 describe("U1 — 빈 응답·격리는 측정 못 함(engine_error)으로 센다", () => {
   const row = (errorMessage: string) => ({
     brandMentioned: false,
+    engineId: "claude",
     errorMessage,
     isStub: false,
     mentionQuality: undefined,
