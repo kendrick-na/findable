@@ -5,6 +5,7 @@ import {
   publicationVerifiedAnswerCount,
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
+import { publicErrorMessage } from "@repo/audit/public-error-message";
 import { isUsableRun, metricsOf } from "@repo/audit/run-quality";
 import { isStaleAuditJob, reconcileStaleAuditJob } from "@repo/audit/stale-job";
 import { auth, currentUser } from "@repo/auth/server";
@@ -204,8 +205,11 @@ export default async function AuditHistoryDetail({
             <h2 className="font-semibold text-lg">{t.notCompletedTitle}</h2>
             <p className="mt-2 text-muted-foreground text-sm">
               {/* 러너가 저장한 실패 문장은 한국어(또는 내부 오류 원문)다 — 영어 화면엔 사전 문장만 쓴다. */}
-              {(locale === "ko" ? job.errorMessage : null) ??
-                t.notCompletedBody}
+              {(locale === "ko"
+                ? publicErrorMessage(job.errorMessage, true, {
+                    generalFallback: t.notCompletedBody,
+                  })
+                : null) ?? t.notCompletedBody}
             </p>
             <Link className="mt-4 inline-block text-sm underline" href="/brand">
               {t.remeasure}
