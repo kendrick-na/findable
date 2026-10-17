@@ -1,3 +1,4 @@
+import { isEnginePausedMessage } from "@repo/ai/lib/engines/engine-breaker";
 import { isEngineTimeoutMessage } from "@repo/ai/lib/engines/engine-timeout";
 
 /**
@@ -11,7 +12,12 @@ import { isEngineTimeoutMessage } from "@repo/ai/lib/engines/engine-timeout";
  *  - 늦게 와서 반영된 칸(`lateCell: "resolved"`)도 「회복됨」으로 남긴다(답은 왔지만 느렸다는 사실).
  */
 
-export type EngineErrorKind = "timeout" | "rate_limit" | "empty" | "error";
+export type EngineErrorKind =
+  | "timeout"
+  | "rate_limit"
+  | "empty"
+  | "error"
+  | "paused";
 
 export interface EngineErrorRow {
   durationMs?: number | null;
@@ -39,6 +45,8 @@ export interface EngineErrorSummary {
       empty: number;
       error: number;
       rate_limit: number;
+      /** 서킷브레이커로 격리된 칸 수. 없으면 키 자체가 없다(기존 JSON 과 동일). */
+      paused?: number;
       recovered: number;
       timeout: number;
     }
@@ -51,13 +59,17 @@ export interface EngineErrorSummary {
 
 const MAX_EVENTS = 60;
 const RATE_LIMIT_RE = /\b429\b|rate.?limit|too many requests|usage_limit/i;
-const EMPTY_RE = /검색 결과 없음|no results/i;
+const EMPTY_RE =
+  /검색 결과 없음|no results|returned an empty answer|empty answer/i;
 
 export function classifyEngineError(
   message: string | null | undefined
 ): EngineErrorKind {
   if (isEngineTimeoutMessage(message)) {
     return "timeout";
+  }
+  if (isEnginePausedMessage(message)) {
+    return "paused";
   }
   if (typeof message === "string" && RATE_LIMIT_RE.test(message)) {
     return "rate_limit";
@@ -91,7 +103,7 @@ export function summarizeEngineErrors(
       timeout: 0,
     };
     byEngine[row.engineId] = bucket;
-    bucket[kind] += 1;
+    bucket[kind] = (bucket[kind] ?? 0) + 1;
     if (recovered) {
       bucket.recovered += 1;
     }
