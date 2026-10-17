@@ -14,9 +14,9 @@ import {
 
 import {
   DEFAULT_MCP_DAILY_JOB_CAP,
+  MCP_SYSTEM_EMAIL,
   mcpDailyJobCap,
   mcpMeasureEnabled,
-  MCP_SYSTEM_EMAIL,
 } from "./flags";
 import { siteLink } from "./messages";
 import { type McpAuditResult, toMcpResult } from "./result";

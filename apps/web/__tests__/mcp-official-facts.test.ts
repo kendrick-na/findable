@@ -9,11 +9,11 @@ vi.mock("@repo/audit/public-url-security", async (importOriginal) => {
   return {
     ...real,
     // DNS 조회 없이 호스트 이름만 본다: 'private.test' 는 사설, 나머지는 공개.
-    assertPublicUrl: vi.fn(async (url: URL) => {
-      if (url.hostname === "private.test" || url.hostname === "localhost") {
-        throw new Error("URL_PRIVATE");
-      }
-    }),
+    assertPublicUrl: vi.fn((url: URL) =>
+      url.hostname === "private.test" || url.hostname === "localhost"
+        ? Promise.reject(new Error("URL_PRIVATE"))
+        : Promise.resolve()
+    ),
   };
 });
 
@@ -29,13 +29,13 @@ function res(status: number, body = "", headers: Record<string, string> = {}) {
 }
 
 function fakeFetch(map: Record<string, Response | (() => Response)>) {
-  return vi.fn(async (input: string | URL | Request) => {
+  return vi.fn((input: string | URL | Request) => {
     const key = typeof input === "string" ? input : input.toString();
     const hit = map[key];
     if (!hit) {
-      return res(404);
+      return Promise.resolve(res(404));
     }
-    return typeof hit === "function" ? hit() : hit.clone();
+    return Promise.resolve(typeof hit === "function" ? hit() : hit.clone());
   }) as unknown as typeof fetch;
 }
 
@@ -134,9 +134,9 @@ describe("checkOfficialFacts", () => {
   });
 
   it("확인하지 못한 항목은 '없음'이 아니라 error/unknown 으로 구분한다", async () => {
-    const f = vi.fn(async () => {
-      throw new TypeError("network");
-    }) as unknown as typeof fetch;
+    const f = vi.fn(() =>
+      Promise.reject(new TypeError("network"))
+    ) as unknown as typeof fetch;
     const out = await checkOfficialFacts("brand.example", f);
     const byKey = Object.fromEntries(out.items.map((i) => [i.key, i.status]));
     expect(byKey).toEqual({

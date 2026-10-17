@@ -9,10 +9,9 @@
 // 인증: 1단계는 무인증(공개 데이터). 호출 IP 가 Claude·ChatGPT 서버라 IP 별 제한은 쓰지 않고
 //   도메인 캐시·MCP 일일 상한·전역 예산으로 막는다(`lib/mcp/audit-bridge.ts`).
 
+import { log } from "@repo/observability/log";
 import { createMcpHandler } from "mcp-handler";
 import { type NextRequest, NextResponse } from "next/server";
-
-import { log } from "@repo/observability/log";
 
 import { mcpEnabled } from "../../../lib/mcp/flags";
 import {
@@ -27,7 +26,7 @@ export const dynamic = "force-dynamic";
 // 측정 자체는 응답 뒤(`after`)에서 도는 기존 방식과 같다(POST /api/audit 과 동일한 상한).
 export const maxDuration = 300;
 
-async function handle(request: NextRequest): Promise<Response> {
+function handle(request: NextRequest): Response | Promise<Response> {
   if (!mcpEnabled()) {
     return NextResponse.json({ error: "Not available" }, { status: 503 });
   }

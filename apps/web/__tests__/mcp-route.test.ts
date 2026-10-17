@@ -34,11 +34,11 @@ vi.mock("@repo/audit/public-url-security", async (importOriginal) => {
     await importOriginal<typeof import("@repo/audit/public-url-security")>();
   return {
     ...real,
-    assertPublicUrl: vi.fn(async (u: URL) => {
-      if (u.hostname === "private.test") {
-        throw new Error("URL_PRIVATE");
-      }
-    }),
+    assertPublicUrl: vi.fn((u: URL) =>
+      u.hostname === "private.test"
+        ? Promise.reject(new Error("URL_PRIVATE"))
+        : Promise.resolve()
+    ),
   };
 });
 
@@ -109,7 +109,7 @@ describe("스위치 켜짐", () => {
   it("도구 3개가 노출되고 전부 title·annotations 가 있다(읽기 전용 표시 포함)", async () => {
     const out = await rpc("tools/list");
     expect(out.status).toBe(200);
-    const tools = out.body.result.tools as Array<Record<string, any>>;
+    const tools = out.body.result.tools as Record<string, any>[];
     expect(tools.map((t) => t.name).sort()).toEqual([
       "check_official_facts",
       "get_ai_visibility_result",

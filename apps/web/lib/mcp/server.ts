@@ -2,7 +2,6 @@
 
 import { runAuditJob } from "@repo/audit/runner";
 import { database } from "@repo/database";
-import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { after } from "next/server";
 
@@ -65,5 +64,3 @@ export function makeBridgeDeps(): BridgeDeps {
     runAuditJob: (args) => runAuditJob(args),
   };
 }
-
-export { parseError };

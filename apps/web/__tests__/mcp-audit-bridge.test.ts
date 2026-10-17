@@ -15,11 +15,11 @@ vi.mock("@repo/audit/public-url-security", async (importOriginal) => {
     await importOriginal<typeof import("@repo/audit/public-url-security")>();
   return {
     ...real,
-    assertPublicUrl: vi.fn(async (url: URL) => {
-      if (url.hostname === "private.test") {
-        throw new Error("URL_PRIVATE");
-      }
-    }),
+    assertPublicUrl: vi.fn((url: URL) =>
+      url.hostname === "private.test"
+        ? Promise.reject(new Error("URL_PRIVATE"))
+        : Promise.resolve()
+    ),
   };
 });
 // 판정 함수는 격리하고(변환 논리만 시험), 실제 함수의 '닫힘'은 아래 별도 테스트가 본다.
@@ -31,9 +31,9 @@ vi.mock("@repo/audit/normalize-stored-metrics", () => ({
 vi.mock("@repo/audit/run-quality", () => ({ metricsOf: () => fx.metrics }));
 
 import {
+  type BridgeDeps,
   getAiVisibilityResult,
   startAiVisibilityCheck,
-  type BridgeDeps,
 } from "@/lib/mcp/audit-bridge";
 import { MCP_SYSTEM_EMAIL } from "@/lib/mcp/flags";
 import { toMcpResult } from "@/lib/mcp/result";
@@ -226,9 +226,7 @@ describe("start_ai_visibility_check", () => {
 
     it("러너가 던져도 응답 뒤 작업이 예외를 밖으로 내지 않는다", async () => {
       const { deps, tasks } = makeDeps({
-        runAuditJob: vi.fn(async () => {
-          throw new Error("boom");
-        }),
+        runAuditJob: vi.fn(() => Promise.reject(new Error("boom"))),
       });
       await startAiVisibilityCheck(input, deps);
       await expect(tasks[0]?.()).resolves.toBeUndefined();

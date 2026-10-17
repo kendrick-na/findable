@@ -15,6 +15,12 @@ const TIMEOUT_MS = 5000;
 const MAX_REDIRECTS = 3;
 const USER_AGENT = "FindableBot/1.0 (+https://findable.co.kr)";
 
+const LINE_BREAK_RE = /\r?\n/;
+const HTML_START_RE = /^\s*<(!doctype|html)/i;
+const SITEMAP_RE = /<(urlset|sitemapindex)/i;
+const JSON_LD_RE =
+  /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
 /** 주요 AI 크롤러 — robots.txt 에서 막혔는지 본다. */
 export const AI_CRAWLERS = [
   "GPTBot",
@@ -25,8 +31,6 @@ export const AI_CRAWLERS = [
   "PerplexityBot",
   "Google-Extended",
 ] as const;
-
-export type FactStatus = "found" | "missing" | "error";
 
 export interface FactItem {
   detail: string;
@@ -44,7 +48,7 @@ export interface OfficialFactsResult {
 }
 
 type Fetched =
-  | { ok: true; status: number; text: string; finalUrl: string }
+  | { ok: true; status: number; text: string }
   | { ok: false; reason: "timeout" | "network" | "blocked" };
 
 export type FetchLike = typeof fetch;
@@ -54,20 +58,35 @@ async function readLimited(response: Response): Promise<string> {
   if (!reader) {
     return "";
   }
-  const chunks: Uint8Array[] = [];
+  const chunks: Buffer[] = [];
   let total = 0;
   while (total < MAX_BYTES) {
     const { done, value } = await reader.read();
     if (done || !value) {
       break;
     }
-    chunks.push(value);
+    chunks.push(Buffer.from(value));
     total += value.byteLength;
   }
   await reader.cancel().catch(() => undefined);
   return new TextDecoder("utf-8", { fatal: false }).decode(
-    Buffer.concat(chunks.map((c) => Buffer.from(c))).subarray(0, MAX_BYTES)
+    Buffer.concat(chunks).subarray(0, MAX_BYTES)
   );
+}
+
+function failureReason(error: unknown): "timeout" | "network" {
+  const name = error instanceof Error ? error.name : "";
+  return name === "TimeoutError" || name === "AbortError"
+    ? "timeout"
+    : "network";
+}
+
+function nextRedirectTarget(current: URL, location: string): URL | null {
+  try {
+    return normalizePublicUrl(new URL(location, current).toString());
+  } catch {
+    return null;
+  }
 }
 
 async function safeGet(startUrl: URL, fetchImpl: FetchLike): Promise<Fetched> {
@@ -86,53 +105,37 @@ async function safeGet(startUrl: URL, fetchImpl: FetchLike): Promise<Fetched> {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (error) {
-      const name = error instanceof Error ? error.name : "";
-      return {
-        ok: false,
-        reason:
-          name === "TimeoutError" || name === "AbortError"
-            ? "timeout"
-            : "network",
-      };
+      return { ok: false, reason: failureReason(error) };
     }
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location) {
-        return {
-          ok: true,
-          status: response.status,
-          text: "",
-          finalUrl: current.toString(),
-        };
-      }
-      try {
-        current = normalizePublicUrl(new URL(location, current).toString());
-      } catch {
-        return { ok: false, reason: "blocked" };
-      }
-      continue;
+    const isRedirect = response.status >= 300 && response.status < 400;
+    const location = response.headers.get("location");
+    if (!isRedirect) {
+      const text = response.ok ? await readLimited(response) : "";
+      return { ok: true, status: response.status, text };
     }
-    const text = response.ok ? await readLimited(response) : "";
-    return {
-      ok: true,
-      status: response.status,
-      text,
-      finalUrl: current.toString(),
-    };
+    if (!location) {
+      return { ok: true, status: response.status, text: "" };
+    }
+    const target = nextRedirectTarget(current, location);
+    if (!target) {
+      return { ok: false, reason: "blocked" };
+    }
+    current = target;
   }
   return { ok: false, reason: "network" };
 }
 
-/** robots.txt 에서 AI 크롤러별 전체 차단(`Disallow: /`) 여부를 판정한다. 단순 파서(그룹 단위). */
-export function blockedAiCrawlers(robotsTxt: string): string[] {
-  const groups: Array<{ agents: string[]; disallowAll: boolean }> = [];
-  let current: { agents: string[]; disallowAll: boolean } | null = null;
+interface RobotsGroup {
+  agents: string[];
+  disallowAll: boolean;
+}
+
+function parseRobotsGroups(robotsTxt: string): RobotsGroup[] {
+  const groups: RobotsGroup[] = [];
+  let current: RobotsGroup | null = null;
   let lastWasAgent = false;
-  for (const rawLine of robotsTxt.split(/\r?\n/)) {
+  for (const rawLine of robotsTxt.split(LINE_BREAK_RE)) {
     const line = rawLine.split("#")[0]?.trim() ?? "";
-    if (!line) {
-      continue;
-    }
     const idx = line.indexOf(":");
     if (idx < 0) {
       continue;
@@ -146,65 +149,158 @@ export function blockedAiCrawlers(robotsTxt: string): string[] {
       }
       current.agents.push(value.toLowerCase());
       lastWasAgent = true;
-    } else {
-      lastWasAgent = false;
-      if (field === "disallow" && value === "/" && current) {
-        current.disallowAll = true;
-      }
+      continue;
+    }
+    lastWasAgent = false;
+    if (field === "disallow" && value === "/" && current) {
+      current.disallowAll = true;
     }
   }
-  const blocked = new Set<string>();
+  return groups;
+}
+
+/** robots.txt 에서 AI 크롤러별 전체 차단(`Disallow: /`) 여부를 판정한다. 단순 파서(그룹 단위). */
+export function blockedAiCrawlers(robotsTxt: string): string[] {
+  const groups = parseRobotsGroups(robotsTxt);
   const wildcardBlocked = groups.some(
     (g) => g.disallowAll && g.agents.includes("*")
   );
-  for (const crawler of AI_CRAWLERS) {
+  return AI_CRAWLERS.filter((crawler) => {
     const name = crawler.toLowerCase();
     const specific = groups.filter((g) => g.agents.includes(name));
-    if (specific.length > 0) {
-      if (specific.some((g) => g.disallowAll)) {
-        blocked.add(crawler);
-      }
-    } else if (wildcardBlocked) {
-      blocked.add(crawler);
+    return specific.length > 0
+      ? specific.some((g) => g.disallowAll)
+      : wildcardBlocked;
+  });
+}
+
+function collectTypes(node: unknown, out: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const n of node) {
+      collectTypes(n, out);
+    }
+    return;
+  }
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  const record = node as Record<string, unknown>;
+  const t = record["@type"];
+  const types = Array.isArray(t) ? t : [t];
+  for (const x of types) {
+    if (typeof x === "string") {
+      out.add(x);
     }
   }
-  return [...blocked];
+  for (const v of Object.values(record)) {
+    collectTypes(v, out);
+  }
 }
 
 /** HTML 안의 JSON-LD(`application/ld+json`)에서 @type 목록을 뽑는다. */
 export function jsonLdTypes(html: string): string[] {
   const types = new Set<string>();
-  const re =
-    /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  for (const match of html.matchAll(re)) {
+  for (const match of html.matchAll(JSON_LD_RE)) {
     try {
-      const walk = (node: unknown): void => {
-        if (Array.isArray(node)) {
-          for (const n of node) {
-            walk(n);
-          }
-        } else if (node && typeof node === "object") {
-          const t = (node as Record<string, unknown>)["@type"];
-          if (typeof t === "string") {
-            types.add(t);
-          } else if (Array.isArray(t)) {
-            for (const x of t) {
-              if (typeof x === "string") {
-                types.add(x);
-              }
-            }
-          }
-          for (const v of Object.values(node as Record<string, unknown>)) {
-            walk(v);
-          }
-        }
-      };
-      walk(JSON.parse(match[1] ?? ""));
+      collectTypes(JSON.parse(match[1] ?? ""), types);
     } catch {
       // 깨진 JSON-LD 는 "없음"으로 취급한다.
     }
   }
   return [...types];
+}
+
+function llmsItem(llms: Fetched): FactItem {
+  if (!llms.ok) {
+    return {
+      key: "llms_txt",
+      status: "error",
+      detail: "llms.txt 를 확인하지 못했습니다(응답 없음).",
+    };
+  }
+  // 소프트 404(HTML 오류 페이지)를 llms.txt 로 오인하지 않는다.
+  const real =
+    llms.status === 200 && llms.text.trim() && !HTML_START_RE.test(llms.text);
+  return real
+    ? { key: "llms_txt", status: "found", detail: "llms.txt 가 있습니다." }
+    : {
+        key: "llms_txt",
+        status: "missing",
+        detail: "llms.txt 를 찾지 못했습니다.",
+      };
+}
+
+function robotsStatus(blockedCount: number): string {
+  if (blockedCount === AI_CRAWLERS.length) {
+    return "blocked";
+  }
+  return blockedCount > 0 ? "partially_blocked" : "allowed";
+}
+
+function robotsItem(robots: Fetched): FactItem {
+  if (robots.ok && robots.status === 200 && robots.text.trim()) {
+    const blocked = blockedAiCrawlers(robots.text);
+    return {
+      key: "robots_ai_crawlers",
+      status: robotsStatus(blocked.length),
+      blocked_agents: blocked,
+      detail: blocked.length
+        ? `robots.txt 에서 AI 크롤러 ${blocked.length}종을 막고 있습니다.`
+        : "robots.txt 가 주요 AI 크롤러를 막지 않습니다.",
+    };
+  }
+  if (robots.ok && (robots.status === 404 || robots.status === 410)) {
+    return {
+      key: "robots_ai_crawlers",
+      status: "allowed",
+      blocked_agents: [],
+      detail: "robots.txt 가 없어 AI 크롤러를 막지 않습니다.",
+    };
+  }
+  // 모르면 unknown — 막혔다고 단정하지 않는다.
+  return {
+    key: "robots_ai_crawlers",
+    status: "unknown",
+    blocked_agents: [],
+    detail: "robots.txt 를 확인하지 못했습니다.",
+  };
+}
+
+function jsonLdItem(home: Fetched): FactItem {
+  if (!(home.ok && home.status === 200)) {
+    return {
+      key: "json_ld",
+      status: "error",
+      types: [],
+      detail: "첫 화면을 확인하지 못했습니다.",
+    };
+  }
+  const types = jsonLdTypes(home.text);
+  return {
+    key: "json_ld",
+    status: types.length ? "found" : "missing",
+    types,
+    detail: types.length
+      ? `첫 화면에 구조화 데이터(${types.slice(0, 5).join(", ")})가 있습니다.`
+      : "첫 화면에 구조화 데이터(JSON-LD)가 없습니다.",
+  };
+}
+
+function sitemapItem(sitemap: Fetched): FactItem {
+  if (!sitemap.ok) {
+    return {
+      key: "sitemap",
+      status: "error",
+      detail: "sitemap.xml 을 확인하지 못했습니다.",
+    };
+  }
+  return sitemap.status === 200 && SITEMAP_RE.test(sitemap.text)
+    ? { key: "sitemap", status: "found", detail: "sitemap.xml 이 있습니다." }
+    : {
+        key: "sitemap",
+        status: "missing",
+        detail: "sitemap.xml 을 찾지 못했습니다.",
+      };
 }
 
 export async function checkOfficialFacts(
@@ -224,112 +320,12 @@ export async function checkOfficialFacts(
     safeGet(new URL("/sitemap.xml", origin), fetchImpl),
   ]);
 
-  const items: FactItem[] = [];
-
-  // llms.txt — 200 이고 본문이 있어야 "있음". HTML 오류 페이지(소프트 404)는 제외.
-  if (
-    llms.ok &&
-    llms.status === 200 &&
-    llms.text.trim() &&
-    !/^\s*<(!doctype|html)/i.test(llms.text)
-  ) {
-    items.push({
-      key: "llms_txt",
-      status: "found",
-      detail: "llms.txt 가 있습니다.",
-    });
-  } else if (llms.ok) {
-    items.push({
-      key: "llms_txt",
-      status: "missing",
-      detail: "llms.txt 를 찾지 못했습니다.",
-    });
-  } else {
-    items.push({
-      key: "llms_txt",
-      status: "error",
-      detail: "llms.txt 를 확인하지 못했습니다(응답 없음).",
-    });
-  }
-
-  // robots.txt — 모르면 unknown(막혔다고 단정하지 않는다).
-  if (robots.ok && robots.status === 200 && robots.text.trim()) {
-    const blocked = blockedAiCrawlers(robots.text);
-    let status = "allowed";
-    if (blocked.length === AI_CRAWLERS.length) {
-      status = "blocked";
-    } else if (blocked.length > 0) {
-      status = "partially_blocked";
-    }
-    items.push({
-      key: "robots_ai_crawlers",
-      status,
-      blocked_agents: blocked,
-      detail: blocked.length
-        ? `robots.txt 에서 AI 크롤러 ${blocked.length}종을 막고 있습니다.`
-        : "robots.txt 가 주요 AI 크롤러를 막지 않습니다.",
-    });
-  } else if (robots.ok && (robots.status === 404 || robots.status === 410)) {
-    items.push({
-      key: "robots_ai_crawlers",
-      status: "allowed",
-      blocked_agents: [],
-      detail: "robots.txt 가 없어 AI 크롤러를 막지 않습니다.",
-    });
-  } else {
-    items.push({
-      key: "robots_ai_crawlers",
-      status: "unknown",
-      blocked_agents: [],
-      detail: "robots.txt 를 확인하지 못했습니다.",
-    });
-  }
-
-  // JSON-LD — 첫 화면 HTML 기준.
-  if (home.ok && home.status === 200) {
-    const types = jsonLdTypes(home.text);
-    items.push({
-      key: "json_ld",
-      status: types.length ? "found" : "missing",
-      types,
-      detail: types.length
-        ? `첫 화면에 구조화 데이터(${types.slice(0, 5).join(", ")})가 있습니다.`
-        : "첫 화면에 구조화 데이터(JSON-LD)가 없습니다.",
-    });
-  } else {
-    items.push({
-      key: "json_ld",
-      status: "error",
-      types: [],
-      detail: "첫 화면을 확인하지 못했습니다.",
-    });
-  }
-
-  // sitemap.xml
-  if (
-    sitemap.ok &&
-    sitemap.status === 200 &&
-    /<(urlset|sitemapindex)/i.test(sitemap.text)
-  ) {
-    items.push({
-      key: "sitemap",
-      status: "found",
-      detail: "sitemap.xml 이 있습니다.",
-    });
-  } else if (sitemap.ok) {
-    items.push({
-      key: "sitemap",
-      status: "missing",
-      detail: "sitemap.xml 을 찾지 못했습니다.",
-    });
-  } else {
-    items.push({
-      key: "sitemap",
-      status: "error",
-      detail: "sitemap.xml 을 확인하지 못했습니다.",
-    });
-  }
-
+  const items = [
+    llmsItem(llms),
+    robotsItem(robots),
+    jsonLdItem(home),
+    sitemapItem(sitemap),
+  ];
   const good = items.filter(
     (i) => i.status === "found" || i.status === "allowed"
   ).length;
