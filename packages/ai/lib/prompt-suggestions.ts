@@ -24,7 +24,9 @@ import {
   balanceAxisOfType,
   composeQuestions,
   defaultConsumerQuestions,
+  defaultConsumerQuestionsFromPhrase,
   fixedAlternativeQuestions,
+  fixedBrandQuestions,
   guardQuestions,
   industryFrame,
   industryLabel,
@@ -54,6 +56,19 @@ function suggestModel() {
 }
 
 export type SuggestLanguage = "ko" | "en";
+
+/**
+ * 질문 생성 보강 플래그(2026-10-18, 진단 ③⑥) — **기본 꺼짐**. 켜지 않으면 출력은 예전과 같다.
+ *  - QUESTION_OTHER_FALLBACK_ENABLED: 업종 `other`·미지정일 때 사이트 근거 분야 이름으로 기본·대안 질문을 만든다.
+ *  - QUESTION_BRAND_GUARANTEE_ENABLED: 생성기가 이름 질문을 하나도 못 냈을 때 코드가 고정 문형으로 채운다.
+ */
+const ON_VALUES = new Set(["1", "true"]);
+export function isQuestionFlagOn(
+  name: "QUESTION_BRAND_GUARANTEE_ENABLED" | "QUESTION_OTHER_FALLBACK_ENABLED",
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return ON_VALUES.has((env[name] ?? "").trim().toLowerCase());
+}
 
 // audit runner의 균형 원칙(P0-a) 계승: 추적 질문은 두 유형을 섞는다.
 //   - brand: 브랜드 자체를 물어 노출·팩트정합·감성 측정.
@@ -314,13 +329,26 @@ function toSuggested(q: PlanQuestion): SuggestedPrompt {
  * 정적 폴백 — LLM 실패·비확신 시 업종 분야 이름만으로 만든 소비자 말투 기본 질문을 제안으로 낸다.
  *   업종을 모르면(또는 other) 지어내지 않고 빈 목록 — 화면이 "직접 추가"로 안내한다.
  */
-export function staticFallback(input: SuggestInput): PromptSuggestions {
-  const defaults = defaultConsumerQuestions({
-    englishName: input.brandName,
-    industry: input.industry,
-    koreanName: input.brandName,
-    language: scopeOf(input) === "global" ? "en" : "ko",
-  });
+export function staticFallback(
+  input: SuggestInput,
+  categoryPhrase?: string | null
+): PromptSuggestions {
+  const language = scopeOf(input) === "global" ? "en" : "ko";
+  const defaults =
+    defaultConsumerQuestions({
+      englishName: input.brandName,
+      industry: input.industry,
+      koreanName: input.brandName,
+      language,
+    }) ??
+    // 업종을 모를 때만(업종 있는 경로는 위에서 끝난다) 사이트 근거 분야 이름을 쓴다 — 플래그가 켜져 있을 때만.
+    (isQuestionFlagOn("QUESTION_OTHER_FALLBACK_ENABLED")
+      ? defaultConsumerQuestionsFromPhrase({
+          brandName: input.brandName,
+          language,
+          phrase: categoryPhrase,
+        })
+      : null);
   if (!defaults) {
     return { prompts: [], competitors: [] };
   }
@@ -344,6 +372,8 @@ export async function suggestTrackingPrompts(
   input: SuggestInput
 ): Promise<PromptSuggestions> {
   const scope = scopeOf(input);
+  // 생성 호출이 만든 '서비스 분야 이름'(검증 통과분) — 폴백이 업종 없이도 쓸 수 있게 try 밖에 둔다(진단 ③).
+  let categoryPhrase: string | null = null;
   try {
     const siteText = siteTextOf(input.site);
     // 사이트 글이 AI 엔진 이름을 직접 쓰는 브랜드(사업이 AI 검색)만 질문의 엔진 이름을 허용한다.
@@ -361,7 +391,6 @@ export async function suggestTrackingPrompts(
     let confident = true;
     // 첫 결과가 이미 충분했고 대표 상품만 비어서 다시 만드는 경우 — 두 번째 응답의 "확신 없음"이 멀쩡한 첫 결과를 버리게 하면 안 된다.
     let representativeOnlyRetry = false;
-    let categoryPhrase: string | null = null;
     // 처음 1번 + 모자라면 1번 더(합쳐서 다시 거른다). 추가 호출은 최대 1회.
     for (let attempt = 0; attempt < 2; attempt++) {
       const round = await generateCandidates(input, scope);
@@ -371,12 +400,16 @@ export async function suggestTrackingPrompts(
         : confident && round.confident;
       categoryPhrase ??= vetCategoryPhrase(round.categoryPhrase, ctx);
       const guarded = guardQuestions(all, ctx);
-      const composed = composeWithFixedAlternatives(
-        composeQuestions(guarded.kept, scope, { preferListing: true }),
+      const composed = ensureBrandQuestions(
+        composeWithFixedAlternatives(
+          composeQuestions(guarded.kept, scope, { preferListing: true }),
+          input,
+          scope,
+          hasCompetitors,
+          categoryPhrase
+        ),
         input,
-        scope,
-        hasCompetitors,
-        categoryPhrase
+        scope
       );
       logGuardDropped(attempt, input.brandName, guarded.dropped);
       const missingRepresentative = shouldRetryForRepresentative(
@@ -395,7 +428,7 @@ export async function suggestTrackingPrompts(
       ) {
         // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
         if (!confident || composed.length < 4) {
-          return staticFallback(input);
+          return staticFallback(input, categoryPhrase);
         }
         return {
           prompts: composed.slice(0, MAX_PROMPTS).map(toSuggested),
@@ -404,14 +437,14 @@ export async function suggestTrackingPrompts(
         };
       }
     }
-    return staticFallback(input);
+    return staticFallback(input, categoryPhrase);
   } catch (error) {
     log.warn("prompt.suggest.failed", {
       brandName: input.brandName,
       domain: input.domain,
       error: String(error),
     });
-    return staticFallback(input);
+    return staticFallback(input, categoryPhrase);
   }
 }
 
@@ -449,6 +482,30 @@ function logGuardDropped(
   });
 }
 
+/**
+ * 이름 질문 보장(진단 ⑥, 플래그 QUESTION_BRAND_GUARANTEE_ENABLED · 기본 꺼짐).
+ * 생성기가 이름 질문을 **하나도** 못 냈을 때만 코드의 고정 문형으로 채운다(실측: 후보 11~17개인데 이름 질문 0개 → 6문항).
+ * 자리가 모자라면 뒤쪽 이름 없는 질문을 덜어 상한(20)을 지킨다. 이름 질문이 이미 있으면 손대지 않는다.
+ */
+function ensureBrandQuestions(
+  composed: PlanQuestion[],
+  input: SuggestInput,
+  scope: PlanMarketScope
+): PlanQuestion[] {
+  if (
+    !isQuestionFlagOn("QUESTION_BRAND_GUARANTEE_ENABLED") ||
+    composed.some((q) => q.type === "brand")
+  ) {
+    return composed;
+  }
+  const fixed = fixedBrandQuestions(input.brandName, scope);
+  if (fixed.length === 0) {
+    return composed;
+  }
+  const room = Math.max(0, MAX_PROMPTS - fixed.length);
+  return [...composed.slice(0, room), ...fixed];
+}
+
 /** 경쟁사가 없으면 대안 질문은 모델 것을 버리고 코드의 고정 문형으로 채운다. */
 function composeWithFixedAlternatives(
   composed: PlanQuestion[],
@@ -462,7 +519,9 @@ function composeWithFixedAlternatives(
   }
   return [
     ...composed.filter((q) => q.type !== "alternative"),
-    ...fixedAlternativeQuestions(input.industry, scope, categoryPhrase),
+    ...fixedAlternativeQuestions(input.industry, scope, categoryPhrase, {
+      phraseOnly: isQuestionFlagOn("QUESTION_OTHER_FALLBACK_ENABLED"),
+    }),
   ];
 }
 

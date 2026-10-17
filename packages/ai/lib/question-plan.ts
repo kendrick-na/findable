@@ -205,6 +205,97 @@ export function defaultConsumerQuestions(input: {
   return [ko[0], ko[1], ko[3], en[0]] as DefaultConsumerQuestion[];
 }
 
+/**
+ * 업종이 `other`·미지정일 때, 사이트 근거로 검증된 '서비스 분야 이름'(categoryPhrase)으로 만든 기본 질문(2026-10-18, 진단 ③).
+ *
+ * 왜: 업종이 `other` 면 위 `defaultConsumerQuestions` 가 null 이라 기본 질문이 0개였다 — 생성기가 못 낸 날엔 질문이 통째로 비었다
+ *   (업종 '기타' 7곳 중 6곳 미측정). 분야 이름은 생성 호출이 이미 만들고 `vetCategoryPhrase` 가 사이트 문구와 대조한 값이라 추가 호출·원가가 없다.
+ * 한국어 분야 이름은 한국어 질문에만, 영어(한글 없는) 분야 이름은 영어 질문에만 쓴다 — 번역해서 지어내지 않는다.
+ * 업종이 있는 10개 경로는 이 함수를 타지 않는다(출력 불변).
+ */
+export function defaultConsumerQuestionsFromPhrase(input: {
+  brandName: string;
+  language: "en" | "ko";
+  phrase: string | null | undefined;
+}): DefaultConsumerQuestion[] | null {
+  const phrase = input.phrase?.trim();
+  if (!phrase) {
+    return null;
+  }
+  const hasHangul = HANGUL_RE.test(phrase);
+  if (input.language === "ko" && hasHangul) {
+    return [
+      { nameless: true, language: "ko", text: `${phrase} 추천해줘` },
+      { nameless: true, language: "ko", text: `${phrase} 뭐가 좋아?` },
+      {
+        nameless: true,
+        language: "ko",
+        text: `${phrase} 처음 고를 때 뭘 봐야 해?`,
+      },
+      {
+        nameless: false,
+        language: "ko",
+        text: `${input.brandName} 후기 어때?`,
+      },
+    ];
+  }
+  if (input.language === "en" && !hasHangul) {
+    return [
+      {
+        nameless: true,
+        language: "en",
+        text: `Can you recommend ${phrase} companies?`,
+      },
+      {
+        nameless: true,
+        language: "en",
+        text: `What are the best ${phrase} options?`,
+      },
+      {
+        nameless: true,
+        language: "en",
+        text: `What should I look for when choosing ${phrase}?`,
+      },
+      {
+        nameless: false,
+        language: "en",
+        text: `What do people say about ${input.brandName}?`,
+      },
+    ];
+  }
+  return null;
+}
+
+/**
+ * 이름 질문 보장용 고정 문형(2026-10-18, 진단 ⑥). 생성기가 이름 질문을 하나도 못 냈을 때만 코드가 채운다.
+ * 브랜드 이름은 입력 그대로 넣으므로 `brand_missing`(이름 표기가 어긋나 전부 폐기) 문제가 구조적으로 생기지 않는다.
+ */
+export function fixedBrandQuestions(
+  brandName: string,
+  scope: PlanMarketScope | null | undefined
+): PlanQuestion[] {
+  const name = brandName.trim();
+  if (name.length < 2) {
+    return [];
+  }
+  const forms = {
+    ko: [`${name} 후기 어때?`, `${name} 장단점 알려줘`, `${name} 어떤 곳이야?`],
+    en: [
+      `What do people say about ${name}?`,
+      `What are the pros and cons of ${name}?`,
+      `What is ${name} known for?`,
+    ],
+  } as const;
+  const targets = targetCounts(scope).brand;
+  return (["ko", "en"] as const).flatMap((language) =>
+    forms[language].slice(0, targets[language]).map((text) => ({
+      language,
+      text,
+      type: "brand" as const,
+    }))
+  );
+}
+
 // ── 자동 검사 ────────────────────────────────────────────────────────────
 const NON_IDENTITY_CHAR_RE = /[^a-z0-9가-힣]/g;
 const LIST_MARKER_RE = /^\s*[-*\d.)\s]+/;
@@ -528,10 +619,25 @@ export function industryFrame(
 export function fixedAlternativeQuestions(
   industry: string | null | undefined,
   scope: PlanMarketScope | null | undefined,
-  categoryPhrase?: string | null
+  categoryPhrase?: string | null,
+  options: { phraseOnly?: boolean } = {}
 ): PlanQuestion[] {
   const label = industryLabel(industry);
   if (!label) {
+    // 업종이 `other`·미지정이어도(진단 ③) 사이트 근거로 검증된 한국어 분야 이름이 있으면 그 문형만 쓴다(영어는 지어내지 않는다).
+    if (
+      options.phraseOnly &&
+      categoryPhrase &&
+      HANGUL_RE.test(categoryPhrase)
+    ) {
+      return categoryAlternativeForms(categoryPhrase)
+        .slice(0, targetCounts(scope).alternative.ko)
+        .map((text) => ({
+          language: "ko" as const,
+          text,
+          type: "alternative" as const,
+        }));
+    }
     return [];
   }
   const forms = industryFrame(industry).alternativeForms;
