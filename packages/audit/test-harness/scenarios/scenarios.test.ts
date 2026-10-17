@@ -34,9 +34,11 @@ vi.mock("@repo/database", () => ({ database: {} }));
 
 describe("시나리오 준비값 점검(계획표가 코드와 어긋나지 않았는가)", () => {
   it("T2·T3 계획은 시드가 고정돼 있고 칸당 호출 상한은 3이다", () => {
-    expect(T2_PLAN.seed).toBe(SCENARIO_SEED);
+    // T2 는 시드 3(SCENARIO_SEED 로는 gemini 429 가 24번 안에 한 번도 안 나와 시험이 비었다).
+    expect(T2_PLAN.seed).toBe(3);
     expect(T3_PLAN.seed).toBe(SCENARIO_SEED);
-    expect(MAX_CALLS_PER_CELL).toBe(3);
+    // 최초 1 + 칸당 재시도 상한(stabilityLimits 기본 1).
+    expect(MAX_CALLS_PER_CELL).toBe(2);
     expect(T2_QUESTIONS).toBe(20);
     expect(T3_QUESTIONS).toBe(20);
   });
@@ -68,16 +70,7 @@ describe("T1 동시 폭주 (필요한 합쳐진 단위: U2 입장 관리)", () =
     ).toBe(false);
   });
 
-  it.todo(
-    "고객 3곳(A 20 · B 1 · C 1) + 내부 2 + 무료 3 동시 시작 → 동시 실행 ≤ 상한 (ConcurrencyProbe.maxConcurrent)"
-  );
-  it.todo(
-    "고객별 동시 실행 ≤ 공정 상한, B·C 첫 시작 대기가 A 의 잔여 작업 시간에 비례하지 않음 (probe.waitMs)"
-  );
-  it.todo(
-    "입장 대기 중인 job 이 AUDIT_JOB_QUEUE_STALE_AFTER_MS(30분)에 걸려 실패로 바뀌지 않음 (store.statusTrail 에 failed 없음)"
-  );
-  it.todo("풀 크기 1·2 각각에서 FakePool.timeouts === 0 (연결 대기 오류 0)");
+  // 채움: apps/app/__tests__/stability-t1-concurrency.scenario.test.ts (입장 관리·대기 줄 일꾼은 apps/app 에 있다).
 });
 
 describe("T2 엔진 1개 100% 5xx + 다른 엔진 20% 429 (필요: U1 재시도·서킷브레이커)", () => {
@@ -86,19 +79,7 @@ describe("T2 엔진 1개 100% 5xx + 다른 엔진 20% 429 (필요: U1 재시도�
     expect(T2_PLAN.rules.map((r) => r.engine)).toEqual(["claude", "gemini"]);
   });
 
-  it.todo("모든 칸의 harness.callsPerCell() ≤ MAX_CALLS_PER_CELL(3)");
-  it.todo(
-    "총 호출 수 ≤ (질문 수 × 엔진 수 × 3), 장애 엔진(claude)은 서킷브레이커로 그보다 훨씬 적음"
-  );
-  it.todo(
-    "장애 엔진 제외 시 결과 measurementContext.engineErrors(또는 U1 이 정한 필드)에 엔진·사유 기록"
-  );
-  it.todo(
-    "오류 칸이 mentionQuality 'absent'(미노출)로 바뀌는 경로 0 — 모든 오류 행은 errorMessage 유지 + 분모(verifiedCount) 제외"
-  );
-  it.todo(
-    "Retry-After(5초)를 존중: 재시도 시각 − 첫 호출 시각 ≥ 5초 (가짜 시계 + CallRecord.at)"
-  );
+  // 채움: T2-T3-runner.scenario.test.ts(러너 층) · packages/ai/lib/engines/test-harness/t2-t3-engine-guard.scenario.test.ts(엔진 층).
 });
 
 describe("T3 빈 응답 20% (필요: U1 빈 응답 재시도·분모 제외)", () => {
@@ -106,13 +87,7 @@ describe("T3 빈 응답 20% (필요: U1 빈 응답 재시도·분모 제외)", (
     expect(T3_PLAN.rules.every((r) => r.fault.type === "empty")).toBe(true);
   });
 
-  it.todo(
-    "빈 응답은 미노출로 세지 않는다: 해당 칸이 분모(verifiedCount)에서 빠짐"
-  );
-  it.todo(
-    "빈 응답 칸은 재시도(칸당 호출 ≤ 3) 후에도 비면 분모 제외 + 사유(예: empty_response) 기록"
-  );
-  it.todo("시드 고정 20% 주입에서 같은 입력은 같은 결과(재현성)");
+  // 채움: T2-T3-runner.scenario.test.ts · packages/ai/lib/engines/test-harness/t2-t3-engine-guard.scenario.test.ts.
 });
 
 describe("T4 중단 시뮬 (필요: U3 중단 복구, 정리 cron)", () => {
@@ -136,16 +111,7 @@ describe("T4 중단 시뮬 (필요: U3 중단 복구, 정리 cron)", () => {
     expect(T4.interruptAfterSavedQuestions).toBeLessThan(T4.questions);
   });
 
-  it.todo(
-    "lease 만료 + 정리 cron 실행 후 job.status 가 failed 가 아니라 queued(+leaseUntil, 이어가기 대기)"
-  );
-  it.todo(
-    "이어가기 실행은 남은 질문(8~12번째)만 호출 — harness.calls 에 q1~q7 없음"
-  );
-  it.todo("같은 칸(엔진+질문) 유료 호출 1회 (callsPerCell 최대 1)");
-  it.todo(
-    "이어가기 횟수가 MAX_AUDIT_CONTINUATIONS 를 넘지 않음 — 초과 시 잠정 마감"
-  );
+  // 채움: T4-T5-interruption-rollback.scenario.test.ts · apps/web/__tests__/stability-t4-sweep-route.test.ts(cron 라우트).
 });
 
 describe("T5 롤백 호환 (필요: U1~U4 중 checkpoint/결과에 필드를 더하는 단위 + 플래그)", () => {
@@ -197,11 +163,5 @@ describe("T5 롤백 호환 (필요: U1~U4 중 checkpoint/결과에 필드를 더
     );
   });
 
-  it.todo(
-    "새 코드(플래그 켬)가 만든 checkpoint 를 옛 코드 읽기(readAuditCheckpoint at 5068d9f4)로 읽어 이어가기 성공"
-  );
-  it.todo(
-    "플래그 끈 상태의 측정 결과 JSON 이 기준선(5068d9f4)과 바이트 동일 (시각·durationMs 정규화 후)"
-  );
-  it.todo("플래그 켰다 끈 뒤(롤백) 진행 중이던 job 이 이어가기로 완료");
+  // 채움: T4-T5-interruption-rollback.scenario.test.ts 의 「T5 롤백 호환」 · apps/web/__tests__/stability-t4-sweep-route.test.ts(정리 경로 꺼짐 동일).
 });

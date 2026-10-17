@@ -29,7 +29,8 @@ export const T1 = {
 // ── T2 엔진 1개 100% 5xx + 다른 엔진 20% 429 ──────────────────
 export const T2_QUESTIONS = 20;
 export const T2_PLAN: FaultPlan = {
-  seed: SCENARIO_SEED,
+  // SCENARIO_SEED 는 gemini 호출 24번 안에 429 가 한 번도 안 나온다(시드 스캔 실측) → 시드 3(7·8·9·13·16번째가 429).
+  seed: 3,
   rules: [
     { engine: "claude", fault: { type: "http5xx", status: 503 } },
     {
@@ -39,8 +40,8 @@ export const T2_PLAN: FaultPlan = {
     },
   ],
 };
-/** U1 합격선: 칸당 호출 ≤ 3(최초 1 + 재시도 2). */
-export const MAX_CALLS_PER_CELL = 3;
+/** U1 합격선: 칸당 호출 ≤ 2(최초 1 + 재시도 1 = stabilityLimits().cellMaxRetries 기본값). 초안의 3 은 낡았다. */
+export const MAX_CALLS_PER_CELL = 2;
 
 // ── T3 빈 응답 20% ──────────────────────────────────────────
 export const T3_QUESTIONS = 20;
