@@ -20,6 +20,7 @@ import {
   auditJobInternal,
   auditJobNotInternal,
 } from "@repo/database/internal-orgs";
+import { withCronHeartbeat } from "@repo/observability/cron-heartbeat";
 import { log } from "@repo/observability/log";
 import { denyIfNotCron } from "@repo/security/cron";
 import type { NextRequest } from "next/server";
@@ -30,7 +31,23 @@ export const maxDuration = 30;
 const STALE_AFTER_MS = 15 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * 하트비트(2026-10-18 안정성 U4): cron 이 조용히 멈추는 것을 Sentry 모니터가 감지하게 체크인을 보낸다.
+ * 인증을 **먼저** 거치므로 거절된 호출은 체크인을 만들지 않는다(가짜 체크인으로 정지를 가리지 못하게).
+ * 플래그 `STABILITY_OPS_ALERTS_ENABLED` 꺼짐이면 본문만 그대로 실행한다(동작 동일).
+ */
 export const GET = async (request: NextRequest) => {
+  const denied = denyIfNotCron(request);
+  if (denied) {
+    return denied;
+  }
+  return await withCronHeartbeat("daily-ops-digest", "0 15 * * *", () =>
+    runDailyOpsDigest(request)
+  );
+};
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 기존 cron 본문을 그대로 옮겼다(하트비트 래퍼 추가로 함수 이름만 바뀜).
+const runDailyOpsDigest = async (request: NextRequest) => {
   const denied = denyIfNotCron(request);
   if (denied) {
     return denied;

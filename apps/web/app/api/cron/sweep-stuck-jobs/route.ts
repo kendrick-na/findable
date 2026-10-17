@@ -27,6 +27,7 @@ import {
 } from "@repo/audit/stale-job";
 import { sweepAuditTrackingReconciliation } from "@repo/audit/sweep-audit-tracking";
 import { database } from "@repo/database";
+import { withCronHeartbeat } from "@repo/observability/cron-heartbeat";
 import { log } from "@repo/observability/log";
 import { captureOpsAlert } from "@repo/observability/ops-alert";
 import { denyIfNotCron } from "@repo/security/cron";
@@ -39,7 +40,22 @@ export const maxDuration = 300;
 // crew 단계 전용 임계값. crew route STALE_AFTER_MS(15분)와 동일.
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
+/**
+ * 하트비트(2026-10-18 안정성 U4): cron 이 조용히 멈추는 것을 Sentry 모니터가 감지하게 체크인을 보낸다.
+ * 인증을 **먼저** 거치므로 거절된 호출은 체크인을 만들지 않는다(가짜 체크인으로 정지를 가리지 못하게).
+ * 플래그 `STABILITY_OPS_ALERTS_ENABLED` 꺼짐이면 본문만 그대로 실행한다(동작 동일).
+ */
 export const GET = async (request: NextRequest) => {
+  const denied = denyIfNotCron(request);
+  if (denied) {
+    return denied;
+  }
+  return await withCronHeartbeat("sweep-stuck-jobs", "*/15 * * * *", () =>
+    runSweepStuckJobs(request)
+  );
+};
+
+const runSweepStuckJobs = async (request: NextRequest) => {
   const denied = denyIfNotCron(request);
   if (denied) {
     return denied;
