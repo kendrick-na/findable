@@ -10,6 +10,12 @@ const POST_ROUTE = readFileSync(
   join(import.meta.dirname, "../../web/app/api/audit/route.ts"),
   "utf8"
 );
+// 익명 캐시 조회는 2026-10-17 에 route.ts → lib/audit-gates.ts 로 옮겼다(MCP 커넥터와 공유).
+//   쿼리 본문 검사는 새 위치에서, "라우트가 그 함수를 실제로 쓴다"는 검사는 route.ts 에서 한다.
+const AUDIT_GATES = readFileSync(
+  join(import.meta.dirname, "../../web/lib/audit-gates.ts"),
+  "utf8"
+);
 const POLL_ROUTE = readFileSync(
   join(import.meta.dirname, "../../web/app/api/audit/[jobId]/route.ts"),
   "utf8"
@@ -73,10 +79,18 @@ describe("audit tenant boundary", () => {
   });
 
   test("anonymous cache query is tenant-bound", () => {
-    expect(POST_ROUTE).toMatch(/organizationId:\s*null/);
-    expect(POST_ROUTE).toMatch(
+    expect(AUDIT_GATES).toMatch(/organizationId:\s*null/);
+    expect(AUDIT_GATES).toMatch(
       /NOT:\s*\{\s*email:\s*\{\s*startsWith:\s*"org:"/
     );
+  });
+
+  test("POST route uses the tenant-bound cache and does not keep its own copy", () => {
+    expect(POST_ROUTE).toMatch(/findCachedByDomain/);
+    expect(POST_ROUTE).toMatch(/from "\.\.\/\.\.\/\.\.\/lib\/audit-gates"/);
+    // 사본이 다시 생기면(한쪽만 고쳐지는 사고) 바로 잡는다.
+    expect(POST_ROUTE).not.toMatch(/function findCachedByDomain/);
+    expect(POST_ROUTE).not.toMatch(/organizationId:\s*null/);
   });
 
   test("public poll route applies the private-result gate", () => {
