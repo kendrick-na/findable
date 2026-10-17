@@ -19,6 +19,8 @@
 //      되살리지 말 것 → `packages/security/cron.ts` 주석 참고.
 
 import { continueOldestPendingAudit } from "@repo/audit/audit-continuation";
+import { resumeStuckProcessingJobs } from "@repo/audit/resume-stuck";
+import { isStabilityFlagOn } from "@repo/audit/stability-flags";
 import {
   AUDIT_JOB_QUEUE_STALE_ERROR,
   staleAuditJobsWhere,
@@ -48,6 +50,16 @@ export const GET = async (request: NextRequest) => {
   // 1) 빠른 모드 stuck — 기준은 stale-job 단일 진실. 문구 "stuck-swept" 는
   //    measure-one 의 재개 판별(RESUMABLE_TIMEOUT_RE)이 읽으므로 바꾸지 말 것.
   const now = new Date();
+  // U3(STABILITY_RESUME_STUCK_ENABLED, 기본 꺼짐): 받아 둔 답이 있는 stale processing 은 실패 대신
+  //   이어가기 대기(queued + leaseUntil)로 돌린다 — 돌린 작업은 아래 failed 정리 조건에서 빠진다.
+  //   꺼짐이면 이 호출·응답 키가 없어 기존과 같다.
+  const resumeStuck = isStabilityFlagOn("STABILITY_RESUME_STUCK_ENABLED");
+  const resumedStuck = resumeStuck
+    ? await resumeStuckProcessingJobs({
+        now,
+        staleWhere: staleAuditJobsWhere("processing", now),
+      })
+    : 0;
   const fastProcessing = await database.auditJob.updateMany({
     where: staleAuditJobsWhere("processing", now),
     data: {
@@ -100,11 +112,16 @@ export const GET = async (request: NextRequest) => {
     });
   }
 
-  const swept = { crew: crew.count, fast: fast.count };
+  const swept = {
+    crew: crew.count,
+    fast: fast.count,
+    ...(resumeStuck ? { resumed: resumedStuck } : {}),
+  };
   const tracking = await sweepAuditTrackingReconciliation(now);
   if (
     swept.fast > 0 ||
     swept.crew > 0 ||
+    resumedStuck > 0 ||
     tracking.completed > 0 ||
     tracking.failed > 0
   ) {
