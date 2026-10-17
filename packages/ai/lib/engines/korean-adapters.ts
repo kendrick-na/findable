@@ -8,6 +8,8 @@
 // 환경변수 미설정 시 stub 응답.
 // Naver Cue: 직접 스크래핑은 D-004에 따라 v1.0 제외 (약관·법적 리스크).
 
+import { isStabilityFlagOn } from "../stability-flags";
+import { abortableSleep } from "./cell-retry";
 import { isAbortError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type {
@@ -199,6 +201,38 @@ interface NaverSearchResult {
   items: NaverSearchItem[];
 }
 
+/** 검색 API 요청 실패 재시도 간격(ms) — 요청이 무료라 짧게 1회만. */
+const SEARCH_REQUEST_RETRY_DELAY_MS = 1000;
+
+/**
+ * 안정성 U1(STABILITY_CELL_RETRY_ENABLED): 다음·네이버 검색 **요청 실패**(429·5xx·네트워크 오류)는
+ * 1초 뒤 1회 다시 보낸다. 결과 0건(정상 응답)은 요청 실패가 아니므로 여기서 다루지 않는다.
+ * 플래그가 꺼져 있으면 `send()` 를 그대로 한 번 부른다(기존과 동일). 중단(abort)이면 즉시 던진다.
+ */
+async function sendSearchRequest(
+  send: () => Promise<Response>,
+  signal: AbortSignal | undefined
+): Promise<Response> {
+  if (!isStabilityFlagOn("STABILITY_CELL_RETRY_ENABLED")) {
+    return await send();
+  }
+  let first: Response;
+  try {
+    first = await send();
+  } catch (error) {
+    if (isAbortError(error) || signal?.aborted) {
+      throw error;
+    }
+    await abortableSleep(SEARCH_REQUEST_RETRY_DELAY_MS, signal);
+    return await send();
+  }
+  if (first.ok || !(first.status === 429 || first.status >= 500)) {
+    return first;
+  }
+  await abortableSleep(SEARCH_REQUEST_RETRY_DELAY_MS, signal);
+  return await send();
+}
+
 async function naverSearch(
   query: string,
   signal?: AbortSignal
@@ -216,13 +250,17 @@ async function naverSearch(
   const results = await Promise.allSettled(
     endpoints.map(async (kind) => {
       const url = `https://openapi.naver.com/v1/search/${kind}.json?query=${encodeURIComponent(query)}&display=10`;
-      const resp = await fetch(url, {
-        headers: {
-          "X-Naver-Client-Id": clientId,
-          "X-Naver-Client-Secret": clientSecret,
-        },
-        signal,
-      });
+      const resp = await sendSearchRequest(
+        () =>
+          fetch(url, {
+            headers: {
+              "X-Naver-Client-Id": clientId,
+              "X-Naver-Client-Secret": clientSecret,
+            },
+            signal,
+          }),
+        signal
+      );
       if (!resp.ok) {
         throw new Error(`${kind} HTTP ${resp.status}`);
       }
@@ -359,10 +397,14 @@ export const daumAdapter: EngineAdapter = async (query) => {
       const res = await Promise.allSettled(
         endpoints.map(async (kind) => {
           const url = `https://dapi.kakao.com/v2/search/${kind}?query=${encodeURIComponent(q)}&size=10`;
-          const resp = await fetch(url, {
-            headers: { Authorization: `KakaoAK ${restKey}` },
-            signal: query.signal,
-          });
+          const resp = await sendSearchRequest(
+            () =>
+              fetch(url, {
+                headers: { Authorization: `KakaoAK ${restKey}` },
+                signal: query.signal,
+              }),
+            query.signal
+          );
           if (!resp.ok) {
             kakaoFailures += 1;
             return [];

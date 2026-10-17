@@ -47,16 +47,29 @@ export interface StabilityLimits {
   cellMaxRetries: number;
   /** 전체 동시 실행 상한(내부·무료·고객 모두 센다). */
   globalConcurrency: number;
-  /** 고객(조직)별 동시 실행 상한. */
+  /** 고객(조직)별 동시 실행 상한 — 플랜 구분이 없을 때의 값(= 가장 큰 플랜 값). */
   orgConcurrency: number;
-  /** 고객별 하루(24시간) 측정 횟수 상한 — 플랜별. 무료는 기존 규칙(도메인당 24시간 1회)을 그대로 쓴다. */
+  /** 고객(조직)별 동시 실행 상한 — 플랜별(스타터 1·그로스 2·스케일 2). */
+  orgConcurrencyByPlan: { growth: number; scale: number; starter: number };
+  /**
+   * 고객별 하루(24시간) **수동** 측정 횟수 상한 — 플랜별. 자동 측정(스타터 주 1·그로스 매일)은 이 한도와 별도로 큐가 분산한다.
+   * 무료는 기존 규칙(도메인당 24시간 1회)을 그대로 쓴다.
+   */
   orgDailyCap: { growth: number; scale: number; starter: number };
+  /** 고객별 월(30일) 수동 측정 합계 상한 — 플랜별. */
+  orgMonthlyCap: { growth: number; scale: number; starter: number };
   /** 대기 줄에서 이 시간(분)을 넘기면 실패로 닫는다(안내 문구와 함께). */
   queueWaitMaxMinutes: number;
   /** Retry-After 를 따르되 이 값(ms)을 넘기지 않는다. */
   retryAfterCapMs: number;
   /** 재시도 사이 대기(ms) 목록. 부족하면 마지막 값을 쓴다. */
   retryDelaysMs: number[];
+  /**
+   * `Retry-After` 없는 429(지출 상한·크레딧 소진일 수 있다)도 재시도할까. 기본 false — 재시도로 안 풀리고 원가만 늘 수 있다.
+   */
+  retryOn429WithoutRetryAfter: boolean;
+  /** 총 재시도 호출이 전체 호출에서 차지할 수 있는 비율 상한(0~1) — 재시도가 원가·429를 키우지 않게 하는 총량 상한. */
+  retryTotalShare: number;
 }
 
 const num = (raw: string | undefined, fallback: number): number => {
@@ -77,24 +90,39 @@ const numList = (raw: string | undefined, fallback: number[]): number[] => {
 };
 
 /**
- * ⚠️ 아래 기본값은 **임시값**(공급자 한도 미확인). 환경값 이름은 고정이다 — 값만 운영에서 바꾼다.
+ * 기본값은 대표 위임(2026-10-18)으로 확정한 **경쟁사·공급자 조사 채택값**이다
+ *  (근거: Findable_동기측정/결과/측정한도_경쟁사_공급자_조사_20261018.md). 환경값 이름은 고정이고, 값은 운영에서 바꾼다.
+ *  올리는 기준(2주 연속): 큐 대기 p95 5분 초과 · 429 2% 미만 · 실측 원가율 15% 미만 · 상한 도달 고객 20% 초과.
  */
 export function stabilityLimits(
   env: Record<string, string | undefined> = process.env
 ): StabilityLimits {
   return {
-    breakerCooldownMs: num(env.STABILITY_BREAKER_COOLDOWN_MS, 120_000),
-    breakerFailThreshold: num(env.STABILITY_BREAKER_FAIL_THRESHOLD, 5),
-    cellMaxRetries: num(env.STABILITY_CELL_MAX_RETRIES, 2),
+    breakerCooldownMs: num(env.STABILITY_BREAKER_COOLDOWN_MS, 300_000),
+    breakerFailThreshold: num(env.STABILITY_BREAKER_FAIL_THRESHOLD, 3),
+    cellMaxRetries: num(env.STABILITY_CELL_MAX_RETRIES, 1),
     globalConcurrency: num(env.STABILITY_GLOBAL_CONCURRENCY, 8),
     orgConcurrency: num(env.STABILITY_ORG_CONCURRENCY, 2),
+    orgConcurrencyByPlan: {
+      growth: num(env.STABILITY_ORG_CONCURRENCY_GROWTH, 2),
+      scale: num(env.STABILITY_ORG_CONCURRENCY_SCALE, 2),
+      starter: num(env.STABILITY_ORG_CONCURRENCY_STARTER, 1),
+    },
     orgDailyCap: {
-      growth: num(env.STABILITY_ORG_DAILY_CAP_GROWTH, 10),
-      scale: num(env.STABILITY_ORG_DAILY_CAP_SCALE, 20),
-      starter: num(env.STABILITY_ORG_DAILY_CAP_STARTER, 3),
+      growth: num(env.STABILITY_ORG_DAILY_CAP_GROWTH, 5),
+      scale: num(env.STABILITY_ORG_DAILY_CAP_SCALE, 10),
+      starter: num(env.STABILITY_ORG_DAILY_CAP_STARTER, 2),
+    },
+    orgMonthlyCap: {
+      growth: num(env.STABILITY_ORG_MONTHLY_CAP_GROWTH, 100),
+      scale: num(env.STABILITY_ORG_MONTHLY_CAP_SCALE, 250),
+      starter: num(env.STABILITY_ORG_MONTHLY_CAP_STARTER, 30),
     },
     queueWaitMaxMinutes: num(env.STABILITY_QUEUE_WAIT_MAX_MINUTES, 120),
     retryAfterCapMs: num(env.STABILITY_RETRY_AFTER_CAP_MS, 15_000),
-    retryDelaysMs: numList(env.STABILITY_RETRY_DELAYS_MS, [2000, 8000]),
+    retryDelaysMs: numList(env.STABILITY_RETRY_DELAYS_MS, [2000]),
+    retryOn429WithoutRetryAfter:
+      (env.STABILITY_RETRY_429_WITHOUT_RETRY_AFTER ?? "").trim() === "1",
+    retryTotalShare: num(env.STABILITY_RETRY_TOTAL_SHARE, 0.2),
   };
 }

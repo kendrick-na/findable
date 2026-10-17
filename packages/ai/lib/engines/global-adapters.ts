@@ -28,6 +28,8 @@ import {
   tripLetsurCircuit,
   withLetsurFallback,
 } from "../letsur-fallback";
+import { isStabilityFlagOn } from "../stability-flags";
+import { classifyRetryable, noteRetryHint } from "./cell-retry";
 import { describeProviderError, isAbortError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type {
@@ -891,6 +893,10 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
             : "You are a search assistant. Provide factual, brand-aware answers with concrete recommendations and sources when available.",
         prompt: query.prompt,
         abortSignal: query.signal,
+        // 안정성 U1: 칸 재시도가 켜지면 SDK 기본 재시도(2회)를 끈다 — 재시도 한 층만(곱셈 방지).
+        ...(isStabilityFlagOn("STABILITY_CELL_RETRY_ENABLED")
+          ? { maxRetries: 0 }
+          : {}),
         // Vercel Gateway 경로에서만 태그 부착(Letsur·Google 직접 호출은 미해당).
         ...(useDirectProvider
           ? {}
@@ -911,6 +917,34 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
       //   실측 32건(perplexity·gemini·claude)에서 마크다운 링크가 그대로 화면에 노출됐고,
       //   perplexity 는 `<br>` 태그까지 보냈다. 인용 URL 은 citedSources 에 따로 남는다.
       const text = sanitizeEngineText(rawText);
+      // 안정성 U1: 빈(공백뿐) 응답은 「답이 없다」가 아니라 「못 쟀다」다 — 오류 칸으로 돌려 재시도·분모 제외가 되게 한다.
+      //   brandMentioned 등 측정값은 만들지 않는다. 토큰은 이미 썼으니 usage 는 남긴다(원가 과소 집계 방지).
+      if (
+        isStabilityFlagOn("STABILITY_EMPTY_AS_ERROR_ENABLED") &&
+        text.trim().length === 0
+      ) {
+        const emptyFailure: EngineResponse = {
+          engineId,
+          rawResponse: "",
+          brandMentioned: false,
+          mentionPosition: null,
+          mentionListSize: null,
+          sentiment: null,
+          citedSources: [],
+          shareOfVoice: null,
+          errorMessage: `Engine ${engineId} returned an empty answer`,
+          durationMs: Date.now() - start,
+          isStub: false,
+          usage: {
+            inputTokens: usage?.inputTokens ?? null,
+            outputTokens: usage?.outputTokens ?? null,
+            costModel:
+              engineId === "gemini" && useDirectProvider ? "free" : "token",
+            ...gatewayRoute(engineId, useDirectProvider, providerMetadata),
+          },
+        };
+        return noteRetryHint(emptyFailure, { retryable: true });
+      }
       const mention = detectBrandMention(
         text,
         query.brandName,
@@ -971,7 +1005,7 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
         throw error;
       }
       logProviderFailure(engineId, useDirectProvider, error);
-      return {
+      const failure: EngineResponse = {
         engineId,
         rawResponse: "",
         brandMentioned: false,
@@ -984,6 +1018,9 @@ function makeGatewayAdapter(engineId: GlobalEngineId): EngineAdapter {
         durationMs: Date.now() - start,
         isStub: false,
       };
+      return isStabilityFlagOn("STABILITY_CELL_RETRY_ENABLED")
+        ? noteRetryHint(failure, classifyRetryable(error))
+        : failure;
     }
   };
 }
@@ -1119,6 +1156,9 @@ async function runChatgptSearchAttempt(
     tools: attempt.tools as never,
     prompt: query.prompt,
     abortSignal: query.signal,
+    ...(isStabilityFlagOn("STABILITY_CELL_RETRY_ENABLED")
+      ? { maxRetries: 0 }
+      : {}),
     ...(attempt.via === "gateway"
       ? {
           providerOptions: {
@@ -1231,7 +1271,7 @@ export const chatgptApiSearchAdapter: EngineAdapter = async (query) => {
       lastError = error;
     }
   }
-  return {
+  const failure: EngineResponse = {
     engineId: "chatgpt",
     rawResponse: "",
     brandMentioned: false,
@@ -1245,6 +1285,9 @@ export const chatgptApiSearchAdapter: EngineAdapter = async (query) => {
     durationMs: Date.now() - start,
     isStub: false,
   };
+  return isStabilityFlagOn("STABILITY_CELL_RETRY_ENABLED")
+    ? noteRetryHint(failure, classifyRetryable(lastError))
+    : failure;
 };
 export const claudeAdapter: EngineAdapter = makeGatewayAdapter("claude");
 export const perplexityAdapter: EngineAdapter =

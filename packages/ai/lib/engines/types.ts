@@ -214,6 +214,11 @@ export interface EngineResponse {
     | "absent"
     | "unverified";
   rawResponse: string;
+  /**
+   * 칸당 재시도(STABILITY_CELL_RETRY_ENABLED)가 일어났을 때만 붙는 총 시도 횟수(최초 포함, 2 이상).
+   * 재시도가 없으면 생략 — 꺼짐 상태·1회 성공 응답의 JSON 은 기존과 같다. usage 는 시도 간 합산됐다.
+   */
+  retryAttempts?: number;
   sentiment: "positive" | "neutral" | "negative" | null;
   /**
    * api-search-v1 후보 엔진 섀도 결과(`API_SEARCH_SHADOW=true` + 허용 도메인). **chatgpt·gemini 행에만** 붙는다.
