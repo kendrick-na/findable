@@ -21,15 +21,21 @@ describe("안정성 플래그 — 전부 기본 꺼짐", () => {
   });
 });
 
-describe("stabilityLimits — 숫자는 환경값, 기본값은 임시", () => {
+describe("stabilityLimits — 숫자는 환경값, 기본값은 조사 채택값", () => {
   it("환경값이 없으면 임시 기본값", () => {
     const limits = stabilityLimits({});
     expect(limits).toMatchObject({
-      cellMaxRetries: 2,
+      breakerCooldownMs: 300_000,
+      breakerFailThreshold: 3,
+      cellMaxRetries: 1,
       globalConcurrency: 8,
       orgConcurrency: 2,
-      orgDailyCap: { growth: 10, scale: 20, starter: 3 },
-      retryDelaysMs: [2000, 8000],
+      orgConcurrencyByPlan: { growth: 2, scale: 2, starter: 1 },
+      orgDailyCap: { growth: 5, scale: 10, starter: 2 },
+      orgMonthlyCap: { growth: 100, scale: 250, starter: 30 },
+      retryDelaysMs: [2000],
+      retryOn429WithoutRetryAfter: false,
+      retryTotalShare: 0.2,
     });
   });
   it("환경값이 있으면 그 값, 잘못된 값은 기본값으로", () => {
@@ -49,6 +55,10 @@ describe("stabilityLimits — 숫자는 환경값, 기본값은 임시", () => {
         STABILITY_GLOBAL_CONCURRENCY: "abc",
         STABILITY_RETRY_DELAYS_MS: "x,y",
       })
-    ).toMatchObject({ globalConcurrency: 8, retryDelaysMs: [2000, 8000] });
+    ).toMatchObject({ globalConcurrency: 8, retryDelaysMs: [2000] });
+    expect(
+      stabilityLimits({ STABILITY_RETRY_429_WITHOUT_RETRY_AFTER: "1" })
+        .retryOn429WithoutRetryAfter
+    ).toBe(true);
   });
 });
