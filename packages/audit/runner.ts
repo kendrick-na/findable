@@ -81,6 +81,7 @@ import {
   DEMAND_PROMPTS_TIMEOUT_MS,
   resolveDemandDiscovery,
 } from "./demand-run-prompts";
+import { summarizeEngineErrors } from "./engine-error-log";
 import { geoAxisScores } from "./geo-score";
 import { keys } from "./keys";
 import {
@@ -1814,6 +1815,20 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
         ),
         discoveryPromptCount: prompts.filter((p) => p.kind === "discovery")
           .length,
+        // 어느 엔진이 어떤 종류로(타임아웃·429·검색 결과 없음) 실패했나 — 저장된 행에서 계산만 한다(없으면 키도 없다).
+        ...(() => {
+          const engineErrors = summarizeEngineErrors(
+            flat.map((r, index) => ({
+              durationMs: r.durationMs,
+              engineId: r.engineId,
+              errorMessage: r.errorMessage,
+              lateCell: lateCellMarker(cellOfRow(index, r.engineId)),
+              promptIndex: tagged[index]?.promptIndex,
+              promptKind: tagged[index]?.promptKind,
+            }))
+          );
+          return engineErrors ? { engineErrors } : {};
+        })(),
         // 측정 시작 시점의 준비도 + '기본값으로 진행' 선택 기록(없으면 키도 없다).
         ...(checkpoint.context.setupReadiness
           ? { setupReadiness: checkpoint.context.setupReadiness }
