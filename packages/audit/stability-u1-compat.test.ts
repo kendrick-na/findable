@@ -100,7 +100,9 @@ describe("U1 — checkpoint 호환(N5): 필드 추가 없음, 새 응답 필드�
       scope
     );
     expect(read?.responses[0][0]).toMatchObject({ retryAttempts: 2 });
-    expect(read?.planKey).toBe(empty.planKey);
+    // 계획 키(planKey)의 입력인 질문 목록·엔진 계획은 새 필드가 있어도 그대로다.
+    expect(read?.prompts).toEqual(empty.prompts);
+    expect(read?.enginePlan).toEqual(empty.enginePlan);
   });
 
   it("플래그 꺼짐 상태의 기존 checkpoint 는 저장 JSON 이 바이트 동일(새 키 없음)", () => {
