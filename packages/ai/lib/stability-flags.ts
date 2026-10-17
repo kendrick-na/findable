@@ -64,6 +64,12 @@ export interface StabilityLimits {
   retryAfterCapMs: number;
   /** 재시도 사이 대기(ms) 목록. 부족하면 마지막 값을 쓴다. */
   retryDelaysMs: number[];
+  /**
+   * `Retry-After` 없는 429(지출 상한·크레딧 소진일 수 있다)도 재시도할까. 기본 false — 재시도로 안 풀리고 원가만 늘 수 있다.
+   */
+  retryOn429WithoutRetryAfter: boolean;
+  /** 총 재시도 호출이 전체 호출에서 차지할 수 있는 비율 상한(0~1) — 재시도가 원가·429를 키우지 않게 하는 총량 상한. */
+  retryTotalShare: number;
 }
 
 const num = (raw: string | undefined, fallback: number): number => {
