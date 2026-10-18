@@ -16,6 +16,8 @@ interface Job {
   errorMessage?: string;
   id: string;
   language: "ko";
+  /** 슬롯 예약 표식(`admit:…`) 또는 러너 토큰. */
+  leaseToken?: string | null;
   leaseUntil: Date | null;
   organizationId: string | null;
   status: "queued" | "processing" | "failed" | "completed";
@@ -29,11 +31,74 @@ const m = vi.hoisted(() => ({
 }));
 const jobs = () => m.jobs as Job[];
 
+const isReserved = (j: Job) =>
+  j.status === "queued" && Boolean(j.leaseToken?.startsWith("admit:"));
+// 대기 줄 조회는 예약 건을 뺀다(notReservedWhere).
 const isWaiting = (j: Job) =>
   j.status === "queued" &&
   j.leaseUntil === null &&
   j.organizationId !== null &&
-  j.brandId !== null;
+  j.brandId !== null &&
+  !isReserved(j);
+
+interface UpdateArgs {
+  data: Record<string, unknown>;
+  where: Record<string, unknown> & {
+    attemptStartedAt?: { lt: Date };
+    createdAt?: { lt: Date };
+    id?: string;
+    leaseToken?: { startsWith: string };
+    status?: string;
+  };
+}
+const updateManyImpl = ({ where, data }: UpdateArgs) => {
+  // 슬롯 예약 표식 찍기
+  if (
+    where.id &&
+    where.status === "queued" &&
+    typeof data.leaseToken === "string"
+  ) {
+    const job = jobs().find((j) => j.id === where.id && j.status === "queued");
+    if (job) {
+      Object.assign(job, data);
+    }
+    return { count: job ? 1 : 0 };
+  }
+  // 시작하지 못한 예약 되돌리기
+  if (where.leaseToken?.startsWith && where.attemptStartedAt) {
+    const before = where.attemptStartedAt.lt;
+    const hit = jobs().filter(
+      (j) => isReserved(j) && (j.attemptStartedAt ?? new Date(0)) < before
+    );
+    for (const j of hit) {
+      Object.assign(j, data);
+    }
+    return { count: hit.length };
+  }
+  const hit = jobs().filter(
+    (j) =>
+      isWaiting(j) &&
+      (!where.id || j.id === where.id) &&
+      (!where.createdAt || j.createdAt < where.createdAt.lt)
+  );
+  for (const j of hit) {
+    Object.assign(j, data);
+  }
+  return { count: hit.length };
+};
+const groupByImpl = () => {
+  const by = new Map<string, number>();
+  const occupied = jobs().filter(
+    (x) =>
+      x.status === "processing" ||
+      (isReserved(x) &&
+        (x.attemptStartedAt?.getTime() ?? 0) > NOW.getTime() - 90_000)
+  );
+  for (const j of occupied) {
+    by.set(j.email, (by.get(j.email) ?? 0) + 1);
+  }
+  return [...by].map(([email, n]) => ({ email, _count: { _all: n } }));
+};
 
 vi.mock("@repo/database", () => ({
   database: {
@@ -50,30 +115,7 @@ vi.mock("@repo/database", () => ({
       }),
     },
     auditJob: {
-      updateMany: async ({
-        where,
-        data,
-      }: {
-        data: Record<string, unknown>;
-        where: Record<string, unknown> & {
-          createdAt?: { lt: Date };
-          id?: string;
-        };
-      }) => {
-        const hit = jobs().filter((j) => {
-          if (where.id && j.id !== where.id) {
-            return false;
-          }
-          if (where.createdAt && !(j.createdAt < where.createdAt.lt)) {
-            return false;
-          }
-          return isWaiting(j);
-        });
-        for (const j of hit) {
-          Object.assign(j, data);
-        }
-        return { count: hit.length };
-      },
+      updateMany: async (args: UpdateArgs) => updateManyImpl(args),
       findMany: async ({ where }: { where: { leaseUntil: unknown } }) => {
         const waiting = where.leaseUntil === null;
         return jobs()
@@ -82,7 +124,8 @@ vi.mock("@repo/database", () => ({
               ? isWaiting(j)
               : j.status === "queued" &&
                 j.leaseUntil !== null &&
-                j.organizationId !== null
+                j.organizationId !== null &&
+                !isReserved(j)
           )
           .sort(
             (a, b) =>
@@ -96,14 +139,17 @@ vi.mock("@repo/database", () => ({
               ).getTime()
           );
       },
-      groupBy: async () => {
-        const by = new Map<string, number>();
-        for (const j of jobs().filter((x) => x.status === "processing")) {
-          by.set(j.email, (by.get(j.email) ?? 0) + 1);
-        }
-        return [...by].map(([email, n]) => ({ email, _count: { _all: n } }));
-      },
+      groupBy: async () => groupByImpl(),
     },
+    // 슬롯 예약 트랜잭션 대역(진짜 잠금·경합은 audit-queue-reservation-postgres.test.ts 가 증명한다).
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        $executeRaw: async () => 0,
+        auditJob: {
+          groupBy: async () => groupByImpl(),
+          updateMany: async (args: UpdateArgs) => updateManyImpl(args),
+        },
+      }),
   },
 }));
 vi.mock("@repo/audit/runner", () => ({ runAuditJob: m.runAuditJob }));
@@ -338,5 +384,57 @@ describe("cron 라우트", () => {
     const res = await GET(req("Bearer s3cret"));
     expect(res.status).toBe(200);
     expect(ranIds()).toEqual(["w"]);
+  });
+});
+
+describe("슬롯 예약(2026-10-18 판정 경합 수정)", () => {
+  it("일꾼은 대기 job 에 예약 표식을 찍은 뒤에 러너를 부른다", async () => {
+    const job = add({ org: "A", id: "w1" });
+    m.runAuditJob.mockImplementation(async () => {
+      // 러너가 불리는 시점에 이미 예약 표식이 있어야 한다(다른 판정이 이 자리를 센다).
+      expect(job.leaseToken?.startsWith("admit:")).toBe(true);
+    });
+    await runAuditQueueTick(1, NOW);
+    expect(ranIds()).toEqual(["w1"]);
+  });
+
+  it("예약된 job 은 다른 일꾼의 대기 후보에서 빠진다(같은 건을 또 집지 않음)", async () => {
+    add({
+      org: "A",
+      id: "reserved",
+      leaseToken: "admit:xyz",
+      attemptStartedAt: NOW,
+    });
+    const result = await runAuditQueueTick(1, NOW);
+    expect(result).toMatchObject({ picked: null });
+    expect(m.runAuditJob).not.toHaveBeenCalled();
+  });
+
+  it("시작하지 못한 예약(TTL 90초 초과)은 틱 맨 앞에서 대기로 되돌아와 시작된다", async () => {
+    const stale = add({
+      org: "A",
+      id: "stale-res",
+      leaseToken: "admit:old",
+      attemptStartedAt: new Date(NOW.getTime() - 5 * 60_000),
+    });
+    const result = await runAuditQueueTick(1, NOW);
+    expect(result).toMatchObject({ picked: true, jobId: "stale-res" });
+    expect(stale.leaseToken?.startsWith("admit:")).toBe(true); // 되돌린 뒤 다시 예약돼 실행
+    expect(ranIds()).toEqual(["stale-res"]);
+  });
+
+  it("살아 있는 예약도 자리를 차지한다 — 전역 상한이 예약 때문에 가득 차면 새 대기를 시작하지 않는다", async () => {
+    for (let i = 0; i < 8; i += 1) {
+      add({
+        org: `R${i}`,
+        id: `res-${i}`,
+        leaseToken: "admit:live",
+        attemptStartedAt: NOW,
+      });
+    }
+    add({ org: "W", id: "waiting" });
+    const result = await runAuditQueueTick(1, NOW);
+    expect(result).toMatchObject({ picked: null, reason: "no_room" });
+    expect(m.runAuditJob).not.toHaveBeenCalled();
   });
 });

@@ -8,8 +8,14 @@ import { isInternalOrgId } from "@repo/database/internal-orgs";
 import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { getAppDictionary } from "@/lib/i18n";
-import { hasRoomFor, loadRunningCounts, type RunningCounts } from "./admission";
+import {
+  hasRoomFor,
+  loadRunningCounts,
+  notReservedWhere,
+  type RunningCounts,
+} from "./admission";
 import { buildOrgRunInput } from "./run-input";
+import { releaseStaleReservations, reserveSlot } from "./slot-reservation";
 
 /**
  * 대기 줄 일꾼 1회분(cron 1회 = 함수 1개 = 최대 300초 → **작업 1건**).
@@ -27,11 +33,13 @@ import { buildOrgRunInput } from "./run-input";
 /** 한 번에 후보로 읽을 대기 건 상한(가장 오래된 순). */
 const CANDIDATE_LIMIT = 200;
 
+// 예약(슬롯을 받아 곧 시작하는 중) 건은 대기에서 뺀다 — 같은 건을 일꾼이 또 집지 않게(slot-reservation.ts).
 const waitingWhere = {
   status: "queued" as const,
   leaseUntil: null,
   organizationId: { not: null },
   brandId: { not: null },
+  ...notReservedWhere,
 };
 
 export type AuditQueueTickResult =
@@ -100,6 +108,9 @@ export async function runAuditQueueTick(
 ): Promise<AuditQueueTickResult> {
   const limits = stabilityLimits();
 
+  // 0) 시작하지 못하고 TTL 이 지난 예약 표식을 지운다 — 대기 줄에 다시 보이게(슬롯 반환).
+  await releaseStaleReservations(now);
+
   // 1) 너무 오래 기다린 대기는 실패로 닫는다(기존 오류 문구 재사용).
   const expired = await database.auditJob.updateMany({
     where: {
@@ -141,8 +152,23 @@ export async function runAuditQueueTick(
         language: true,
       },
     });
-    const job = pickEligible(waiting, counts, limits, await loadPlans(waiting));
+    const plans = await loadPlans(waiting);
+    const job = pickEligible(waiting, counts, limits, plans);
     if (job?.organizationId && job.brandId) {
+      // 고른 뒤 자리를 **원자적으로** 확보한다(판정과 확보를 쪼개면 시작 경로와 겹쳐 상한을 넘는다).
+      const slot = await reserveSlot({
+        jobId: job.id,
+        now,
+        orgId: job.organizationId,
+        plan: plans.get(job.organizationId),
+      });
+      if (slot !== "reserved") {
+        return {
+          expired: expired.count,
+          picked: null,
+          reason: "no_room",
+        };
+      }
       await runWaitingJob(
         {
           id: job.id,
@@ -170,6 +196,7 @@ export async function runAuditQueueTick(
       leaseUntil: { not: null },
       organizationId: { not: null },
       brandId: { not: null },
+      ...notReservedWhere,
     },
     orderBy: { attemptStartedAt: "asc" },
     take: CANDIDATE_LIMIT,
@@ -183,10 +210,26 @@ export async function runAuditQueueTick(
   const finalizing = pending.find(
     (row) => row.leaseUntil && row.leaseUntil.getTime() < now.getTime()
   );
+  const pendingPlans =
+    counts.global < limits.globalConcurrency
+      ? await loadPlans(pending)
+      : new Map<string, string>();
   const continuing =
     counts.global < limits.globalConcurrency
-      ? pickEligible(pending, counts, limits, await loadPlans(pending))
+      ? pickEligible(pending, counts, limits, pendingPlans)
       : undefined;
+  // 새 유료 질문이 나가는 이어가기는 자리를 원자적으로 확보한 뒤에만 한다(시간창이 지난 마감은 새 질문이 없어 상한과 무관).
+  if (!finalizing && continuing?.organizationId) {
+    const slot = await reserveSlot({
+      jobId: continuing.id,
+      now,
+      orgId: continuing.organizationId,
+      plan: pendingPlans.get(continuing.organizationId),
+    });
+    if (slot !== "reserved") {
+      return { expired: expired.count, picked: null, reason: "no_room" };
+    }
+  }
   const next = finalizing ?? continuing;
   if (next) {
     try {

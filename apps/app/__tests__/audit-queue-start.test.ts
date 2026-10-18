@@ -15,6 +15,7 @@ const m = vi.hoisted(() => {
     runAuditJob: vi.fn(),
     groupBy: vi.fn(),
     count: vi.fn(),
+    reserveCount: 1,
     plan: vi.fn(),
     track:
       <T>(name: string, value: () => T) =>
@@ -50,6 +51,23 @@ vi.mock("@repo/database", () => ({
         m.calls.push("job.count");
         return m.count(...a);
       },
+    },
+    // 슬롯 예약(한 트랜잭션: 잠금 → 점유 수 → 예약 표식). 진짜 잠금·경합은 audit-queue-reservation-postgres.test.ts 가 증명한다.
+    $transaction: (fn: (tx: unknown) => Promise<unknown>) => {
+      m.calls.push("tx.begin");
+      return fn({
+        $executeRaw: m.track("tx.lock", () => 0),
+        auditJob: {
+          groupBy: (...a: unknown[]) => {
+            m.calls.push("job.groupBy");
+            return m.groupBy(...a);
+          },
+          updateMany: () => {
+            m.calls.push("job.reserve");
+            return Promise.resolve({ count: m.reserveCount });
+          },
+        },
+      });
     },
   },
 }));
@@ -126,6 +144,7 @@ beforeEach(() => {
   m.runAuditJob.mockReset();
   m.groupBy.mockReset().mockResolvedValue([]);
   m.count.mockReset().mockResolvedValue(0);
+  m.reserveCount = 1;
   m.plan.mockReset().mockResolvedValue("growth");
   resetAdmissionErrorStreak();
   vi.stubEnv("STABILITY_ADMISSION_ENABLED", "");
@@ -208,6 +227,32 @@ describe("입장 관리(켜짐)", () => {
     await startOrgTracking(input);
     await flush();
     expect(m.runAuditJob).toHaveBeenCalledTimes(3);
+  });
+
+  it("예약 표식을 찍은 뒤에만 러너를 부른다(순서: job 만들기 → 잠금 → 점유 수 → 예약 → 러너)", async () => {
+    await startOrgTracking(input);
+    const order: string[] = [];
+    m.runAuditJob.mockImplementation(() => {
+      order.push("runner");
+      return Promise.resolve();
+    });
+    await flush();
+    expect(m.calls.slice(BASE_CALLS.length - 1)).toEqual([
+      "job.create",
+      "tx.begin",
+      "tx.lock",
+      "job.groupBy",
+      "job.reserve",
+    ]);
+    expect(order).toEqual(["runner"]);
+  });
+
+  it("예약에 실패하면(다른 곳이 이미 집은 job·상한 가득) 러너를 부르지 않고 대기로 둔다", async () => {
+    m.reserveCount = 0; // gone
+    const result = await startOrgTracking(input);
+    await flush();
+    expect(result).toEqual({ ok: true, jobId: "j1" });
+    expect(m.runAuditJob).not.toHaveBeenCalled();
   });
 
   it("쿼리는 직렬이고 개수 조회는 groupBy 1회뿐이다(풀 max 1)", async () => {

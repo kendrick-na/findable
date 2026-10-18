@@ -27,6 +27,8 @@ interface Job {
   errorMessage?: string;
   id: string;
   language: "ko";
+  /** 슬롯 예약 표식(`admit:…`) 또는 러너 토큰 — queued job 의 예약 표시. */
+  leaseToken?: string | null;
   leaseUntil: Date | null;
   organizationId: string | null;
   owner: string;
@@ -55,11 +57,102 @@ const db = <T>(fn: () => T): Promise<T> =>
     return fn();
   });
 
+const RESERVED = "admit:";
+const RESERVATION_TTL = 90_000;
+const isReserved = (j: Job) =>
+  j.status === "queued" && Boolean(j.leaseToken?.startsWith(RESERVED));
+// 대기 줄 조회는 예약 건을 뺀다(notReservedWhere).
 const isWaiting = (j: Job) =>
   j.status === "queued" &&
   j.leaseUntil === null &&
   j.organizationId !== null &&
-  j.brandId !== null;
+  j.brandId !== null &&
+  !isReserved(j);
+
+interface UpdateArgs {
+  data: Record<string, unknown>;
+  where: Record<string, unknown> & {
+    attemptStartedAt?: { lt: Date };
+    createdAt?: { lt: Date };
+    id?: string;
+    leaseToken?: { startsWith: string };
+    status?: string;
+  };
+}
+
+// ── 가짜 DB 동작(풀을 빌리는 쪽과 트랜잭션 안(이미 연결을 쥔 쪽)이 같이 쓴다) ──
+const updateManyImpl = ({ where, data }: UpdateArgs) => {
+  // ① 슬롯 예약 표식 찍기: where { id, status: "queued" }, data.leaseToken = "admit:…"
+  if (
+    where.id &&
+    where.status === "queued" &&
+    typeof data.leaseToken === "string"
+  ) {
+    const job = jobs().find((j) => j.id === where.id && j.status === "queued");
+    if (job) {
+      Object.assign(job, data);
+    }
+    return { count: job ? 1 : 0 };
+  }
+  // ② 시작하지 못한 예약 되돌리기
+  if (where.leaseToken?.startsWith && where.attemptStartedAt) {
+    const before = where.attemptStartedAt.lt;
+    const hit = jobs().filter(
+      (j) => isReserved(j) && (j.attemptStartedAt ?? new Date(0)) < before
+    );
+    for (const j of hit) {
+      Object.assign(j, data);
+    }
+    return { count: hit.length };
+  }
+  // ③ 기존: 대기 만료·heartbeat
+  const hit = jobs().filter(
+    (j) =>
+      isWaiting(j) &&
+      (!where.id || j.id === where.id) &&
+      (!where.createdAt || j.createdAt < where.createdAt.lt)
+  );
+  for (const j of hit) {
+    Object.assign(j, data);
+  }
+  return { count: hit.length };
+};
+const findManyImpl = ({ where }: { where: { leaseUntil: unknown } }) => {
+  const waiting = where.leaseUntil === null;
+  return jobs()
+    .filter((j) =>
+      waiting
+        ? isWaiting(j)
+        : j.status === "queued" &&
+          j.leaseUntil !== null &&
+          j.organizationId !== null &&
+          !isReserved(j)
+    )
+    .sort((a, b) =>
+      waiting
+        ? a.createdAt.getTime() - b.createdAt.getTime()
+        : (a.attemptStartedAt ?? a.createdAt).getTime() -
+          (b.attemptStartedAt ?? b.createdAt).getTime()
+    );
+};
+// 점유 = 실행 중 + 유효한 예약(loadRunningCounts 와 같은 정의).
+const groupByImpl = () => {
+  const by = new Map<string, number>();
+  const now = Date.now();
+  const occupied = jobs().filter(
+    (j) =>
+      j.status === "processing" ||
+      (isReserved(j) &&
+        (j.attemptStartedAt?.getTime() ?? 0) > now - RESERVATION_TTL)
+  );
+  for (const j of occupied) {
+    by.set(j.email, (by.get(j.email) ?? 0) + 1);
+  }
+  return [...by].map(([email, n]) => ({ email, _count: { _all: n } }));
+};
+// 어드바이저리 잠금 대역: 트랜잭션을 한 줄로 세운다(진짜는 Postgres 잠금 — audit-queue-reservation-postgres.test.ts 가 증명).
+let txTail: Promise<unknown> = Promise.resolve();
+const inTx = <T>(fn: () => T): Promise<T> => sleep(5).then(fn); // 이미 연결을 쥐고 있으므로 풀을 또 빌리지 않는다
 
 vi.mock("@repo/database", () => ({
   database: {
@@ -77,54 +170,26 @@ vi.mock("@repo/database", () => ({
         })),
     },
     auditJob: {
-      updateMany: ({
-        where,
-        data,
-      }: {
-        data: Record<string, unknown>;
-        where: Record<string, unknown> & {
-          createdAt?: { lt: Date };
-          id?: string;
-        };
-      }) =>
-        db(() => {
-          const hit = jobs().filter(
-            (j) =>
-              isWaiting(j) &&
-              (!where.id || j.id === where.id) &&
-              (!where.createdAt || j.createdAt < where.createdAt.lt)
-          );
-          for (const j of hit) {
-            Object.assign(j, data);
-          }
-          return { count: hit.length };
-        }),
-      findMany: ({ where }: { where: { leaseUntil: unknown } }) =>
-        db(() => {
-          const waiting = where.leaseUntil === null;
-          return jobs()
-            .filter((j) =>
-              waiting
-                ? isWaiting(j)
-                : j.status === "queued" &&
-                  j.leaseUntil !== null &&
-                  j.organizationId !== null
-            )
-            .sort((a, b) =>
-              waiting
-                ? a.createdAt.getTime() - b.createdAt.getTime()
-                : (a.attemptStartedAt ?? a.createdAt).getTime() -
-                  (b.attemptStartedAt ?? b.createdAt).getTime()
-            );
-        }),
-      groupBy: () =>
-        db(() => {
-          const by = new Map<string, number>();
-          for (const j of jobs().filter((x) => x.status === "processing")) {
-            by.set(j.email, (by.get(j.email) ?? 0) + 1);
-          }
-          return [...by].map(([email, n]) => ({ email, _count: { _all: n } }));
-        }),
+      updateMany: (args: UpdateArgs) => db(() => updateManyImpl(args)),
+      findMany: (args: { where: { leaseUntil: unknown } }) =>
+        db(() => findManyImpl(args)),
+      groupBy: () => db(() => groupByImpl()),
+    },
+    $transaction: <T>(fn: (tx: unknown) => Promise<T>): Promise<T> => {
+      const run = txTail.then(() =>
+        pool().use(async () =>
+          fn({
+            $executeRaw: async () => 0,
+            auditJob: {
+              updateMany: (args: UpdateArgs) =>
+                inTx(() => updateManyImpl(args)),
+              groupBy: () => inTx(() => groupByImpl()),
+            },
+          })
+        )
+      );
+      txTail = run.catch(() => undefined);
+      return run as Promise<T>;
     },
   },
 }));
@@ -138,6 +203,7 @@ vi.mock("@repo/audit/runner", () => ({
       return;
     }
     job.status = "processing"; // 확인과 변경 사이에 await 가 없다 = 원자적
+    job.leaseToken = `run:${job.id}`; // 선점이 예약 표식을 덮는다(예약 → 실행 중으로 이어짐)
     job.attemptStartedAt = new Date();
     job.leaseUntil = new Date(Date.now() + 6 * 60_000);
     m.claimed.push(job.id);
@@ -174,7 +240,7 @@ vi.mock("@repo/auth/plan-server", () => ({
 import { isStaleAuditJob } from "@repo/audit/stale-job";
 import { SALES_INTERNAL_ORG_ID } from "@repo/database/internal-orgs";
 import { GET } from "../app/api/cron/audit-queue/route";
-import { decideAdmission } from "../lib/audit-queue/admission";
+import { admitJob } from "../lib/audit-queue/slot-reservation";
 import { startGate } from "../lib/audit-queue/start-gate";
 import { runAuditQueueTick } from "../lib/audit-queue/worker";
 
@@ -224,7 +290,11 @@ const settle = async <T>(promise: Promise<T>): Promise<T> => {
 const startRequest = async (job: Job) => {
   if (job.organizationId) {
     const decision = await settle(
-      decideAdmission(job.organizationId, m.plans[job.organizationId])
+      admitJob({
+        jobId: job.id,
+        orgId: job.organizationId,
+        plan: m.plans[job.organizationId],
+      })
     );
     if (decision === "start") {
       runAuditJob({ jobId: job.id, domain: job.domain, language: "ko" }).catch(
@@ -455,6 +525,39 @@ describe("T1 공정성·선점·꺼짐", () => {
     expect(probe().maxConcurrent).toBe(1);
   });
 
+  it("같은 순간 도착한 A 20건·여러 고객의 시작 판정: start 가 고객별·전체 상한을 넘지 않는다(예약이 서로를 보게 한다)", async () => {
+    m.plans = {
+      A: "growth",
+      B: "growth",
+      C: "growth",
+      D: "growth",
+      E: "growth",
+    };
+    const aJobs = Array.from({ length: 20 }, () => addJob("A", "A", 0));
+    const others = ["B", "C", "D", "E"].flatMap((org) =>
+      Array.from({ length: 6 }, () => addJob(org, org, 0))
+    );
+    const all = [...aJobs, ...others];
+    const decisions = await settle(
+      Promise.all(
+        all.map((job) =>
+          admitJob({
+            jobId: job.id,
+            orgId: job.organizationId as string,
+            plan: m.plans[job.organizationId as string],
+          })
+        )
+      )
+    );
+    const started = all.filter((_, index) => decisions[index] === "start");
+    const perOrg = (org: string) =>
+      started.filter((job) => job.organizationId === org).length;
+    expect(perOrg("A")).toBeLessThanOrEqual(2); // 그로스 고객별 상한
+    expect(started.length).toBeLessThanOrEqual(8); // 전체 상한
+    expect(started.length).toBe(8); // 살아 있다: 자리가 있는 만큼은 시작한다
+    expect(pool().timeouts).toBe(0);
+  });
+
   it("일꾼 플래그 꺼짐: cron 은 skipped 이고 대기 job 은 시작되지 않는다", async () => {
     vi.stubEnv("STABILITY_ADMISSION_ENABLED", "");
     vi.stubEnv("CRON_SECRET", "s3cret");
@@ -518,7 +621,7 @@ describe("T1 공정성·선점·꺼짐", () => {
     vi.stubEnv("STABILITY_ORG_DAILY_CAP_ENABLED", "");
     m.getCurrentPlan.mockRejectedValue(new Error("플랜 조회가 불리면 안 된다"));
     expect(await startGate("A")).toEqual({
-      admission: "start",
+      admissionOn: false,
       overCap: false,
     });
     expect(m.getCurrentPlan).not.toHaveBeenCalled();

@@ -15,6 +15,7 @@ import { log } from "@repo/observability/log";
 import { after } from "next/server";
 import { getAuditRuntimeReadiness } from "@/lib/audit/runtime-readiness";
 import { buildOrgRunInput } from "@/lib/audit-queue/run-input";
+import { admitJob } from "@/lib/audit-queue/slot-reservation";
 import { startGate } from "@/lib/audit-queue/start-gate";
 import { brandCapacityBlock } from "@/lib/brand/brand-capacity";
 import { requireOrg } from "@/lib/db/scoped";
@@ -397,11 +398,15 @@ export const startOrgTracking = async (
 
     // 8-b) 대기 — 실행하지 않고 성공으로 돌려준다(화면은 기존 「측정 대기 중」 표현).
     //   전용 일꾼(/api/cron/audit-queue)이 상한 여유가 생기면 같은 입력(buildOrgRunInput)으로 시작한다.
-    if (gate.admission !== "start") {
+    //   시작 여부는 슬롯 예약(한 트랜잭션: 점유 수 확인 + 예약 표식)으로 정한다 — 같은 순간 몰려도 상한을 넘지 않는다.
+    const admission = gate.admissionOn
+      ? await admitJob({ jobId: job.id, orgId, plan: gate.plan })
+      : "start";
+    if (admission !== "start") {
       log.info("audit.org.job_queued", {
         jobId: job.id,
         orgId,
-        admission: gate.admission,
+        admission,
       });
       return { ok: true, jobId: job.id };
     }
