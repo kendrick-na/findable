@@ -160,6 +160,11 @@ describe("꺼짐 동일성", () => {
     await flush();
     expect(result).toEqual({ ok: true, jobId: "j1" });
     expect(m.calls).toEqual(BASE_CALLS);
+    // 꺼짐이면 입장 관리의 트랜잭션·잠금·점유 수 조회가 **한 번도** 없다(예전과 같은 DB 호출).
+    expect(m.calls).not.toContain("tx.begin");
+    expect(m.calls).not.toContain("tx.lock");
+    expect(m.calls).not.toContain("job.reserve");
+    expect(m.calls).not.toContain("job.groupBy");
     expect(m.plan).not.toHaveBeenCalled();
     expect(m.runAuditJob).toHaveBeenCalledTimes(1);
     expect(m.runAuditJob).toHaveBeenCalledWith(
@@ -168,6 +173,18 @@ describe("꺼짐 동일성", () => {
     expect(Object.keys(m.runAuditJob.mock.calls[0][0]).sort()).toEqual(
       [...Object.keys(EXPECTED_RUN_INPUT), "invocationStartedAtMs"].sort()
     );
+  });
+});
+
+describe("입장 관리만 꺼진 채 일·월 상한만 켠 경우", () => {
+  it("트랜잭션·잠금·예약 없이 예전처럼 바로 시작한다(상한 조회만 추가)", async () => {
+    vi.stubEnv("STABILITY_ORG_DAILY_CAP_ENABLED", "1");
+    const result = await startOrgTracking(input);
+    await flush();
+    expect(result).toEqual({ ok: true, jobId: "j1" });
+    expect(m.calls).not.toContain("tx.begin");
+    expect(m.calls).not.toContain("job.reserve");
+    expect(m.runAuditJob).toHaveBeenCalledTimes(1);
   });
 });
 
