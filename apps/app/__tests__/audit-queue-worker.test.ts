@@ -379,11 +379,18 @@ describe("cron 라우트", () => {
   });
 
   it("인증 + 플래그 켜짐이면 대기 1건을 실행한다", async () => {
-    vi.stubEnv("CRON_SECRET", "s3cret");
-    add({ org: "A", id: "w" });
-    const res = await GET(req("Bearer s3cret"));
-    expect(res.status).toBe(200);
-    expect(ranIds()).toEqual(["w"]);
+    // 라우트는 실제 시계를 쓴다 — 시험 데이터의 기준 시각(NOW)에 고정하지 않으면 날짜가 지나며 「너무 오래 기다림」으로 닫힌다.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    try {
+      vi.stubEnv("CRON_SECRET", "s3cret");
+      add({ org: "A", id: "w" });
+      const res = await GET(req("Bearer s3cret"));
+      expect(res.status).toBe(200);
+      expect(ranIds()).toEqual(["w"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -107,6 +107,12 @@ import {
   countMeasurementCoverage,
   isMeasurementFailure,
 } from "./measurement-coverage";
+import {
+  buildGapPreflight,
+  finalizeGapDiagnostics,
+  type GapPreflight,
+  isMeasurementGapLogEnabled,
+} from "./measurement-gap";
 import { isPublishableAuditResult } from "./normalize-stored-metrics";
 import {
   type CustomerIdentityInput,
@@ -150,6 +156,7 @@ import {
   SHADOW_PLAN_TIMEOUT_MS,
   type ShadowPlanV2Result,
 } from "./shadow-plan-v2";
+import type { SiteReadOutcome } from "./site-profile";
 import {
   persistAuditTracking,
   type TaggedEngineResponse,
@@ -190,6 +197,14 @@ export interface AuditRunInput {
    */
   finalizeOnly?: boolean;
   /**
+   * 측정 구멍 기록(MEASUREMENT_GAP_LOG_ENABLED 켜짐일 때만 쓴다) — 호출부가 알고 있는 사이트 읽기 결과 코드와
+   * 질문 생성 기록. 없으면 질문 수·이름 질문 수만으로 분류한다. 기록 전용(측정을 막지 않는다).
+   */
+  gapInput?: {
+    questionGeneration?: Record<string, unknown>;
+    siteOutcome?: SiteReadOutcome;
+  };
+  /**
    * 업종(AuditJob.industry). 언급 품질 검증에서 동명이인 분별 단서로 쓴다
    * ("기아"가 자동차인지 야구단인지). 없어도 동작하며, 있으면 판정 정확도가 올라간다.
    */
@@ -219,6 +234,41 @@ export interface AuditRunInput {
    * 기록 전용이다: 이 값으로 측정을 막지 않는다(막는 건 호출부의 게이트).
    */
   setupReadiness?: SetupReadinessRecord;
+}
+
+/**
+ * checkpoint.ts 는 롤백 호환 때문에 기준 커밋과 바이트 동일하게 둔다(T5 시험) — 그래서 이 값은 context 의 **추가 키**로만 싣고
+ * 읽을 때 좁혀 읽는다(옛 코드는 모르는 키를 그대로 무시한다).
+ */
+function gapPreflightFrom(context: object): GapPreflight | undefined {
+  return (context as { gapPreflight?: GapPreflight }).gapPreflight;
+}
+
+/**
+ * 측정 구멍 기록의 시작 전 값. 플래그가 꺼져 있으면 빈 객체(체크포인트 JSON 불변).
+ * 질문이 적거나 이름 질문이 없으면 **시작 전에** 경고 로그를 남긴다(측정은 막지 않는다).
+ */
+function gapPreflightOf(
+  input: AuditRunInput,
+  runPrompts: readonly RunPrompt[]
+): { gapPreflight?: GapPreflight } {
+  if (!isMeasurementGapLogEnabled()) {
+    return {};
+  }
+  const gapPreflight = buildGapPreflight({
+    prompts: runPrompts,
+    questionGeneration: input.gapInput?.questionGeneration,
+    siteOutcome: input.gapInput?.siteOutcome,
+  });
+  if (gapPreflight.warnings.length > 0) {
+    log.warn("audit.measurement_gap.preflight_warning", {
+      brandQuestionCount: gapPreflight.brandQuestionCount,
+      jobId: input.jobId,
+      questionCount: gapPreflight.questionCount,
+      warnings: gapPreflight.warnings,
+    });
+  }
+  return { gapPreflight };
 }
 
 /** 행에 붙은 섀도 결과만 골라 저장용 필드로(없으면 빈 객체 → 기존 저장 모양 불변). */
@@ -1018,6 +1068,7 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
                 ? { demandQuestionSet: demandDiscovery.set }
                 : {}),
               ...(setupReadiness ? { setupReadiness } : {}),
+              ...gapPreflightOf(input, runPrompts),
               ...(questionSetKey ? { questionSetKey } : {}),
               // 「N개 중 M개 측정」 표기용(호출 옵션 회차만 — 대시보드 결과 모양은 그대로).
               ...(customLimit && savedSet
@@ -1829,6 +1880,15 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
           );
           return engineErrors ? { engineErrors } : {};
         })(),
+        // 못 잰·부족했던 이유 코드(플래그 켜짐일 때만, 없으면 키도 없다).
+        ...(gapPreflightFrom(checkpoint.context)
+          ? {
+              gapDiagnostics: finalizeGapDiagnostics(
+                gapPreflightFrom(checkpoint.context) as GapPreflight,
+                countMeasurementCoverage(flat)
+              ),
+            }
+          : {}),
         // 측정 시작 시점의 준비도 + '기본값으로 진행' 선택 기록(없으면 키도 없다).
         ...(checkpoint.context.setupReadiness
           ? { setupReadiness: checkpoint.context.setupReadiness }

@@ -265,6 +265,39 @@ describe("runAuditJob in stub mode", () => {
     });
   });
 
+  it("측정 구멍 기록: 꺼짐(기본)이면 결과에 gapDiagnostics 키가 없다", async () => {
+    seedJob();
+    await runAuditJob(input);
+    const result = job().result as { measurementContext: object };
+    expect("gapDiagnostics" in result.measurementContext).toBe(false);
+  });
+
+  it("측정 구멍 기록: 켜짐이면 시작 전 기록과 끝난 뒤 분류가 결과에 남는다(사이트 읽기 코드 포함)", async () => {
+    vi.stubEnv("MEASUREMENT_GAP_LOG_ENABLED", "true");
+    seedJob();
+    await runAuditJob({
+      ...input,
+      gapInput: { siteOutcome: "robots_blocked" },
+    });
+    expect(job().status).toBe("completed");
+    const result = job().result as {
+      measurementContext: {
+        gapDiagnostics?: {
+          brandQuestionCount: number;
+          codes: string[];
+          questionCount: number;
+          siteOutcome?: string;
+          warnings: string[];
+        };
+      };
+    };
+    const gap = result.measurementContext.gapDiagnostics;
+    expect(gap?.siteOutcome).toBe("robots_blocked");
+    expect(gap?.codes).toContain("robots_blocked");
+    expect(gap?.questionCount).toBeGreaterThan(0);
+    expect(JSON.stringify(gap)).not.toContain("example.com");
+  });
+
   it("is forced on Preview even with FINDABLE_AUDIT_STUB_MODE unset", async () => {
     vi.stubEnv("FINDABLE_AUDIT_STUB_MODE", undefined);
     seedJob();

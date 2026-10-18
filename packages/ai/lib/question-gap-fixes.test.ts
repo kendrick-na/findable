@@ -65,6 +65,10 @@ const FLAGS = [
   "QUESTION_BRAND_GUARANTEE_ENABLED",
   "QUESTION_SOFT_CONFIDENCE_ENABLED",
 ] as const;
+const EXTRA_FLAGS = [
+  "QUESTION_BRAND_VARIANT_ENABLED",
+  "QUESTION_GENERATION_LOG_ENABLED",
+] as const;
 const flagsOn = (...only: (typeof FLAGS)[number][]) => {
   for (const f of only.length > 0 ? only : FLAGS) {
     vi.stubEnv(f, "true");
@@ -73,7 +77,7 @@ const flagsOn = (...only: (typeof FLAGS)[number][]) => {
 
 beforeEach(() => {
   h.generateObject.mockReset();
-  for (const f of FLAGS) {
+  for (const f of [...FLAGS, ...EXTRA_FLAGS]) {
     vi.stubEnv(f, "");
   }
 });
@@ -311,5 +315,66 @@ describe("⑨ '확신 없음'이어도 검사를 통과한 질문이 충분하�
     h.generateObject.mockResolvedValue(llm());
     const out = await suggestTrackingPrompts({ ...base, industry: "beauty" });
     expect(out.lowConfidence).toBeUndefined();
+  });
+});
+
+describe("③ 이름 질문 표기 변형(QUESTION_BRAND_VARIANT_ENABLED)", () => {
+  const variantLlm = () =>
+    llm({
+      brandUnderstanding: [
+        item("프란츠 스킨케어 후기 어때?"),
+        item("프란츠 어디서 사?"),
+        item("이 브랜드 평판 어때?"),
+      ],
+    });
+  it("꺼짐(기본): 제목 앞부분 변형은 인정하지 않는다 — 예전과 같다", async () => {
+    h.generateObject.mockResolvedValue(
+      llm({ brandUnderstanding: [item("프란츠스킨 후기 어때?")] })
+    );
+    const out = await suggestTrackingPrompts({
+      ...base,
+      brandName: "(주)프란츠 코리아",
+      site: { ...base.site, siteName: "스킨랩", title: "스킨랩 | 시카" },
+    });
+    expect(out.prompts.some((p) => p.type === "brand")).toBe(false);
+  });
+  it("켜짐: 법인 꼬리표를 뗀 이름으로 쓴 이름 질문을 인정한다", async () => {
+    vi.stubEnv("QUESTION_BRAND_VARIANT_ENABLED", "true");
+    h.generateObject.mockResolvedValue(variantLlm());
+    const out = await suggestTrackingPrompts({
+      ...base,
+      brandName: "(주)프란츠 코리아",
+      site: { ...base.site, siteName: "스킨랩", title: "스킨랩 | 시카" },
+    });
+    expect(
+      out.prompts.filter((p) => p.type === "brand").length
+    ).toBeGreaterThan(0);
+  });
+  it("이름 없는 질문 판정은 변형 때문에 달라지지 않는다(이름 변형이 들어간 이름 없는 질문은 그대로 통과)", async () => {
+    vi.stubEnv("QUESTION_BRAND_VARIANT_ENABLED", "true");
+    h.generateObject.mockResolvedValue(variantLlm());
+    const out = await suggestTrackingPrompts({ ...base, brandName: "프란츠" });
+    expect(out.prompts.length).toBeGreaterThan(0);
+  });
+});
+
+describe("⑦ 질문 생성 기록(QUESTION_GENERATION_LOG_ENABLED)", () => {
+  it("꺼짐(기본): 결과에 generationLog 키가 없다", async () => {
+    h.generateObject.mockResolvedValue(llm());
+    expect("generationLog" in (await suggestTrackingPrompts(base))).toBe(false);
+  });
+  it("켜짐: 후보 수·폐기 사유·결정을 담고 질문 문장은 담지 않는다", async () => {
+    vi.stubEnv("QUESTION_GENERATION_LOG_ENABLED", "true");
+    h.generateObject.mockResolvedValue(llm({ confident: false }));
+    const out = await suggestTrackingPrompts(base);
+    expect(out.generationLog?.decision).toBe("fallback_unconfident");
+    expect(out.generationLog?.rounds[0]?.candidates).toBeGreaterThan(0);
+    expect(JSON.stringify(out.generationLog)).not.toContain("추천해줘");
+  });
+  it("생성 호출이 실패하면 fallback_error", async () => {
+    vi.stubEnv("QUESTION_GENERATION_LOG_ENABLED", "true");
+    h.generateObject.mockRejectedValue(new Error("boom"));
+    const out = await suggestTrackingPrompts(base);
+    expect(out.generationLog?.decision).toBe("fallback_error");
   });
 });

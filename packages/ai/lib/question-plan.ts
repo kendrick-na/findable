@@ -359,6 +359,11 @@ export interface PlanGuardContext {
   allowEngineNames?: boolean;
   /** 우리 이름·별칭·사이트명·도메인 이름(질문에 들어가면 이름 없는 질문이 아니다). */
   brandNames: readonly string[];
+  /**
+   * 이름 질문(type=brand)을 **통과시킬 때만** 더 허용하는 표기 변형(법인 꼬리표 뗀 이름·제목 앞부분 등, 진단 ③).
+   * 이름 없는 질문의 「이름이 들어갔다」 판정에는 쓰지 않는다 → 이 값이 없거나 꺼져 있으면 예전과 같다.
+   */
+  brandVariants?: readonly string[];
   /** 승인·등록된 경쟁사 이름(있으면 비교·대안 질문에 쓸 수 있다). */
   competitors?: readonly string[];
   /** 업종 enum 값 — 업종별 금지 질문 틀을 고른다(없으면 중립 틀). */
@@ -388,6 +393,48 @@ function containsAnyName(text: string, names: readonly string[]): boolean {
     .map(compact)
     .filter((n) => n.length >= MIN_NAME_KEY_LENGTH)
     .some((n) => key.includes(n));
+}
+
+const CORP_AFFIX_RE =
+  /\(주\)|주식회사|㈜|\b(co|corp|corporation|inc|ltd|llc|company)\b\.?|코리아|korea|official|공식|\.com|\.co\.kr|\.kr/gi;
+const TITLE_SPLIT_RE = /\s*[|\-–—:·•]\s*/;
+const MIN_LATIN_VARIANT_LENGTH = 3;
+
+/**
+ * 이름 질문 표기 변형(진단 ③, 플래그 QUESTION_BRAND_VARIANT_ENABLED). 후보 9~18개 중 12~17개가 `brand_missing` 으로 버려진
+ * 원인은 이름 표기가 어긋나는 것으로 **추정**된다(모델이 법인 꼬리표·제목 앞부분만 쓰는 경우).
+ * 입력 이름·별칭·사이트 제목/H1 앞부분에서 **글자만 바꾸는** 변형(법인 꼬리표 제거·공백 첫 낱말)만 만든다 — 번역·음역은 하지 않는다.
+ */
+export function expandBrandVariants(
+  sources: readonly (string | null | undefined)[]
+): string[] {
+  const out = new Set<string>();
+  const add = (raw: string) => {
+    const key = compact(raw);
+    const latin = !HANGUL_RE.test(key);
+    if (
+      key.length >= MIN_NAME_KEY_LENGTH &&
+      (!latin || key.length >= MIN_LATIN_VARIANT_LENGTH) &&
+      !GENERIC_TOKENS.has(key)
+    ) {
+      out.add(raw.trim());
+    }
+  };
+  for (const source of sources) {
+    const value = (source ?? "").trim();
+    if (!value) {
+      continue;
+    }
+    const stripped = value.replace(CORP_AFFIX_RE, " ").trim();
+    add(stripped);
+    const head = value.split(TITLE_SPLIT_RE)[0] ?? "";
+    add(head.replace(CORP_AFFIX_RE, " "));
+    const words = stripped.split(WHITESPACE_RE).filter(Boolean);
+    if (words.length > 1 && words[0]) {
+      add(words[0]);
+    }
+  }
+  return [...out];
 }
 
 function hasSiteEvidence(text: string, siteText: string): boolean {
@@ -822,6 +869,17 @@ export function findUnknownProperNoun(
 }
 
 /** 질문 1개를 유형 규칙에 비춰 검사한다. 통과면 null, 아니면 버리는 이유. */
+/** 이름 질문의 이름 확인 — 입력 이름이 없으면 표기 변형(플래그 켜짐일 때만 채워짐)도 인정한다. */
+function brandNameReason(
+  text: string,
+  hasName: boolean,
+  ctx: PlanGuardContext
+): DropReason | null {
+  return hasName || containsAnyName(text, ctx.brandVariants ?? [])
+    ? null
+    : "brand_missing";
+}
+
 export function checkQuestion(
   q: PlanQuestion,
   ctx: PlanGuardContext
@@ -855,7 +913,7 @@ export function checkQuestion(
   }
   const hasName = containsAnyName(text, ctx.brandNames);
   if (q.type === "brand") {
-    return hasName ? null : "brand_missing";
+    return brandNameReason(text, hasName, ctx);
   }
   if (hasName) {
     return "name_in_nameless";

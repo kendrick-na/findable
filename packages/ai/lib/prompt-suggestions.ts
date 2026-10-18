@@ -25,6 +25,7 @@ import {
   composeQuestions,
   defaultConsumerQuestions,
   defaultConsumerQuestionsFromPhrase,
+  expandBrandVariants,
   fixedAlternativeQuestions,
   fixedBrandQuestions,
   guardQuestions,
@@ -61,6 +62,8 @@ export type SuggestLanguage = "ko" | "en";
  * 질문 생성 보강 플래그(2026-10-18, 진단 ③⑥) — **기본 꺼짐**. 켜지 않으면 출력은 예전과 같다.
  *  - QUESTION_OTHER_FALLBACK_ENABLED: 업종 `other`·미지정일 때 사이트 근거 분야 이름으로 기본·대안 질문을 만든다.
  *  - QUESTION_BRAND_GUARANTEE_ENABLED: 생성기가 이름 질문을 하나도 못 냈을 때 코드가 고정 문형으로 채운다.
+ *  - QUESTION_BRAND_VARIANT_ENABLED: 이름 질문 검사가 표기 변형(법인 꼬리표 뗀 이름·제목 앞부분)도 인정한다(진단 ③).
+ *  - QUESTION_GENERATION_LOG_ENABLED: 결과에 `generationLog`(후보 수·확신·폐기 사유·폴백 결정)를 싣는다(진단 ⑦, 기록 전용).
  *  - QUESTION_SOFT_CONFIDENCE_ENABLED: 생성기가 "확신 없음"이어도 검사를 통과한 질문이 충분하면(8개 이상) 버리지 않고 쓴다
  *    (진단 재현: 통과한 12~16개를 통째로 버리고 업종 기본 4개로 물러나던 경로).
  */
@@ -68,6 +71,8 @@ const ON_VALUES = new Set(["1", "true"]);
 export function isQuestionFlagOn(
   name:
     | "QUESTION_BRAND_GUARANTEE_ENABLED"
+    | "QUESTION_BRAND_VARIANT_ENABLED"
+    | "QUESTION_GENERATION_LOG_ENABLED"
     | "QUESTION_OTHER_FALLBACK_ENABLED"
     | "QUESTION_SOFT_CONFIDENCE_ENABLED",
   env: Record<string, string | undefined> = process.env
@@ -141,8 +146,36 @@ export interface SuggestedPrompt {
   type?: QuestionType;
 }
 
+/**
+ * 질문 생성 기록(진단 ⑦, 플래그 QUESTION_GENERATION_LOG_ENABLED) — 왜 이 질문 수가 나왔는지 사후에 읽는 용도.
+ * 질문 문장·고객 정보는 담지 않는다(개수·사유 이름만).
+ */
+export interface QuestionGenerationLog {
+  /** 이름 질문 보장이 고정 문형으로 채웠는가. */
+  brandGuaranteeApplied: boolean;
+  /** 최종 제안 중 이름 질문 수. */
+  brandQuestionCount: number;
+  /** 마지막 결정: 생성 결과 사용·확신 낮음 유지·업종 기본 질문으로 후퇴 등. */
+  decision:
+    | "fallback_error"
+    | "fallback_few"
+    | "fallback_unconfident"
+    | "generated"
+    | "soft_confident";
+  finalCount: number;
+  rounds: {
+    attempt: number;
+    candidates: number;
+    confident: boolean;
+    droppedByReason: Record<string, number>;
+    kept: number;
+  }[];
+}
+
 export interface PromptSuggestions {
   competitors: string[];
+  /** 질문 생성 기록(플래그 QUESTION_GENERATION_LOG_ENABLED 켜짐일 때만). 화면은 읽지 않는다. */
+  generationLog?: QuestionGenerationLog;
   /**
    * 생성기가 "재료가 부족해 추측했다"고 했지만 검사를 통과한 질문이 충분해 그대로 쓴 경우(플래그 QUESTION_SOFT_CONFIDENCE_ENABLED).
    * 화면은 읽지 않는다 — 로그·진단용 신호다.
@@ -383,6 +416,37 @@ export function staticFallback(
 export async function suggestTrackingPrompts(
   input: SuggestInput
 ): Promise<PromptSuggestions> {
+  const trace: GenerationTrace = { rounds: [] };
+  const result = await suggestWithTrace(input, trace);
+  if (!isQuestionFlagOn("QUESTION_GENERATION_LOG_ENABLED")) {
+    return result;
+  }
+  return { ...result, generationLog: toGenerationLog(result, trace) };
+}
+
+interface GenerationTrace {
+  brandGuaranteeApplied?: boolean;
+  decision?: QuestionGenerationLog["decision"];
+  rounds: QuestionGenerationLog["rounds"];
+}
+
+function toGenerationLog(
+  result: PromptSuggestions,
+  trace: GenerationTrace
+): QuestionGenerationLog {
+  return {
+    brandGuaranteeApplied: trace.brandGuaranteeApplied === true,
+    brandQuestionCount: result.prompts.filter((p) => p.type === "brand").length,
+    decision: trace.decision ?? "fallback_error",
+    finalCount: result.prompts.length,
+    rounds: trace.rounds,
+  };
+}
+
+async function suggestWithTrace(
+  input: SuggestInput,
+  trace: GenerationTrace
+): Promise<PromptSuggestions> {
   const scope = scopeOf(input);
   // 생성 호출이 만든 '서비스 분야 이름'(검증 통과분) — 폴백이 업종 없이도 쓸 수 있게 try 밖에 둔다(진단 ③).
   let categoryPhrase: string | null = null;
@@ -393,6 +457,17 @@ export async function suggestTrackingPrompts(
     const ctx = {
       allowEngineNames,
       brandNames: brandNamesOf(input),
+      ...(isQuestionFlagOn("QUESTION_BRAND_VARIANT_ENABLED")
+        ? {
+            brandVariants: expandBrandVariants([
+              input.brandName,
+              ...(input.aliases ?? []),
+              input.site?.siteName,
+              input.site?.title,
+              input.site?.h1,
+            ]),
+          }
+        : {}),
       competitors: input.competitors,
       industry: input.industry,
       requireBasis: true,
@@ -412,6 +487,13 @@ export async function suggestTrackingPrompts(
         : confident && round.confident;
       categoryPhrase ??= vetCategoryPhrase(round.categoryPhrase, ctx);
       const guarded = guardQuestions(all, ctx);
+      trace.rounds[attempt] = {
+        attempt,
+        candidates: all.length,
+        confident: round.confident,
+        droppedByReason: countBy(guarded.dropped.map((d) => d.reason)),
+        kept: guarded.kept.length,
+      };
       const composed = ensureBrandQuestions(
         composeWithFixedAlternatives(
           composeQuestions(guarded.kept, scope, { preferListing: true }),
@@ -436,12 +518,23 @@ export async function suggestTrackingPrompts(
       if (
         (composed.length >= RETRY_BELOW && !missingRepresentative) ||
         attempt === 1 ||
-        !round.confident
+        stopsOnUnconfident(round.confident, composed.length)
       ) {
         // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
-        return finalizeSuggestions(input, composed, confident, categoryPhrase);
+        trace.brandGuaranteeApplied =
+          isQuestionFlagOn("QUESTION_BRAND_GUARANTEE_ENABLED") &&
+          !guarded.kept.some((q) => q.type === "brand") &&
+          composed.some((q) => q.type === "brand");
+        return finalizeSuggestions(
+          input,
+          composed,
+          confident,
+          categoryPhrase,
+          trace
+        );
       }
     }
+    trace.decision = "fallback_few";
     return staticFallback(input, categoryPhrase);
   } catch (error) {
     log.warn("prompt.suggest.failed", {
@@ -449,8 +542,35 @@ export async function suggestTrackingPrompts(
       domain: input.domain,
       error: String(error),
     });
+    trace.decision = "fallback_error";
     return staticFallback(input, categoryPhrase);
   }
+}
+
+function countBy(values: readonly string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const value of values) {
+    out[value] = (out[value] ?? 0) + 1;
+  }
+  return out;
+}
+
+/**
+ * 첫 결과가 「확신 없음」이면 예전엔 바로 멈췄다. 생성기는 비결정적이라(같은 입력이 4→18개로 흔들림) 첫 시도가 빈손이어도
+ * 한 번 더 만들면 충분히 나오는 경우가 있다 — QUESTION_SOFT_CONFIDENCE_ENABLED 켜짐이고 통과 질문이 아직 모자라면 1회 더 시도한다
+ * (추가 호출 최대 1회 — 기존 두 번째 시도 한도 안).
+ */
+function stopsOnUnconfident(
+  confident: boolean,
+  composedCount: number
+): boolean {
+  if (confident) {
+    return false;
+  }
+  return !(
+    isQuestionFlagOn("QUESTION_SOFT_CONFIDENCE_ENABLED") &&
+    composedCount < SOFT_CONFIDENT_MIN_QUESTIONS
+  );
 }
 
 /** 사이트 글이 충분한데 대표 상품 질문이 하나도 안 남았으면 한 번 더 만든다(실측: 같은 사이트가 0~3개로 흔들림). */
@@ -492,7 +612,8 @@ function finalizeSuggestions(
   input: SuggestInput,
   composed: PlanQuestion[],
   confident: boolean,
-  categoryPhrase: string | null
+  categoryPhrase: string | null,
+  trace?: GenerationTrace
 ): PromptSuggestions {
   const softConfident =
     !confident &&
@@ -500,7 +621,13 @@ function finalizeSuggestions(
     composed.length >= SOFT_CONFIDENT_MIN_QUESTIONS;
   // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
   if (!(confident || softConfident) || composed.length < 4) {
+    if (trace) {
+      trace.decision = confident ? "fallback_few" : "fallback_unconfident";
+    }
     return staticFallback(input, categoryPhrase);
+  }
+  if (trace) {
+    trace.decision = softConfident ? "soft_confident" : "generated";
   }
   return {
     prompts: composed.slice(0, MAX_PROMPTS).map(toSuggested),

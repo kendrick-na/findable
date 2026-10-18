@@ -368,6 +368,63 @@ async function fetchHome(
 export async function readSiteProfile(
   domain: string
 ): Promise<SiteProfile | null> {
+  return (await readSiteProfileWithOutcome(domain)).profile;
+}
+
+/**
+ * 사이트를 읽지 못했거나 재료가 얇을 때 **왜**였는지(미측정 사유 코드, 2026-10-19).
+ *  - robots_blocked: robots.txt 가 홈을 막음(우회하지 않는다) · certificate_error: HTTPS 인증서 오류
+ *  - timeout: 시간 초과 · not_html: HTML 이 아님 · fetch_failed: 그 밖의 접속 실패
+ *  - render_needed: 글자가 거의 없는 JS 사이트인데 브라우저 렌더링으로도 채우지 못함(꺼져 있거나 실패)
+ *  - ok: 정상
+ */
+export type SiteReadOutcome =
+  | "certificate_error"
+  | "fetch_failed"
+  | "not_html"
+  | "ok"
+  | "render_needed"
+  | "robots_blocked"
+  | "timeout";
+
+const TIMEOUT_ERROR_RE = /timeout|abort/i;
+const CERT_ERROR_RE =
+  /cert|tls|ssl|altname|self[_ ]signed|unable_to_verify|issuer/i;
+
+/** 읽기 실패 예외를 사유 코드로 분류한다(오류 문구 원문은 밖으로 내지 않는다). */
+export function classifySiteReadError(error: unknown): SiteReadOutcome {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current; depth += 1) {
+    if (current instanceof Error) {
+      const code = (current as Error & { code?: unknown }).code;
+      parts.push(
+        current.name,
+        current.message,
+        typeof code === "string" ? code : ""
+      );
+      current = (current as Error & { cause?: unknown }).cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+  const text = parts.join(" ");
+  if (CERT_ERROR_RE.test(text)) {
+    return "certificate_error";
+  }
+  if (TIMEOUT_ERROR_RE.test(text)) {
+    return "timeout";
+  }
+  if (text.includes("NOT_HTML")) {
+    return "not_html";
+  }
+  return "fetch_failed";
+}
+
+export async function readSiteProfileWithOutcome(
+  domain: string
+): Promise<{ outcome: SiteReadOutcome; profile: SiteProfile | null }> {
   try {
     const requested = normalizePublicUrl(domain).origin;
     const overall = AbortSignal.timeout(OVERALL_TIMEOUT_MS);
@@ -391,7 +448,7 @@ export async function readSiteProfile(
     const disallow = robots ? parseRobotsDisallow(robots) : [];
     if (!isAllowedByRobots("/", disallow)) {
       log.warn("audit.site_profile.robots_blocked", { domain });
-      return null;
+      return { outcome: "robots_blocked", profile: null };
     }
     let home = extractSiteProfile(homeHtml);
     // 일반 읽기로 글자가 거의 없으면(JS 로 그리는 사이트) 브라우저로 그려 한 번 더 읽는다(꺼져 있으면 건너뜀).
@@ -415,8 +472,9 @@ export async function readSiteProfile(
         }
       }
     }
+    const outcome: SiteReadOutcome = home.thin ? "render_needed" : "ok";
     if (!sitemap || SITEMAP_INDEX_RE.test(sitemap)) {
-      return { ...home, pagesRead: 1 };
+      return { outcome, profile: { ...home, pagesRead: 1 } };
     }
     const host = new URL(origin).host;
     const urls = servicePageUrls(sitemap, host)
@@ -433,15 +491,16 @@ export async function readSiteProfile(
         )
       )
     );
-    return mergeSiteProfiles(
+    const merged = mergeSiteProfiles(
       home,
       pages.flatMap((html) => (html ? [extractSiteProfile(html)] : []))
     );
+    return { outcome: merged.thin ? outcome : "ok", profile: merged };
   } catch (error) {
     log.warn("audit.site_profile.failed", {
       domain,
       error: error instanceof Error ? error.message : String(error),
     });
-    return null;
+    return { outcome: classifySiteReadError(error), profile: null };
   }
 }
