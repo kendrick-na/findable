@@ -251,6 +251,8 @@ export interface GapPreflight {
   /** 이미지 속 글자 읽기 집계(시도·성공·추정 원가). 원본 이미지·글자 원문은 담지 않는다. */
   siteImageText?: Record<string, number>;
   siteOutcome?: SiteReadOutcome;
+  /** 사이트를 읽은 방법(plain·render·http_fallback·cert_sibling_host·image_text). 기록 전용. */
+  siteReadMethods?: string[];
   /** 시작 전 경고(질문 세트 기준). */
   warnings: GapWarning[];
 }
@@ -261,6 +263,7 @@ export function buildGapPreflight(input: {
   siteHttpFallback?: boolean;
   siteImageText?: Record<string, number>;
   siteOutcome?: SiteReadOutcome;
+  siteReadMethods?: readonly string[];
 }): GapPreflight {
   const counts: QuestionCounts = {
     brandQuestionCount: input.prompts.filter((p) => p.kind !== "discovery")
@@ -275,6 +278,9 @@ export function buildGapPreflight(input: {
     ...(input.siteOutcome ? { siteOutcome: input.siteOutcome } : {}),
     ...(input.siteHttpFallback ? { siteHttpFallback: true as const } : {}),
     ...(input.siteImageText ? { siteImageText: input.siteImageText } : {}),
+    ...(input.siteReadMethods?.length
+      ? { siteReadMethods: [...input.siteReadMethods] }
+      : {}),
     warnings: questionSetWarnings(counts),
   };
 }
@@ -329,5 +335,39 @@ export function formatUnmeasuredTable(rows: readonly GapReportRow[]): string {
   }
   const clean = rows.filter((row) => row.codes.length === 0).length;
   lines.push("", `정상(사유 없음) ${clean}곳 / 전체 ${rows.length}곳`);
+  return lines.join("\n");
+}
+
+export interface ReadMethodRow {
+  /** 익명 ID. */
+  id: string;
+  methods: readonly string[];
+}
+
+const READ_METHOD_LABEL: Record<string, string> = {
+  cert_sibling_host: "인증서 형제 호스트(https·검증 유지)",
+  http_fallback: "평문 http 폴백(인증서 오류 사이트, 공개 읽기 전용)",
+  image_text: "이미지 속 글자 읽기(비전 모델)",
+  plain: "일반 읽기",
+  render: "브라우저 렌더링",
+};
+
+/** 「사이트를 어떤 방법으로 읽었나」 표(마크다운) — 한 곳이 방법을 여러 개 쓰면 각 줄에 모두 나온다. 읽기 방법 기록이 없는 곳은 세지 않는다. */
+export function formatReadMethodTable(rows: readonly ReadMethodRow[]): string {
+  const byMethod = new Map<string, string[]>();
+  for (const row of rows) {
+    for (const method of new Set(row.methods)) {
+      byMethod.set(method, [...(byMethod.get(method) ?? []), row.id]);
+    }
+  }
+  const lines = ["| 읽기 방법 | 곳 수 | ID |", "|---|---|---|"];
+  for (const [method, label] of Object.entries(READ_METHOD_LABEL)) {
+    const ids = byMethod.get(method);
+    if (ids) {
+      lines.push(
+        `| ${label} | ${ids.length} | ${[...ids].sort().join(", ")} |`
+      );
+    }
+  }
   return lines.join("\n");
 }

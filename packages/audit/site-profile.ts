@@ -2,6 +2,13 @@ import { log } from "@repo/observability/log";
 import { isAllowedByRobots, parseRobotsDisallow } from "./brand-catalog";
 import { assertPublicUrl, normalizePublicUrl } from "./public-url-security";
 import { collectImageText, isSiteImageTextEnabled } from "./site-image-text";
+import {
+  isCertSiblingFlagOn,
+  parseCertAltNames,
+  readMethods,
+  type SiteReadMethod,
+  siblingHostCandidates,
+} from "./site-read-policy";
 import { renderSiteHtml, siteRenderStatus } from "./site-render";
 import { servicePageUrls } from "./site-structure";
 
@@ -431,8 +438,8 @@ const CERT_OUTCOMES: ReadonlySet<SiteReadOutcome> = new Set<SiteReadOutcome>([
   "certificate_error",
 ]);
 
-/** 읽기 실패 예외를 사유 코드로 분류한다(오류 문구 원문은 밖으로 내지 않는다). */
-export function classifySiteReadError(error: unknown): SiteReadOutcome {
+/** 오류와 cause 체인의 이름·문구·코드를 한 줄로 합친다(분류·인증서 이름 읽기용 — 밖으로 내보내지 않는다). */
+function errorTextOf(error: unknown): string {
   const parts: string[] = [];
   let current: unknown = error;
   for (let depth = 0; depth < 4 && current; depth += 1) {
@@ -449,7 +456,12 @@ export function classifySiteReadError(error: unknown): SiteReadOutcome {
       break;
     }
   }
-  const text = parts.join(" ");
+  return parts.join(" ");
+}
+
+/** 읽기 실패 예외를 사유 코드로 분류한다(오류 문구 원문은 밖으로 내지 않는다). */
+export function classifySiteReadError(error: unknown): SiteReadOutcome {
+  const text = errorTextOf(error);
   if (CERT_ERROR_RE.test(text)) {
     return certOutcomeOf(text);
   }
@@ -506,6 +518,8 @@ export interface SiteReadResult {
     outputTokens: number;
     readable: number;
   };
+  /** 사용한 읽기 방법(plain·render·http_fallback·cert_sibling_host·image_text). 읽지 못한 경우는 빈 배열. */
+  methods: SiteReadMethod[];
   outcome: SiteReadOutcome;
   profile: SiteProfile | null;
 }
@@ -524,11 +538,39 @@ interface HomeRead {
   html: string;
   httpFallback: boolean;
   origin: string;
+  siblingHost: boolean;
+}
+
+/** 인증서 오류 뒤 같은 인증서의 다른 유효 이름(같은 가족)으로 https 홈을 읽어 본다. 검증은 그대로 켜져 있다 — 그 이름은 인증서에 실제로 있으므로 통과한다. */
+async function readSiblingHome(
+  requested: string,
+  error: unknown,
+  overall: AbortSignal
+): Promise<HomeRead | null> {
+  const candidates = siblingHostCandidates(
+    new URL(requested).hostname,
+    parseCertAltNames(errorTextOf(error))
+  );
+  for (const candidate of candidates) {
+    const origin = `https://${candidate}`;
+    try {
+      const html = await fetchText(
+        new URL("/", origin),
+        stageSignal(HOME_TIMEOUT_MS, overall),
+        "html"
+      );
+      return { html, httpFallback: false, origin, siblingHost: true };
+    } catch {
+      // 다음 후보
+    }
+  }
+  return null;
 }
 
 /**
- * 홈을 읽는다. https 가 **인증서 오류**로 실패하고 플래그가 켜져 있으면, 같은 호스트의 평문 http 로 한 번 더 읽는다.
- * 🔒 TLS 검증은 끄지 않는다(이 함수 어디에도 검증 해제 없음 — 시험이 소스를 읽어 확인). 평문 http 는 **공개 읽기 전용 GET** 뿐이고,
+ * 홈을 읽는다. https 가 **인증서 오류**로 실패했을 때만 추가 경로를 쓴다(플래그가 켜져 있을 때):
+ *  ① 같은 인증서의 형제 호스트(SITE_CERT_SIBLING_HOST_ENABLED, https·검증 유지) → ② 같은 호스트의 평문 http(SITE_HTTP_FALLBACK_ENABLED).
+ * 🔒 TLS 검증은 어디서도 끄지 않는다(시험이 소스를 읽어 확인). 평문 http 는 **공개 읽기 전용 GET** 뿐이고,
  * robots 는 http 쪽에서 다시 확인하며, http 가 https(같은 인증서 오류)로 되돌리면 원래 오류로 끝낸다.
  */
 async function readHome(
@@ -536,15 +578,25 @@ async function readHome(
   overall: AbortSignal
 ): Promise<HomeRead | { outcome: "robots_blocked" }> {
   try {
-    return { ...(await fetchHome(requested, overall)), httpFallback: false };
+    return {
+      ...(await fetchHome(requested, overall)),
+      httpFallback: false,
+      siblingHost: false,
+    };
   } catch (error) {
-    if (
-      !(
-        isHttpFallbackOn() &&
-        requested.startsWith("https:") &&
-        CERT_OUTCOMES.has(classifySiteReadError(error))
-      )
-    ) {
+    const certError =
+      requested.startsWith("https:") &&
+      CERT_OUTCOMES.has(classifySiteReadError(error));
+    if (!certError) {
+      throw error;
+    }
+    if (isCertSiblingFlagOn()) {
+      const sibling = await readSiblingHome(requested, error, overall);
+      if (sibling) {
+        return sibling;
+      }
+    }
+    if (!isHttpFallbackOn()) {
       throw error;
     }
     const httpOrigin = requested.replace(HTTPS_PREFIX_RE, "http:");
@@ -557,7 +609,12 @@ async function readHome(
         stageSignal(HOME_TIMEOUT_MS, overall),
         "html"
       );
-      return { html, httpFallback: true, origin: httpOrigin };
+      return {
+        html,
+        httpFallback: true,
+        origin: httpOrigin,
+        siblingHost: false,
+      };
     } catch {
       throw error; // 평문 읽기도 안 되면(또는 https 로 되돌리면) 원래 인증서 오류로 끝낸다
     }
@@ -615,21 +672,29 @@ export function applyImageText(
   };
 }
 
+interface FinishContext {
+  disallow: readonly string[];
+  html: string;
+  httpFallback: boolean;
+  origin: string;
+  /** 읽기 방법 기록에 쓰는 사실. */
+  used: { certSiblingHost: boolean; render: boolean };
+}
+
 /**
  * 읽기가 끝난 뒤 마무리: 글자가 얇고 플래그가 켜져 있으면 이미지 속 글자를 읽어 합친다.
  * 이미지 수·바이트·원가는 상한 안에서만(site-image-text.ts), 제3자 사이트는 robots 금지 경로 이미지를 가져오지 않는다.
+ * 사용한 읽기 방법(methods)도 여기서 확정한다.
  */
 async function finish(
   profile: SiteProfile,
   outcome: SiteReadOutcome,
-  ctx: {
-    disallow: readonly string[];
-    html: string;
-    httpFallback: boolean;
-    origin: string;
-  }
+  ctx: FinishContext
 ): Promise<SiteReadResult> {
+  const methodsOf = (imageText: boolean) =>
+    readMethods({ ...ctx.used, httpFallback: ctx.httpFallback, imageText });
   const base: SiteReadResult = {
+    methods: methodsOf(false),
     outcome,
     profile,
     ...(ctx.httpFallback ? { httpFallback: true as const } : {}),
@@ -654,10 +719,17 @@ async function finish(
   return {
     ...base,
     imageText,
+    methods: methodsOf(collected.attempted > 0),
     outcome: merged.thin ? "image_text_failed" : "image_text_used",
     profile: merged,
   };
 }
+
+const blocked = (): SiteReadResult => ({
+  methods: [],
+  outcome: "robots_blocked",
+  profile: null,
+});
 
 export async function readSiteProfileWithOutcome(
   domain: string
@@ -668,14 +740,14 @@ export async function readSiteProfileWithOutcome(
     // robots 우선(플래그 SITE_ROBOTS_FIRST_ENABLED): 홈이 막혀 있으면 홈을 **받기 전에** 멈춘다 — 금지된 페이지를 읽는 일 자체를 없앤다.
     if (isRobotsFirstOn() && (await homeBlockedByRobots(requested, overall))) {
       log.warn("audit.site_profile.robots_blocked", { domain, early: true });
-      return { outcome: "robots_blocked", profile: null };
+      return blocked();
     }
     const read = await readHome(requested, overall);
     if ("outcome" in read) {
       log.warn("audit.site_profile.robots_blocked", { domain, http: true });
-      return { outcome: "robots_blocked", profile: null };
+      return blocked();
     }
-    const { html: homeHtml, httpFallback, origin } = read;
+    const { html: homeHtml, httpFallback, origin, siblingHost } = read;
     const [robots, sitemap] = await Promise.all([
       orNull(
         fetchText(
@@ -695,7 +767,7 @@ export async function readSiteProfileWithOutcome(
     const disallow = robots ? parseRobotsDisallow(robots) : [];
     if (!isAllowedByRobots("/", disallow)) {
       log.warn("audit.site_profile.robots_blocked", { domain });
-      return { outcome: "robots_blocked", profile: null };
+      return blocked();
     }
     const rendered = await renderIfThin(
       extractSiteProfile(homeHtml),
@@ -704,11 +776,12 @@ export async function readSiteProfileWithOutcome(
     );
     const home = rendered.home;
     const outcome: SiteReadOutcome = thinOutcome(home.thin, rendered.renderRan);
-    const ctx = {
+    const ctx: FinishContext = {
       disallow,
       html: rendered.html ?? homeHtml,
       httpFallback,
       origin,
+      used: { certSiblingHost: siblingHost, render: home.rendered === true },
     };
     if (!sitemap || SITEMAP_INDEX_RE.test(sitemap)) {
       return await finish({ ...home, pagesRead: 1 }, outcome, ctx);
@@ -741,6 +814,10 @@ export async function readSiteProfileWithOutcome(
       domain,
       error: error instanceof Error ? error.message : String(error),
     });
-    return { outcome: classifySiteReadError(error), profile: null };
+    return {
+      methods: [],
+      outcome: classifySiteReadError(error),
+      profile: null,
+    };
   }
 }

@@ -47,6 +47,7 @@ beforeEach(() => {
   vi.stubEnv("SITE_ROBOTS_FIRST_ENABLED", "");
   vi.stubEnv("SITE_HTTP_FALLBACK_ENABLED", "");
   vi.stubEnv("SITE_IMAGE_TEXT_ENABLED", "");
+  vi.stubEnv("SITE_CERT_SIBLING_HOST_ENABLED", "");
   imageModel.extractImageText.mockReset();
 });
 afterEach(() => {
@@ -69,7 +70,11 @@ describe("사이트 읽기 사유 코드(readSiteProfileWithOutcome)", () => {
         : html(RICH)
     );
     const out = await readSiteProfileWithOutcome("example.test");
-    expect(out).toEqual({ outcome: "robots_blocked", profile: null });
+    expect(out).toEqual({
+      methods: [],
+      outcome: "robots_blocked",
+      profile: null,
+    });
   });
 
   it("HTTPS 인증서 호스트 불일치는 cert_host_mismatch(원인 세분)", async () => {
@@ -198,7 +203,11 @@ describe("인증서 오류 — http 폴백", () => {
   it("[플래그 꺼짐] https 인증서 오류면 http 를 시도하지 않고 cert_host_mismatch 로 끝난다", async () => {
     installTls(() => html(RICH));
     const out = await readSiteProfileWithOutcome("example.test");
-    expect(out).toEqual({ outcome: "cert_host_mismatch", profile: null });
+    expect(out).toEqual({
+      methods: [],
+      outcome: "cert_host_mismatch",
+      profile: null,
+    });
     expect(seen.every((u) => u.startsWith("https:"))).toBe(true);
   });
 
@@ -237,7 +246,11 @@ describe("인증서 오류 — http 폴백", () => {
         : Response.redirect("https://example.test/", 301)
     );
     const out = await readSiteProfileWithOutcome("example.test");
-    expect(out).toEqual({ outcome: "cert_host_mismatch", profile: null });
+    expect(out).toEqual({
+      methods: [],
+      outcome: "cert_host_mismatch",
+      profile: null,
+    });
   });
 
   it("[플래그 켜짐] 인증서 오류가 아닌 실패(5xx)는 http 폴백을 쓰지 않는다", async () => {
@@ -386,5 +399,118 @@ describe("이미지 속 글자 읽기", () => {
     const out = await readSiteProfileWithOutcome("example.test");
     expect(out.outcome).toBe("ok");
     expect(imageModel.extractImageText).not.toHaveBeenCalled();
+  });
+});
+
+// ── 인증서 형제 호스트(플래그 SITE_CERT_SIBLING_HOST_ENABLED) + 읽기 방법 기록 ───────────────────────
+const altnameError = (list: string) =>
+  new Error("fetch failed", {
+    cause: Object.assign(
+      new Error(
+        `Hostname/IP does not match certificate's altnames: Host: shop.example.co.kr. is not in the cert's altnames: ${list}`
+      ),
+      { code: "ERR_TLS_CERT_ALTNAME_INVALID" }
+    ),
+  });
+const installSibling = (list: string, okHosts: string[], thin = false) => {
+  seen = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: URL | string) => {
+      const url = new URL(String(input));
+      seen.push(`${url.protocol}//${url.hostname}${url.pathname}`);
+      if (url.protocol === "https:" && url.hostname === "shop.example.co.kr") {
+        return Promise.reject(altnameError(list));
+      }
+      if (url.protocol === "https:" && okHosts.includes(url.hostname)) {
+        return Promise.resolve(
+          url.pathname === "/" ? html(thin ? THIN : RICH) : text("", 404)
+        );
+      }
+      return Promise.reject(altnameError(list));
+    })
+  );
+};
+
+describe("인증서 형제 호스트", () => {
+  const LIST =
+    "DNS:example.co.kr, DNS:www.example.co.kr, DNS:other-company.com";
+
+  it("[플래그 꺼짐] 형제 호스트를 시도하지 않고 cert_host_mismatch", async () => {
+    installSibling(LIST, ["example.co.kr"]);
+    const out = await readSiteProfileWithOutcome("shop.example.co.kr");
+    expect(out.outcome).toBe("cert_host_mismatch");
+    expect(seen.some((u) => u.includes("//example.co.kr"))).toBe(false);
+  });
+
+  it("[플래그 켜짐] 같은 인증서의 같은 가족 호스트로 https 검증을 유지한 채 읽는다 — 다른 회사 이름은 시도하지 않는다", async () => {
+    vi.stubEnv("SITE_CERT_SIBLING_HOST_ENABLED", "true");
+    installSibling(LIST, ["example.co.kr"]);
+    const out = await readSiteProfileWithOutcome("shop.example.co.kr");
+    expect(out.outcome).toBe("ok");
+    expect(out.methods).toEqual(["cert_sibling_host"]);
+    expect(seen.every((u) => !u.includes("other-company.com"))).toBe(true);
+    expect(seen.every((u) => u.startsWith("https:"))).toBe(true);
+  });
+
+  it("[플래그 켜짐] 형제 호스트도 안 되면 http 폴백 플래그가 있을 때만 http 로 이어진다", async () => {
+    vi.stubEnv("SITE_CERT_SIBLING_HOST_ENABLED", "true");
+    installSibling(LIST, []);
+    expect(
+      (await readSiteProfileWithOutcome("shop.example.co.kr")).outcome
+    ).toBe("cert_host_mismatch");
+  });
+});
+
+describe("읽기 방법 기록(methods)", () => {
+  it("일반 읽기는 plain", async () => {
+    install((u) => (u.pathname === "/" ? html(RICH) : text("", 404)));
+    expect((await readSiteProfileWithOutcome("example.test")).methods).toEqual([
+      "plain",
+    ]);
+  });
+  it("렌더링으로 채웠으면 render", async () => {
+    install((u) => (u.pathname === "/" ? html(THIN) : text("", 404)));
+    render.renderSiteHtml.mockResolvedValue(RICH);
+    expect((await readSiteProfileWithOutcome("example.test")).methods).toEqual([
+      "render",
+    ]);
+  });
+  it("http 폴백 + 렌더링 + 이미지 글자 읽기가 이어지면 세 방법이 모두 기록된다", async () => {
+    vi.stubEnv("SITE_HTTP_FALLBACK_ENABLED", "true");
+    vi.stubEnv("SITE_IMAGE_TEXT_ENABLED", "true");
+    seen = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: URL | string) => {
+        const url = new URL(String(input));
+        seen.push(`${url.protocol}${url.pathname}`);
+        if (url.protocol === "https:") {
+          return Promise.reject(certError());
+        }
+        if (url.pathname === "/") {
+          return Promise.resolve(html(PAGE_WITH_IMAGES));
+        }
+        if (url.pathname.endsWith(".png")) {
+          return Promise.resolve(
+            new Response(PNG, {
+              headers: { "content-type": "image/png" },
+              status: 200,
+            })
+          );
+        }
+        return Promise.resolve(text("", 404));
+      })
+    );
+    render.renderSiteHtml.mockResolvedValue(PAGE_WITH_IMAGES); // 렌더링을 돌렸지만 여전히 얇다
+    imageModel.extractImageText.mockResolvedValue({
+      inputTokens: 100,
+      outputTokens: 10,
+      text: `프란츠 시카 크림 ${"민감성 피부 보습 진정 ".repeat(15)}`,
+    });
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("image_text_used");
+    expect(out.methods).toEqual(["http_fallback", "image_text"]);
+    expect(out.httpFallback).toBe(true);
   });
 });

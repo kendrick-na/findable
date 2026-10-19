@@ -208,6 +208,7 @@ export interface AuditRunInput {
     siteHttpFallback?: boolean;
     siteImageText?: Record<string, number>;
     siteOutcome?: SiteReadOutcome;
+    siteReadMethods?: string[];
   };
   /**
    * 업종(AuditJob.industry). 언급 품질 검증에서 동명이인 분별 단서로 쓴다
@@ -271,6 +272,7 @@ function gapPreflightOf(
     siteHttpFallback: input.gapInput?.siteHttpFallback,
     siteImageText: input.gapInput?.siteImageText,
     siteOutcome: input.gapInput?.siteOutcome,
+    siteReadMethods: input.gapInput?.siteReadMethods,
   });
   if (gapPreflight.warnings.length > 0) {
     log.warn("audit.measurement_gap.preflight_warning", {

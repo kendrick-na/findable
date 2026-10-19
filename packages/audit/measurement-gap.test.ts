@@ -6,6 +6,7 @@ import {
   classifyGaps,
   ensureReasonCodes,
   finalizeGapDiagnostics,
+  formatReadMethodTable,
   formatUnmeasuredTable,
   GAP_ACTION_KO,
   GAP_LABEL_KO,
@@ -261,5 +262,21 @@ describe("시작 불변식 · 사유 없는 실패 금지(2026-10-19)", () => {
     expect(classifyFailureMessage("Audit run has no prompts")).toEqual([
       "zero_questions",
     ]);
+  });
+});
+
+describe("읽기 방법 표", () => {
+  it("방법별 곳 수·ID 를 낸다(한 곳이 여러 방법이면 각 줄에, 방법 기록 없는 곳은 세지 않는다)", () => {
+    const table = formatReadMethodTable([
+      { id: "A-01", methods: ["plain"] },
+      { id: "I-21", methods: ["http_fallback", "render"] },
+      { id: "I-05", methods: ["render", "image_text"] },
+    ]);
+    expect(table).toContain("| 일반 읽기 | 1 | A-01 |");
+    expect(table).toContain("| 브라우저 렌더링 | 2 | I-05, I-21 |");
+    expect(table).toContain("| 이미지 속 글자 읽기(비전 모델) | 1 | I-05 |");
+    expect(table).toContain(
+      "| 평문 http 폴백(인증서 오류 사이트, 공개 읽기 전용) | 1 | I-21 |"
+    );
   });
 });
