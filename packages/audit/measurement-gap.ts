@@ -22,33 +22,76 @@ export function isMeasurementGapLogEnabled(
 
 /** 질문 세트가 이 수보다 적으면 경고한다(기본 질문 4개 + 이름 없는 질문이 거의 없다는 뜻). */
 export const MIN_HEALTHY_QUESTION_COUNT = 8;
+/** 이름 질문(우리 이름이 들어간 질문) 최소 수 — 0개는 이름 인식 지표가 아예 없다. 1개는 한 번의 흔들림에 취약하다. */
+export const MIN_BRAND_QUESTION_COUNT = 2;
 
 export type GapCode =
   | "all_engines_failed"
   | "certificate_error"
+  | "few_brand_questions"
   | "few_questions"
   | "no_brand_question"
+  | "prepare_error"
   | "render_needed"
   | "robots_blocked"
   | "site_timeout"
   | "site_unreachable"
+  | "thin_after_render"
+  | "unclassified"
   | "zero_questions";
 
 export const GAP_LABEL_KO: Record<GapCode, string> = {
   all_engines_failed: "엔진 응답을 하나도 못 받음",
   certificate_error: "사이트 HTTPS 인증서 오류",
+  few_brand_questions: `이름 질문 ${MIN_BRAND_QUESTION_COUNT}개 미만`,
   few_questions: `질문 ${MIN_HEALTHY_QUESTION_COUNT}개 미만`,
   no_brand_question: "이름 질문 0개",
+  prepare_error: "측정 준비 단계 오류",
   render_needed: "JS 사이트인데 렌더링으로도 재료 부족",
   robots_blocked: "사이트가 AI 접근을 막음(robots)",
   site_timeout: "사이트 읽기 시간 초과",
   site_unreachable: "사이트 접속 실패(기타)",
+  thin_after_render:
+    "렌더링 후에도 글자 거의 없음(글이 이미지 안에 있는 사이트)",
+  unclassified: "사유 미분류(기록 누락 — 점검 필요)",
   zero_questions: "질문 0개",
+};
+
+/**
+ * 사유별 다음 행동 안내(운영자·측정 담당용 — 고객 화면 문구가 아니다). 결과 JSON·보고 표에서만 쓴다.
+ * 「정직한 측정 불가」(우회하지 않는 것)와 「코드로 풀 수 있는 것」을 가른다.
+ */
+export const GAP_ACTION_KO: Record<GapCode, string> = {
+  all_engines_failed: "엔진 키·한도·장애 확인 후 재측정(엔진별 오류 기록 참고)",
+  certificate_error:
+    "측정 불가로 보고(사이트 운영자의 인증서 수리 외 방법 없음 — 우회 금지). 한 줄 소개 입력으로 대체 가능",
+  few_brand_questions:
+    "이름 질문 보증(QUESTION_BRAND_GUARANTEE_ENABLED) 켜고 재생성",
+  few_questions:
+    "단계적 폴백(QUESTION_STEPWISE_FALLBACK_ENABLED)·소프트 확신 켜고 재생성, 그래도 모자라면 측정 불가로 보고",
+  no_brand_question:
+    "이름 질문 보증(QUESTION_BRAND_GUARANTEE_ENABLED) 켜고 재생성",
+  prepare_error: "준비 단계 오류 메시지 확인 후 재시도",
+  render_needed:
+    "SITE_RENDER_ENABLED 를 운영과 같게 켜고 재시도, 안 되면 한 줄 소개 입력",
+  robots_blocked:
+    "측정 불가로 보고(robots 우회 금지). 한 줄 소개 입력으로 대체 측정은 가능하며 별도 표기",
+  site_timeout:
+    "재시도(큰 페이지는 앞 500KB만 읽음), 반복되면 사이트 응답 속도 문제로 보고",
+  site_unreachable:
+    "접속 실패 원인 확인(DNS·차단) 후 재시도, 한 줄 소개 입력으로 대체 가능",
+  thin_after_render:
+    "한 줄 소개 입력으로 대체 측정(렌더링으로는 풀리지 않음 — 이미지 읽기는 보류 기능)",
+  unclassified: "사유 기록 누락 — 코드 점검 필요(이 값이 나오면 버그)",
+  zero_questions: "한 줄 소개 입력 또는 업종 직접 지정 후 재생성",
 };
 
 export type GapWarning = Extract<
   GapCode,
-  "few_questions" | "no_brand_question" | "zero_questions"
+  | "few_brand_questions"
+  | "few_questions"
+  | "no_brand_question"
+  | "zero_questions"
 >;
 
 export interface QuestionCounts {
@@ -68,8 +111,72 @@ export function questionSetWarnings(counts: QuestionCounts): GapWarning[] {
   }
   if (counts.brandQuestionCount <= 0) {
     out.push("no_brand_question");
+  } else if (counts.brandQuestionCount < MIN_BRAND_QUESTION_COUNT) {
+    out.push("few_brand_questions");
   }
   return out;
+}
+
+/**
+ * 측정 시작 불변식(2026-10-19) — 질문 ≥ 8 이고 이름 질문 ≥ 2 이거나, 아니면 **사유 코드가 붙은 측정 불가**다.
+ * 조용한 0문항·4문항·이름 0개로 측정이 진행되는 경로를 없애는 기준이다(경고 규칙과 같은 판정을 쓴다).
+ */
+export function checkQuestionInvariant(
+  counts: QuestionCounts
+): { ok: true } | { codes: GapWarning[]; ok: false } {
+  const codes = questionSetWarnings(counts);
+  return codes.length === 0 ? { ok: true } : { codes, ok: false };
+}
+
+/** 측정 불가로 끝낼 때 오류 문구 머리표. 사유 코드가 뒤따른다(예: `UNMEASURABLE:few_questions,no_brand_question`). */
+export const UNMEASURABLE_PREFIX = "UNMEASURABLE:";
+
+export function unmeasurableMessage(codes: readonly GapCode[]): string {
+  return `${UNMEASURABLE_PREFIX}${ensureReasonCodes(codes).join(",")}`;
+}
+
+/** 실패인데 사유가 비어 있으면 `unclassified` 를 붙인다 — 「사유 없는 실패」를 만들지 않는 마지막 보증. */
+export function ensureReasonCodes(codes: readonly GapCode[]): GapCode[] {
+  return codes.length > 0 ? [...codes] : ["unclassified"];
+}
+
+const PREFIXED_CODE_RE = /^UNMEASURABLE:([a-z_,]+)/;
+const NO_PROMPTS_RE = /no prompts|no_questions/i;
+const PREPARE_ERROR_RE = /^prepare_error/i;
+
+/**
+ * 실패 메시지(작업 오류·스크립트 사유 문자열)를 사유 코드로 옮긴다 — **항상 코드가 1개 이상** 나온다(마지막 보증 = prepare_error/unclassified).
+ * `UNMEASURABLE:` 머리표가 있으면 그 코드들을 그대로 읽는다.
+ */
+export function classifyFailureMessage(
+  message: string | null | undefined
+): GapCode[] {
+  const text = (message ?? "").trim();
+  const prefixed = PREFIXED_CODE_RE.exec(text);
+  if (prefixed?.[1]) {
+    const known = prefixed[1]
+      .split(",")
+      .filter((c): c is GapCode => c in GAP_LABEL_KO);
+    return ensureReasonCodes(known);
+  }
+  if (NO_PROMPTS_RE.test(text)) {
+    return ["zero_questions"];
+  }
+  if (PREPARE_ERROR_RE.test(text)) {
+    return ["prepare_error"];
+  }
+  return text ? ["unclassified"] : ensureReasonCodes([]);
+}
+
+const INVARIANT_ON_VALUES = new Set(["1", "true"]);
+
+/** 시작 불변식 강제(플래그 MEASUREMENT_INVARIANT_ENABLED, 기본 꺼짐) — 호출부가 `requireQuestionInvariant` 로 opt-in 해야 적용된다. */
+export function isMeasurementInvariantEnabled(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return INVARIANT_ON_VALUES.has(
+    (env.MEASUREMENT_INVARIANT_ENABLED ?? "").trim().toLowerCase()
+  );
 }
 
 const SITE_CODE: Partial<Record<SiteReadOutcome, GapCode>> = {
@@ -78,6 +185,7 @@ const SITE_CODE: Partial<Record<SiteReadOutcome, GapCode>> = {
   not_html: "site_unreachable",
   render_needed: "render_needed",
   robots_blocked: "robots_blocked",
+  thin_after_render: "thin_after_render",
   timeout: "site_timeout",
 };
 

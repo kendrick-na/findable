@@ -118,6 +118,25 @@ export function isRetryableMessage(
   );
 }
 
+const SERVER_ERROR_RE =
+  /(?:\bHTTP\b|\bAPI\b|status(?:Code)?)[\s:=]*5\d\d\b|overloaded|service unavailable|bad gateway|gateway time-?out/i;
+const EMPTY_CAUSE_RE = /empty answer|empty response|returned no answer text/i;
+
+/** 재시도 앞 실패의 원인 분류(기록용 · 문구 원문은 남기지 않는다). */
+export function retryCauseOf(
+  hint: RetryHint | undefined,
+  message: string | null | undefined
+): string {
+  const text = message ?? "";
+  if (hint?.rateLimited || RATE_LIMIT_MESSAGE_RE.test(text)) {
+    return "rate_limit";
+  }
+  if (EMPTY_CAUSE_RE.test(text)) {
+    return "empty";
+  }
+  return SERVER_ERROR_RE.test(text) ? "server_error" : "network";
+}
+
 /** 던져진 오류(AI SDK APICallError 포함)에서 재시도 가능 여부와 Retry-After 를 읽는다. */
 export function classifyRetryable(error: unknown): RetryHint {
   const { statusCode, retryAfterSeconds } = describeProviderError(error);
@@ -266,6 +285,7 @@ export async function runCellGuarded(
   let settled = false;
   const maxRetries = options.retry ? Math.max(0, limits.cellMaxRetries) : 0;
   const priorUsage: EngineUsage[] = [];
+  const causes: string[] = [];
   let attempts = 0;
 
   try {
@@ -297,6 +317,7 @@ export async function runCellGuarded(
           !rateLimitBlocked(thrownHint, message, limits) &&
           takeRetryBudget(limits)
         ) {
+          causes.push(retryCauseOf(thrownHint, message));
           await sleep(
             retryDelayMs(attempts - 1, thrownHint, limits, random),
             signal
@@ -322,6 +343,7 @@ export async function runCellGuarded(
           !rateLimitBlocked(hint, response.errorMessage, limits) &&
           takeRetryBudget(limits)
         ) {
+          causes.push(retryCauseOf(hint, response.errorMessage));
           if (response.usage) {
             priorUsage.push(response.usage);
           }
@@ -337,6 +359,7 @@ export async function runCellGuarded(
               ...response,
               ...(mergedUsage ? { usage: mergedUsage } : {}),
               retryAttempts: attempts,
+              retryCauses: causes,
             }
           : response;
 

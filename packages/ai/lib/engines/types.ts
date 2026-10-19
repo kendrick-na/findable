@@ -219,6 +219,8 @@ export interface EngineResponse {
    * 재시도가 없으면 생략 — 꺼짐 상태·1회 성공 응답의 JSON 은 기존과 같다. usage 는 시도 간 합산됐다.
    */
   retryAttempts?: number;
+  /** 재시도 앞에서 실패한 시도들의 원인 분류(rate_limit·server_error·empty·network) — 재시도로 회복한 칸도 기록하려는 용도(진단 ⑦). */
+  retryCauses?: string[];
   sentiment: "positive" | "neutral" | "negative" | null;
   /**
    * api-search-v1 후보 엔진 섀도 결과(`API_SEARCH_SHADOW=true` + 허용 도메인). **chatgpt·gemini 행에만** 붙는다.

@@ -109,9 +109,12 @@ import {
 } from "./measurement-coverage";
 import {
   buildGapPreflight,
+  checkQuestionInvariant,
   finalizeGapDiagnostics,
   type GapPreflight,
   isMeasurementGapLogEnabled,
+  isMeasurementInvariantEnabled,
+  unmeasurableMessage,
 } from "./measurement-gap";
 import { isPublishableAuditResult } from "./normalize-stored-metrics";
 import {
@@ -228,6 +231,11 @@ export interface AuditRunInput {
    * ③ 결과에 「N개 중 M개 측정」(`measurementContext.questionPlan`)을 남긴다. 절대 상한 20.
    */
   promptLimit?: number;
+  /**
+   * true 면(플래그 MEASUREMENT_INVARIANT_ENABLED 도 켜져 있을 때) 질문 8개 미만·이름 질문 2개 미만인 측정은
+   * 조용히 진행하지 않고 `UNMEASURABLE:<사유 코드>` 로 끝낸다. 고객 측정(플랜별 질문 수 상한이 더 작다)은 켜지 않는다 — 영업·동기 측정 경로용.
+   */
+  requireQuestionInvariant?: boolean;
   /**
    * 호출부가 이미 판정한 측정 준비도(+ '기본값으로 진행' 선택). 없으면 brandId 가 있을 때 러너가
    * 직접 읽어 결과(measurementContext.setupReadiness)에 남긴다 — 모든 진입 경로가 이 한 곳을 지난다.
@@ -1121,6 +1129,17 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
     if (plannedPrompts.length === 0) {
       throw new Error("Audit run has no prompts");
     }
+    // 시작 불변식(opt-in + 플래그): 질문 ≥ 8·이름 질문 ≥ 2 가 아니면 조용히 진행하지 않고 사유 코드가 붙은 측정 불가로 끝낸다.
+    if (input.requireQuestionInvariant && isMeasurementInvariantEnabled()) {
+      const verdict = checkQuestionInvariant({
+        brandQuestionCount: plannedPrompts.filter((p) => p.kind !== "discovery")
+          .length,
+        questionCount: plannedPrompts.length,
+      });
+      if (!verdict.ok) {
+        throw new Error(unmeasurableMessage(verdict.codes));
+      }
+    }
     const checkpoint =
       savedCheckpoint ??
       ledgerPlan?.checkpoint ??
@@ -1876,6 +1895,8 @@ export async function runAuditJob(input: AuditRunInput): Promise<void> {
               lateCell: lateCellMarker(cellOfRow(index, r.engineId)),
               promptIndex: tagged[index]?.promptIndex,
               promptKind: tagged[index]?.promptKind,
+              retryAttempts: r.retryAttempts,
+              retryCauses: r.retryCauses,
             }))
           );
           return engineErrors ? { engineErrors } : {};

@@ -298,6 +298,26 @@ describe("runAuditJob in stub mode", () => {
     expect(JSON.stringify(gap)).not.toContain("example.com");
   });
 
+  it("시작 불변식: 플래그+opt-in 이면 질문 8개 미만은 사유 코드가 붙은 측정 불가로 끝나고, 둘 중 하나라도 없으면 그대로 측정한다", async () => {
+    // 플래그 꺼짐 + opt-in → 예전처럼 측정
+    seedJob();
+    await runAuditJob({ ...input, requireQuestionInvariant: true });
+    expect(job().status).toBe("completed");
+
+    // 플래그 켜짐 + opt-in 없음 → 예전처럼 측정(고객 측정 경로)
+    vi.stubEnv("MEASUREMENT_INVARIANT_ENABLED", "true");
+    seedJob();
+    await runAuditJob(input);
+    expect(job().status).toBe("completed");
+
+    // 플래그 켜짐 + opt-in → 기본 질문 4개뿐이라 측정 불가(사유 코드)
+    seedJob();
+    await runAuditJob({ ...input, requireQuestionInvariant: true });
+    expect(job().status).toBe("failed");
+    expect(String(job().errorMessage)).toMatch(/^UNMEASURABLE:.*few_questions/);
+    expect(leakedCalls()).toEqual([]);
+  });
+
   it("is forced on Preview even with FINDABLE_AUDIT_STUB_MODE unset", async () => {
     vi.stubEnv("FINDABLE_AUDIT_STUB_MODE", undefined);
     seedJob();

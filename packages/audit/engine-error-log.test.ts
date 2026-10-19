@@ -90,3 +90,46 @@ describe("summarizeEngineErrors — 어느 엔진이 어떤 종류로 실패했�
     expect(out?.truncated).toBe(true);
   });
 });
+
+describe("재시도 회복·5xx 기록(2026-10-19)", () => {
+  it("칸 재시도로 회복한 칸(최종 성공)도 원인·시도 횟수와 함께 기록한다", () => {
+    const summary = summarizeEngineErrors([
+      {
+        engineId: "chatgpt",
+        errorMessage: null,
+        promptIndex: 2,
+        promptKind: "discovery",
+        retryAttempts: 2,
+        retryCauses: ["rate_limit"],
+      },
+    ]);
+    expect(summary?.total).toBe(1);
+    expect(summary?.byEngine.chatgpt).toMatchObject({
+      rate_limit: 1,
+      recovered: 1,
+    });
+    expect(summary?.events[0]).toMatchObject({
+      attempts: 2,
+      engineId: "chatgpt",
+      kind: "rate_limit",
+      promptIndex: 2,
+      recovered: true,
+    });
+  });
+
+  it("재시도가 없었던 정상 칸은 기록하지 않는다(정상 회차는 키 없음)", () => {
+    expect(
+      summarizeEngineErrors([
+        { engineId: "chatgpt", errorMessage: null, retryAttempts: 1 },
+      ])
+    ).toBeNull();
+  });
+
+  it("5xx·과부하는 server_error 로 분류한다", () => {
+    expect(classifyEngineError("HTTP 503 service unavailable")).toBe(
+      "server_error"
+    );
+    expect(classifyEngineError("Anthropic overloaded")).toBe("server_error");
+    expect(classifyEngineError("HTTP 429 rate limit")).toBe("rate_limit");
+  });
+});

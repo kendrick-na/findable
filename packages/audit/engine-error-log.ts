@@ -17,7 +17,8 @@ export type EngineErrorKind =
   | "rate_limit"
   | "empty"
   | "error"
-  | "paused";
+  | "paused"
+  | "server_error";
 
 export interface EngineErrorRow {
   durationMs?: number | null;
@@ -26,9 +27,14 @@ export interface EngineErrorRow {
   lateCell?: "resolved" | "final_failed";
   promptIndex?: number | null;
   promptKind?: string | null;
+  /** 칸 재시도로 시도한 횟수(2 이상이면 재시도가 있었다) · 앞 실패의 원인 분류. 재시도로 회복한 칸도 기록한다. */
+  retryAttempts?: number;
+  retryCauses?: readonly string[];
 }
 
 export interface EngineErrorEvent {
+  /** 칸 재시도 횟수(2 이상일 때만 키가 있다). */
+  attempts?: number;
   durationMs: number | null;
   engineId: string;
   kind: EngineErrorKind;
@@ -48,6 +54,8 @@ export interface EngineErrorSummary {
       /** 서킷브레이커로 격리된 칸 수. 없으면 키 자체가 없다(기존 JSON 과 동일). */
       paused?: number;
       recovered: number;
+      /** 5xx·과부하. 없으면 키 자체가 없다(기존 JSON 과 동일). */
+      server_error?: number;
       timeout: number;
     }
   >;
@@ -59,6 +67,8 @@ export interface EngineErrorSummary {
 
 const MAX_EVENTS = 60;
 const RATE_LIMIT_RE = /\b429\b|rate.?limit|too many requests|usage_limit/i;
+const SERVER_ERROR_RE =
+  /(?:\bHTTP\b|\bAPI\b|status(?:Code)?)[\s:=]*5\d\d\b|overloaded|service unavailable|bad gateway|gateway time-?out/i;
 const EMPTY_RE =
   /검색 결과 없음|no results|returned an empty answer|empty answer/i;
 
@@ -74,8 +84,37 @@ export function classifyEngineError(
   if (typeof message === "string" && RATE_LIMIT_RE.test(message)) {
     return "rate_limit";
   }
+  if (typeof message === "string" && SERVER_ERROR_RE.test(message)) {
+    return "server_error";
+  }
   if (typeof message === "string" && EMPTY_RE.test(message)) {
     return "empty";
+  }
+  return "error";
+}
+
+/** 한 행이 기록 대상인지·어떤 종류인지·회복됐는지(늦은 칸 회복 · 칸 재시도 회복 · 최종 오류). */
+function rowVerdict(
+  row: EngineErrorRow
+): { kind: EngineErrorKind; recovered: boolean } | null {
+  const lateRecovered = !row.errorMessage && row.lateCell === "resolved";
+  // 칸 재시도(앞 시도가 실패)로 회복한 칸 — 최종은 성공이지만 「한 번 실패했다」는 사실을 남긴다.
+  const retryRecovered =
+    !(row.errorMessage || lateRecovered) && (row.retryAttempts ?? 1) > 1;
+  if (lateRecovered) {
+    return { kind: "timeout", recovered: true };
+  }
+  if (retryRecovered) {
+    return { kind: causeToKind(row.retryCauses?.[0]), recovered: true };
+  }
+  return row.errorMessage
+    ? { kind: classifyEngineError(row.errorMessage), recovered: false }
+    : null;
+}
+
+function causeToKind(cause: string | undefined): EngineErrorKind {
+  if (cause === "rate_limit" || cause === "server_error" || cause === "empty") {
+    return cause;
   }
   return "error";
 }
@@ -88,13 +127,11 @@ export function summarizeEngineErrors(
   const events: EngineErrorEvent[] = [];
   let total = 0;
   for (const row of rows) {
-    const recovered = !row.errorMessage && row.lateCell === "resolved";
-    if (!(row.errorMessage || recovered)) {
+    const verdict = rowVerdict(row);
+    if (!verdict) {
       continue;
     }
-    const kind: EngineErrorKind = recovered
-      ? "timeout"
-      : classifyEngineError(row.errorMessage);
+    const { kind, recovered } = verdict;
     const bucket = byEngine[row.engineId] ?? {
       empty: 0,
       error: 0,
@@ -110,6 +147,9 @@ export function summarizeEngineErrors(
     total += 1;
     if (events.length < MAX_EVENTS) {
       events.push({
+        ...((row.retryAttempts ?? 1) > 1
+          ? { attempts: row.retryAttempts }
+          : {}),
         durationMs: row.durationMs ?? null,
         engineId: row.engineId,
         kind,

@@ -64,6 +64,7 @@ export type SuggestLanguage = "ko" | "en";
  *  - QUESTION_BRAND_GUARANTEE_ENABLED: 생성기가 이름 질문을 하나도 못 냈을 때 코드가 고정 문형으로 채운다.
  *  - QUESTION_BRAND_VARIANT_ENABLED: 이름 질문 검사가 표기 변형(법인 꼬리표 뗀 이름·제목 앞부분)도 인정한다(진단 ③).
  *  - QUESTION_GENERATION_LOG_ENABLED: 결과에 `generationLog`(후보 수·확신·폐기 사유·폴백 결정)를 싣는다(진단 ⑦, 기록 전용).
+ *  - QUESTION_STEPWISE_FALLBACK_ENABLED: 통과한 질문이 모자라도(8개 미만) 버리지 않고 업종·분야 기본 질문으로 **채워서** 0개·4개로 끝나지 않게 한다(단계적 폴백).
  *  - QUESTION_SOFT_CONFIDENCE_ENABLED: 생성기가 "확신 없음"이어도 검사를 통과한 질문이 충분하면(8개 이상) 버리지 않고 쓴다
  *    (진단 재현: 통과한 12~16개를 통째로 버리고 업종 기본 4개로 물러나던 경로).
  */
@@ -74,7 +75,8 @@ export function isQuestionFlagOn(
     | "QUESTION_BRAND_VARIANT_ENABLED"
     | "QUESTION_GENERATION_LOG_ENABLED"
     | "QUESTION_OTHER_FALLBACK_ENABLED"
-    | "QUESTION_SOFT_CONFIDENCE_ENABLED",
+    | "QUESTION_SOFT_CONFIDENCE_ENABLED"
+    | "QUESTION_STEPWISE_FALLBACK_ENABLED",
   env: Record<string, string | undefined> = process.env
 ): boolean {
   return ON_VALUES.has((env[name] ?? "").trim().toLowerCase());
@@ -161,7 +163,8 @@ export interface QuestionGenerationLog {
     | "fallback_few"
     | "fallback_unconfident"
     | "generated"
-    | "soft_confident";
+    | "soft_confident"
+    | "topped_up";
   finalCount: number;
   rounds: {
     attempt: number;
@@ -197,6 +200,8 @@ const OVERSHOOT = 3;
 const RETRY_BELOW = 14;
 // "확신 없음"이어도 검사를 통과한 질문이 이만큼 있으면 버리지 않는다(플래그 켜짐일 때만).
 const SOFT_CONFIDENT_MIN_QUESTIONS = 8;
+/** 이름 질문 최소 보증 수 — 1개뿐이면 한 번의 흔들림에 이름 인식 지표가 사라진다. */
+const MIN_GUARANTEED_BRAND_QUESTIONS = 2;
 // 사이트 글이 이만큼은 있어야 "대표 상품 0개"를 재시도 사유로 본다(글이 없는 사이트에서 헛호출 방지).
 const MIN_SITE_TEXT_FOR_REPRESENTATIVE_RETRY = 300;
 
@@ -257,6 +262,25 @@ const suggestionSchema = z.object({
       "주어진 업종·사이트 문구로 맥락 있는 질문을 만들었으면 true. 재료가 부족해 추측했으면 false."
     ),
 });
+
+/**
+ * 사이트를 못 읽었거나 재료가 얇을 때 사람이 적은 한두 줄 소개를 사이트 재료 앞에 붙인다(저장하지 않는다).
+ * 화면 서버 액션과 측정 스크립트가 **같은 규칙**을 쓰도록 여기 한 벌만 둔다. 소개가 비어 있으면 사이트를 그대로 돌려준다.
+ */
+export function mergeSiteNote<T extends NonNullable<SuggestInput["site"]>>(
+  readSite: T | null | undefined,
+  cleanedNote: string
+): NonNullable<SuggestInput["site"]> | null | undefined {
+  if (!cleanedNote) {
+    return readSite;
+  }
+  return {
+    ...(readSite ?? {}),
+    bodySnippet: [cleanedNote, readSite?.bodySnippet].filter(Boolean).join(" "),
+    description: [cleanedNote, readSite?.description].filter(Boolean).join(" "),
+    thin: false,
+  };
+}
 
 export interface SuggestInput {
   /** 고객이 확인한 별칭(한·영·제품 표기). */
@@ -417,11 +441,46 @@ export async function suggestTrackingPrompts(
   input: SuggestInput
 ): Promise<PromptSuggestions> {
   const trace: GenerationTrace = { rounds: [] };
-  const result = await suggestWithTrace(input, trace);
+  const result = withBrandGuarantee(
+    await suggestWithTrace(input, trace),
+    input,
+    trace
+  );
   if (!isQuestionFlagOn("QUESTION_GENERATION_LOG_ENABLED")) {
     return result;
   }
   return { ...result, generationLog: toGenerationLog(result, trace) };
+}
+
+/**
+ * 어느 경로(생성·기본 질문·채움)로 끝났든 이름 질문이 2개 미만이면 고정 문형으로 보증한다(플래그 QUESTION_BRAND_GUARANTEE_ENABLED).
+ * 질문이 하나도 없는 결과는 건드리지 않는다 — 재료가 전혀 없는데 이름 질문만 내서 측정을 시작하게 하지 않는다(정직한 측정 불가로 남긴다).
+ */
+function withBrandGuarantee(
+  result: PromptSuggestions,
+  input: SuggestInput,
+  trace: GenerationTrace
+): PromptSuggestions {
+  if (
+    !isQuestionFlagOn("QUESTION_BRAND_GUARANTEE_ENABLED") ||
+    result.prompts.length === 0 ||
+    result.prompts.filter((p) => p.type === "brand").length >=
+      MIN_GUARANTEED_BRAND_QUESTIONS
+  ) {
+    return result;
+  }
+  const asPlan: PlanQuestion[] = result.prompts.map((p) => ({
+    language: p.language,
+    text: p.text,
+    type: p.type ?? "category",
+  }));
+  const ensured = ensureBrandQuestions(asPlan, input, scopeOf(input));
+  trace.brandGuaranteeApplied = true;
+  const byText = new Map(result.prompts.map((p) => [p.text, p]));
+  return {
+    ...result,
+    prompts: ensured.map((q) => byText.get(q.text) ?? toSuggested(q)),
+  };
 }
 
 interface GenerationTrace {
@@ -506,6 +565,15 @@ async function suggestWithTrace(
         scope
       );
       logGuardDropped(attempt, input.brandName, guarded.dropped);
+      // 기록 전용(항상): 시도마다 후보 수·확신·통과·폐기 사유 — 동작은 바꾸지 않는다.
+      log.info("prompt.suggest.attempt", {
+        attempt,
+        brandName: input.brandName,
+        candidates: all.length,
+        confident: round.confident,
+        droppedByReason: trace.rounds[attempt]?.droppedByReason,
+        kept: guarded.kept.length,
+      });
       const missingRepresentative = shouldRetryForRepresentative(
         attempt,
         input,
@@ -621,6 +689,13 @@ function finalizeSuggestions(
     composed.length >= SOFT_CONFIDENT_MIN_QUESTIONS;
   // 비확신이거나 사실상 빈손이면 업종 기반 기본 질문으로 최소치 보장.
   if (!(confident || softConfident) || composed.length < 4) {
+    const stepwise = toppedUp(input, composed, categoryPhrase);
+    if (stepwise) {
+      if (trace) {
+        trace.decision = "topped_up";
+      }
+      return stepwise;
+    }
     if (trace) {
       trace.decision = confident ? "fallback_few" : "fallback_unconfident";
     }
@@ -638,6 +713,35 @@ function finalizeSuggestions(
 }
 
 /**
+ * 단계적 폴백의 마지막 단계(플래그 QUESTION_STEPWISE_FALLBACK_ENABLED): 통과한 질문을 버리지 않고 업종·분야 기본 질문으로 **채운다**.
+ * 이름 없는 통과 질문이 하나도 없으면(이름 보증이 채운 이름 질문뿐이어도) null(예전 경로 — 기본 질문만, 업종 기타라면 빈 목록 = 정직한 측정 불가 사유로 남는다).
+ */
+function toppedUp(
+  input: SuggestInput,
+  composed: PlanQuestion[],
+  categoryPhrase: string | null
+): PromptSuggestions | null {
+  if (
+    !(
+      isQuestionFlagOn("QUESTION_STEPWISE_FALLBACK_ENABLED") &&
+      composed.some((q) => q.type !== "brand")
+    )
+  ) {
+    return null;
+  }
+  const defaults = staticFallback(input, categoryPhrase);
+  const seen = new Set(composed.map((q) => q.text.trim().toLowerCase()));
+  const extra = defaults.prompts.filter(
+    (p) => !seen.has(p.text.trim().toLowerCase())
+  );
+  return {
+    ...defaults,
+    prompts: [...composed.map(toSuggested), ...extra].slice(0, MAX_PROMPTS),
+    lowConfidence: true,
+  };
+}
+
+/**
  * 이름 질문 보장(진단 ⑥, 플래그 QUESTION_BRAND_GUARANTEE_ENABLED · 기본 꺼짐).
  * 생성기가 이름 질문을 **하나도** 못 냈을 때만 코드의 고정 문형으로 채운다(실측: 후보 11~17개인데 이름 질문 0개 → 6문항).
  * 자리가 모자라면 뒤쪽 이름 없는 질문을 덜어 상한(20)을 지킨다. 이름 질문이 이미 있으면 손대지 않는다.
@@ -647,18 +751,27 @@ function ensureBrandQuestions(
   input: SuggestInput,
   scope: PlanMarketScope
 ): PlanQuestion[] {
-  if (
-    !isQuestionFlagOn("QUESTION_BRAND_GUARANTEE_ENABLED") ||
-    composed.some((q) => q.type === "brand")
-  ) {
+  if (!isQuestionFlagOn("QUESTION_BRAND_GUARANTEE_ENABLED")) {
     return composed;
   }
-  const fixed = fixedBrandQuestions(input.brandName, scope);
-  if (fixed.length === 0) {
+  const existing = composed.filter((q) => q.type === "brand");
+  if (existing.length >= MIN_GUARANTEED_BRAND_QUESTIONS) {
     return composed;
   }
-  const room = Math.max(0, MAX_PROMPTS - fixed.length);
-  return [...composed.slice(0, room), ...fixed];
+  const have = new Set(existing.map((q) => q.text.trim().toLowerCase()));
+  const fixed = fixedBrandQuestions(input.brandName, scope).filter(
+    (q) => !have.has(q.text.trim().toLowerCase())
+  );
+  // 이름 질문이 하나도 없으면 고정 문형 전부, 1개뿐이면 최소치(2)까지만 채운다.
+  const add =
+    existing.length === 0
+      ? fixed
+      : fixed.slice(0, MIN_GUARANTEED_BRAND_QUESTIONS - existing.length);
+  if (add.length === 0) {
+    return composed;
+  }
+  const room = Math.max(0, MAX_PROMPTS - add.length);
+  return [...composed.slice(0, room), ...add];
 }
 
 /** 경쟁사가 없으면 대안 질문은 모델 것을 버리고 코드의 고정 문형으로 채운다. */

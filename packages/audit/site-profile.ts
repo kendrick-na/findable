@@ -375,7 +375,8 @@ export async function readSiteProfile(
  * 사이트를 읽지 못했거나 재료가 얇을 때 **왜**였는지(미측정 사유 코드, 2026-10-19).
  *  - robots_blocked: robots.txt 가 홈을 막음(우회하지 않는다) · certificate_error: HTTPS 인증서 오류
  *  - timeout: 시간 초과 · not_html: HTML 이 아님 · fetch_failed: 그 밖의 접속 실패
- *  - render_needed: 글자가 거의 없는 JS 사이트인데 브라우저 렌더링으로도 채우지 못함(꺼져 있거나 실패)
+ *  - render_needed: 글자가 거의 없는 JS 사이트인데 브라우저 렌더링이 꺼져 있거나 실패해서 채우지 못함
+ *  - thin_after_render: 렌더링을 실제로 돌렸는데도 글자가 거의 없음(글이 이미지 안에 있는 사이트 — 진단 ID I-05 로 확정)
  *  - ok: 정상
  */
 export type SiteReadOutcome =
@@ -385,6 +386,7 @@ export type SiteReadOutcome =
   | "ok"
   | "render_needed"
   | "robots_blocked"
+  | "thin_after_render"
   | "timeout";
 
 const TIMEOUT_ERROR_RE = /timeout|abort/i;
@@ -422,12 +424,49 @@ export function classifySiteReadError(error: unknown): SiteReadOutcome {
   return "fetch_failed";
 }
 
+/** 글자가 얇을 때 렌더링을 실제로 돌렸는지로 사유를 가른다(안 돌렸으면 켜면 풀릴 수 있다, 돌렸는데도 얇으면 이미지 중심 사이트). */
+function thinOutcome(thin: boolean, renderRan: boolean): SiteReadOutcome {
+  if (!thin) {
+    return "ok";
+  }
+  return renderRan ? "thin_after_render" : "render_needed";
+}
+
+const ROBOTS_FIRST_ON = new Set(["1", "true"]);
+function isRobotsFirstOn(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return ROBOTS_FIRST_ON.has(
+    (env.SITE_ROBOTS_FIRST_ENABLED ?? "").trim().toLowerCase()
+  );
+}
+
+/** robots.txt 를 먼저 읽어 홈(/)이 막혔는지 본다. 못 읽으면(404·오류) 막히지 않은 것으로 본다(기존과 같다). */
+async function homeBlockedByRobots(
+  origin: string,
+  overall: AbortSignal
+): Promise<boolean> {
+  const robots = await orNull(
+    fetchText(
+      new URL("/robots.txt", origin),
+      stageSignal(AUX_TIMEOUT_MS, overall),
+      "text"
+    )
+  );
+  return robots ? !isAllowedByRobots("/", parseRobotsDisallow(robots)) : false;
+}
+
 export async function readSiteProfileWithOutcome(
   domain: string
 ): Promise<{ outcome: SiteReadOutcome; profile: SiteProfile | null }> {
   try {
     const requested = normalizePublicUrl(domain).origin;
     const overall = AbortSignal.timeout(OVERALL_TIMEOUT_MS);
+    // robots 우선(플래그 SITE_ROBOTS_FIRST_ENABLED): 홈이 막혀 있으면 홈을 **받기 전에** 멈춘다 — 금지된 페이지를 읽는 일 자체를 없앤다.
+    if (isRobotsFirstOn() && (await homeBlockedByRobots(requested, overall))) {
+      log.warn("audit.site_profile.robots_blocked", { domain, early: true });
+      return { outcome: "robots_blocked", profile: null };
+    }
     const { html: homeHtml, origin } = await fetchHome(requested, overall);
     const [robots, sitemap] = await Promise.all([
       orNull(
@@ -451,6 +490,7 @@ export async function readSiteProfileWithOutcome(
       return { outcome: "robots_blocked", profile: null };
     }
     let home = extractSiteProfile(homeHtml);
+    let renderRan = false;
     // 일반 읽기로 글자가 거의 없으면(JS 로 그리는 사이트) 브라우저로 그려 한 번 더 읽는다(꺼져 있으면 건너뜀).
     if (home.thin) {
       const renderStatus = siteRenderStatus();
@@ -462,6 +502,7 @@ export async function readSiteProfileWithOutcome(
         });
       }
       const rendered = await renderSiteHtml(origin);
+      renderRan = rendered !== null;
       if (rendered) {
         const renderedProfile = extractSiteProfile(rendered);
         if (
@@ -472,7 +513,7 @@ export async function readSiteProfileWithOutcome(
         }
       }
     }
-    const outcome: SiteReadOutcome = home.thin ? "render_needed" : "ok";
+    const outcome: SiteReadOutcome = thinOutcome(home.thin, renderRan);
     if (!sitemap || SITEMAP_INDEX_RE.test(sitemap)) {
       return { outcome, profile: { ...home, pagesRead: 1 } };
     }

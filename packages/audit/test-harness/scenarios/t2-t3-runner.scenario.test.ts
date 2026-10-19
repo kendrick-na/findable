@@ -120,6 +120,7 @@ interface Result {
   measurementContext?: {
     engineErrors?: {
       byEngine: Record<string, Record<string, number>>;
+      events?: { kind: string; recovered: boolean }[];
       total: number;
     };
   };
@@ -215,9 +216,11 @@ describe("T2 러너 층 — 엔진 1개 100% 5xx + 다른 엔진 20% 429 (질문
     const errors = result.measurementContext?.engineErrors;
     expect(errors).toBeDefined();
     expect(errors?.byEngine.claude.paused).toBeGreaterThan(0);
-    expect(errors?.byEngine.claude.error).toBe(3); // 연속 3회 최종 실패 뒤 격리
+    // 연속 3회 최종 실패 뒤 격리. 5xx 는 2026-10-19 부터 server_error 로 따로 센다(예전엔 error).
+    expect(errors?.byEngine.claude.server_error).toBe(3);
     expect(
       (errors?.byEngine.claude.paused ?? 0) +
+        (errors?.byEngine.claude.server_error ?? 0) +
         (errors?.byEngine.claude.error ?? 0)
     ).toBe(claudePlanned);
 
@@ -244,9 +247,10 @@ describe("T2 러너 층 — 엔진 1개 100% 5xx + 다른 엔진 20% 429 (질문
     expect(harness.callsFor("claude")).toHaveLength(claudePlanned);
     expect(result.measurementContext?.engineErrors?.byEngine.claude).toEqual({
       empty: 0,
-      error: claudePlanned,
+      error: 0,
       rate_limit: 0,
       recovered: 0,
+      server_error: claudePlanned,
       timeout: 0,
     });
   });
@@ -285,7 +289,12 @@ describe("T3 러너 층 — 빈 응답 20% (질문 20개)", () => {
       (sum, e) => sum + (e.empty ?? 0),
       0
     );
-    expect(emptyTotal).toBe(emptyErrorRows.length);
+    // 끝내 빈 칸(오류)에 더해, 재시도로 회복한 빈 응답 칸(2026-10-19부터 recovered 로 함께 기록)이 합쳐진다.
+    const emptyRecovered = (
+      result.measurementContext?.engineErrors?.events ?? []
+    ).filter((e) => e.kind === "empty" && e.recovered).length;
+    expect(emptyTotal).toBe(emptyErrorRows.length + emptyRecovered);
+    expect(emptyRecovered).toBeGreaterThan(0);
     for (const engine of Object.keys(byEngine)) {
       expect(["chatgpt", "perplexity"]).toContain(engine);
     }

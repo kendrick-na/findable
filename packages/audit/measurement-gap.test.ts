@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGapPreflight,
+  checkQuestionInvariant,
+  classifyFailureMessage,
   classifyGaps,
+  ensureReasonCodes,
   finalizeGapDiagnostics,
   formatUnmeasuredTable,
+  GAP_ACTION_KO,
+  GAP_LABEL_KO,
+  type GapCode,
   isMeasurementGapLogEnabled,
   MIN_HEALTHY_QUESTION_COUNT,
   questionSetWarnings,
+  unmeasurableMessage,
 } from "./measurement-gap";
 import { classifySiteReadError } from "./site-profile";
 
@@ -129,5 +136,93 @@ describe("측정 완료 보고 — 못 잰 곳 사유별 표", () => {
     expect(table).toContain("| 사이트가 AI 접근을 막음(robots) | 1 | A-30 |");
     expect(table).toContain("| 질문 8개 미만 | 2 | A-15, E-11 |");
     expect(table).toContain("정상(사유 없음) 1곳 / 전체 5곳");
+  });
+});
+
+describe("시작 불변식 · 사유 없는 실패 금지(2026-10-19)", () => {
+  const OUTCOMES = [
+    undefined,
+    "ok",
+    "robots_blocked",
+    "certificate_error",
+    "timeout",
+    "not_html",
+    "fetch_failed",
+    "render_needed",
+    "thin_after_render",
+  ] as const;
+
+  it("질문 수·이름 질문 수 전 구간: 불변식 위반이면 사유 코드가 반드시 1개 이상, 통과면 코드 없음", () => {
+    for (let q = 0; q <= 20; q++) {
+      for (let b = 0; b <= q; b++) {
+        const verdict = checkQuestionInvariant({
+          brandQuestionCount: b,
+          questionCount: q,
+        });
+        const shouldPass = q >= 8 && b >= 2;
+        expect(verdict.ok).toBe(shouldPass);
+        if (!verdict.ok) {
+          expect(verdict.codes.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it("측정이 안 된 모든 조합(사이트 결과 × 질문 수 × 엔진 전멸)에서 사유 코드가 비지 않는다", () => {
+    for (const siteOutcome of OUTCOMES) {
+      for (const q of [0, 3, 8, 12]) {
+        for (const b of [0, 1, 2, 4]) {
+          for (const measured of [0, 3]) {
+            const input = {
+              brandQuestionCount: Math.min(b, q),
+              engine: { attempted: 4, measured },
+              questionCount: q,
+              siteOutcome,
+            };
+            const unmeasured =
+              !checkQuestionInvariant(input).ok ||
+              measured === 0 ||
+              (siteOutcome !== undefined && siteOutcome !== "ok");
+            const codes = classifyGaps(input);
+            if (unmeasured) {
+              expect(ensureReasonCodes(codes).length).toBeGreaterThan(0);
+            }
+            for (const c of codes) {
+              expect(GAP_LABEL_KO[c]).toBeTruthy();
+              expect(GAP_ACTION_KO[c]).toBeTruthy();
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("측정 불가 메시지는 머리표+코드이고, 읽으면 같은 코드가 나온다", () => {
+    const message = unmeasurableMessage(["few_questions", "no_brand_question"]);
+    expect(message).toBe("UNMEASURABLE:few_questions,no_brand_question");
+    expect(classifyFailureMessage(message)).toEqual([
+      "few_questions",
+      "no_brand_question",
+    ]);
+    expect(unmeasurableMessage([])).toBe("UNMEASURABLE:unclassified");
+  });
+
+  it("어떤 실패 메시지도 코드 1개 이상(마지막 보증)", () => {
+    const samples = [
+      "Audit run has no prompts",
+      "prepare_error:boom",
+      "HTTP 500",
+      "",
+      null,
+      undefined,
+      "UNMEASURABLE:알수없음",
+    ];
+    for (const m of samples) {
+      const codes: GapCode[] = classifyFailureMessage(m);
+      expect(codes.length).toBeGreaterThan(0);
+    }
+    expect(classifyFailureMessage("Audit run has no prompts")).toEqual([
+      "zero_questions",
+    ]);
   });
 });
