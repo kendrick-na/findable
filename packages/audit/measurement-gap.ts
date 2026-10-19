@@ -27,9 +27,14 @@ export const MIN_BRAND_QUESTION_COUNT = 2;
 
 export type GapCode =
   | "all_engines_failed"
+  | "cert_chain_error"
+  | "cert_expired"
+  | "cert_host_mismatch"
+  | "cert_self_signed"
   | "certificate_error"
   | "few_brand_questions"
   | "few_questions"
+  | "image_text_failed"
   | "no_brand_question"
   | "prepare_error"
   | "render_needed"
@@ -42,9 +47,15 @@ export type GapCode =
 
 export const GAP_LABEL_KO: Record<GapCode, string> = {
   all_engines_failed: "엔진 응답을 하나도 못 받음",
+  cert_chain_error: "사이트 HTTPS 인증서 체인 오류(중간 인증서 누락·신뢰 불가)",
+  cert_expired: "사이트 HTTPS 인증서 만료",
+  cert_host_mismatch: "사이트 HTTPS 인증서가 접속 호스트 이름을 포함하지 않음",
+  cert_self_signed: "사이트 HTTPS 인증서가 자체 서명",
   certificate_error: "사이트 HTTPS 인증서 오류",
   few_brand_questions: `이름 질문 ${MIN_BRAND_QUESTION_COUNT}개 미만`,
   few_questions: `질문 ${MIN_HEALTHY_QUESTION_COUNT}개 미만`,
+  image_text_failed:
+    "글이 이미지 안에 있는데 이미지 글자 읽기로도 재료를 못 채움",
   no_brand_question: "이름 질문 0개",
   prepare_error: "측정 준비 단계 오류",
   render_needed: "JS 사이트인데 렌더링으로도 재료 부족",
@@ -63,10 +74,20 @@ export const GAP_LABEL_KO: Record<GapCode, string> = {
  */
 export const GAP_ACTION_KO: Record<GapCode, string> = {
   all_engines_failed: "엔진 키·한도·장애 확인 후 재측정(엔진별 오류 기록 참고)",
+  cert_chain_error:
+    "측정 불가로 보고(사이트 운영자가 인증서 체인을 고쳐야 함 — 우회 금지). 한 줄 소개 입력으로 대체 가능",
+  cert_expired:
+    "측정 불가로 보고(사이트 운영자가 인증서를 갱신해야 함 — 우회 금지). 한 줄 소개 입력으로 대체 가능",
+  cert_host_mismatch:
+    "측정 불가로 보고(인증서가 이 호스트 이름을 포함하지 않음 — 검증을 끄지 않는다). 공개 읽기 전용에 한해 http 폴백(SITE_HTTP_FALLBACK_ENABLED, 정책 판단 필요) 또는 한 줄 소개 입력",
+  cert_self_signed:
+    "측정 불가로 보고(자체 서명 인증서 — 우회 금지). 한 줄 소개 입력으로 대체 가능",
   certificate_error:
     "측정 불가로 보고(사이트 운영자의 인증서 수리 외 방법 없음 — 우회 금지). 한 줄 소개 입력으로 대체 가능",
   few_brand_questions:
     "이름 질문 보증(QUESTION_BRAND_GUARANTEE_ENABLED) 켜고 재생성",
+  image_text_failed:
+    "한 줄 소개 입력으로 대체 측정(이미지 글자 읽기 상한·형식·모델 응답 확인 — 실호출 검증 필요)",
   few_questions:
     "단계적 폴백(QUESTION_STEPWISE_FALLBACK_ENABLED)·소프트 확신 켜고 재생성, 그래도 모자라면 측정 불가로 보고",
   no_brand_question:
@@ -180,7 +201,12 @@ export function isMeasurementInvariantEnabled(
 }
 
 const SITE_CODE: Partial<Record<SiteReadOutcome, GapCode>> = {
+  cert_chain_error: "cert_chain_error",
+  cert_expired: "cert_expired",
+  cert_host_mismatch: "cert_host_mismatch",
+  cert_self_signed: "cert_self_signed",
   certificate_error: "certificate_error",
+  image_text_failed: "image_text_failed",
   fetch_failed: "site_unreachable",
   not_html: "site_unreachable",
   render_needed: "render_needed",
@@ -220,6 +246,10 @@ export interface GapPreflight {
   brandQuestionCount: number;
   questionCount: number;
   questionGeneration?: StoredQuestionGeneration;
+  /** 인증서 오류로 평문 http 폴백 읽기를 썼다(기록 전용). */
+  siteHttpFallback?: true;
+  /** 이미지 속 글자 읽기 집계(시도·성공·추정 원가). 원본 이미지·글자 원문은 담지 않는다. */
+  siteImageText?: Record<string, number>;
   siteOutcome?: SiteReadOutcome;
   /** 시작 전 경고(질문 세트 기준). */
   warnings: GapWarning[];
@@ -228,6 +258,8 @@ export interface GapPreflight {
 export function buildGapPreflight(input: {
   prompts: readonly { kind?: "brand" | "discovery" }[];
   questionGeneration?: StoredQuestionGeneration;
+  siteHttpFallback?: boolean;
+  siteImageText?: Record<string, number>;
   siteOutcome?: SiteReadOutcome;
 }): GapPreflight {
   const counts: QuestionCounts = {
@@ -241,6 +273,8 @@ export function buildGapPreflight(input: {
       ? { questionGeneration: input.questionGeneration }
       : {}),
     ...(input.siteOutcome ? { siteOutcome: input.siteOutcome } : {}),
+    ...(input.siteHttpFallback ? { siteHttpFallback: true as const } : {}),
+    ...(input.siteImageText ? { siteImageText: input.siteImageText } : {}),
     warnings: questionSetWarnings(counts),
   };
 }

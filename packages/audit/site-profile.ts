@@ -1,6 +1,7 @@
 import { log } from "@repo/observability/log";
 import { isAllowedByRobots, parseRobotsDisallow } from "./brand-catalog";
 import { assertPublicUrl, normalizePublicUrl } from "./public-url-security";
+import { collectImageText, isSiteImageTextEnabled } from "./site-image-text";
 import { renderSiteHtml, siteRenderStatus } from "./site-render";
 import { servicePageUrls } from "./site-structure";
 
@@ -377,11 +378,19 @@ export async function readSiteProfile(
  *  - timeout: 시간 초과 · not_html: HTML 이 아님 · fetch_failed: 그 밖의 접속 실패
  *  - render_needed: 글자가 거의 없는 JS 사이트인데 브라우저 렌더링이 꺼져 있거나 실패해서 채우지 못함
  *  - thin_after_render: 렌더링을 실제로 돌렸는데도 글자가 거의 없음(글이 이미지 안에 있는 사이트 — 진단 ID I-05 로 확정)
+ *  - cert_host_mismatch·cert_expired·cert_self_signed·cert_chain_error: HTTPS 인증서 오류 원인 세분(기록 전용 — 검증은 끄지 않는다). 분류 못 하면 certificate_error
+ *  - image_text_used: 글자가 얇아 이미지 속 글자 읽기(SITE_IMAGE_TEXT_ENABLED)로 재료를 채움 · image_text_failed: 시도했지만 못 채움
  *  - ok: 정상
  */
 export type SiteReadOutcome =
+  | "cert_chain_error"
+  | "cert_expired"
+  | "cert_host_mismatch"
+  | "cert_self_signed"
   | "certificate_error"
   | "fetch_failed"
+  | "image_text_failed"
+  | "image_text_used"
   | "not_html"
   | "ok"
   | "render_needed"
@@ -392,6 +401,35 @@ export type SiteReadOutcome =
 const TIMEOUT_ERROR_RE = /timeout|abort/i;
 const CERT_ERROR_RE =
   /cert|tls|ssl|altname|self[_ ]signed|unable_to_verify|issuer/i;
+
+const CERT_MISMATCH_RE =
+  /altname|does not match|hostname\/ip|HOSTNAME_MISMATCH/i;
+const CERT_EXPIRED_RE = /CERT_HAS_EXPIRED|certificate has expired|expired/i;
+const CERT_SELF_SIGNED_RE = /SELF_SIGNED|self[_ -]?signed/i;
+const CERT_CHAIN_RE =
+  /UNABLE_TO_VERIFY_LEAF|UNABLE_TO_GET_ISSUER|UNABLE_TO_VERIFY|CERT_UNTRUSTED|issuer|chain/i;
+
+/** 인증서 오류의 원인을 가른다(기록 전용). 분류하지 못하면 certificate_error. */
+function certOutcomeOf(text: string): SiteReadOutcome {
+  if (CERT_MISMATCH_RE.test(text)) {
+    return "cert_host_mismatch";
+  }
+  if (CERT_EXPIRED_RE.test(text)) {
+    return "cert_expired";
+  }
+  if (CERT_SELF_SIGNED_RE.test(text)) {
+    return "cert_self_signed";
+  }
+  return CERT_CHAIN_RE.test(text) ? "cert_chain_error" : "certificate_error";
+}
+
+const CERT_OUTCOMES: ReadonlySet<SiteReadOutcome> = new Set<SiteReadOutcome>([
+  "cert_chain_error",
+  "cert_expired",
+  "cert_host_mismatch",
+  "cert_self_signed",
+  "certificate_error",
+]);
 
 /** 읽기 실패 예외를 사유 코드로 분류한다(오류 문구 원문은 밖으로 내지 않는다). */
 export function classifySiteReadError(error: unknown): SiteReadOutcome {
@@ -413,7 +451,7 @@ export function classifySiteReadError(error: unknown): SiteReadOutcome {
   }
   const text = parts.join(" ");
   if (CERT_ERROR_RE.test(text)) {
-    return "certificate_error";
+    return certOutcomeOf(text);
   }
   if (TIMEOUT_ERROR_RE.test(text)) {
     return "timeout";
@@ -456,9 +494,174 @@ async function homeBlockedByRobots(
   return robots ? !isAllowedByRobots("/", parseRobotsDisallow(robots)) : false;
 }
 
+export interface SiteReadResult {
+  /** 인증서 오류 때문에 같은 호스트의 평문 http 로 읽었다(플래그 SITE_HTTP_FALLBACK_ENABLED). TLS 검증을 끈 것이 아니다. */
+  httpFallback?: true;
+  /** 이미지 속 글자 읽기를 시도했을 때의 집계(원본 이미지·글자 원문은 담지 않는다). */
+  imageText?: {
+    attempted: number;
+    estimatedKrw: number;
+    failed: number;
+    inputTokens: number;
+    outputTokens: number;
+    readable: number;
+  };
+  outcome: SiteReadOutcome;
+  profile: SiteProfile | null;
+}
+
+const HTTPS_PREFIX_RE = /^https:/;
+const HTTP_FALLBACK_ON = new Set(["1", "true"]);
+function isHttpFallbackOn(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return HTTP_FALLBACK_ON.has(
+    (env.SITE_HTTP_FALLBACK_ENABLED ?? "").trim().toLowerCase()
+  );
+}
+
+interface HomeRead {
+  html: string;
+  httpFallback: boolean;
+  origin: string;
+}
+
+/**
+ * 홈을 읽는다. https 가 **인증서 오류**로 실패하고 플래그가 켜져 있으면, 같은 호스트의 평문 http 로 한 번 더 읽는다.
+ * 🔒 TLS 검증은 끄지 않는다(이 함수 어디에도 검증 해제 없음 — 시험이 소스를 읽어 확인). 평문 http 는 **공개 읽기 전용 GET** 뿐이고,
+ * robots 는 http 쪽에서 다시 확인하며, http 가 https(같은 인증서 오류)로 되돌리면 원래 오류로 끝낸다.
+ */
+async function readHome(
+  requested: string,
+  overall: AbortSignal
+): Promise<HomeRead | { outcome: "robots_blocked" }> {
+  try {
+    return { ...(await fetchHome(requested, overall)), httpFallback: false };
+  } catch (error) {
+    if (
+      !(
+        isHttpFallbackOn() &&
+        requested.startsWith("https:") &&
+        CERT_OUTCOMES.has(classifySiteReadError(error))
+      )
+    ) {
+      throw error;
+    }
+    const httpOrigin = requested.replace(HTTPS_PREFIX_RE, "http:");
+    if (await homeBlockedByRobots(httpOrigin, overall)) {
+      return { outcome: "robots_blocked" };
+    }
+    try {
+      const html = await fetchText(
+        new URL("/", httpOrigin),
+        stageSignal(HOME_TIMEOUT_MS, overall),
+        "html"
+      );
+      return { html, httpFallback: true, origin: httpOrigin };
+    } catch {
+      throw error; // 평문 읽기도 안 되면(또는 https 로 되돌리면) 원래 인증서 오류로 끝낸다
+    }
+  }
+}
+
+/** 일반 읽기로 글자가 거의 없으면(JS 사이트) 브라우저로 그려 한 번 더 읽는다(꺼져 있으면 건너뜀). */
+async function renderIfThin(
+  home: SiteProfile,
+  origin: string,
+  domain: string
+): Promise<{ home: SiteProfile; html: string | null; renderRan: boolean }> {
+  if (!home.thin) {
+    return { home, html: null, renderRan: false };
+  }
+  const renderStatus = siteRenderStatus();
+  if (renderStatus !== "enabled") {
+    // 운영은 켜져 있는데 로컬 측정은 꺼져 있던 불일치를 로그에서 바로 찾게 한다(진단 ID I-05).
+    log.info("audit.site_profile.thin_without_render", {
+      domain,
+      renderStatus,
+    });
+  }
+  const rendered = await renderSiteHtml(origin);
+  if (!rendered) {
+    return { home, html: null, renderRan: false };
+  }
+  const renderedProfile = extractSiteProfile(rendered);
+  const better =
+    !renderedProfile.thin ||
+    renderedProfile.bodySnippet.length > home.bodySnippet.length;
+  return {
+    home: better ? { ...renderedProfile, rendered: true } : home,
+    html: better ? rendered : null,
+    renderRan: true,
+  };
+}
+
+/** 이미지 속 글자를 재료에 합친다(순수). 글자 수 상한을 지키고 thin 을 다시 계산한다. */
+export function applyImageText(
+  profile: SiteProfile,
+  texts: readonly string[]
+): SiteProfile {
+  if (texts.length === 0) {
+    return profile;
+  }
+  const bodySnippet = [profile.bodySnippet, ...texts]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, MAX_TOTAL_BODY_CHARS);
+  return {
+    ...profile,
+    bodySnippet,
+    thin: bodySnippet.replace(SPACE_RE, "").length < THIN_SITE_TEXT_CHARS,
+  };
+}
+
+/**
+ * 읽기가 끝난 뒤 마무리: 글자가 얇고 플래그가 켜져 있으면 이미지 속 글자를 읽어 합친다.
+ * 이미지 수·바이트·원가는 상한 안에서만(site-image-text.ts), 제3자 사이트는 robots 금지 경로 이미지를 가져오지 않는다.
+ */
+async function finish(
+  profile: SiteProfile,
+  outcome: SiteReadOutcome,
+  ctx: {
+    disallow: readonly string[];
+    html: string;
+    httpFallback: boolean;
+    origin: string;
+  }
+): Promise<SiteReadResult> {
+  const base: SiteReadResult = {
+    outcome,
+    profile,
+    ...(ctx.httpFallback ? { httpFallback: true as const } : {}),
+  };
+  if (!(profile.thin && isSiteImageTextEnabled())) {
+    return base;
+  }
+  const collected = await collectImageText({
+    disallow: ctx.disallow,
+    html: ctx.html,
+    origin: ctx.origin,
+  });
+  const imageText = {
+    attempted: collected.attempted,
+    estimatedKrw: collected.estimatedKrw,
+    failed: collected.failed,
+    inputTokens: collected.inputTokens,
+    outputTokens: collected.outputTokens,
+    readable: collected.readable,
+  };
+  const merged = applyImageText(profile, collected.texts);
+  return {
+    ...base,
+    imageText,
+    outcome: merged.thin ? "image_text_failed" : "image_text_used",
+    profile: merged,
+  };
+}
+
 export async function readSiteProfileWithOutcome(
   domain: string
-): Promise<{ outcome: SiteReadOutcome; profile: SiteProfile | null }> {
+): Promise<SiteReadResult> {
   try {
     const requested = normalizePublicUrl(domain).origin;
     const overall = AbortSignal.timeout(OVERALL_TIMEOUT_MS);
@@ -467,7 +670,12 @@ export async function readSiteProfileWithOutcome(
       log.warn("audit.site_profile.robots_blocked", { domain, early: true });
       return { outcome: "robots_blocked", profile: null };
     }
-    const { html: homeHtml, origin } = await fetchHome(requested, overall);
+    const read = await readHome(requested, overall);
+    if ("outcome" in read) {
+      log.warn("audit.site_profile.robots_blocked", { domain, http: true });
+      return { outcome: "robots_blocked", profile: null };
+    }
+    const { html: homeHtml, httpFallback, origin } = read;
     const [robots, sitemap] = await Promise.all([
       orNull(
         fetchText(
@@ -489,37 +697,28 @@ export async function readSiteProfileWithOutcome(
       log.warn("audit.site_profile.robots_blocked", { domain });
       return { outcome: "robots_blocked", profile: null };
     }
-    let home = extractSiteProfile(homeHtml);
-    let renderRan = false;
-    // 일반 읽기로 글자가 거의 없으면(JS 로 그리는 사이트) 브라우저로 그려 한 번 더 읽는다(꺼져 있으면 건너뜀).
-    if (home.thin) {
-      const renderStatus = siteRenderStatus();
-      if (renderStatus !== "enabled") {
-        // 운영은 켜져 있는데 로컬 측정은 꺼져 있던 불일치를 로그에서 바로 찾게 한다(진단 ID I-05).
-        log.info("audit.site_profile.thin_without_render", {
-          domain,
-          renderStatus,
-        });
-      }
-      const rendered = await renderSiteHtml(origin);
-      renderRan = rendered !== null;
-      if (rendered) {
-        const renderedProfile = extractSiteProfile(rendered);
-        if (
-          !renderedProfile.thin ||
-          renderedProfile.bodySnippet.length > home.bodySnippet.length
-        ) {
-          home = { ...renderedProfile, rendered: true };
-        }
-      }
-    }
-    const outcome: SiteReadOutcome = thinOutcome(home.thin, renderRan);
+    const rendered = await renderIfThin(
+      extractSiteProfile(homeHtml),
+      origin,
+      domain
+    );
+    const home = rendered.home;
+    const outcome: SiteReadOutcome = thinOutcome(home.thin, rendered.renderRan);
+    const ctx = {
+      disallow,
+      html: rendered.html ?? homeHtml,
+      httpFallback,
+      origin,
+    };
     if (!sitemap || SITEMAP_INDEX_RE.test(sitemap)) {
-      return { outcome, profile: { ...home, pagesRead: 1 } };
+      return await finish({ ...home, pagesRead: 1 }, outcome, ctx);
     }
     const host = new URL(origin).host;
     const urls = servicePageUrls(sitemap, host)
       .ko.filter((url) => isAllowedByRobots(new URL(url).pathname, disallow))
+      .map((url) =>
+        httpFallback ? url.replace(HTTPS_PREFIX_RE, "http:") : url
+      )
       .slice(0, MAX_EXTRA_PAGES);
     const pages = await Promise.all(
       urls.map((url) =>
@@ -536,7 +735,7 @@ export async function readSiteProfileWithOutcome(
       home,
       pages.flatMap((html) => (html ? [extractSiteProfile(html)] : []))
     );
-    return { outcome: merged.thin ? outcome : "ok", profile: merged };
+    return await finish(merged, merged.thin ? outcome : "ok", ctx);
   } catch (error) {
     log.warn("audit.site_profile.failed", {
       domain,

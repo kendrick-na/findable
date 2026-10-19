@@ -8,6 +8,10 @@ vi.mock("./public-url-security", async (importOriginal) => ({
   assertPublicUrl: () => Promise.resolve(),
 }));
 const render = vi.hoisted(() => ({ renderSiteHtml: vi.fn() }));
+const imageModel = vi.hoisted(() => ({ extractImageText: vi.fn() }));
+vi.mock("@repo/ai/lib/image-text", () => ({
+  extractImageText: imageModel.extractImageText,
+}));
 vi.mock("./site-render", () => ({
   renderSiteHtml: render.renderSiteHtml,
   siteRenderStatus: () => "flag_off",
@@ -41,6 +45,9 @@ beforeEach(() => {
   render.renderSiteHtml.mockReset();
   render.renderSiteHtml.mockResolvedValue(null);
   vi.stubEnv("SITE_ROBOTS_FIRST_ENABLED", "");
+  vi.stubEnv("SITE_HTTP_FALLBACK_ENABLED", "");
+  vi.stubEnv("SITE_IMAGE_TEXT_ENABLED", "");
+  imageModel.extractImageText.mockReset();
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -65,13 +72,13 @@ describe("사이트 읽기 사유 코드(readSiteProfileWithOutcome)", () => {
     expect(out).toEqual({ outcome: "robots_blocked", profile: null });
   });
 
-  it("HTTPS 인증서 오류는 certificate_error", async () => {
+  it("HTTPS 인증서 호스트 불일치는 cert_host_mismatch(원인 세분)", async () => {
     const cause = Object.assign(new Error("altnames"), {
       code: "ERR_TLS_CERT_ALTNAME_INVALID",
     });
     install(() => new Error("fetch failed", { cause }));
     expect((await readSiteProfileWithOutcome("example.test")).outcome).toBe(
-      "certificate_error"
+      "cert_host_mismatch"
     );
   });
 
@@ -156,5 +163,228 @@ describe("robots 우회 금지 불변식", () => {
     expect((await readSiteProfileWithOutcome("example.test")).outcome).toBe(
       "ok"
     );
+  });
+});
+
+// ── 인증서 오류 + 평문 http 폴백(플래그 SITE_HTTP_FALLBACK_ENABLED) ────────────────────────────────
+const certError = () =>
+  new Error("fetch failed", {
+    cause: Object.assign(
+      new Error("Hostname/IP does not match certificate's altnames"),
+      {
+        code: "ERR_TLS_CERT_ALTNAME_INVALID",
+      }
+    ),
+  });
+/** https 는 인증서 오류, http 는 route 가 응답한다. 요청한 (프로토콜, 경로) 를 모두 기록한다. */
+let seen: string[] = [];
+const installTls = (httpRoute: Route) => {
+  seen = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: URL | string) => {
+      const url = new URL(String(input));
+      seen.push(`${url.protocol}${url.pathname}`);
+      if (url.protocol === "https:") {
+        return Promise.reject(certError());
+      }
+      const out = httpRoute(url);
+      return out instanceof Error ? Promise.reject(out) : Promise.resolve(out);
+    })
+  );
+};
+
+describe("인증서 오류 — http 폴백", () => {
+  it("[플래그 꺼짐] https 인증서 오류면 http 를 시도하지 않고 cert_host_mismatch 로 끝난다", async () => {
+    installTls(() => html(RICH));
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out).toEqual({ outcome: "cert_host_mismatch", profile: null });
+    expect(seen.every((u) => u.startsWith("https:"))).toBe(true);
+  });
+
+  it("[플래그 켜짐] 인증서 오류 뒤 같은 호스트 http 로 읽고 httpFallback 표시(정상 사이트는 ok)", async () => {
+    vi.stubEnv("SITE_HTTP_FALLBACK_ENABLED", "true");
+    installTls((u) => (u.pathname === "/" ? html(RICH) : text("", 404)));
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("ok");
+    expect(out.httpFallback).toBe(true);
+    expect(seen).toContain("http:/");
+  });
+
+  it("[플래그 켜짐] http 로 읽어도 JS 앱 틀이면 정직하게 render_needed(렌더링 불가) 로 끝난다", async () => {
+    vi.stubEnv("SITE_HTTP_FALLBACK_ENABLED", "true");
+    installTls((u) => (u.pathname === "/" ? html(THIN) : text("", 404)));
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("render_needed");
+    expect(out.profile?.thin).toBe(true);
+    expect(out.httpFallback).toBe(true);
+  });
+
+  it("[플래그 켜짐] 렌더링을 돌렸는데도 얇으면 thin_after_render", async () => {
+    vi.stubEnv("SITE_HTTP_FALLBACK_ENABLED", "true");
+    installTls((u) => (u.pathname === "/" ? html(THIN) : text("", 404)));
+    render.renderSiteHtml.mockResolvedValue(THIN);
+    expect((await readSiteProfileWithOutcome("example.test")).outcome).toBe(
+      "thin_after_render"
+    );
+  });
+
+  it("[플래그 켜짐] http 가 https 로 되돌리면(같은 인증서 오류) 원래 인증서 오류로 끝난다", async () => {
+    vi.stubEnv("SITE_HTTP_FALLBACK_ENABLED", "true");
+    installTls((u) =>
+      u.pathname === "/robots.txt"
+        ? text("", 404)
+        : Response.redirect("https://example.test/", 301)
+    );
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out).toEqual({ outcome: "cert_host_mismatch", profile: null });
+  });
+
+  it("[플래그 켜짐] 인증서 오류가 아닌 실패(5xx)는 http 폴백을 쓰지 않는다", async () => {
+    vi.stubEnv("SITE_HTTP_FALLBACK_ENABLED", "true");
+    install(() => text("err", 503));
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("fetch_failed");
+    expect(calls.every((p) => p !== undefined)).toBe(true);
+    expect(out.httpFallback).toBeUndefined();
+  });
+
+  it("[플래그 켜짐] http 쪽 robots 가 홈을 막으면 http 로도 읽지 않는다(robots_blocked)", async () => {
+    vi.stubEnv("SITE_HTTP_FALLBACK_ENABLED", "true");
+    installTls((u) =>
+      u.pathname === "/robots.txt"
+        ? text("User-agent: *\nDisallow: /")
+        : html(RICH)
+    );
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("robots_blocked");
+    expect(seen).not.toContain("http:/");
+  });
+
+  it("🔒 TLS 검증을 끄는 코드가 읽기·이미지 모듈에 없다(rejectUnauthorized·NODE_TLS_REJECT_UNAUTHORIZED·insecure dispatcher)", async () => {
+    const { readFileSync } = await import("node:fs");
+    for (const file of [
+      "./site-profile.ts",
+      "./site-image-text.ts",
+      "./site-render.ts",
+    ]) {
+      const source = readFileSync(new URL(file, import.meta.url), "utf8");
+      expect(source).not.toMatch(
+        /rejectUnauthorized|NODE_TLS_REJECT_UNAUTHORIZED|ignoreHTTPSErrors|--ignore-certificate-errors|allowInsecure/i
+      );
+    }
+  });
+});
+
+// ── 이미지 속 글자 읽기(플래그 SITE_IMAGE_TEXT_ENABLED) — 가짜 이미지·가짜 모델 ──────────────────────
+const PAGE_WITH_IMAGES = `<html><head><title>x</title></head><body><div id="root"></div>
+<img src="/logo.png" width="300" height="80" alt="logo">
+<img src="/detail1.png" width="800" height="1200" alt="상품 상세">
+<img src="/detail2.png" width="800" height="1000">
+<img src="/private/secret.png" width="800" height="900">
+<img src="/icon-small.png" width="40" height="40">
+</body></html>`;
+const PNG = new Uint8Array([137, 80, 78, 71, 1, 2, 3, 4]);
+const imageRoute =
+  (page: string, robots = ""): Route =>
+  (u) => {
+    if (u.pathname === "/") {
+      return html(page);
+    }
+    if (u.pathname === "/robots.txt") {
+      return robots ? text(robots) : text("", 404);
+    }
+    if (u.pathname.endsWith(".png")) {
+      return new Response(PNG, {
+        headers: { "content-type": "image/png" },
+        status: 200,
+      });
+    }
+    return text("", 404);
+  };
+
+describe("이미지 속 글자 읽기", () => {
+  it("[플래그 꺼짐] 얇은 사이트여도 이미지를 내려받지도 모델을 부르지도 않는다", async () => {
+    install(imageRoute(PAGE_WITH_IMAGES));
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("render_needed");
+    expect(calls.some((p) => p.endsWith(".png"))).toBe(false);
+    expect(imageModel.extractImageText).not.toHaveBeenCalled();
+  });
+
+  it("[플래그 켜짐] 글자가 얇으면 로고·아이콘 제외 이미지의 글자를 재료에 합쳐 image_text_used", async () => {
+    vi.stubEnv("SITE_IMAGE_TEXT_ENABLED", "true");
+    install(imageRoute(PAGE_WITH_IMAGES));
+    imageModel.extractImageText.mockResolvedValue({
+      inputTokens: 1200,
+      outputTokens: 80,
+      text: `프란츠 시카 크림 ${"민감성 피부 보습 진정 ".repeat(15)}`,
+    });
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("image_text_used");
+    expect(out.profile?.thin).toBe(false);
+    expect(out.profile?.bodySnippet).toContain("프란츠 시카 크림");
+    expect(out.imageText?.readable).toBeGreaterThan(0);
+    expect(out.imageText?.inputTokens).toBeGreaterThan(0);
+    // 로고·작은 아이콘은 가져오지 않는다
+    expect(calls).not.toContain("/logo.png");
+    expect(calls).not.toContain("/icon-small.png");
+  });
+
+  it("[플래그 켜짐] robots 금지 경로 이미지는 가져오지 않는다(제3자 사이트)", async () => {
+    vi.stubEnv("SITE_IMAGE_TEXT_ENABLED", "true");
+    install(imageRoute(PAGE_WITH_IMAGES, "User-agent: *\nDisallow: /private/"));
+    imageModel.extractImageText.mockResolvedValue({
+      inputTokens: 1,
+      outputTokens: 1,
+      text: "상세 설명 문구 여러 단어",
+    });
+    await readSiteProfileWithOutcome("example.test");
+    expect(calls).not.toContain("/private/secret.png");
+    expect(calls).toContain("/detail1.png");
+  });
+
+  it("[플래그 켜짐] 모델이 글자를 못 읽으면 image_text_failed(사유 코드) — 지어내지 않는다", async () => {
+    vi.stubEnv("SITE_IMAGE_TEXT_ENABLED", "true");
+    install(imageRoute(PAGE_WITH_IMAGES));
+    imageModel.extractImageText.mockResolvedValue({
+      inputTokens: 1,
+      outputTokens: 1,
+      text: "",
+    });
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("image_text_failed");
+    expect(out.profile?.thin).toBe(true);
+    expect(out.imageText?.readable).toBe(0);
+  });
+
+  it("[플래그 켜짐] 모델 호출이 오류여도 읽기는 정상 종료하고 image_text_failed", async () => {
+    vi.stubEnv("SITE_IMAGE_TEXT_ENABLED", "true");
+    install(imageRoute(PAGE_WITH_IMAGES));
+    imageModel.extractImageText.mockRejectedValue(new Error("model down"));
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("image_text_failed");
+    expect(out.imageText?.failed).toBeGreaterThan(0);
+  });
+
+  it("[플래그 켜짐] 호출 상한: 사이트당 이미지 수·원가 상한을 넘기지 않는다", async () => {
+    vi.stubEnv("SITE_IMAGE_TEXT_ENABLED", "true");
+    vi.stubEnv("SITE_IMAGE_TEXT_MAX_IMAGES", "1");
+    install(imageRoute(PAGE_WITH_IMAGES));
+    imageModel.extractImageText.mockResolvedValue({
+      inputTokens: 1,
+      outputTokens: 1,
+      text: "",
+    });
+    await readSiteProfileWithOutcome("example.test");
+    expect(imageModel.extractImageText).toHaveBeenCalledTimes(1);
+  });
+
+  it("[플래그 켜짐] 글자가 충분한 사이트는 이미지에 손대지 않는다", async () => {
+    vi.stubEnv("SITE_IMAGE_TEXT_ENABLED", "true");
+    install(imageRoute(RICH));
+    const out = await readSiteProfileWithOutcome("example.test");
+    expect(out.outcome).toBe("ok");
+    expect(imageModel.extractImageText).not.toHaveBeenCalled();
   });
 });

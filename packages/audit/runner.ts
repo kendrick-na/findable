@@ -205,6 +205,8 @@ export interface AuditRunInput {
    */
   gapInput?: {
     questionGeneration?: Record<string, unknown>;
+    siteHttpFallback?: boolean;
+    siteImageText?: Record<string, number>;
     siteOutcome?: SiteReadOutcome;
   };
   /**
@@ -266,6 +268,8 @@ function gapPreflightOf(
   const gapPreflight = buildGapPreflight({
     prompts: runPrompts,
     questionGeneration: input.gapInput?.questionGeneration,
+    siteHttpFallback: input.gapInput?.siteHttpFallback,
+    siteImageText: input.gapInput?.siteImageText,
     siteOutcome: input.gapInput?.siteOutcome,
   });
   if (gapPreflight.warnings.length > 0) {

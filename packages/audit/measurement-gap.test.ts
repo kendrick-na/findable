@@ -110,9 +110,40 @@ describe("사이트 읽기 오류 분류", () => {
       }
     );
     expect(classifySiteReadError(new Error("fetch failed", { cause }))).toBe(
+      "cert_host_mismatch"
+    );
+  });
+  it("인증서 오류 원인 세분: 호스트 불일치·만료·자체 서명·체인 오류·그 밖(기록 전용)", () => {
+    const withCode = (code: string, message = "fetch failed") =>
+      classifySiteReadError(
+        new Error("fetch failed", {
+          cause: Object.assign(new Error(message), { code }),
+        })
+      );
+    expect(withCode("ERR_TLS_CERT_ALTNAME_INVALID")).toBe("cert_host_mismatch");
+    expect(withCode("CERT_HAS_EXPIRED", "certificate has expired")).toBe(
+      "cert_expired"
+    );
+    expect(
+      withCode("DEPTH_ZERO_SELF_SIGNED_CERT", "self signed certificate")
+    ).toBe("cert_self_signed");
+    expect(
+      withCode(
+        "SELF_SIGNED_CERT_IN_CHAIN",
+        "self-signed certificate in certificate chain"
+      )
+    ).toBe("cert_self_signed");
+    expect(
+      withCode(
+        "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+        "unable to verify the first certificate"
+      )
+    ).toBe("cert_chain_error");
+    expect(withCode("ERR_SSL_PROTOCOL_ERROR", "ssl protocol error")).toBe(
       "certificate_error"
     );
   });
+
   it("시간 초과·HTML 아님·그 밖", () => {
     expect(
       classifySiteReadError(
@@ -150,6 +181,12 @@ describe("시작 불변식 · 사유 없는 실패 금지(2026-10-19)", () => {
     "fetch_failed",
     "render_needed",
     "thin_after_render",
+    "cert_host_mismatch",
+    "cert_expired",
+    "cert_self_signed",
+    "cert_chain_error",
+    "image_text_used",
+    "image_text_failed",
   ] as const;
 
   it("질문 수·이름 질문 수 전 구간: 불변식 위반이면 사유 코드가 반드시 1개 이상, 통과면 코드 없음", () => {
