@@ -16,6 +16,7 @@ import {
 const holder = vi.hoisted(() => ({
   dns: new Map<string, "fail" | "ok" | "private">(),
   fetched: [] as string[],
+  pinnedCalls: 0,
   db: null as unknown,
 }));
 
@@ -48,6 +49,15 @@ vi.mock("@repo/audit/public-url-security", async (importOriginal) => {
     }),
   };
 });
+
+// 운영 경로의 기본 fetch 는 DNS 핀 fetch(pinned-fetch.ts). 이 시험은 그 아래 네트워크를 가짜 전역 fetch 로 바꿔 끼운다
+// (핀 자체는 mcp-pinned-fetch.test.ts 가 로컬 모의 서버로 검증). route 가 핀 fetch 를 거치는지는 pinnedCalls 로 본다.
+vi.mock("@/lib/mcp/pinned-fetch", () => ({
+  pinnedFetch: (input: string | URL | Request, init?: RequestInit) => {
+    holder.pinnedCalls += 1;
+    return globalThis.fetch(input, init);
+  },
+}));
 
 function setDb(domain = "brand.example") {
   holder.db = makeWatchedDb({
@@ -87,6 +97,7 @@ beforeEach(() => {
   vi.resetModules();
   holder.dns.clear();
   holder.fetched.length = 0;
+  holder.pinnedCalls = 0;
   vi.stubEnv("FINDABLE_MCP_ENABLED", "true");
   // 도메인 고정: 점검 도구는 「brandId=기대도메인」 쌍이 있어야 접속한다.
   vi.stubEnv(
@@ -113,6 +124,8 @@ describe("읽기 전용 모드 route — 공식 정보 점검", () => {
     const good = await facts("https://brand.example");
     expect(good.isError).not.toBe(true);
     expect(holder.fetched.length).toBeGreaterThan(0);
+    // 운영 기본 경로가 DNS 핀 fetch 를 거쳤다.
+    expect(holder.pinnedCalls).toBe(holder.fetched.length);
     holder.fetched.length = 0;
     const bad = await facts("https://other.example");
     expect(bad.isError).toBe(true);

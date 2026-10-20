@@ -2,6 +2,8 @@
 //
 // 보안: 사설 주소 차단(`assertPublicUrl`)을 **리다이렉트마다** 다시 건다(SSRF).
 // 읽는 양·시간 상한을 둔다(응답 512KB, 요청당 5초, 리다이렉트 3회).
+// 기본 fetchImpl 은 연결 주소 고정(DNS 핀) fetch(`pinned-fetch.ts`) — 검사한 IP 로만 연결해 DNS 재바인딩 창을 닫는다.
+// 시험·호출자는 fetchImpl 을 주입해 바꿀 수 있다(주입 구조 유지).
 
 import {
   assertPublicUrl,
@@ -9,6 +11,7 @@ import {
 } from "@repo/audit/public-url-security";
 
 import { FACTS_LIMITS_KO } from "./messages";
+import { pinnedFetch } from "./pinned-fetch";
 
 const MAX_BYTES = 512 * 1024;
 const TIMEOUT_MS = 5000;
@@ -305,7 +308,7 @@ function sitemapItem(sitemap: Fetched): FactItem {
 
 export async function checkOfficialFacts(
   rawUrl: string,
-  fetchImpl: FetchLike = fetch,
+  fetchImpl: FetchLike = pinnedFetch,
   now: () => Date = () => new Date()
 ): Promise<OfficialFactsResult> {
   // 입력 검증 오류(URL_*)는 호출자가 mapUrlError 로 변환한다.

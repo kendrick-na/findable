@@ -76,6 +76,7 @@ import {
 } from "./geo-schemas";
 import { ERROR_MESSAGES_KO, LIMITS_KO, mapUrlError } from "./messages";
 import { checkOfficialFacts, type FetchLike } from "./official-facts";
+import { pinnedFetch } from "./pinned-fetch";
 
 // [읽기 전용 DB 손잡이]
 
@@ -1281,9 +1282,9 @@ function hostOnly(value: string): string | null {
  * 등록 도메인이어도 요청 직전에 해석된 주소가 사설·루프백·링크로컬이 아닌지 한 번 더 확인한다(assertPublicUrl).
  * official-facts.ts 는 수정하지 않는다(리다이렉트를 수동으로 따라가며 매 단계 fetch 를 부르는 구조를 이용).
  *
- * ⚠️ 한계(숨기지 않는다): 여기서 확인한 주소와 실제 연결 사이에 DNS 응답이 바뀌는 재바인딩은 완전히 막지 못한다.
- *   fetch 가 연결 때 호스트를 다시 해석하고, 해석된 IP 로 연결을 고정(핀)할 수단이 이 구조에는 없다.
- *   그래서 이 도구는 토큰 검사가 켜져 있을 때만 등록하고(fail-closed), 등록 도메인만 점검하며, 확인 횟수를 늘려 창을 줄일 뿐이다.
+ * DNS 재바인딩: 기본 inner 는 연결 주소 고정 fetch(pinned-fetch.ts) — 한 번 해석한 공개 IP 로만 연결하고
+ *   연결 직후 실제 상대 주소를 다시 확인한다. 그래서 여기의 assertPublicUrl 은 허용 목록·주소 사전 확인(이중 방어)이다.
+ *   ⚠️ 시험 등에서 inner 로 일반 fetch 를 주입하면 핀이 없다(그 경우 확인~연결 사이 창이 남는다).
  */
 export function confinedFetch(
   domains: ReadonlySet<string>,
@@ -1365,7 +1366,7 @@ export async function guardedOfficialFacts(
   }
   const out = await checkOfficialFacts(
     url,
-    confinedFetch(domains, ctx.fetchImpl ?? fetch)
+    confinedFetch(domains, ctx.fetchImpl ?? pinnedFetch)
   );
   const passed = out.items.filter(
     (i) => i.status === "found" || i.status === "allowed"
