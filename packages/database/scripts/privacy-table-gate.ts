@@ -30,12 +30,19 @@ export function evaluatePrivacyTables(
   return { schema, present, missing, ok: missing.length === 0 };
 }
 
+/** DB 연결 시도 제한(ms). 넘으면 pg 가 연결 오류를 낸다. */
+export const PRIVACY_GATE_CONNECT_TIMEOUT_MS = 10_000;
+
 export async function readPrivacyTables(
   connectionString: string
 ): Promise<PrivacyTableVerdict> {
   const schema = connectionSchema(connectionString);
   const prisma = new PrismaClient({
-    adapter: new PrismaPg({ connectionString, max: 1 }),
+    adapter: new PrismaPg({
+      connectionString,
+      max: 1,
+      connectionTimeoutMillis: PRIVACY_GATE_CONNECT_TIMEOUT_MS,
+    }),
   });
   try {
     const rows = await prisma.$transaction(

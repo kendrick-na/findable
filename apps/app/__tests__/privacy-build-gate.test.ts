@@ -11,8 +11,10 @@ import { resolveDatabaseUrl } from "@repo/database/keys";
 import {
   decidePrivacyBuildGate,
   gateConnectionString,
+  PRIVACY_GATE_TOTAL_TIMEOUT_MS,
 } from "@repo/database/scripts/privacy-build-gate";
 import type { PrivacyTableVerdict } from "@repo/database/scripts/privacy-table-gate";
+import { PRIVACY_GATE_CONNECT_TIMEOUT_MS } from "@repo/database/scripts/privacy-table-gate";
 import { describe, expect, it, vi } from "vitest";
 
 const okVerdict: PrivacyTableVerdict = {
@@ -69,6 +71,17 @@ describe("decidePrivacyBuildGate", () => {
       vi.fn().mockRejectedValue(err)
     );
     expect(d.action).toBe("fail");
+    expect(d.message).not.toContain("db.example");
+    expect(d.message).not.toContain("u:p");
+  });
+
+  it("⛔ 제한 시간 안에 DB 확인이 안 끝나면 실패(연결 문자열 노출 없음) — 기본 60초·연결 10초", async () => {
+    expect(PRIVACY_GATE_TOTAL_TIMEOUT_MS).toBe(60_000);
+    expect(PRIVACY_GATE_CONNECT_TIMEOUT_MS).toBe(10_000);
+    const hang = vi.fn(() => new Promise<PrivacyTableVerdict>(() => undefined));
+    const d = await decidePrivacyBuildGate(PROD, hang, 20);
+    expect(d.action).toBe("fail");
+    expect(d.message).toContain("안에 DB 확인이 끝나지 않음");
     expect(d.message).not.toContain("db.example");
     expect(d.message).not.toContain("u:p");
   });

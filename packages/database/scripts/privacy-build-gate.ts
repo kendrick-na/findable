@@ -2,7 +2,10 @@
 //
 // 왜: 앱은 그 표가 없으면 Clerk 웹훅을 전부 500 으로 돌린다(fail-closed). 사람이 「마이그레이션 먼저」를 잊어도
 //   운영 빌드가 실패하면 Vercel 은 **이전 정상 배포를 그대로 유지**한다.
+// 전제: **Findable 은 Vercel 전용 배포**다(apps/app·apps/web 모두 Vercel Git 연동). 운영 여부는 Vercel 이 빌드에 넣는
+//   VERCEL_ENV 로만 판단한다 — 다른 곳(자체 서버·다른 CI)에서 운영 빌드를 하면 이 게이트는 건너뛴다(그런 배포는 없다).
 // 규칙
+//  - 시간 제한: DB 연결 시도 10초(`PRIVACY_GATE_CONNECT_TIMEOUT_MS`), 게이트 전체 60초. 넘으면 실패(exit 1).
 //  - VERCEL_ENV === "production" 일 때만 검사. 미리보기·로컬 빌드는 건너뛰고 한 줄 로그만.
 //  - 검사 대상 DB = 앱 런타임과 같은 규칙(FINDABLE_DATABASE_URL 우선, 없으면 DATABASE_URL — `keys.ts`).
 //  - 운영에서 표가 없거나, DB 주소가 없거나, 접속·조회가 실패하면 → 실패(exit 1). (fail-closed)
@@ -15,6 +18,32 @@ import {
   type PrivacyTableVerdict,
   readPrivacyTables,
 } from "./privacy-table-gate";
+
+/** 게이트 전체 제한 시간(ms). 넘으면 실패 — 빌드가 DB 때문에 무한정 멈추지 않게. */
+export const PRIVACY_GATE_TOTAL_TIMEOUT_MS = 60_000;
+
+class GateTimeoutError extends Error {
+  constructor() {
+    super("timeout");
+    this.name = "GateTimeoutError";
+  }
+}
+
+/** `promise` 가 `ms` 안에 끝나지 않으면 GateTimeoutError 로 거절한다. */
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new GateTimeoutError()), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
 
 export type GateDecision =
   | { action: "skip"; message: string }
@@ -40,7 +69,8 @@ export const gateConnectionString = (env: Env): string | undefined =>
  */
 export async function decidePrivacyBuildGate(
   env: Env,
-  read: (connectionString: string) => Promise<PrivacyTableVerdict>
+  read: (connectionString: string) => Promise<PrivacyTableVerdict>,
+  timeoutMs: number = PRIVACY_GATE_TOTAL_TIMEOUT_MS
 ): Promise<GateDecision> {
   if (!shouldCheck(env)) {
     return {
@@ -57,7 +87,7 @@ export async function decidePrivacyBuildGate(
     };
   }
   try {
-    const verdict = await read(connectionString);
+    const verdict = await withTimeout(read(connectionString), timeoutMs);
     if (!verdict.ok) {
       return {
         action: "fail",
@@ -69,6 +99,12 @@ export async function decidePrivacyBuildGate(
       message: `[privacy-build-gate] ok ${JSON.stringify(verdict.present)}`,
     };
   } catch (error) {
+    if (error instanceof GateTimeoutError) {
+      return {
+        action: "fail",
+        message: `[privacy-build-gate] FAIL: ${timeoutMs / 1000}초 안에 DB 확인이 끝나지 않음 — 확인 불가라 중단(fail-closed)`,
+      };
+    }
     return {
       action: "fail",
       message: `[privacy-build-gate] FAIL: DB 조회 실패 ${safeErrorLabel(error)} — 확인 불가라 중단(fail-closed)`,
@@ -81,7 +117,8 @@ async function main(): Promise<void> {
   const out = decision.action === "fail" ? process.stderr : process.stdout;
   out.write(`${decision.message}\n`);
   if (decision.action === "fail") {
-    process.exitCode = 1;
+    // 열린 DB 연결이 빌드를 붙잡지 않도록 즉시 끝낸다.
+    process.exit(1);
   }
 }
 
