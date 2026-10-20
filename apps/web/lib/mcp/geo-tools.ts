@@ -12,7 +12,11 @@
 //     `withRecomputedAuditMetrics` 를 그대로 쓴다. 이 파일은 조립만 한다(새 분류·새 분모 금지).
 //   - 값이 없으면 0 이 아니라 Known.unavailable. 봉투를 못 만들면 거부가 아니라 status:"unverifiable".
 //   - 허용 목록 밖 브랜드와 존재하지 않는 브랜드는 **같은** not_available 오류.
-//   - 신뢰구간은 S1 머지 전까지 unavailable(not_configured).
+//   - 신뢰구간은 S1 의 aggregateRepeats(Wilson)를 연결한다. 같은 조건 반복이 최소 횟수 미만이거나 코호트가
+//     맞지 않으면 계속 unavailable(insufficient_sample 등)이고 0 으로 내보내지 않는다.
+//   - brand_name 의 출처는 허용 목록에 있는 브랜드의 `Brand.name`(표시 이름) 하나뿐이다. 법인명·사업자번호·이메일은
+//     select 에도 없고 loadLatest 가 id·name·domain 만 남기고 나머지 칸을 버린다.
+//   - check_official_facts 는 허용 목록 브랜드의 등록된 도메인(Brand.domain)만 점검한다(대표 결정 P-1).
 // 도구 설명은 동작 사실만 쓴다(모델에게 행동을 지시하는 문장 금지). 모든 도구에 title + annotations.
 
 import type { McpServer } from "@modelcontextprotocol/server";
@@ -33,11 +37,20 @@ import {
   withRecomputedAuditMetrics,
 } from "@repo/audit/normalize-stored-metrics";
 import type {
+  EngineModelInfo,
   EvidenceEnvelope,
+  Interval,
+  Known,
   McpReadonlyToolName,
+  ObservedValues,
+  RetrievalInfo,
   UnavailableReason,
   UnmeasuredRow,
 } from "@repo/audit/proof-types";
+import {
+  aggregateRepeats,
+  type CohortAggregate,
+} from "@repo/audit/repeat-aggregate";
 import {
   engineSetKeyOf,
   questionLanguagesOf,
@@ -123,6 +136,8 @@ export interface GeoToolContext {
   db: ReadonlyDb;
   fetchImpl?: FetchLike;
   log: { error: (event: string, data?: Record<string, unknown>) => void };
+  /** 같은 조건 반복의 최소 횟수(사전 등록 값). 생략하면 임시값 3. */
+  minRepeats?: number;
 }
 
 // [응답 헬퍼]
@@ -195,7 +210,15 @@ function finalize<T extends z.ZodType>(
 // [저장 결과 읽기]
 
 interface StoredRow extends BucketableAnswer {
-  usage?: { searchUnavailable?: boolean } | null;
+  engineSet?: string | null;
+  usage?: {
+    chatgptEngineSet?: string;
+    engineSet?: string;
+    fallback?: string;
+    modelId?: string;
+    searchUnavailable?: boolean;
+    webSearchRequests?: number | null;
+  } | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -314,7 +337,243 @@ function unmeasuredRowsOf(
   return out;
 }
 
+// [저장된 필드에서만 얻는 사전 등록 칸: 검색 호출 여부·엔진/모델 정보]
+// 저장 결과에 있는 값만 쓴다. 없으면 unavailable 이고 값을 만들지 않는다(색인 확인은 저장 경로가 없다).
+
+type RetrievalState = "not_used" | "unknown" | "used";
+
+function retrievalOfRow(row: StoredRow): RetrievalState {
+  const n = row.usage?.webSearchRequests;
+  if (typeof n === "number" && Number.isFinite(n)) {
+    return n > 0 ? "used" : "not_used";
+  }
+  // 검색을 원했지만 검색 없이 답한 행: 검색을 호출하지 않았다.
+  if (row.usage?.searchUnavailable === true) {
+    return "not_used";
+  }
+  return "unknown"; // null·미기재 = 미수집(0 이 아니다)
+}
+
+const MAX_SOURCE_URLS = 50;
+
+/** 쿼리·해시·로그인 정보는 버린다(개인정보가 섞일 수 있음). http(s)가 아니거나 읽을 수 없으면 null. */
+function safeSourceUrl(raw: string | null | undefined): string | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    const u = new URL(raw);
+    return u.protocol === "http:" || u.protocol === "https:"
+      ? `${u.origin}${u.pathname}`
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function sourceUrlsOf(rows: readonly StoredRow[]): string[] {
+  const out = new Set<string>();
+  for (const row of rows) {
+    for (const item of row.citedSources ?? []) {
+      const url = safeSourceUrl(item?.url);
+      if (url) {
+        out.add(url);
+      }
+    }
+  }
+  return [...out].slice(0, MAX_SOURCE_URLS);
+}
+
+function engineStatesOf(
+  rows: readonly StoredRow[]
+): Map<string, Set<RetrievalState>> {
+  const perEngine = new Map<string, Set<RetrievalState>>();
+  for (const row of rows) {
+    const group = answerGroup(row.engineId);
+    if (group === "ai" || group === "search") {
+      const set = perEngine.get(row.engineId) ?? new Set<RetrievalState>();
+      set.add(retrievalOfRow(row));
+      perEngine.set(row.engineId, set);
+    }
+  }
+  return perEngine;
+}
+
+type EngineRetrieval = RetrievalInfo["by_engine"][string];
+
+function engineRetrievalOf(
+  states: ReadonlySet<RetrievalState>
+): EngineRetrieval {
+  const known = [...states].filter((v) => v !== "unknown");
+  if (states.size === 1 && known[0] === "used") {
+    return { engine_class: "web_search", retrieval: "used" };
+  }
+  if (states.size === 1 && known[0] === "not_used") {
+    return { engine_class: "model_knowledge", retrieval: "not_used" };
+  }
+  return {
+    engine_class: known.length > 1 ? "mixed" : "unknown",
+    retrieval: "unknown",
+  };
+}
+
+function overallRetrievalOf(
+  overall: ReadonlySet<RetrievalState>
+): RetrievalInfo["retrieval_used"] {
+  const known = [...overall].filter((v) => v !== "unknown");
+  if (overall.has("unknown") || known.length > 1) {
+    return "mixed";
+  }
+  return known[0] ?? "unknown";
+}
+
+function retrievalInfoOf(
+  rows: readonly StoredRow[],
+  asOf: string
+): Known<RetrievalInfo> {
+  const perEngine = engineStatesOf(rows);
+  const overall = new Set<RetrievalState>();
+  const by_engine: RetrievalInfo["by_engine"] = {};
+  for (const [engineId, states] of perEngine) {
+    by_engine[engineId] = engineRetrievalOf(states);
+    for (const v of states) {
+      overall.add(v);
+    }
+  }
+  if (overall.size === 0 || (overall.size === 1 && overall.has("unknown"))) {
+    return {
+      as_of: null,
+      status: "unavailable",
+      reason: "not_recorded",
+      detail_ko: "웹 검색 사용 여부는 이 회차에 기록되어 있지 않습니다.",
+    };
+  }
+  return {
+    as_of: asOf,
+    status: "known",
+    value: {
+      by_engine,
+      retrieval_used: overallRetrievalOf(overall),
+      source_urls: sourceUrlsOf(rows),
+    },
+  };
+}
+
+function callSourceOf(
+  gateway: boolean,
+  web: boolean
+): EngineModelInfo["call_source"] {
+  if (gateway) {
+    return "api_fallback";
+  }
+  return web ? "web" : null;
+}
+
+function engineModelOf(
+  rows: readonly StoredRow[],
+  engineIds: readonly string[],
+  setKey: string | null,
+  asOf: string
+): EngineModelInfo[] {
+  return engineIds.map((engine_id) => {
+    const mine = rows.filter((r) => r.engineId === engine_id);
+    const models = new Set(
+      mine.map((r) => r.usage?.modelId).filter((m): m is string => !!m)
+    );
+    const gateway = mine.some((r) => r.usage?.fallback === "gateway");
+    const web = mine.some((r) => !!r.usage?.chatgptEngineSet);
+    const model_id: EngineModelInfo["model_id"] =
+      models.size === 1
+        ? { as_of: asOf, status: "known", value: [...models][0] ?? "" }
+        : {
+            as_of: asOf,
+            status: "unavailable",
+            reason: "not_recorded",
+            detail_ko:
+              models.size > 1
+                ? "회차 안에서 모델이 여러 개라 하나로 적지 않았습니다."
+                : "엔진 모델 버전은 기록되어 있지 않습니다.",
+          };
+    return {
+      call_source: callSourceOf(gateway, web),
+      engine_id,
+      engine_set:
+        mine.map((r) => r.usage?.engineSet ?? r.engineSet).find((v) => !!v) ??
+        setKey,
+      model_id,
+    };
+  });
+}
+
+// [같은 조건 반복 → 신뢰구간]
+
+/** 사전 등록 문서에 최소 반복 수가 적혀 있지 않다 — 임시값. [확인 필요] 확정되면 GeoToolContext.minRepeats 로 넘긴다. */
+const DEFAULT_MIN_REPEATS = 3;
+const HISTORY_LIMIT = 30;
+
+type CohortView =
+  | {
+      cohort: CohortAggregate;
+      interval: Known<Interval>;
+      observed: Known<ObservedValues>;
+    }
+  | { cohort: null; interval: Known<Interval> };
+
+function cohortViewOf(
+  brand: StoredBrandRow,
+  job: StoredJobRow,
+  history: readonly StoredJobRow[],
+  minRepeats: number,
+  asOf: string
+): CohortView {
+  const jobs = history.some((h) => h.id === job.id)
+    ? history
+    : [job, ...history];
+  const agg = aggregateRepeats(
+    jobs.map((h) => ({
+      completed_at: h.completedAt ?? h.createdAt,
+      job_id: h.id,
+      result: withRecomputedAuditMetrics(h.result),
+    })),
+    {
+      brand_domain: brand.domain,
+      min_repeats: minRepeats,
+      suppression_threshold: null,
+    }
+  );
+  const cohort = agg.cohorts.find((c) => c.job_ids.includes(job.id)) ?? null;
+  const gone = (
+    reason: "insufficient_sample" | "not_recorded" | "withheld_not_publishable",
+    detail_ko: string
+  ): CohortView => ({
+    cohort: null,
+    interval: { as_of: asOf, status: "unavailable", reason, detail_ko },
+  });
+  if (!cohort) {
+    return gone(
+      "not_recorded",
+      "이 회차를 같은 조건 묶음에 넣지 못해 구간을 내지 않습니다."
+    );
+  }
+  if (!cohort.comparable) {
+    return gone(
+      "insufficient_sample",
+      `같은 조건의 반복이 ${cohort.repeat_count}회뿐이라(최소 ${minRepeats}회 필요) 신뢰구간을 내지 않습니다.`
+    );
+  }
+  const observed = cohort.observed.ai_brand;
+  if (observed.status !== "known") {
+    return gone(
+      "withheld_not_publishable",
+      "같은 조건 묶음의 숫자를 낼 수 없어 구간을 내지 않습니다."
+    );
+  }
+  return { cohort, interval: observed.value.interval, observed };
+}
+
 export interface BrandRun {
+  /** 같은 조건 반복이 충분할 때만 채워진다(아니면 null = 최신 1회 값만 쓴다). */
+  cohort: CohortAggregate | null;
   corrected: unknown;
   evidence: EvidenceEnvelope;
   language: EvidenceEnvelope["language"];
@@ -335,7 +594,9 @@ type RunOutcome =
 /** 저장된 회차 1개 → 근거 봉투. 재료가 모자라면 이유와 함께 ok:false(= 호출자가 「확인 불가」로 표시). */
 export function buildBrandRun(
   brand: StoredBrandRow,
-  job: StoredJobRow
+  job: StoredJobRow,
+  history: readonly StoredJobRow[] = [],
+  minRepeats: number = DEFAULT_MIN_REPEATS
 ): RunOutcome {
   const corrected = withRecomputedAuditMetrics(job.result);
   const rows = rowsOf(corrected);
@@ -387,7 +648,15 @@ export function buildBrandRun(
   const setKey = engineSetKeyOf(corrected);
   const questionSetKey = savedQuestionSetKeyOf(corrected);
 
-  const observed = {
+  const view = cohortViewOf(brand, job, history, minRepeats, measuredAt);
+  const cohortJobs = view.cohort
+    ? history.filter((h) => view.cohort?.used_job_ids.includes(h.id))
+    : [];
+  const evidenceRows =
+    cohortJobs.length > 0
+      ? cohortJobs.flatMap((h) => rowsOf(withRecomputedAuditMetrics(h.result)))
+      : rows;
+  const singleObserved: Known<ObservedValues> = {
     as_of: measuredAt,
     status: "known",
     value: {
@@ -412,44 +681,39 @@ export function buildBrandRun(
       exposure_count: ai.confirmed,
       exposure_rate: rate(ai.confirmed, ai.adjudicated),
       group: "ai_brand",
-      interval: {
-        as_of: measuredAt,
-        status: "unavailable",
-        reason: "not_configured",
-        detail_ko: "신뢰구간 계산이 아직 연결되지 않았습니다.",
-      },
+      interval: view.interval,
     },
-  };
+  } as Known<ObservedValues>;
+  const observed: Known<ObservedValues> = view.cohort
+    ? view.observed
+    : singleObserved;
 
   const evidence = {
     comparison: null,
     engine_model: {
       as_of: measuredAt,
       status: "known",
-      value: engineIds.map((engine_id) => ({
-        call_source: null,
-        engine_id,
-        engine_set: setKey,
-        model_id: {
-          as_of: measuredAt,
-          status: "unavailable",
-          reason: "not_recorded",
-          detail_ko: "엔진 모델 버전은 기록되어 있지 않습니다.",
-        },
-      })),
+      value: engineModelOf(evidenceRows, engineIds, setKey, measuredAt),
     },
+    // 색인 확인은 저장 결과에 기록 경로가 없다 — 값을 만들지 않는다(Search Console 확인은 별도 기록).
     index_check: {
       as_of: null,
       status: "unavailable",
-      reason: "not_configured",
-      detail_ko: "색인 확인 방법이 설정되어 있지 않습니다.",
+      reason: "not_recorded",
+      detail_ko:
+        "색인 확인은 저장 결과에 기록되지 않습니다(Search Console 확인은 별도 기록).",
     },
     language,
     limits: LIMITS_BLOCK,
     measured_at: {
       as_of: measuredAt,
       status: "known",
-      value: { first: measuredAt, last: measuredAt },
+      value: view.cohort
+        ? {
+            first: view.cohort.first_completed_at,
+            last: view.cohort.last_completed_at,
+          }
+        : { first: measuredAt, last: measuredAt },
     },
     method_version: {
       as_of: measuredAt,
@@ -463,25 +727,24 @@ export function buildBrandRun(
           verdict_version:
             typeof contextVerdict === "number" ? contextVerdict : null,
         },
-        interval_method: null,
+        interval_method:
+          observed.status === "known" &&
+          observed.value.interval.status === "known"
+            ? observed.value.interval.value.method
+            : null,
       },
     },
     observed,
-    retrieval: {
-      as_of: null,
-      status: "unavailable",
-      reason: "not_recorded",
-      detail_ko: "웹 검색 사용 여부는 이 회차에 기록되어 있지 않습니다.",
-    },
+    retrieval: retrievalInfoOf(evidenceRows, measuredAt),
     schema_version: 1,
     source_ids: {
       as_of: measuredAt,
       status: "known",
       value: {
         kind: "audit_jobs",
-        audit_job_ids: [job.id],
+        audit_job_ids: view.cohort ? view.cohort.used_job_ids : [job.id],
         question_set_key: questionSetKey,
-        sample_count: 1,
+        sample_count: view.cohort ? view.cohort.repeat_count : 1,
       },
     },
     unmeasured: unmeasuredRowsOf(corrected, rows),
@@ -489,14 +752,27 @@ export function buildBrandRun(
 
   return {
     ok: true,
-    run: { corrected, evidence, language, measuredAt, rows, summary },
+    run: {
+      cohort: view.cohort,
+      corrected,
+      evidence,
+      language,
+      measuredAt,
+      rows,
+      summary,
+    },
   };
 }
 
 type Loaded =
   | { kind: "not_available" }
   | { kind: "no_data" }
-  | { brand: StoredBrandRow; job: StoredJobRow; kind: "run" };
+  | {
+      brand: StoredBrandRow;
+      history: StoredJobRow[];
+      job: StoredJobRow;
+      kind: "run";
+    };
 
 /** 허용 목록 → 브랜드 → 최신 완료 회차. 목록 밖/없는 브랜드는 구별되지 않는 같은 결과. */
 async function loadLatest(
@@ -506,19 +782,27 @@ async function loadLatest(
   if (!ctx.allowlist.has(brandId)) {
     return { kind: "not_available" };
   }
-  const brand = await ctx.db.brand.findFirst({
+  const found = await ctx.db.brand.findFirst({
     where: { id: brandId },
     select: { id: true, name: true, domain: true },
   });
-  if (!brand) {
+  if (!found) {
     return { kind: "not_available" };
   }
-  const job = await ctx.db.auditJob.findFirst({
+  // 값 출처 한정: 표시 이름은 Brand.name 하나. 그 밖의 칸(법인명·사업자번호·이메일 등)이 행에 섞여 와도 버린다.
+  const brand: StoredBrandRow = {
+    domain: found.domain,
+    id: found.id,
+    name: found.name,
+  };
+  const history = await ctx.db.auditJob.findMany({
     where: { brandId, status: "completed" },
     orderBy: { completedAt: "desc" },
+    take: HISTORY_LIMIT,
     select: { id: true, completedAt: true, createdAt: true, result: true },
   });
-  return job ? { kind: "run", brand, job } : { kind: "no_data" };
+  const job = history[0];
+  return job ? { kind: "run", brand, history, job } : { kind: "no_data" };
 }
 
 // [도구 입력]
@@ -539,6 +823,101 @@ const READONLY_ANNOTATIONS = {
 
 // [도구 본문 — 시험이 직접 부를 수 있게 분리]
 
+type GroupRate = {
+  denominator: number;
+  exposure_count: number;
+  exposure_rate: number | null;
+} | null;
+
+function cohortGroupRate(
+  run: BrandRun,
+  group: "ai_brand" | "discovery" | "search"
+): GroupRate {
+  const k = run.cohort?.observed[group];
+  return k?.status === "known"
+    ? {
+        denominator: k.value.denominator,
+        exposure_count: k.value.exposure_count,
+        exposure_rate: k.value.exposure_rate,
+      }
+    : null;
+}
+
+function singleGroupRates(
+  run: BrandRun
+): Record<"ai_brand" | "discovery" | "search", GroupRate> {
+  const { ai, discovery, search } = run.summary;
+  return {
+    ai_brand: {
+      denominator: ai.adjudicated,
+      exposure_count: ai.confirmed,
+      exposure_rate: rate(ai.confirmed, ai.adjudicated),
+    },
+    discovery: discovery
+      ? {
+          denominator: discovery.adjudicated,
+          exposure_count: discovery.recommended,
+          exposure_rate: rate(discovery.recommended, discovery.adjudicated),
+        }
+      : null,
+    search: search
+      ? {
+          denominator: search.adjudicated,
+          exposure_count: search.confirmed,
+          exposure_rate: rate(search.confirmed, search.adjudicated),
+        }
+      : null,
+  };
+}
+
+/** 같은 조건 반복이 충분하면(run.cohort) 근거 봉투와 같은 묶음 값을, 아니면 최신 1회 값을 쓴다. */
+function summaryDataOf(brand: StoredBrandRow, run: BrandRun): SummaryData {
+  const single = singleGroupRates(run);
+  const cohortAi = cohortGroupRate(run, "ai_brand");
+  const groups = run.cohort
+    ? {
+        ai_brand: cohortAi ?? single.ai_brand,
+        discovery: cohortGroupRate(run, "discovery"),
+        search: cohortGroupRate(run, "search"),
+      }
+    : single;
+  const cohortObs = run.cohort?.observed.ai_brand;
+  const coverage = coverageOf(
+    run.rows.filter(
+      (r) => answerGroup(r.engineId) === "ai" && !isDiscoveryAnswer(r)
+    )
+  );
+  const aiGroup = groups.ai_brand ?? single.ai_brand;
+  return {
+    brand_id: brand.id,
+    brand_name: brand.name,
+    collection_rate:
+      cohortObs?.status === "known"
+        ? cohortObs.value.collection.rate
+        : rate(coverage.measured, coverage.attempted),
+    exposure_denominator: aiGroup?.denominator ?? 0,
+    exposure_rate: aiGroup?.exposure_rate ?? null,
+    groups,
+    measured_at: run.cohort ? run.cohort.last_completed_at : run.measuredAt,
+  } as SummaryData;
+}
+
+const NO_ADJUDICATED_KO =
+  "판정이 끝난 AI 답변이 없어 노출률을 내지 않았습니다(0%가 아니라 계산하지 않은 상태입니다).";
+
+function summaryMessageOf(run: BrandRun): string {
+  const single = singleGroupRates(run).ai_brand;
+  const cohortAi = cohortGroupRate(run, "ai_brand");
+  const g = cohortAi ?? single;
+  if (!g || g.denominator === 0) {
+    return NO_ADJUDICATED_KO;
+  }
+  if (cohortAi) {
+    return `같은 조건으로 저장된 ${run.cohort?.repeat_count}회 측정을 묶어, 판정이 끝난 AI 답변 ${g.denominator}건 중 ${g.exposure_count}건에서 브랜드가 제대로 인식되었습니다. 반복은 독립 표본이 아니어서 신뢰구간은 참고용이며 숫자 하나로 판단할 수 없습니다.`;
+  }
+  return `저장된 최신 측정 1회(${run.measuredAt.slice(0, 10)}) 기준, 판정이 끝난 AI 답변 ${g.denominator}건 중 ${g.exposure_count}건에서 브랜드가 제대로 인식되었습니다. 표본이 작고 반복은 독립이 아니어서 숫자 하나로 판단할 수 없습니다.`;
+}
+
 export async function runSummary(
   ctx: GeoToolContext,
   brandId: string
@@ -557,54 +936,20 @@ export async function runSummary(
       ),
     };
   }
-  const built = buildBrandRun(loaded.brand, loaded.job);
+  const built = buildBrandRun(
+    loaded.brand,
+    loaded.job,
+    loaded.history,
+    ctx.minRepeats ?? DEFAULT_MIN_REPEATS
+  );
   if (!built.ok) {
     return {
       response: unverifiable(tool, built.reason, built.detail, built.language),
     };
   }
   const { run } = built;
-  const ai = run.summary.ai;
-  const discovery = run.summary.discovery;
-  const search = run.summary.search;
-  const coverage = coverageOf(
-    run.rows.filter(
-      (r) => answerGroup(r.engineId) === "ai" && !isDiscoveryAnswer(r)
-    )
-  );
-  const data: SummaryData = {
-    brand_id: loaded.brand.id,
-    brand_name: loaded.brand.name,
-    collection_rate: rate(coverage.measured, coverage.attempted),
-    exposure_denominator: ai.adjudicated,
-    exposure_rate: rate(ai.confirmed, ai.adjudicated),
-    groups: {
-      ai_brand: {
-        denominator: ai.adjudicated,
-        exposure_count: ai.confirmed,
-        exposure_rate: rate(ai.confirmed, ai.adjudicated),
-      },
-      discovery: discovery
-        ? {
-            denominator: discovery.adjudicated,
-            exposure_count: discovery.recommended,
-            exposure_rate: rate(discovery.recommended, discovery.adjudicated),
-          }
-        : null,
-      search: search
-        ? {
-            denominator: search.adjudicated,
-            exposure_count: search.confirmed,
-            exposure_rate: rate(search.confirmed, search.adjudicated),
-          }
-        : null,
-    },
-    measured_at: run.measuredAt,
-  };
-  const message_ko =
-    ai.adjudicated > 0
-      ? `저장된 최신 측정 1회(${run.measuredAt.slice(0, 10)}) 기준, 판정이 끝난 AI 답변 ${ai.adjudicated}건 중 ${ai.confirmed}건에서 브랜드가 제대로 인식되었습니다. 표본이 작고 반복은 독립이 아니어서 숫자 하나로 판단할 수 없습니다.`
-      : "판정이 끝난 AI 답변이 없어 노출률을 내지 않았습니다(0%가 아니라 계산하지 않은 상태입니다).";
+  const data = summaryDataOf(loaded.brand, run);
+  const message_ko = summaryMessageOf(run);
   return {
     response: finalize(tool, summaryDataSchema, {
       message_ko,
@@ -688,8 +1033,54 @@ export async function runBreakdown(
   };
 }
 
-export async function runFacts(ctx: GeoToolContext, url: string) {
+const LEADING_WWW = /^www\./;
+const TRAILING_DOT = /\.$/;
+
+function hostOnly(value: string): string | null {
+  const text = value.trim();
+  if (text === "") {
+    return null;
+  }
+  try {
+    const host = new URL(
+      text.includes("://") ? text : `https://${text}`
+    ).hostname.toLowerCase();
+    return host.replace(LEADING_WWW, "").replace(TRAILING_DOT, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+/** 허용 목록 브랜드의 등록된 도메인 집합(Brand.domain). 허용 목록이 비면 빈 집합. */
+async function registeredDomains(ctx: GeoToolContext): Promise<Set<string>> {
+  const domains = new Set<string>();
+  for (const id of ctx.allowlist) {
+    const brand = await ctx.db.brand.findFirst({
+      where: { id },
+      select: { id: true, domain: true },
+    });
+    const host = brand ? hostOnly(brand.domain) : null;
+    if (host) {
+      domains.add(host);
+    }
+  }
+  return domains;
+}
+
+/**
+ * 읽기 전용 모드의 공식 정보 점검(대표 결정 P-1): 익명 공개 안 함·자사 허용 목록 한정.
+ * 입력 주소의 호스트가 허용 목록 브랜드의 등록된 도메인과 같을 때만 점검하고, 아니면(빈 허용 목록 포함)
+ * 허용 목록 밖·없는 브랜드와 같은 not_available 로 거부한다. 사설 주소 차단 등 기존 방어는 점검 안에서 그대로 유지된다.
+ */
+export async function runFacts(
+  ctx: GeoToolContext,
+  url: string
+): Promise<ToolOutcome> {
   const tool: McpReadonlyToolName = "check_official_facts";
+  const requested = hostOnly(url);
+  if (requested === null || !(await registeredDomains(ctx)).has(requested)) {
+    return { error: "not_available" as const };
+  }
   const out = await checkOfficialFacts(url, ctx.fetchImpl);
   const gone = (detail_ko: string) => ({
     as_of: null,
@@ -723,7 +1114,7 @@ export async function runFacts(ctx: GeoToolContext, url: string) {
     limits_ko: out.limits_ko,
     summary_ko: out.summary_ko,
   };
-  return finalize(tool, factsDataSchema, {
+  const response = finalize(tool, factsDataSchema, {
     message_ko: out.summary_ko,
     tool,
     status: "ok",
@@ -733,6 +1124,7 @@ export async function runFacts(ctx: GeoToolContext, url: string) {
     limits_ko: LIMITS_KO,
     limits_en: LIMITS_EN,
   });
+  return { response };
 }
 
 // [등록]
@@ -800,14 +1192,14 @@ export function registerGeoReadonlyTools(
     {
       title: "공식 사실·AI 크롤러 점검",
       description:
-        "공개된 브랜드 사이트가 AI 검색엔진이 읽기 좋은 상태인지 점검합니다. llms.txt, robots.txt의 AI 크롤러 허용 여부, 구조화 데이터(JSON-LD), sitemap.xml 유무를 확인합니다. 입력한 주소의 공개 페이지를 서버가 직접 읽으며(응답 512KB, 요청당 5초, 리다이렉트 3회, 사설 주소 차단) AI 엔진에는 질의하지 않습니다. / Checks whether a public brand site is AI-search friendly (llms.txt, AI crawler rules in robots.txt, JSON-LD, sitemap).",
+        "허용 목록에 등록된 브랜드의 도메인에 한해, 공개 사이트가 AI 검색엔진이 읽기 좋은 상태인지 점검합니다. 등록되지 않은 주소는 거부합니다. llms.txt, robots.txt의 AI 크롤러 허용 여부, 구조화 데이터(JSON-LD), sitemap.xml 유무를 확인합니다. 입력한 주소의 공개 페이지를 서버가 직접 읽으며(응답 512KB, 요청당 5초, 리다이렉트 3회, 사설 주소 차단) AI 엔진에는 질의하지 않습니다. / Checks whether the registered domain of an allow-listed brand is AI-search friendly (llms.txt, AI crawler rules in robots.txt, JSON-LD, sitemap).",
       inputSchema: z.object({
         url: z
           .string()
           .min(1)
           .max(2048)
           .describe(
-            "점검할 브랜드의 공개 사이트 주소. 예: https://example.co.kr"
+            "허용 목록 브랜드의 등록된 사이트 주소. 예: https://example.co.kr"
           ),
       }),
       outputSchema: anyOutput,
@@ -819,7 +1211,8 @@ export function registerGeoReadonlyTools(
     },
     async ({ url }) => {
       try {
-        return ok(await runFacts(ctx, url));
+        const out = await runFacts(ctx, url);
+        return "error" in out ? fail(out.error) : ok(out.response);
       } catch (error) {
         if (error instanceof Error && error.message.startsWith("URL_")) {
           return failUrl(mapUrlError(error));

@@ -172,15 +172,26 @@ describe("M-facts — 읽기 전용 모드 안에서의 점검", () => {
       return { ...real, assertPublicUrl: vi.fn(async () => undefined) };
     });
     const { runFacts, toReadonlyDb } = await import("../lib/mcp/geo-tools");
-    const res = (await runFacts(
+    const out = await runFacts(
       {
-        allowlist: new Set(),
-        db: toReadonlyDb(makeWatchedDb({ brand: null, job: null }).db),
+        allowlist: new Set([BRAND_ID]),
+        db: toReadonlyDb(
+          makeWatchedDb({
+            brand: {
+              id: BRAND_ID,
+              name: "시험브랜드",
+              domain: "brand.example",
+            },
+            job: null,
+          }).db
+        ),
         fetchImpl: fakeFetch,
         log: { error: vi.fn() },
       },
       "https://brand.example"
-    )) as Record<string, any>;
+    );
+    expect("response" in out).toBe(true);
+    const res = ("response" in out ? out.response : {}) as Record<string, any>;
     expect(res.status).toBe("ok");
     expect(res.tool).toBe("check_official_facts");
     expect(res.evidence.source_ids.value.kind).toBe("live_fetch");
@@ -201,8 +212,44 @@ describe("M-facts — 읽기 전용 모드 안에서의 점검", () => {
     vi.doUnmock("@repo/audit/public-url-security");
   });
 
-  it("사설 주소는 사람 말 오류(isError)로 거절한다", async () => {
+  it("허용 목록에 없는 주소(사설·임의 URL 포함)는 not_available 로 거부한다", async () => {
     vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
+    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", BRAND_ID);
+    for (const url of [
+      "http://localhost",
+      "https://other.example",
+      "https://brand.example.evil.test",
+      "not a url",
+    ]) {
+      const out = await rpc("tools/call", {
+        name: "check_official_facts",
+        arguments: { url },
+      });
+      expect(out.body.result.isError).toBe(true);
+      expect(JSON.stringify(out.body.result.content)).toContain(
+        "not_available"
+      );
+    }
+  });
+
+  it("허용 목록이 비어 있으면 등록 도메인이어도 거부한다", async () => {
+    vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
+    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", "");
+    const out = await rpc("tools/call", {
+      name: "check_official_facts",
+      arguments: { url: "https://brand.example" },
+    });
+    expect(out.body.result.isError).toBe(true);
+    expect(JSON.stringify(out.body.result.content)).toContain("not_available");
+  });
+
+  it("등록 도메인이 사설 주소로 풀리면 기존 방어가 그대로 거절한다", async () => {
+    vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
+    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", BRAND_ID);
+    holder.db = makeWatchedDb({
+      brand: { id: BRAND_ID, name: "시험브랜드", domain: "localhost" },
+      job: makeJob(),
+    }).db;
     const out = await rpc("tools/call", {
       name: "check_official_facts",
       arguments: { url: "http://localhost" },

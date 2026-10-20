@@ -129,10 +129,10 @@ describe("6. 고정 입력 재계산 일치 — M-sum", () => {
       (u: any) => u.code === "engine_error"
     );
     expect(gap).toMatchObject({ count: 1 });
-    // 신뢰구간은 S1 머지 전까지 확인 불가(미설정).
+    // 같은 조건 반복이 1회뿐이라 신뢰구간은 0 이 아니라 확인 불가(표본 부족).
     expect(observed.value.interval).toMatchObject({
       status: "unavailable",
-      reason: "not_configured",
+      reason: "insufficient_sample",
     });
   });
 
@@ -237,7 +237,10 @@ describe("5. 근거 봉투", () => {
         status: "unavailable",
         reason: "not_recorded",
       });
-      expect(ev.index_check.status).toBe("unavailable");
+      expect(ev.index_check).toMatchObject({
+        status: "unavailable",
+        reason: "not_recorded",
+      });
       expect(ev.engine_model.value[0].model_id.status).toBe("unavailable");
       // message_ko 가 응답 맨 앞에 온다(요약을 먼저 읽게).
       expect(Object.keys(res)[0]).toBe("message_ko");
@@ -355,5 +358,214 @@ describe("9. 응답에 비공개 필드 없음", () => {
       expect(text).not.toContain("000-00-00000");
       expect(text).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
     }
+  });
+});
+
+// [수정 1] brand_name 은 허용 목록 브랜드의 Brand.name 하나뿐이다.
+describe("brand_name 출처 한정", () => {
+  it("행에 법인명·사업자번호·이메일이 섞여 와도 brand_name 은 Brand.name 이고 나머지는 어디에도 없다", async () => {
+    holder.db = makeWatchedDb({
+      brand: {
+        id: BRAND_ID,
+        name: "시험브랜드",
+        domain: "brand.example",
+        legalName: "주식회사 시험법인명",
+        businessNumber: "123-45-67890",
+        email: "owner@secret-mail.example",
+      },
+      job: makeJob(),
+    }).db;
+    for (const name of [
+      "get_brand_measurement_summary",
+      "get_answer_verdict_breakdown",
+    ]) {
+      const out = await rpc("tools/call", {
+        name,
+        arguments: { brand_id: BRAND_ID },
+      });
+      const text = JSON.stringify(out.body.result);
+      expect(text).not.toContain("주식회사 시험법인명");
+      expect(text).not.toContain("123-45-67890");
+      expect(text).not.toContain("secret-mail");
+      const keys = allKeys(out.body.result.structuredContent);
+      for (const bad of ["legalName", "businessNumber", "email"]) {
+        expect(keys.has(bad)).toBe(false);
+      }
+    }
+    const summary = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    expect(summary.data.brand_name).toBe("시험브랜드");
+  });
+});
+
+// 엔진 4개 × 질문 3개(A·B·C) = 12칸을 3회 반복한 고정 입력. 손계산:
+//   확인 칸: chatgpt A·C / claude A·B / perplexity A / gemini A → 한 회차 12건 중 6건
+//   3회 반복 → 판정이 끝난 답 36건 중 확인 18건, 칸 12개 중 확인 6칸(칸 노출률 합 6)
+function repeatRows(
+  extra: Record<string, unknown> = {},
+  opts: { language?: string | null } = {}
+): Rows {
+  const mk = (engineId: string, q: string, confirmed: boolean) => ({
+    engineId,
+    promptKind: "brand",
+    ...(opts.language === null ? {} : { promptLang: opts.language ?? "ko" }),
+    promptText: q,
+    brandMentioned: confirmed,
+    mentionQuality: confirmed ? "confirmed" : undefined,
+    errorMessage: null,
+    isStub: false,
+    citedSources: [],
+    ...extra,
+  });
+  return [
+    mk("chatgpt", "질문 A", true),
+    mk("chatgpt", "질문 B", false),
+    mk("chatgpt", "질문 C", true),
+    mk("claude", "질문 A", true),
+    mk("claude", "질문 B", true),
+    mk("claude", "질문 C", false),
+    mk("perplexity", "질문 A", true),
+    mk("perplexity", "질문 B", false),
+    mk("perplexity", "질문 C", false),
+    mk("gemini", "질문 A", true),
+    mk("gemini", "질문 B", false),
+    mk("gemini", "질문 C", false),
+  ];
+}
+
+function runsOf(n: number, rows: Rows = repeatRows()) {
+  return Array.from({ length: n }, (_v, i) =>
+    makeJob(makeResult(rows), {
+      id: `job-${i + 1}`,
+      completedAt: `2026-10-2${i}T01:00:00.000Z`,
+    })
+  ).reverse(); // 최신순
+}
+
+function setJobs(jobs: Record<string, unknown>[]) {
+  holder.db = makeWatchedDb({
+    brand: { id: BRAND_ID, name: "시험브랜드", domain: "brand.example" },
+    job: jobs[0] ?? null,
+    jobs,
+  }).db;
+}
+
+/** 시험 안의 독립 계산: Wilson 95% (칸 노출률의 합 / 칸 수). */
+function wilson(successes: number, n: number) {
+  const z = 1.959_963_984_540_054;
+  const p = successes / n;
+  const denom = 1 + (z * z) / n;
+  const center = (p + (z * z) / (2 * n)) / denom;
+  const half =
+    (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / denom;
+  return { low: center - half, high: center + half };
+}
+
+describe("M-sum 신뢰구간 연결 — 같은 조건 반복이 충분할 때만", () => {
+  it("3회 반복이면 Wilson 구간을 손계산 값과 비교해 낸다", async () => {
+    setJobs(runsOf(3));
+    const res = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    expect(res.status).toBe("ok");
+    const interval = res.evidence.observed.value.interval;
+    expect(interval.status).toBe("known");
+    const want = wilson(6, 12);
+    expect(interval.value.method).toBe("wilson");
+    expect(interval.value.low).toBeCloseTo(want.low, 9);
+    expect(interval.value.high).toBeCloseTo(want.high, 9);
+    expect(res.evidence.observed.value.collection.repeat_count).toBe(3);
+    expect(res.evidence.source_ids.value.audit_job_ids.sort()).toEqual([
+      "job-1",
+      "job-2",
+      "job-3",
+    ]);
+    expect(res.evidence.source_ids.value.sample_count).toBe(3);
+    expect(res.evidence.method_version.value.interval_method).toBe("wilson");
+    // 묶음 값과 data 가 같은 분모·건수를 쓴다(판정이 끝난 36건 중 18건).
+    expect(res.data.exposure_denominator).toBe(36);
+    expect(res.data.groups.ai_brand.exposure_count).toBe(18);
+  });
+
+  it("반복이 부족하면(2회) 구간을 내지 않고 0 이 아니라 확인 불가", async () => {
+    setJobs(runsOf(2));
+    const res = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    expect(res.status).toBe("ok");
+    expect(res.evidence.observed.value.interval).toMatchObject({
+      status: "unavailable",
+      reason: "insufficient_sample",
+    });
+    expect(res.evidence.source_ids.value.audit_job_ids).toEqual(["job-2"]);
+  });
+
+  it("언어가 다른 회차는 같은 묶음에 합치지 않는다(최신 ko 1회 + 이전 en 2회 → 반복 부족)", async () => {
+    const en = runsOf(2, repeatRows({}, { language: "en" })).map((j, i) => ({
+      ...j,
+      id: `en-${i}`,
+      completedAt: new Date(`2026-10-1${i}T01:00:00.000Z`),
+    }));
+    const ko = runsOf(1);
+    setJobs([...ko, ...en]);
+    const res = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    expect(res.evidence.observed.value.interval).toMatchObject({
+      status: "unavailable",
+      reason: "insufficient_sample",
+    });
+    expect(res.evidence.source_ids.value.audit_job_ids).toEqual(["job-1"]);
+  });
+});
+
+describe("사전 등록 칸 — 저장된 필드에서만", () => {
+  it("검색 호출 횟수·모델·엔진 세트는 저장된 값만 쓰고 없으면 확인 불가", async () => {
+    const rows = repeatRows().map((r) => {
+      if (r.engineId === "claude") {
+        return {
+          ...r,
+          usage: { webSearchRequests: 2, modelId: "anthropic/test-model" },
+        };
+      }
+      if (r.engineId === "chatgpt") {
+        return {
+          ...r,
+          usage: { webSearchRequests: 0, engineSet: "api-search-v1" },
+        };
+      }
+      return r;
+    });
+    setJobs([makeJob(makeResult(rows))]);
+    const res = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    const retrieval = res.evidence.retrieval;
+    expect(retrieval.status).toBe("known");
+    expect(retrieval.value.by_engine.claude).toEqual({
+      engine_class: "web_search",
+      retrieval: "used",
+    });
+    expect(retrieval.value.by_engine.chatgpt).toEqual({
+      engine_class: "model_knowledge",
+      retrieval: "not_used",
+    });
+    // 기록이 없는 엔진은 「안 썼다」가 아니라 모름이다.
+    expect(retrieval.value.by_engine.gemini.retrieval).toBe("unknown");
+    expect(retrieval.value.retrieval_used).toBe("mixed");
+    const models = Object.fromEntries(
+      res.evidence.engine_model.value.map((m: any) => [m.engine_id, m])
+    );
+    expect(models.claude.model_id).toMatchObject({
+      status: "known",
+      value: "anthropic/test-model",
+    });
+    expect(models.gemini.model_id.status).toBe("unavailable");
+    // 색인 확인은 저장 경로가 없다.
+    expect(res.evidence.index_check).toMatchObject({
+      status: "unavailable",
+      reason: "not_recorded",
+    });
   });
 });

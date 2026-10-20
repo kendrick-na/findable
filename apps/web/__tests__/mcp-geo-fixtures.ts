@@ -64,11 +64,15 @@ export function makeResult(
 
 export const JOB_ID = "aaaaaaaa-2222-4333-8444-555555555555";
 
-export function makeJob(result: unknown = makeResult()) {
+export function makeJob(
+  result: unknown = makeResult(),
+  overrides: { completedAt?: string; id?: string } = {}
+) {
+  const completed = overrides.completedAt ?? "2026-10-20T01:00:00.000Z";
   return {
-    id: JOB_ID,
-    completedAt: new Date("2026-10-20T01:00:00.000Z"),
-    createdAt: new Date("2026-10-20T00:55:00.000Z"),
+    id: overrides.id ?? JOB_ID,
+    completedAt: new Date(completed),
+    createdAt: new Date(Date.parse(completed) - 5 * 60 * 1000),
     result,
   };
 }
@@ -80,6 +84,8 @@ export function makeJob(result: unknown = makeResult()) {
 export function makeWatchedDb(opts: {
   brand: Record<string, unknown> | null;
   job: Record<string, unknown> | null;
+  /** 같은 브랜드의 완료 회차 여러 개(최신순). 생략하면 job 하나. */
+  jobs?: Record<string, unknown>[];
 }) {
   const reads: string[] = [];
   const writes: string[] = [];
@@ -89,7 +95,7 @@ export function makeWatchedDb(opts: {
   > = {
     auditJob: {
       findFirst: async () => opts.job,
-      findMany: async () => (opts.job ? [opts.job] : []),
+      findMany: async () => opts.jobs ?? (opts.job ? [opts.job] : []),
     },
     brand: { findFirst: async () => opts.brand },
   };
