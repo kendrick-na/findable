@@ -286,7 +286,7 @@ describe("증거 한 장 묶음", () => {
   it("영어 틀: 같은 구조, 기준일·비교 불가 문구, 금칙어 없음", () => {
     const view = buildEvidenceSheetView(assembleEvidenceSheet(parts("en", 2)));
     const text = flattenView(view);
-    expect(text).toContain("Not comparable (only 2 repeats)");
+    expect(text).toContain("Not comparable (repeat count is only 2)");
     expect(text).toContain("Not proof of effect");
     expect(text).toContain("as of 2026-10-21");
     expect(

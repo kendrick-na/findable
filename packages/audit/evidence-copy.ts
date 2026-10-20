@@ -437,7 +437,7 @@ const EN: EvidenceCopyDict = {
   method_interval_wilson: "Wilson 95% interval",
   method_line:
     "Verdicts: rules, then AI (LLM) · Interval: {interval} · Only same-condition runs are combined",
-  nc_repeats_only: "only {repeats} repeats",
+  nc_repeats_only: "repeat count is only {repeats}",
   not_comparable_labels: {
     collection_rate_shift: "collection rate shifted",
     denominator_zero: "denominator 0",

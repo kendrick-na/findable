@@ -7,7 +7,7 @@
   "language": { "language": "ko", "script": "Hang" },
   "limits": { "limits_en": "", "limits_ko": "" },
   "measured_at": { "as_of": "2026-09-28", "status": "known", "value": { "first": "2026-09-28T09:15:45.936Z", "last": "2026-09-28T09:15:45.936Z" } },
-  "method_version": { "as_of": "2026-09-28", "status": "known", "value": { "cohort": { "engine_set_key": null, "language": { "language": "ko", "script": "Hang" }, "question_set_key": null, "sampling_version": "미기록(옛 회차)", "verdict_version": null }, "interval_method": "wilson" } },
+  "method_version": { "as_of": "2026-09-28", "status": "known", "value": { "cohort": { "engine_set_key": null, "language": { "language": "ko", "script": "Hang" }, "question_set_key": null, "sampling_version": "unrecorded", "verdict_version": null }, "interval_method": "wilson" } },
   "min_repeats": 3,
   "observed": {
     "as_of": "2026-09-28",
