@@ -2217,6 +2217,12 @@
         "error": "error",
         "partial": "Paused at the time limit — continuing automatically from the next row"
       },
+      "ingestReason": {
+        "ok": "Done",
+        "timeout": "Paused at the time limit — continuing from the next row",
+        "source_unavailable": "Source key missing or no response",
+        "error": "Error while processing this source (others continue)"
+      },
       "errors": {
         "disabled": "Company discovery is off.",
         "db_not_ready": "Database not ready (migration not applied).",

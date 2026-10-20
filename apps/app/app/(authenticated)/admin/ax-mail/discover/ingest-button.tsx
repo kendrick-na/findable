@@ -4,6 +4,7 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ingestDiscoverySources } from "@/app/actions/admin/sales-discovery";
+import { ingestReasonCode } from "@/lib/ax-mail/discovery/ingest-reason";
 import type {
   ApiSource,
   IngestSourceResult,
@@ -54,14 +55,15 @@ async function ingestOneSource(
 
 function line(labels: Labels, r: IngestSourceResult): string {
   const name = labels.sourceShort[r.source];
-  if (r.status !== "ok" || !r.result) {
-    return `${name}: ${labels.ingestStatus[r.status === "ok" ? "error" : r.status]}`;
+  const reason = ingestReasonCode(r);
+  if (reason === "ok" && r.result) {
+    return `${name}: ${labels.ingestStatus.ok
+      .replace("{fetched}", String(r.fetched))
+      .replace("{created}", String(r.result.created))
+      .replace("{updated}", String(r.result.updated))
+      .replace("{ambiguous}", String(r.result.ambiguous))}`;
   }
-  return `${name}: ${labels.ingestStatus.ok
-    .replace("{fetched}", String(r.fetched))
-    .replace("{created}", String(r.result.created))
-    .replace("{updated}", String(r.result.updated))
-    .replace("{ambiguous}", String(r.result.ambiguous))}`;
+  return `${name}: ${labels.ingestReason[reason]}`;
 }
 
 /** 「데이터 불러오기」 — API 원천마다 1페이지(파일 원천은 수동 단계 그대로). */
