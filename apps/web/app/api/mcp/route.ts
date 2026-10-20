@@ -83,6 +83,11 @@ function handle(request: NextRequest): Response | Promise<Response> {
       registerFindableTools(server, {
         client,
         deps: makeBridgeDeps(),
+        // 공식 정보 점검은 허용 목록 브랜드의 등록 도메인만 읽는다(허용 목록이 비면 전부 거부).
+        factsGuard: {
+          allowlist: readonlyBrandAllowlist(),
+          db: toReadonlyDb(database),
+        },
         log: { error: (event, data) => log.error(event, data) },
       }),
     {

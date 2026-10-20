@@ -114,6 +114,9 @@ export const PROOF_ALLOWED_SENTENCES: readonly string[] = [
   "정확도를 보장하지 않습니다",
   "정확도 보장이 아닙니다",
   "최초 측정",
+  // 입력 방법을 바꿔 다시 재는 안내(기존 GAP_ACTION_KO 상수의 문구). 제품·효과 주장이 아니라 입력 수단의 대체다.
+  "한 줄 소개 입력으로 대체 가능",
+  "한 줄 소개 입력으로 대체 측정",
   // 영어
   "not independent",
   "not an independent validation set",
@@ -122,11 +125,18 @@ export const PROOF_ALLOWED_SENTENCES: readonly string[] = [
   "does not guarantee",
 ];
 
+/** 부정형이 아니어도 허용하는 일반 용법(입력 수단 안내·측정 시점 표현). 목록을 늘리지 않는다. */
+const NEUTRAL_ALLOWED_SENTENCES: ReadonlySet<string> = new Set([
+  "최초 측정",
+  "한 줄 소개 입력으로 대체 가능",
+  "한 줄 소개 입력으로 대체 측정",
+]);
+
 const NEGATION_MARKERS = ["아님", "아닙", "않", "not "] as const;
 
-/** 허용 문장 하나가 부정형인지(시험용). 「최초 측정」은 일반 용법이라 예외. */
+/** 허용 문장 하나가 부정형인지(시험용). 일반 용법 몇 개는 예외(NEUTRAL_ALLOWED_SENTENCES). */
 export function isNegativeAllowedSentence(sentence: string): boolean {
-  if (sentence === "최초 측정") {
+  if (NEUTRAL_ALLOWED_SENTENCES.has(sentence)) {
     return true;
   }
   return NEGATION_MARKERS.some((marker) => sentence.includes(marker));

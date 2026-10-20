@@ -1303,7 +1303,9 @@ export function confinedFetch(
 }
 
 /** 허용 목록 브랜드의 등록된 도메인 집합(Brand.domain). 허용 목록이 비면 빈 집합. */
-async function registeredDomains(ctx: GeoToolContext): Promise<Set<string>> {
+async function registeredDomains(
+  ctx: Pick<GeoToolContext, "allowlist" | "db">
+): Promise<Set<string>> {
   const domains = new Set<string>();
   for (const id of ctx.allowlist) {
     const brand = await ctx.db.brand.findFirst({
@@ -1323,11 +1325,18 @@ async function registeredDomains(ctx: GeoToolContext): Promise<Set<string>> {
  * 입력 주소의 호스트가 허용 목록 브랜드의 등록된 도메인과 같을 때만 점검하고, 아니면(빈 허용 목록 포함)
  * 허용 목록 밖·없는 브랜드와 같은 not_available 로 거부한다. 사설 주소 차단 등 기존 방어는 점검 안에서 그대로 유지된다.
  */
-export async function runFacts(
-  ctx: GeoToolContext,
+/**
+ * 허용 목록 브랜드의 등록 도메인만 점검하는 공용 본체(읽기 전용 모드 도구와 기존 tools.ts 직접 경로가 함께 쓴다).
+ * 허용 목록 밖·빈 허용 목록·읽을 수 없는 주소는 not_available. 사설 주소 차단 등 기존 방어는 점검 안에서 유지된다.
+ * 요약 문구는 이 함수가 직접 쓴다: 「양호」 같은 평가가 아니라 규칙 기준 통과 건수만 말한다.
+ */
+export async function guardedOfficialFacts(
+  ctx: Pick<GeoToolContext, "allowlist" | "db" | "fetchImpl">,
   url: string
-): Promise<ToolOutcome> {
-  const tool: McpReadonlyToolName = "check_official_facts";
+): Promise<
+  | { error: "not_available" }
+  | { out: Awaited<ReturnType<typeof checkOfficialFacts>>; summary_ko: string }
+> {
   const requested = hostOnly(url);
   const domains = await registeredDomains(ctx);
   if (requested === null || !domains.has(requested)) {
@@ -1337,11 +1346,42 @@ export async function runFacts(
     url,
     confinedFetch(domains, ctx.fetchImpl ?? fetch)
   );
-  // 요약 문구는 이 도구가 직접 쓴다: 「양호」 같은 평가가 아니라 규칙 기준 통과 건수만 말한다.
   const passed = out.items.filter(
     (i) => i.status === "found" || i.status === "allowed"
   ).length;
   const summary_ko = `점검한 ${out.items.length}개 항목 중 ${passed}개가 항목별 규칙 기준을 통과했습니다. 확인하지 못한 항목은 '없음'이 아니라 '확인 불가'로 표시했습니다.`;
+  return { out, summary_ko };
+}
+
+/** 기존 tools.ts 직접 경로용 응답: 기존 출력 모양(factsOutput)을 유지하고 64KB 상한을 적용한다. */
+export function legacyFactsResponse(
+  out: Awaited<ReturnType<typeof checkOfficialFacts>>,
+  summary_ko: string
+): Record<string, unknown> {
+  const full = { ...out, summary_ko };
+  if (sizeOf(full) <= MAX_RESPONSE_BYTES) {
+    return full;
+  }
+  return {
+    checked_at: out.checked_at,
+    checked_url: out.checked_url,
+    items: [],
+    limits_ko: out.limits_ko,
+    summary_ko: `응답이 크기 상한을 넘어 항목을 생략했습니다. ${OMITTED_BY_CAP}`,
+    truncated: true,
+  };
+}
+
+export async function runFacts(
+  ctx: GeoToolContext,
+  url: string
+): Promise<ToolOutcome> {
+  const tool: McpReadonlyToolName = "check_official_facts";
+  const guarded = await guardedOfficialFacts(ctx, url);
+  if ("error" in guarded) {
+    return { error: guarded.error };
+  }
+  const { out, summary_ko } = guarded;
   const gone = (detail_ko: string) => ({
     as_of: null,
     status: "unavailable" as const,

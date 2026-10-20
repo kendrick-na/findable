@@ -10,13 +10,24 @@ import {
   type Language,
   startAiVisibilityCheck,
 } from "./audit-bridge";
+import { READONLY_ERROR_MESSAGES_KO } from "./geo-schemas";
+import {
+  guardedOfficialFacts,
+  legacyFactsResponse,
+  type ReadonlyDb,
+} from "./geo-tools";
 import { ERROR_MESSAGES_KO, type McpErrorCode, mapUrlError } from "./messages";
-import { checkOfficialFacts, type FetchLike } from "./official-facts";
+import type { FetchLike } from "./official-facts";
 
 export interface ToolContext {
   /** 출처 추적용(UTM). 'claude' | 'chatgpt' | 'perplexity' | 'cursor' | 'other' */
   client: string;
   deps: BridgeDeps;
+  /**
+   * check_official_facts 가 읽어도 되는 브랜드(허용 목록 + 읽기 전용 DB 손잡이). **없으면 이 도구는 모든 주소를 거부한다(fail-closed).**
+   * 임의 URL·사설 주소·허용 도메인 밖 리다이렉트는 읽지 않는다(코덱스 4차 판정, 대표 결정 P-1).
+   */
+  factsGuard?: { allowlist: ReadonlySet<string>; db: ReadonlyDb };
   fetchImpl?: FetchLike;
   log: { error: (event: string, data?: Record<string, unknown>) => void };
 }
@@ -58,6 +69,20 @@ function fail(code: McpErrorCode) {
   };
 }
 
+/** 허용 목록 밖·없는 브랜드와 같은 모양의 거부(존재 여부를 알리지 않는다). */
+function failFacts() {
+  const payload = {
+    error: {
+      code: "not_available",
+      message_ko: READONLY_ERROR_MESSAGES_KO.not_available,
+    },
+  };
+  return {
+    isError: true as const,
+    content: [{ type: "text" as const, text: JSON.stringify(payload) }],
+  };
+}
+
 function isUrlError(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith("URL_");
 }
@@ -84,8 +109,17 @@ export function registerFindableTools(
     },
     async ({ url }) => {
       try {
-        const out = await checkOfficialFacts(url, ctx.fetchImpl);
-        return ok(out as unknown as Record<string, unknown>);
+        if (!ctx.factsGuard) {
+          return failFacts();
+        }
+        const guarded = await guardedOfficialFacts(
+          { ...ctx.factsGuard, fetchImpl: ctx.fetchImpl },
+          url
+        );
+        if ("error" in guarded) {
+          return failFacts();
+        }
+        return ok(legacyFactsResponse(guarded.out, guarded.summary_ko));
       } catch (error) {
         if (isUrlError(error)) {
           return fail(mapUrlError(error));
