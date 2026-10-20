@@ -33,6 +33,10 @@ export function mcpReadonlyModeEnabled(): boolean {
  *  - VERCEL_ENV 가 정확히 "preview" 면 허용(프리뷰 배포는 NODE_ENV=production 이어도 허용).
  *  - VERCEL_ENV 가 비어 있으면 NODE_ENV 가 정확히 "development" 또는 "test" 일 때만 허용(로컬·시험).
  *  - 그 밖(둘 다 빔·staging·오타·대소문자 변형·앞뒤 공백·production)은 전부 거부 = 운영으로 취급.
+ *
+ * 전제(관제탑 결정 2026-10-20): Findable 은 **Vercel 전용 배포**이고 자체 호스팅 운영은 없다. Vercel 은 모든 배포에
+ * VERCEL_ENV 를 넣으므로 운영(production)은 첫 줄에서 거부된다. NODE_ENV=development/test 허용은 VERCEL_ENV 가 없는
+ * 로컬 개발·시험만을 위한 것이다. 자체 호스팅 운영을 새로 만든다면 이 판정을 별도 명시적 허용값 방식으로 바꿔야 한다.
  */
 export function isPreviewOrDevRuntime(): boolean {
   const vercelEnv = process.env.VERCEL_ENV ?? "";
@@ -56,7 +60,8 @@ export function mcpTokenRequired(): boolean {
 const BRAND_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const LEADING_WWW_RE = /^www\./;
 const TRAILING_DOT_RE = /\.$/;
-// 기대 도메인에는 호스트 이름만 쓴다(주소·경로·포트·계정·공백 금지).
+// 기대 도메인에는 DNS 호스트 이름만 쓴다(주소·경로·포트·계정·공백 금지). 의도된 정책: `:`·`[`·`]` 를 막으므로
+// IPv6 리터럴은 기대 도메인이 될 수 없다(공용 URL 검사는 공개 IPv6 리터럴을 통과시키지만, MCP 점검 대상은 도메인만).
 const PIN_FORBIDDEN_RE = /[\s/\\?#@:[\]]/;
 
 /**
@@ -163,9 +168,12 @@ function sha256(value: string): Buffer {
 
 const BEARER_RE = /^Bearer\s+(.+)$/i;
 
-// 만료 시각: ISO 8601 「YYYY-MM-DDTHH:MM:SSZ」 또는 「…SS+09:00」 같은 오프셋 포함 형식만. 소수 초·날짜만·공백 등은 거부.
+// 만료 시각: ISO 8601 「YYYY-MM-DDTHH:MM:SSZ」 또는 「…SS+09:00」 같은 오프셋 포함 형식만. 소수 초·날짜만·안쪽 공백 등은 거부.
+// 앞뒤 공백은 토큰·허용 목록과 같은 정책으로 지운다. 연도는 2000~9999 만(0000~0099 는 JS Date 가 1900년대로 바꾸므로 거부).
 const STRICT_EXPIRY_RE =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:Z|([+-])(\d{2}):(\d{2}))$/;
+
+const MIN_EXPIRY_YEAR = 2000;
 
 function inRange(value: number, min: number, max: number): boolean {
   return value >= min && value <= max;
@@ -173,7 +181,7 @@ function inRange(value: number, min: number, max: number): boolean {
 
 /** 엄격 형식의 만료 시각을 밀리초로. 형식·범위(없는 날짜 포함)가 틀리면 null. */
 export function parseStrictExpiry(raw: string): number | null {
-  const m = STRICT_EXPIRY_RE.exec(raw);
+  const m = STRICT_EXPIRY_RE.exec(raw.trim());
   if (!m) {
     return null;
   }
@@ -185,6 +193,7 @@ export function parseStrictExpiry(raw: string): number | null {
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   if (
     !(
+      inRange(year, MIN_EXPIRY_YEAR, 9999) &&
       inRange(month, 1, 12) &&
       inRange(day, 1, daysInMonth) &&
       inRange(hour, 0, 23) &&

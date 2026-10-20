@@ -245,7 +245,6 @@ describe("토큰 만료 시각 엄격 형식", () => {
       "2026-10-20T23:59Z",
       "2026-10-20T23:59:59.000Z",
       "2026-10-20t23:59:59z",
-      " 2026-10-20T23:59:59Z",
       "2026-10-20T23:59:59+0900",
       "Tue Oct 20 2026 23:59:59 GMT+0900",
       "1792454399000",
@@ -257,6 +256,63 @@ describe("토큰 만료 시각 엄격 형식", () => {
     ]) {
       expect(parseStrictExpiry(raw), raw).toBeNull();
     }
+  });
+
+  it("연도 경계: 2000 미만(0000~0099 포함)은 거부, 2000~9999 는 허용", async () => {
+    const { parseStrictExpiry } = await import("../lib/mcp/geo-flags");
+    for (const raw of [
+      "0000-01-01T00:00:00Z",
+      "0050-06-15T00:00:00Z",
+      "0099-12-31T23:59:59Z",
+      "1970-01-01T00:00:00Z",
+      "1999-12-31T23:59:59Z",
+      "1999-12-31T23:59:59-09:00",
+    ]) {
+      expect(parseStrictExpiry(raw), raw).toBeNull();
+    }
+    expect(parseStrictExpiry("2000-01-01T00:00:00Z")).toBe(
+      Date.parse("2000-01-01T00:00:00Z")
+    );
+    expect(parseStrictExpiry("9999-12-31T23:59:59Z")).toBe(
+      Date.parse("9999-12-31T23:59:59Z")
+    );
+    // 윤년: 2028-02-29 는 있고 2027-02-29 는 없다.
+    expect(parseStrictExpiry("2028-02-29T00:00:00Z")).not.toBeNull();
+    expect(parseStrictExpiry("2027-02-29T00:00:00Z")).toBeNull();
+  });
+
+  it("공백 정책: 앞뒤 공백은 지우고(토큰·허용 목록과 같음), 안쪽 공백은 거부", async () => {
+    const { parseStrictExpiry } = await import("../lib/mcp/geo-flags");
+    const expected = Date.parse("2026-10-20T23:59:59Z");
+    for (const raw of [
+      " 2026-10-20T23:59:59Z",
+      "2026-10-20T23:59:59Z ",
+      "\t2026-10-20T23:59:59Z\n",
+      "  2026-10-21T08:59:59+09:00  ",
+    ]) {
+      expect(parseStrictExpiry(raw), JSON.stringify(raw)).toBe(expected);
+    }
+    for (const raw of [
+      "2026-10-20 T23:59:59Z",
+      "2026-10-20T23:59:59 Z",
+      "2026-10-20T23:59:59 +09:00",
+      "   ",
+    ]) {
+      expect(parseStrictExpiry(raw), JSON.stringify(raw)).toBeNull();
+    }
+  });
+
+  it("환경변수 만료 시각 앞뒤 공백은 토큰 검사에서도 같은 정책(지움)", async () => {
+    vi.stubEnv("FINDABLE_MCP_TOKEN_REQUIRED", "true");
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN", token);
+    vi.stubEnv(
+      "FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT",
+      " 2099-01-01T00:00:00Z "
+    );
+    const { checkReadonlyToken } = await import("../lib/mcp/geo-flags");
+    expect(checkReadonlyToken(AUTH.authorization, NOW)).toBe("ok");
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT", "0099-01-01T00:00:00Z");
+    expect(checkReadonlyToken(AUTH.authorization, NOW)).toBe("unauthorized");
   });
 
   it("엄격 형식이 아니면 미래 날짜여도 토큰을 거부한다", async () => {

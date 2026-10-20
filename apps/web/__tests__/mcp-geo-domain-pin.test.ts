@@ -65,6 +65,9 @@ describe("허용 목록 해석(parseReadonlyBrandAllowlist)", () => {
       `${BRAND_ID}=localhost`,
       `${BRAND_ID}=brand example.com`,
       `${BRAND_ID}=[::1]`,
+      // 의도된 정책: 기대 도메인은 DNS 도메인만 — 공개 IPv6 리터럴도 불가
+      `${BRAND_ID}=[2606:4700:4700::1111]`,
+      `${BRAND_ID}=2606:4700:4700::1111`,
     ]) {
       const out = parseReadonlyBrandAllowlist(raw);
       expect(out.ids.has(BRAND_ID), raw).toBe(false);
