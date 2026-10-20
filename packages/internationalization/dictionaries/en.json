@@ -2218,11 +2218,11 @@
         "partial": "Paused at the time limit — continuing automatically from the next row"
       },
       "identity": {
-              "unchecked": "Not checked",
-              "confirmed": "Confirmed (homepage business no. matches)",
-              "probable": "Region match · held",
-              "name_only": "Name only · held",
-              "mismatch": "Mismatch"
+        "unchecked": "Not checked",
+        "confirmed": "Confirmed (homepage business no. matches)",
+        "probable": "Region match · held",
+        "name_only": "Name only · held",
+        "mismatch": "Mismatch"
       },
       "ingestReason": {
         "ok": "Done",
