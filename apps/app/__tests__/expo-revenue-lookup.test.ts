@@ -207,3 +207,38 @@ describe("매출 조회 — 출처·추정 금지·이어하기", () => {
     expect(raw).not.toMatch(/email|phone|tel/i);
   });
 });
+
+describe("감사보고서 보강 — 비상장 외감 회사", () => {
+  test("감사보고서 출처는 표에 「DART 감사보고서」로 남고 접수번호·사업연도가 같이 나온다", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "expo-rev-audit-"));
+    const checkpointPath = join(dir, "ck.json");
+    const lookup = vi.fn().mockResolvedValue({
+      ambiguous: false,
+      company: null,
+      revenue: {
+        amount: 87_654_321_000,
+        basis: "audit_report" as const,
+        currency: "KRW",
+        fiscalYear: "2025",
+        fsDiv: "OFS",
+        receiptNo: "20260320000999",
+      },
+    });
+    const { now, sleep } = clockAndSleep();
+    const result = await lib.runRevenueLookup(
+      [COMPANIES[1] as (typeof COMPANIES)[number]],
+      lookup,
+      { done: {}, version: 1 } as Checkpoint,
+      { checkpointPath, hasBudget: () => true, minIntervalMs: 0, now, sleep }
+    );
+    const table = lib.revenueTable(
+      [COMPANIES[1] as (typeof COMPANIES)[number]],
+      result.checkpoint
+    );
+    expect(table).toContain("DART 감사보고서");
+    expect(table).toContain("20260320000999");
+    expect(table).toContain("2025");
+    expect(table).not.toContain("DART 사업보고서");
+    expect(await readFile(checkpointPath, "utf8")).toContain("audit_report");
+  });
+});
