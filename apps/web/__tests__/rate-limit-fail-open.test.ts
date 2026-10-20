@@ -53,6 +53,7 @@ vi.mock("@/env", () => ({
 }));
 
 import { contact } from "../app/[locale]/contact/actions/contact";
+import { contactCopyFor } from "../app/[locale]/contact/components/contact-form";
 import { POST } from "../app/api/newsletter/subscribe/route";
 
 const archived = new Error("Upstash: database is archived (synthetic)");
@@ -87,6 +88,33 @@ describe("contact form rate limit", () => {
     expect(mocks.warn.mock.calls[0]?.[1]).toMatchObject({
       scope: "contact-form",
     });
+  });
+
+  it("sends and logs once (no raw message) when the limiter times out", async () => {
+    mocks.limit.mockResolvedValue({ success: true, reason: "timeout" });
+    await expect(contact("이름", "a@example.test", "문의")).resolves.toEqual(
+      {}
+    );
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(mocks.warn).toHaveBeenCalledTimes(1);
+    expect(mocks.warn.mock.calls[0]?.[1]).toEqual({
+      scope: "contact-form",
+      kind: "timeout",
+      name: "TimeoutError",
+      status: null,
+    });
+  });
+
+  it("keeps IP/email out of the fail-open log", async () => {
+    mocks.limit.mockRejectedValue(
+      new Error(
+        'ERR command was: ["contact_form_203.0.113.7","a@example.test"]'
+      )
+    );
+    await contact("이름", "a@example.test", "문의");
+    const logged = JSON.stringify(mocks.warn.mock.calls);
+    expect(logged).not.toContain("203.0.113.7");
+    expect(logged).not.toContain("a@example.test");
   });
 
   it("blocks with a code (no raw message) when over the limit", async () => {
@@ -130,6 +158,28 @@ describe("newsletter subscribe rate limit", () => {
     });
   });
 
+  it("subscribes and logs once when the limiter times out", async () => {
+    mocks.limit.mockResolvedValue({ success: true, reason: "timeout" });
+    const res = await subscribe();
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.warn).toHaveBeenCalledTimes(1);
+    expect(mocks.warn.mock.calls[0]?.[1]).toMatchObject({
+      scope: "newsletter-subscribe",
+      kind: "timeout",
+    });
+  });
+
+  it("keeps IP/email out of the fail-open log", async () => {
+    mocks.limit.mockRejectedValue(
+      new Error('ERR command was: ["203.0.113.7:reader@example.test"]')
+    );
+    await subscribe();
+    const logged = JSON.stringify(mocks.warn.mock.calls);
+    expect(logged).not.toContain("203.0.113.7");
+    expect(logged).not.toContain("reader@example.test");
+  });
+
   it("returns 429 when over the limit", async () => {
     mocks.limit.mockResolvedValue({ success: false });
     const res = await subscribe();
@@ -144,5 +194,25 @@ describe("newsletter subscribe rate limit", () => {
     expect(res.status).toBe(200);
     expect(mocks.upsert).toHaveBeenCalledTimes(1);
     expect(mocks.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("contact form copy", () => {
+  it("picks Korean for ko, ko-KR, KO_kr and English otherwise", () => {
+    for (const locale of ["ko", "ko-KR", "KO_kr"]) {
+      expect(contactCopyFor(locale).errorRateLimited).toContain("최근 24시간");
+    }
+    for (const locale of ["en", "en-US", "de", "kok"]) {
+      expect(contactCopyFor(locale).errorRateLimited).toContain(
+        "last 24 hours"
+      );
+    }
+  });
+
+  it("does not promise a calendar day (rolling 24h window)", () => {
+    const ko = contactCopyFor("ko").errorRateLimited;
+    const en = contactCopyFor("en").errorRateLimited;
+    expect(ko).not.toMatch(/오늘|내일/);
+    expect(en).not.toMatch(/today|tomorrow/i);
   });
 });

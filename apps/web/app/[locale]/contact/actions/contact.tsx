@@ -40,7 +40,7 @@ export const contact = async (
         (error) =>
           log.warn("[rate-limit] unavailable, fail-open", {
             scope: "contact-form",
-            error: describeRateLimitError(error),
+            ...describeRateLimitError(error),
           })
       );
 

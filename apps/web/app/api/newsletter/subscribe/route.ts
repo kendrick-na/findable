@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       (error) =>
         log.warn("[rate-limit] unavailable, fail-open", {
           scope: "newsletter-subscribe",
-          error: describeRateLimitError(error),
+          ...describeRateLimitError(error),
         })
     );
     if (!decision.allowed) {

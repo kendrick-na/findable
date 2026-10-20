@@ -35,7 +35,7 @@ const COPY = {
     sending: "보내는 중…",
     // 서버액션은 오류 "코드"만 돌려준다(원시 오류 노출 방지, 2026-10-20).
     errorRateLimited:
-      "같은 곳에서 오늘 이미 문의를 보냈어요. 내일 다시 시도해 주세요.",
+      "최근 24시간 안에 같은 곳에서 이미 문의를 보냈어요. 24시간이 지난 뒤 다시 시도해 주세요.",
     errorFailed: "문의를 보내지 못했어요. 잠시 후 다시 시도해 주세요.",
   },
   en: {
@@ -48,10 +48,15 @@ const COPY = {
     messagePh: "Tell us about your brand and what you need.",
     sending: "Sending…",
     errorRateLimited:
-      "A request was already sent from here today. Please try again tomorrow.",
+      "A request was already sent from here in the last 24 hours. Please try again after 24 hours.",
     errorFailed: "We couldn't send your request. Please try again shortly.",
   },
 } as const;
+
+/** "ko", "ko-KR", "KO_kr" 처럼 와도 한국어 문구를 고른다. 그 밖은 영어. */
+const KOREAN_LOCALE = /^ko(?:[-_]|$)/i;
+export const contactCopyFor = (locale: string) =>
+  KOREAN_LOCALE.test(locale) ? COPY.ko : COPY.en;
 
 /**
  * 상담 신청 폼 (2026-07-30 플로우 감사 🔴4 해소).
@@ -60,7 +65,7 @@ const COPY = {
  * → 이름/이메일/문의 3필드 + 기존 서버액션 contact(Resend 발송) 연결.
  */
 export const ContactForm = ({ dictionary, locale }: ContactFormProps) => {
-  const t = locale === "ko" ? COPY.ko : COPY.en;
+  const t = contactCopyFor(locale);
 
   const [state, formAction, isPending] = useActionState<FormState, FormData>(
     async (_prev, formData) => {
