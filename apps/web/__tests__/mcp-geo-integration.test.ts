@@ -201,7 +201,7 @@ describe("교차 통합: 반복 3회 이상이면 같은 숫자가 끝까지 이
     const mcp = await mcpSummary();
     expect(mcp.status).toBe("ok");
 
-    // S2: MCP 의 못 잰 사유까지 받아 증거 한 장을 조립한다
+    // S2: MCP 의 측정하지 못한 이유까지 받아 증거 한 장을 조립한다
     const sheet = sheetFrom(afterAgg, pair, mcp);
     expect(sheet.finding_kind).toBe("observed");
 
@@ -238,7 +238,7 @@ describe("교차 통합: 비교 불가·확인 불가가 끝까지 전파된다"
       reason: "insufficient_sample",
       status: "unavailable",
     });
-    // 못 잰 답(엔진 오류 1건)은 사유 표에 남고 분모(판정이 끝난 답)에는 들어가지 않는다. 반복이 모자라 묶지 않으므로 최신 1회(12건)만 본다.
+    // 측정하지 못한 답(엔진 오류 1건)은 사유 표에 남고 분모(판정이 끝난 답)에는 들어가지 않는다. 반복이 모자라 묶지 않으므로 최신 1회(12건)만 본다.
     const gap = mcp.evidence.unmeasured.find(
       (u: Record<string, unknown>) => u.code === "engine_error"
     );

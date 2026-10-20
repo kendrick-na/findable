@@ -193,7 +193,7 @@ describe("한계 3줄", () => {
 });
 
 describe("값 상태·표시", () => {
-  it("값 상태 4종을 구분한다(관측 0 은 쟀더니 0 일 때만)", () => {
+  it("값 상태 4종을 구분한다(관측 0 은 측정했더니 0 일 때만)", () => {
     const known0: Known<number> = { as_of: null, status: "known", value: 0 };
     expect(valueStateOf(known0, (v) => v === 0)).toBe("observed_zero");
     expect(
@@ -294,7 +294,7 @@ describe("증거 한 장 묶음", () => {
     ).toEqual([]);
   });
 
-  it("못 잰 사유는 0 이 아니라 사유·칸 수·비율·다음 행동과 함께", () => {
+  it("측정하지 못한 이유는 0 이 아니라 사유·칸 수·비율·다음 행동과 함께", () => {
     const view = buildEvidenceSheetView(assembleEvidenceSheet(parts("ko", 3)));
     const table = view.sections.find((s) => s.id === "unmeasured")?.table;
     expect(table?.headers).toEqual(["사유", "칸 수", "비율", "다음 행동"]);

@@ -91,7 +91,7 @@ describe("buildUnmeasuredBreakdown", () => {
     expect(b.rows.reduce((s, r) => s + r.count, 0)).toBe(3);
   });
 
-  it("못 잰 것이 0건이면 빈 배열을 명시한다(none_unmeasured)", () => {
+  it("측정하지 못한 것이 0건이면 빈 배열을 명시한다(none_unmeasured)", () => {
     const b = buildUnmeasuredBreakdown([
       withRows("a", [ok("chatgpt")]),
       withRows("b", [ok("claude")]),

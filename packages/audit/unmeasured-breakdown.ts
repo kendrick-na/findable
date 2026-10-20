@@ -1,7 +1,7 @@
-// packages/audit/unmeasured-breakdown.ts — A4 못 잰 사유 집계 (순수 함수, 2026-10-21)
+// packages/audit/unmeasured-breakdown.ts — A4 측정하지 못한 이유 집계 (순수 함수, 2026-10-21)
 //
-// 하는 일: 저장된 회차에서 「왜 못 쟀나」를 사유별 건수·비율·행동 안내(K0 UnmeasuredRow[])로 센다.
-//   못 잰 것을 0건으로 세거나 숨기지 않는다.
+// 하는 일: 저장된 회차에서 「왜 측정하지 못했나」를 사유별 건수·비율·행동 안내(K0 UnmeasuredRow[])로 센다.
+//   측정하지 못한 것을 0건으로 세거나 숨기지 않는다.
 //
 // 입력(DB 는 호출자가 읽어서 넘긴다): runs[] = { job_id, result?: unknown, error_message?: string | null }
 //   - 실패한 회차는 error_message 를 넘긴다(classifyFailureMessage 가 사유 코드로 옮김, `UNMEASURABLE:` 머리표 지원).
@@ -12,12 +12,12 @@
 //   · 회차(사이트·질문 수준) 18개 = GapCode — 라벨 GAP_LABEL_KO·행동 GAP_ACTION_KO 를 **재사용**(measurement-gap.ts).
 //     분모 = 입력 회차 수.
 //   · 응답(엔진 수준) 3개 — 이 파일에서 새로 정의(아래 RESPONSE_REASON_*):
-//       stub_response     응답 행의 isStub (키 없어 만든 가짜 응답 — 「잰 것」이 아님; 오류 문구가 같이 있어도 스텁으로만 센다)
+//       stub_response     응답 행의 isStub (키 없어 만든 가짜 응답 — 「측정한 것」이 아님; 오류 문구가 같이 있어도 스텁으로만 센다)
 //       engine_error      응답 행의 errorMessage (스텁이 아닌 것)
 //       search_unavailable 응답 행의 usage.searchUnavailable (검색을 원했지만 검색 없이 답함 → 「출처 0」은 미수집)
 //     한 행은 위 셋 중 하나로만 센다(스텁 > 오류 > 검색 불가). 분모 = 응답 행 수(서비스가 끝난 hyperclova 행은 뺌).
 //
-// 결과 status: 입력 회차가 0 이면 `no_data`(「못 잰 게 없음」이 아니라 「볼 자료 없음」), 사유가 하나도 없으면
+// 결과 status: 입력 회차가 0 이면 `no_data`(「측정하지 못한 게 없음」이 아니라 「볼 자료 없음」), 사유가 하나도 없으면
 //   `none_unmeasured` + rows 빈 배열(없음을 명시), 있으면 `has_unmeasured`.
 
 import { answerGroup } from "./answer-buckets";

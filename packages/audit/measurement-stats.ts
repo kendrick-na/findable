@@ -26,7 +26,7 @@ export const Z_95 = 1.959_963_984_540_054;
 
 /**
  * 분자/분모 비율(0~1). **분모가 0 이하이거나 숫자가 아니면 null — 0 이 아니다.**
- * 「못 쟀음」과 「0건」은 다른 상태다.
+ * 「측정하지 못함」과 「0건」은 다른 상태다.
  */
 export function safeRatio(part: number, whole: number): number | null {
   if (!(Number.isFinite(part) && Number.isFinite(whole)) || whole <= 0) {

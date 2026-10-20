@@ -1,6 +1,6 @@
 ---
 name: geo-visibility-audit
-description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summary, get_answer_verdict_breakdown, check_official_facts)을 읽고 자사 AI 답변 가시성 요약을 쓸 때 쓰는 규칙. 못 잰 것을 0으로 세지 않고, 분모·표본·반복·한계를 항상 병기하며, 효과를 단정하지 않는다. Use when summarizing Findable read-only measurement responses; never claim effect, never treat unmeasured as zero.
+description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summary, get_answer_verdict_breakdown, check_official_facts)을 읽고 자사 AI 답변 가시성 요약을 쓸 때 쓰는 규칙. 측정하지 못한 것을 0으로 세지 않고, 분모·표본·반복·한계를 항상 병기하며, 효과를 단정하지 않는다. Use when summarizing Findable read-only measurement responses; never claim effect, never treat unmeasured as zero.
 ---
 
 # geo-visibility-audit — 측정 응답을 읽고 요약 쓰기
@@ -12,7 +12,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 
 | 한다 | 하지 않는다 |
 |---|---|
-| 응답의 숫자를 **분모·표본·반복·못 잰 것**과 함께 한국어로 요약 | 응답에 없는 사실(고객·실적·수상·인력·매출·순위)을 채우기 |
+| 응답의 숫자를 **분모·표본·반복·측정하지 못한 것**과 함께 한국어로 요약 | 응답에 없는 사실(고객·실적·수상·인력·매출·순위)을 채우기 |
 | 「제대로 앎」「다른 회사로 앎」「모름」 같은 **관찰 분류**를 그대로 전달 | 원인·효과·지속 효과·트래픽·매출을 말하기 |
 | 처방 이야기가 나오면 **근거 등급과 실패 조건**을 같이 말하기 | 처방을 「하면 된다」로 단정하기 |
 | 한계 문구를 **항상** 붙이기 | 한계를 빼고 숫자만 보여 주기 |
@@ -21,7 +21,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 
 | 도구 | 무엇을 주나 |
 |---|---|
-| `get_brand_measurement_summary` | 브랜드 측정 요약(시도·수집 칸, 관찰 비율, 못 잰 사유) |
+| `get_brand_measurement_summary` | 브랜드 측정 요약(시도·수집 칸, 관찰 비율, 측정하지 못한 이유) |
 | `get_answer_verdict_breakdown` | 답변 판정 분포(5분류) |
 | `check_official_facts` | 공식 사이트에서 읽힌 사실 확인(저장 결과가 아니라 즉석 확인) |
 
@@ -39,12 +39,12 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 
 | 상태 | 읽는 법 |
 |---|---|
-| `known` 이고 값이 0 | **쟀더니 0건.** 이때만 「0건」이라고 쓴다 |
+| `known` 이고 값이 0 | **측정했더니 0건.** 이때만 「0건」이라고 쓴다 |
 | `unavailable` + `not_collected` | 수집을 시도했지만 값이 안 옴 → **「미수집」** |
 | `unavailable` + `not_configured` | 애초에 측정·확인을 설정하지 않음 → **「미설정」** |
 | `unavailable` + 그 밖의 사유 | **「확인 불가(사유)」**. 사유 목록은 `not_recorded`·`not_applicable`·`source_missing`·`engine_error`·`withheld_not_publishable`·`insufficient_sample` |
 
-**「못 쟀음」은 0이 아니다.** `unavailable` 인 값을 0, 없음, 낮음으로 바꿔 쓰지 않는다. 값마다 `as_of`(기준일)가 있으면 같이 쓰고, `as_of` 가 null 이면 「기준일 모름」이라고 쓴다(최신이라는 뜻이 아니다).
+**「측정하지 못함」은 0이 아니다.** `unavailable` 인 값을 0, 없음, 낮음으로 바꿔 쓰지 않는다. 값마다 `as_of`(기준일)가 있으면 같이 쓰고, `as_of` 가 null 이면 「기준일 모름」이라고 쓴다(최신이라는 뜻이 아니다).
 
 ### 3-2. 근거 봉투 필드
 
@@ -53,7 +53,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 | `observed` | `exposure_count` / `denominator` 를 **둘 다** 쓴다. 비율은 0~1 소수이므로 퍼센트로 바꿀 때 반올림 사실을 밝힌다. `denominator` 가 0 이면 비율을 쓰지 않는다(`insufficient_sample`) |
 | `observed.collection` | 「N건 중 M건 수집, 반복 K회」. `suppressed` 가 true 면 표시를 줄이라는 뜻이니 비율 대신 수집 현황만 쓴다 |
 | `observed.interval` | 구간이 `known` 이면 비율 옆에 구간을 쓴다. `unavailable` 이면 「구간 미제공」 |
-| `unmeasured` | **빈 배열도 말한다**(「못 잰 것 0건」). 행이 있으면 사유 라벨과 건수를 모두 쓴다 |
+| `unmeasured` | **빈 배열도 말한다**(「측정하지 못한 것 0건」). 행이 있으면 사유 라벨과 건수를 모두 쓴다 |
 | `method_version` | 판정 버전·측정 방식이 다른 값은 **합치지 않는다** |
 | `language` | 측정이 확인된 언어는 한국어뿐이다. `mixed`·`en` 은 다른 칸으로 따로 쓴다 |
 | `retrieval` | 웹 검색을 쓴 엔진과 모델 지식으로 답한 엔진을 **나눠** 쓴다. 섞어 평균내지 않는다 |
@@ -79,7 +79,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 
 1. **한 줄 결론(관찰만)**: 「고정한 질문·엔진 조건에서 N건 중 M건에서 제대로 앎으로 판정됐습니다」 꼴. 원인·효과 문장 금지.
 2. **분모·수집 현황**: 분모, 시도·수집 칸, 반복 횟수, 구간(있으면).
-3. **못 잰 것**: `unmeasured` 전부(빈 배열이면 「0건」이라고 명시).
+3. **측정하지 못한 것**: `unmeasured` 전부(빈 배열이면 「0건」이라고 명시).
 4. **조건**: 언어, 판정·측정 방식 버전, 웹 검색 엔진 / 모델 지식 엔진 구분, 기준일.
 5. **한계**: `limits_ko` 그대로. 아래 3가지가 빠졌으면 직접 덧붙인다 — (가) 표본이 한쪽으로 치우칠 수 있다 (나) 같은 질문의 반복은 독립 표본이 아니라 변동성이다 (다) 판정은 AI가 했고 검수는 단일 검수자다.
 6. (요청이 있을 때만) **처방 이야기** — 5절.
@@ -115,7 +115,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 ## 9. 점검표 (보내기 전)
 
 - [ ] 모든 비율 옆에 분모(N건 중 M건)가 있다
-- [ ] 「못 잰 것」을 0으로 쓴 곳이 없다 / `unmeasured` 를 빠짐없이 썼다
+- [ ] 「측정하지 못한 것」을 0으로 쓴 곳이 없다 / `unmeasured` 를 빠짐없이 썼다
 - [ ] 반복 횟수와 수집 현황을 썼다
 - [ ] 한계 문구를 끝에 붙였다
 - [ ] 효과·원인·순위 단정이 없다

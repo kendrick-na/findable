@@ -8,7 +8,7 @@
 //   4. 한계 3줄 고정 `buildLimits` — 항상 3줄이 나온다.
 //
 // 표시 규칙: 비율은 0~1 소수로 들어와 **표시 단계에서만** 정수 퍼센트로 반올림한다.
-//   값 상태 4종(관측 0·미수집·미설정·확인 불가)과 기준일을 값마다 붙인다. 못 잰 값을 0 으로 쓰지 않는다.
+//   값 상태 4종(관측 0·미수집·미설정·확인 불가)과 기준일을 값마다 붙인다. 측정하지 못한 값을 0 으로 쓰지 않는다.
 //   효과·원인·지속 효과·트래픽·매출을 말하지 않는다.
 //
 // ⚠️ 금칙어 검사는 부분 문자열 단순 차단이 아니다: 필수 한계 문장 「독립이 아님」이 「독립」에 걸리지 않도록
@@ -114,7 +114,7 @@ export const PROOF_ALLOWED_SENTENCES: readonly string[] = [
   "정확도를 보장하지 않습니다",
   "정확도 보장이 아닙니다",
   "최초 측정",
-  // 입력 방법을 바꿔 다시 재는 안내(기존 GAP_ACTION_KO 상수의 문구). 제품·효과 주장이 아니라 입력 수단의 대체다.
+  // 입력 방법을 바꿔 다시 측정하는 안내(기존 GAP_ACTION_KO 상수의 문구). 제품·효과 주장이 아니라 입력 수단의 대체다.
   "한 줄 소개 입력으로 대체 가능",
   "한 줄 소개 입력으로 대체 측정",
   // 영어
@@ -309,7 +309,7 @@ const KO: EvidenceCopyDict = {
     method: "방법",
     numbers: "수치",
     sample: "표본",
-    unmeasured: "못 잰 사유",
+    unmeasured: "측정하지 못한 이유",
   },
   interval_line: "95% 구간 {low}~{high}",
   interval_unavailable: "구간: 계산 불가",
@@ -366,7 +366,7 @@ const KO: EvidenceCopyDict = {
   suppressed_line:
     "표본이 표시 기준에 못 미쳐 비율을 숨겼습니다(건수는 위 줄 참고).",
   title: "증거 한 장",
-  un_empty: "기록된 못 잰 항목이 없습니다.",
+  un_empty: "기록된 측정하지 못한 항목이 없습니다.",
   un_headers: ["사유", "칸 수", "비율", "다음 행동"],
 };
 
@@ -579,7 +579,7 @@ export type ValueState =
   | "observed_zero"
   | "unavailable";
 
-/** 값 상태 4종(+일반 관측). 관측 0 은 「쟀더니 0」일 때만이다. */
+/** 값 상태 4종(+일반 관측). 관측 0 은 「측정했더니 0」일 때만이다. */
 export function valueStateOf<T>(
   known: Known<T>,
   isZero: (value: T) => boolean = () => false
@@ -1101,7 +1101,7 @@ export function buildEvidenceSheetView(
   };
 }
 
-/** 묶음 전체를 한 문자열로(금칙어 훑기용). 못 잰 표의 「다음 행동」 같은 외부 상수 문구도 포함한다. */
+/** 묶음 전체를 한 문자열로(금칙어 훑기용). 측정하지 못한 항목 표의 「다음 행동」 같은 외부 상수 문구도 포함한다. */
 export function flattenView(view: EvidenceSheetView): string {
   const parts: string[] = [
     view.title,

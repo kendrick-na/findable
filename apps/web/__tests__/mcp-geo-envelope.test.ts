@@ -124,7 +124,7 @@ describe("6. 고정 입력 재계산 일치 — M-sum", () => {
       exposure_count: 1,
       exposure_rate: 1,
     });
-    // 못 잰 것은 0 으로 나오지 않고 못 잰 사유 표에 건수로 남는다.
+    // 측정하지 못한 것은 0 으로 나오지 않고 측정하지 못한 이유 표에 건수로 남는다.
     const gap = res.evidence.unmeasured.find(
       (u: any) => u.code === "engine_error"
     );

@@ -1,6 +1,6 @@
 // 읽기 전용 MCP 도구 3개 — `FINDABLE_MCP_READONLY_MODE_ENABLED` 가 켜졌을 때만 등록된다.
 //
-//   get_brand_measurement_summary   M-sum   저장된 최신 측정 → 노출률·수집률·못 잰 사유(근거 봉투)
+//   get_brand_measurement_summary   M-sum   저장된 최신 측정 → 노출률·수집률·측정하지 못한 이유(근거 봉투)
 //   get_answer_verdict_breakdown    M-brk   5분류 건수와 비율(분모는 기존 규칙 그대로)
 //   check_official_facts            M-facts 기존 점검 재사용(같은 모드·토큰 뒤에서만)
 //
@@ -911,7 +911,7 @@ const OMITTED_BY_CAP = "응답 크기 상한으로 생략했습니다.";
 
 /**
  * 직렬화 크기의 하드 상한. 출처 URL 을 줄여도 넘으면 단계적으로 줄인다:
- *  1) 못 잰 사유·엔진 모델·엔진별 검색 정보 목록을 20개로, 2) 엔진 모델·검색 정보를 「생략」으로 바꾸고 못 잰 사유를 5개로,
+ *  1) 측정하지 못한 이유·엔진 모델·엔진별 검색 정보 목록을 20개로, 2) 엔진 모델·검색 정보를 「생략」으로 바꾸고 측정하지 못한 이유를 5개로,
  *  3) 그래도 넘으면 숫자 없이 「확인 불가」 최소 응답. 줄였으면 truncation.truncated 를 true 로 둔다.
  * 줄인 사실은 숨기지 않는다(생략한 칸은 Known.unavailable 로 이유를 적는다).
  */
@@ -1452,7 +1452,7 @@ export function registerGeoReadonlyTools(
     {
       title: "브랜드 측정 요약 조회",
       description:
-        "허용 목록에 있는 브랜드의 저장된 최신 측정 1회에서 AI 답변 노출률, 수집률, 못 잰 사유를 읽어 돌려줍니다. 새 측정을 시작하지 않고 AI 엔진에 질의하지 않습니다. 응답에 근거 봉투(측정 시각, 방식, 못 잰 항목)가 붙고, 값이 없는 칸은 0이 아니라 확인 불가로 표시됩니다. / Returns the exposure rate, collection rate and unmeasured reasons from the latest stored measurement of an allow-listed brand. Starts no measurement and queries no AI engine.",
+        "허용 목록에 있는 브랜드의 저장된 최신 측정 1회에서 AI 답변 노출률, 수집률, 측정하지 못한 이유를 읽어 돌려줍니다. 새 측정을 시작하지 않고 AI 엔진에 질의하지 않습니다. 응답에 근거 봉투(측정 시각, 방식, 측정하지 못한 항목)가 붙고, 값이 없는 칸은 0이 아니라 확인 불가로 표시됩니다. / Returns the exposure rate, collection rate and unmeasured reasons from the latest stored measurement of an allow-listed brand. Starts no measurement and queries no AI engine.",
       inputSchema: z.object({ brand_id: brandIdField }),
       outputSchema: anyOutput,
       annotations: {

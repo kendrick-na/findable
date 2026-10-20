@@ -8,7 +8,7 @@
 //   · 이름 주의: 기존 `evidence-series.ts`(조치 완료 기록용)와 다른 파일이다.
 //
 // 규칙(헷갈리지 않게):
-//   1. 못 잰 값은 0 이 아니다. 비어 있으면 `Known.unavailable` + 사유, 분모 0 이면 rate=null.
+//   1. 측정하지 못한 값은 0 이 아니다. 비어 있으면 `Known.unavailable` + 사유, 분모 0 이면 rate=null.
 //   2. 반복 횟수가 기준(`min_repeats`, 사전 등록 문서에서 온 값)에 못 미치면 반드시 not_comparable.
 //      기준을 모르면(null) 판단할 수 없으므로 마찬가지로 not_comparable(안전 쪽).
 //   3. `footer.not_effect_proof` 는 항상 true.
@@ -142,7 +142,7 @@ function sanitizeComparison(
   };
 }
 
-/** 못 잰 사유 행 정리: 순서·건수는 그대로, 분모 0 이면 rate 를 0 이 아니라 null 로 둔다. */
+/** 측정하지 못한 이유 행 정리: 순서·건수는 그대로, 분모 0 이면 rate 를 0 이 아니라 null 로 둔다. */
 function normalizeUnmeasured(rows: readonly UnmeasuredRow[]): UnmeasuredRow[] {
   return rows.map((row) => ({
     ...row,

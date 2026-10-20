@@ -197,7 +197,7 @@ describe("fromStoredRuns — 비교 불가·확인 불가 전파(0 아님)", () 
     expect(ba?.status === "known" && ba.value.not_comparable).not.toBeNull();
   });
 
-  it("엔진 오류 응답은 0 이 아니라 못 잰 사유 표에 남고 분모에서 빠진다", () => {
+  it("엔진 오류 응답은 0 이 아니라 측정하지 못한 이유 표에 남고 분모에서 빠진다", () => {
     const err = runs(
       "e",
       ["25", "26", "27"],
@@ -222,7 +222,7 @@ describe("fromStoredRuns — 비교 불가·확인 불가 전파(0 아님)", () 
 });
 
 describe("증거 한 장 최종 출력 금칙어 훑기", () => {
-  it("못 잰 사유 표에 모든 회차 수준 사유 문구가 들어가도 ko·en 출력에 금칙어가 없다", () => {
+  it("측정하지 못한 이유 표에 모든 회차 수준 사유 문구가 들어가도 ko·en 출력에 금칙어가 없다", () => {
     const sheet = fromStoredRuns(
       { after: after3(), before: before3() },
       OPTIONS

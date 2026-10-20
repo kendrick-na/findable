@@ -6,7 +6,7 @@
 | 입력 조각(`EvidenceSheetParts`) | 출력 위치(K0) | 비었을 때 |
 |---|---|---|
 | `observed` | `envelope.observed` | 확인 불가(사유 유지) + `not_comparable` |
-| `unmeasured[]` | `envelope.unmeasured` | 빈 배열 그대로(못 잰 것 0건 명시). 분모 0이면 `rate`는 0이 아니라 null |
+| `unmeasured[]` | `envelope.unmeasured` | 빈 배열 그대로(측정하지 못한 것 0건 명시). 분모 0이면 `rate`는 0이 아니라 null |
 | `before_after` | `before_after`, `envelope.comparison` | null = 해당 없음 |
 | `retrieval`·`engine_model`·`method_version`·`measured_at`·`source_ids` | 같은 이름 | 확인 불가(`not_recorded`) |
 | `index_check` | `envelope.index_check` | 확인 불가(`not_configured`) |

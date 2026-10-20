@@ -1,7 +1,7 @@
 // 저장된 AuditJob.result → 증거 한 장 입력 (fromStoredRuns, 2026-10-20 통합 전담)
 //
 // 하는 일: DB 에서 읽어 온 저장 회차(엔진 응답 배열 포함)를 S1 집계(aggregateRepeats)·짝짓기(pairComparison)·
-//   못 잰 사유 집계(buildUnmeasuredBreakdown)에 통과시키고, S2 조립기(assembleEvidenceSheet)로 `EvidenceSheetInput` 을 만든다.
+//   측정하지 못한 이유 집계(buildUnmeasuredBreakdown)에 통과시키고, S2 조립기(assembleEvidenceSheet)로 `EvidenceSheetInput` 을 만든다.
 // 하지 않는 일: DB·네트워크·환경변수·시계 읽기, 새 계산(분모·구간은 S1 그대로), 문구 만들기(EV-c 몫),
 //   처방군·대조군 하드코딩(assignment 는 호출자가 사전 등록 문서에서 넘긴다).
 // 전파 규칙: 반복 부족·질문 언어 기록 없음·게시 불가는 숫자를 만들지 않고 「비교 불가/확인 불가」로 둔다(0 아님).

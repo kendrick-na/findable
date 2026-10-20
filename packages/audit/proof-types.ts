@@ -3,7 +3,7 @@
 // 규칙(이 파일 맨 위 주석으로 남긴다):
 //  1. 타입·인터페이스·열거 값 목록(as const 튜플)만. 함수·class·계산·문구·환경변수·zod·DB 금지.
 //  2. import 는 `import type` 만.
-//  3. 값이 없으면 0 이 아니라 Known<T> 의 unavailable(+사유). 「못 쟀음」과 「0건」은 다른 상태다.
+//  3. 값이 없으면 0 이 아니라 Known<T> 의 unavailable(+사유). 「측정하지 못함」과 「0건」은 다른 상태다.
 //  4. 비율은 0~1 소수(반올림 없음). answer-buckets 의 bucketRate(0~100 정수)와 섞지 않는다.
 //  5. 20:00 고정 뒤 변경은 통합 전담만, 필드 추가(선택 필드)만 허용. 필드 삭제·이름 변경·의미 변경 금지.
 
@@ -19,7 +19,7 @@ export const UNAVAILABLE_REASONS = [
   "not_configured", // 미설정: 애초에 측정·확인을 설정하지 않음(예: 색인 확인 방법 없음, 질문 세트 미지정)
   "not_applicable", // 이 엔진·경로에는 해당 개념이 없음
   "source_missing", // 원자료(회차)를 찾지 못함
-  "engine_error", // 엔진 오류로 못 쟀음
+  "engine_error", // 엔진 오류로 측정하지 못함
   "withheld_not_publishable", // 게시 불가 판정(isPublishableAuditResult 가 아님)이라 숫자를 내지 않음
   "insufficient_sample", // 표본·반복·분모가 모자라 계산하지 않음(분모 0 포함)
 ] as const;
@@ -113,14 +113,14 @@ export interface ObservedValues {
   interval: Known<Interval>;
 }
 
-// [5. 못 잰 사유]
+// [5. 측정하지 못한 이유]
 
 /** GapCode(사이트·질문 수준 18개)에 엔진 응답 수준 사유 3개를 더한다. */
 export type UnmeasuredReasonCode =
   | GapCode
   | "engine_error" // 응답 행의 errorMessage
   | "search_unavailable" // usage.searchUnavailable (검색을 원했지만 검색 없이 답함 → 「출처 0」은 미수집)
-  | "stub_response"; // isStub (키 없어 만든 가짜 응답 — 「잰 것」이 아님)
+  | "stub_response"; // isStub (키 없어 만든 가짜 응답 — 「측정한 것」이 아님)
 
 export interface UnmeasuredRow {
   action_ko: string; // 기존 GAP_ACTION_KO 재사용(없으면 A4 가 정의)
@@ -257,7 +257,7 @@ export interface LimitsBlock {
 
 /**
  * 근거 봉투 최소형. 「형태가 있다」는 것이지 「값이 맞다」는 보증이 아니다.
- * 없는 칸은 오류가 아니라 Known.unavailable 로 표시한다. unmeasured 는 빈 배열도 명시(못 잰 것 0건).
+ * 없는 칸은 오류가 아니라 Known.unavailable 로 표시한다. unmeasured 는 빈 배열도 명시(측정하지 못한 것 0건).
  */
 export interface EvidenceEnvelope {
   comparison: Known<PairedComparisonSummary> | null; // null = 이 응답에 전후 비교가 해당 없음
