@@ -239,3 +239,34 @@ describe("요약 조회는 brandId 만으로도 허용(하위 호환)", () => {
     expect("response" in out).toBe(true);
   });
 });
+
+describe("허용 목록 brandId 형식 제한", () => {
+  it("영문·숫자·-·_ 만 허용하고, 안쪽 공백·그 밖의 문자는 그 항목을 버린다", async () => {
+    const { parseReadonlyBrandAllowlist } = await import(
+      "../lib/mcp/geo-flags"
+    );
+    for (const bad of [
+      "brand id",
+      "brand\tid",
+      "브랜드",
+      "id;x",
+      "id/1",
+      "id.1",
+      "a".repeat(129),
+    ]) {
+      for (const raw of [bad, `${bad}=brand.example`]) {
+        const out = parseReadonlyBrandAllowlist(raw);
+        expect(out.ids.size, raw).toBe(0);
+        expect(out.pins.size, raw).toBe(0);
+        expect(out.rejected, raw).toBe(1);
+      }
+    }
+    const good = parseReadonlyBrandAllowlist(
+      ` ${BRAND_ID} , Brand_2=brand.example, a-b_C9 `
+    );
+    expect([...good.ids].sort()).toEqual(
+      [BRAND_ID, "Brand_2", "a-b_C9"].sort()
+    );
+    expect(good.rejected).toBe(0);
+  });
+});

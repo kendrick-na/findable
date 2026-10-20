@@ -17,7 +17,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { mcpEnabled } from "../../../lib/mcp/flags";
 import {
   checkReadonlyToken,
-  isProductionRuntime,
+  isPreviewOrDevRuntime,
   mcpReadonlyModeBlockedHere,
   mcpReadonlyModeEnabled,
   readonlyBrandAllowlist,
@@ -92,16 +92,16 @@ function handle(request: NextRequest): Response | Promise<Response> {
         client,
         deps: makeBridgeDeps(),
         // 공식 정보 점검은 허용 목록 브랜드의 등록 도메인만 읽는다(허용 목록이 비면 전부 거부).
-        // 운영 환경에서는 가드를 주지 않아 이 도구가 모든 주소를 거부한다(프리뷰 한정).
-        ...(isProductionRuntime()
-          ? {}
-          : {
+        // 프리뷰·개발 환경이 아니면(운영·알 수 없는 값) 가드를 주지 않아 이 도구가 모든 주소를 거부한다(fail-closed).
+        ...(isPreviewOrDevRuntime()
+          ? {
               factsGuard: {
                 allowlist: readonlyBrandAllowlist(),
                 db: toReadonlyDb(database),
                 domainPins: readonlyBrandDomainPins(),
               },
-            }),
+            }
+          : {}),
         log: { error: (event, data) => log.error(event, data) },
       }),
     {

@@ -160,3 +160,119 @@ describe("프리뷰 토큰 만료", () => {
     expect(JSON.stringify(out.body)).not.toContain(token);
   });
 });
+
+describe("운영 판정 허용 목록(fail-closed) — isPreviewOrDevRuntime", () => {
+  const cases: [string, string, string, boolean][] = [
+    ["둘 다 없음", "", "", false],
+    ["staging", "staging", "production", false],
+    ["오타 previw", "previw", "production", false],
+    ["대문자 PREVIEW", "PREVIEW", "production", false],
+    ["앞뒤 공백 ' preview '", " preview ", "production", false],
+    ["production", "production", "production", false],
+    ["development(Vercel 값)", "development", "development", false],
+    ["VERCEL_ENV 없음 + NODE_ENV=production", "", "production", false],
+    ["VERCEL_ENV 없음 + NODE_ENV 오타", "", "devlopment", false],
+    ["preview + NODE_ENV=production(허용)", "preview", "production", true],
+    ["VERCEL_ENV 없음 + dev(허용)", "", "development", true],
+    ["VERCEL_ENV 없음 + test(허용)", "", "test", true],
+  ];
+  for (const [label, vercelEnv, nodeEnv, expected] of cases) {
+    it(`${label} → ${expected ? "허용" : "거부"}`, async () => {
+      vi.stubEnv("VERCEL_ENV", vercelEnv);
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      const { isPreviewOrDevRuntime, mcpReadonlyModeBlockedHere } =
+        await import("../lib/mcp/geo-flags");
+      expect(isPreviewOrDevRuntime()).toBe(expected);
+      previewOn();
+      expect(mcpReadonlyModeBlockedHere()).toBe(!expected);
+    });
+  }
+
+  it("거부 환경(staging·둘 다 없음·PREVIEW)에서는 읽기 전용 모드가 503 이고 DB·네트워크를 건드리지 않는다", async () => {
+    for (const [vercelEnv, nodeEnv] of [
+      ["staging", "production"],
+      ["", ""],
+      ["PREVIEW", "production"],
+    ] as const) {
+      previewOn();
+      vi.stubEnv("VERCEL_ENV", vercelEnv);
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      expect((await rpc("tools/list", {}, AUTH)).status, vercelEnv).toBe(503);
+    }
+    expect(watched.reads).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("거부 환경에서는 기존 직접 경로의 점검 도구도 모든 주소를 거부한다(fetch 0)", async () => {
+    vi.stubEnv("VERCEL_ENV", "staging");
+    vi.stubEnv(
+      "FINDABLE_MCP_READONLY_BRAND_ALLOWLIST",
+      `${BRAND_ID}=brand.example`
+    );
+    const out = await rpc("tools/call", {
+      name: "check_official_facts",
+      arguments: { url: "https://brand.example" },
+    });
+    expect(out.body.result.isError).toBe(true);
+    expect(JSON.stringify(out.body.result.content)).toContain("not_available");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("토큰 만료 시각 엄격 형식", () => {
+  const NOW = Date.parse("2026-10-20T00:00:00Z");
+
+  it("허용 형식: …Z 또는 오프셋 포함", async () => {
+    const { parseStrictExpiry } = await import("../lib/mcp/geo-flags");
+    expect(parseStrictExpiry("2026-10-20T23:59:59Z")).toBe(
+      Date.parse("2026-10-20T23:59:59Z")
+    );
+    expect(parseStrictExpiry("2026-10-21T08:59:59+09:00")).toBe(
+      Date.parse("2026-10-20T23:59:59Z")
+    );
+    expect(parseStrictExpiry("2026-10-20T18:59:59-05:00")).toBe(
+      Date.parse("2026-10-20T23:59:59Z")
+    );
+  });
+
+  it("그 밖의 형식·없는 날짜는 null", async () => {
+    const { parseStrictExpiry } = await import("../lib/mcp/geo-flags");
+    for (const raw of [
+      "",
+      "2026-10-20",
+      "2026-10-20T23:59:59",
+      "2026-10-20 23:59:59Z",
+      "2026-10-20T23:59Z",
+      "2026-10-20T23:59:59.000Z",
+      "2026-10-20t23:59:59z",
+      " 2026-10-20T23:59:59Z",
+      "2026-10-20T23:59:59+0900",
+      "Tue Oct 20 2026 23:59:59 GMT+0900",
+      "1792454399000",
+      "2026-02-30T00:00:00Z",
+      "2026-13-01T00:00:00Z",
+      "2026-10-20T24:00:00Z",
+      "2026-10-20T23:60:00Z",
+      "2026-10-20T23:59:59+24:00",
+    ]) {
+      expect(parseStrictExpiry(raw), raw).toBeNull();
+    }
+  });
+
+  it("엄격 형식이 아니면 미래 날짜여도 토큰을 거부한다", async () => {
+    vi.stubEnv("FINDABLE_MCP_TOKEN_REQUIRED", "true");
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN", token);
+    const { checkReadonlyToken } = await import("../lib/mcp/geo-flags");
+    for (const raw of ["2099-01-01", "2099-01-01T00:00:00", "Jan 1 2099"]) {
+      vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT", raw);
+      expect(checkReadonlyToken(AUTH.authorization, NOW), raw).toBe(
+        "unauthorized"
+      );
+    }
+    vi.stubEnv(
+      "FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT",
+      "2099-01-01T09:00:00+09:00"
+    );
+    expect(checkReadonlyToken(AUTH.authorization, NOW)).toBe("ok");
+  });
+});

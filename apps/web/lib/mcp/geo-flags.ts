@@ -4,7 +4,8 @@
 //   FINDABLE_MCP_TOKEN_REQUIRED            Authorization: Bearer 토큰 검사.
 //   FINDABLE_MCP_PREVIEW_TOKEN             프리뷰 전용 토큰 값(서버 쪽 기준값, 값은 어디에도 출력하지 않는다).
 //   FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT  토큰 만료 시각(ISO 8601). 없거나 읽을 수 없거나 지났으면 모두 거부.
-//   (운영 환경 — VERCEL_ENV=production, 또는 VERCEL_ENV 가 없을 때 NODE_ENV=production — 에서는 읽기 전용 모드·점검 도구가 켜지지 않는다.)
+//   (허용 목록 방식 — VERCEL_ENV==="preview", 또는 VERCEL_ENV 가 비었고 NODE_ENV 가 "development"/"test" 일 때만
+//    읽기 전용 모드·점검 도구가 켜진다. 그 밖의 값(둘 다 빔·staging·오타·대소문자 변형·production)은 전부 거부.)
 //   FINDABLE_MCP_READONLY_BRAND_ALLOWLIST  읽어 줄 brandId 목록(쉼표). 비어 있으면 아무 브랜드도 읽지 않는다.
 //                                          항목은 「brandId」 또는 「brandId=기대도메인」. 공식 사실 점검(실제 접속)은
 //                                          「brandId=기대도메인」 쌍이 있고 DB 의 Brand.domain 이 그 도메인과 같을 때만 한다.
@@ -28,26 +29,31 @@ export function mcpReadonlyModeEnabled(): boolean {
 }
 
 /**
- * 운영 환경인가. Vercel 에서는 VERCEL_ENV 가 기준이다(프리뷰 배포도 NODE_ENV=production 이라 NODE_ENV 만 보면 프리뷰가 막힌다).
- * VERCEL_ENV 가 없으면(로컬·자체 서버) NODE_ENV=production 을 운영으로 본다.
+ * 프리뷰·개발·시험 환경인가(허용 목록 방식, fail-closed).
+ *  - VERCEL_ENV 가 정확히 "preview" 면 허용(프리뷰 배포는 NODE_ENV=production 이어도 허용).
+ *  - VERCEL_ENV 가 비어 있으면 NODE_ENV 가 정확히 "development" 또는 "test" 일 때만 허용(로컬·시험).
+ *  - 그 밖(둘 다 빔·staging·오타·대소문자 변형·앞뒤 공백·production)은 전부 거부 = 운영으로 취급.
  */
-export function isProductionRuntime(): boolean {
-  const vercelEnv = (process.env.VERCEL_ENV ?? "").trim();
+export function isPreviewOrDevRuntime(): boolean {
+  const vercelEnv = process.env.VERCEL_ENV ?? "";
   if (vercelEnv !== "") {
-    return vercelEnv === "production";
+    return vercelEnv === "preview";
   }
-  return (process.env.NODE_ENV ?? "") === "production";
+  const nodeEnv = process.env.NODE_ENV ?? "";
+  return nodeEnv === "development" || nodeEnv === "test";
 }
 
-/** 읽기 전용 모드가 켜져 있는데 운영 환경이라 거부해야 하는가(시작 단계 가드). */
+/** 읽기 전용 모드가 켜져 있는데 프리뷰·개발 환경이 아니라 거부해야 하는가(시작 단계 가드). */
 export function mcpReadonlyModeBlockedHere(): boolean {
-  return mcpReadonlyModeEnabled() && isProductionRuntime();
+  return mcpReadonlyModeEnabled() && !isPreviewOrDevRuntime();
 }
 
 export function mcpTokenRequired(): boolean {
   return readFlag("FINDABLE_MCP_TOKEN_REQUIRED");
 }
 
+// brandId 는 영문·숫자·`-`·`_` 만(1~128자). 공백·그 밖의 문자가 섞이면 그 항목을 버린다.
+const BRAND_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const LEADING_WWW_RE = /^www\./;
 const TRAILING_DOT_RE = /\.$/;
 // 기대 도메인에는 호스트 이름만 쓴다(주소·경로·포트·계정·공백 금지).
@@ -87,6 +93,7 @@ export interface ParsedBrandAllowlist {
 
 /**
  * 허용 목록 해석. 항목은 쉼표로 나누고, 각 항목은 「brandId」 또는 「brandId=기대도메인」.
+ *  - 쉼표 앞뒤 공백은 지운다. brandId 는 영문·숫자·`-`·`_` 만 — 안쪽 공백·다른 문자가 있으면 그 항목을 버린다.
  *  - 형식 오류(빈 쪽, `=` 두 개 이상, 도메인 형식 틀림) 항목은 그 brandId 를 **통째로 뺀다**(fail-closed).
  *  - 같은 brandId 에 서로 다른 기대 도메인이 오면 그 brandId 를 통째로 뺀다(어느 쪽이 맞는지 모르므로).
  */
@@ -102,17 +109,20 @@ export function parseReadonlyBrandAllowlist(raw: string): ParsedBrandAllowlist {
     }
     const parts = item.split("=");
     const id = (parts[0] ?? "").trim();
+    if (!BRAND_ID_RE.test(id)) {
+      // brandId 형식 오류(빈 값·안쪽 공백·허용 밖 문자): 이 항목은 버린다(형식이 틀린 id 는 어디에도 넣지 않는다).
+      rejected += 1;
+      continue;
+    }
     if (parts.length === 1) {
       ids.add(id);
       continue;
     }
     const pin =
       parts.length === 2 ? normalizePinnedDomain(parts[1] ?? "") : null;
-    if (id === "" || pin === null) {
+    if (pin === null) {
       rejected += 1;
-      if (id !== "") {
-        banned.add(id);
-      }
+      banned.add(id);
       continue;
     }
     const prior = pins.get(id);
@@ -153,6 +163,44 @@ function sha256(value: string): Buffer {
 
 const BEARER_RE = /^Bearer\s+(.+)$/i;
 
+// 만료 시각: ISO 8601 「YYYY-MM-DDTHH:MM:SSZ」 또는 「…SS+09:00」 같은 오프셋 포함 형식만. 소수 초·날짜만·공백 등은 거부.
+const STRICT_EXPIRY_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:Z|([+-])(\d{2}):(\d{2}))$/;
+
+function inRange(value: number, min: number, max: number): boolean {
+  return value >= min && value <= max;
+}
+
+/** 엄격 형식의 만료 시각을 밀리초로. 형식·범위(없는 날짜 포함)가 틀리면 null. */
+export function parseStrictExpiry(raw: string): number | null {
+  const m = STRICT_EXPIRY_RE.exec(raw);
+  if (!m) {
+    return null;
+  }
+  const [year, month, day, hour, minute, second] = m
+    .slice(1, 7)
+    .map(Number) as [number, number, number, number, number, number];
+  const offH = Number(m[8] ?? "0");
+  const offM = Number(m[9] ?? "0");
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (
+    !(
+      inRange(month, 1, 12) &&
+      inRange(day, 1, daysInMonth) &&
+      inRange(hour, 0, 23) &&
+      inRange(minute, 0, 59) &&
+      inRange(second, 0, 59) &&
+      inRange(offH, 0, 23) &&
+      inRange(offM, 0, 59)
+    )
+  ) {
+    return null;
+  }
+  const sign = m[7] === "-" ? -1 : 1;
+  const utc = Date.UTC(year, month - 1, day, hour, minute, second);
+  return utc - sign * (offH * 60 + offM) * 60_000;
+}
+
 /**
  * 토큰 검사 결과.
  *  - 토큰 검사가 꺼져 있으면 통과(기존 방식, 허용 목록만 적용).
@@ -170,11 +218,11 @@ export function checkReadonlyToken(
   if (expected === "") {
     return "unauthorized";
   }
-  // 만료 시각이 없거나 읽을 수 없거나 지났으면 거부(만료 없는 토큰을 열린 문으로 두지 않는다).
-  const expiresAt = Date.parse(
+  // 만료 시각이 없거나 엄격 형식이 아니거나 지났으면 거부(만료 없는 토큰을 열린 문으로 두지 않는다).
+  const expiresAt = parseStrictExpiry(
     process.env.FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT ?? ""
   );
-  if (!Number.isFinite(expiresAt) || expiresAt <= nowMs) {
+  if (expiresAt === null || expiresAt <= nowMs) {
     return "unauthorized";
   }
   const match = BEARER_RE.exec((authorizationHeader ?? "").trim());
