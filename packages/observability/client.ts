@@ -36,28 +36,12 @@ export const initializeSentry = (): ReturnType<typeof Sentry.init> =>
     // Setting this option to true will print useful information to the console while you're setting up Sentry.
     debug: false,
 
-    // Replay 는 기본 끔(0) — 화면 녹화는 개인정보 위험이 커서 환경변수로만 켠다.
-    replaysOnErrorSampleRate: parseTracesSampleRate(
-      process.env.NEXT_PUBLIC_SENTRY_REPLAY_ERROR_SAMPLE_RATE,
-      0
-    ),
+    // Replay 는 완전 비활성 — 통합(replayIntegration) 자체를 넣지 않고 비율도 0 고정.
+    // 화면 녹화는 개인정보 위험이 커서 환경변수로도 켤 수 없다.
+    replaysOnErrorSampleRate: 0,
+    replaysSessionSampleRate: 0,
 
-    /*
-     * This sets the sample rate to be 10%. You may want this to be 100% while
-     * in development and sample at a lower rate in production
-     */
-    replaysSessionSampleRate: parseTracesSampleRate(
-      process.env.NEXT_PUBLIC_SENTRY_REPLAY_SAMPLE_RATE,
-      0
-    ),
-
-    // You can remove this option if you're not planning to use the Sentry Session Replay feature:
     integrations: [
-      Sentry.replayIntegration({
-        // Additional Replay configuration goes in here, for example:
-        maskAllText: true,
-        blockAllMedia: true,
-      }),
       // Send console.log, console.error, and console.warn calls as logs to Sentry
       Sentry.consoleLoggingIntegration({ levels: ["log", "error", "warn"] }),
     ],

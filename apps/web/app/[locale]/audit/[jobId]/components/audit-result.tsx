@@ -928,6 +928,7 @@ function AuditResultBody({
           // 진단 품질 지표는 별도 이벤트로 유지한다(퍼널 단계와 성능 지표는 다른 질문).
           // jobId 는 결과 열람 열쇠라 분석 도구로 보내지 않는다. 10/27 판독은 DB 의 AuditJob 으로
           // 하므로 PostHog 이벤트에는 jobId 가 필요 없다(이 속성 제거는 판독과 무관).
+          // 확인(관제탑): 이 이벤트를 보내는 곳은 여기 1곳뿐이고 읽는 곳은 0, 효과 증명 사전 등록도 PostHog 를 쓰지 않는다.
           analytics.capture("audit_result_quality", {
             domain: data.domain,
             language: data.language,

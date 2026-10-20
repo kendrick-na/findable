@@ -214,7 +214,9 @@ describe("PostHog", () => {
 });
 
 describe("2차 보강(코덱스 검토)", () => {
-  test("Sentry Replay 는 기본 끔(0)", () => {
+  test("Sentry Replay 는 완전 비활성(통합 없음·비율 0)", () => {
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_REPLAY_SAMPLE_RATE", "1");
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_REPLAY_ERROR_SAMPLE_RATE", "1");
     initClient();
     const options = sentryInit.mock.calls.at(-1)?.[0] as Record<
       string,
@@ -222,6 +224,11 @@ describe("2차 보강(코덱스 검토)", () => {
     >;
     expect(options.replaysSessionSampleRate).toBe(0);
     expect(options.replaysOnErrorSampleRate).toBe(0);
+    const names = (options.integrations as { name: string }[]).map(
+      (i) => i.name
+    );
+    expect(names).not.toContain("replay");
+    vi.unstubAllEnvs();
   });
 
   test("PostHog: SPA 로 /r/ 에 들어가 발생한 이벤트는 버린다", () => {
