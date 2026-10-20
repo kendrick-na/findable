@@ -15,3 +15,9 @@ export const createRateLimiter = (props: Omit<RatelimitConfig, "redis">) =>
   });
 
 export const { slidingWindow } = Ratelimit;
+export {
+  describeRateLimitError,
+  limitOrAllow,
+  type RateLimitDecision,
+  type RateLimiterLike,
+} from "./limit-or-allow";

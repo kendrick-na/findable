@@ -2,8 +2,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { database } from "@repo/database";
 import { resend } from "@repo/email";
 import { NewsletterConfirmationEmail } from "@repo/email/templates/newsletter-confirmation";
+import { log } from "@repo/observability/log";
 import { createRateLimiter, slidingWindow } from "@repo/rate-limit";
 import { isRateLimitConfigured } from "@repo/rate-limit/keys";
+import {
+  describeRateLimitError,
+  limitOrAllow,
+} from "@repo/rate-limit/limit-or-allow";
 import { z } from "zod";
 
 const inputSchema = z.object({
@@ -32,10 +37,17 @@ export async function POST(request: Request) {
   }
   if (limiter) {
     const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0];
-    const result = await limiter.limit(
-      `${forwarded ?? "unknown"}:${parsed.data.email}`
+    // 제한 초과만 막는다. 레이트 리밋 저장소 장애(보관·인증·네트워크)는 구독을 막지 않는다.
+    const decision = await limitOrAllow(
+      limiter,
+      `${forwarded ?? "unknown"}:${parsed.data.email}`,
+      (error) =>
+        log.warn("[rate-limit] unavailable, fail-open", {
+          scope: "newsletter-subscribe",
+          error: describeRateLimitError(error),
+        })
     );
-    if (!result.success) {
+    if (!decision.allowed) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
   }

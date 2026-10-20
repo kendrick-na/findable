@@ -33,6 +33,10 @@ const COPY = {
     messagePh:
       "브랜드/도메인과 궁금한 점을 적어주세요. (요금제·측정 범위·GEO 컨설팅 등)",
     sending: "보내는 중…",
+    // 서버액션은 오류 "코드"만 돌려준다(원시 오류 노출 방지, 2026-10-20).
+    errorRateLimited:
+      "같은 곳에서 오늘 이미 문의를 보냈어요. 내일 다시 시도해 주세요.",
+    errorFailed: "문의를 보내지 못했어요. 잠시 후 다시 시도해 주세요.",
   },
   en: {
     received: "Request received!",
@@ -43,6 +47,9 @@ const COPY = {
     message: "Message",
     messagePh: "Tell us about your brand and what you need.",
     sending: "Sending…",
+    errorRateLimited:
+      "A request was already sent from here today. Please try again tomorrow.",
+    errorFailed: "We couldn't send your request. Please try again shortly.",
   },
 } as const;
 
@@ -63,7 +70,13 @@ export const ContactForm = ({ dictionary, locale }: ContactFormProps) => {
         String(formData.get("message") ?? "")
       );
       if (result.error) {
-        return { status: "idle", error: result.error };
+        return {
+          status: "idle",
+          error:
+            result.error === "rate_limited"
+              ? t.errorRateLimited
+              : t.errorFailed,
+        };
       }
       return { status: "ok" };
     },
