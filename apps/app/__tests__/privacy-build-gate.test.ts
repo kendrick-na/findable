@@ -7,7 +7,11 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decidePrivacyBuildGate } from "@repo/database/scripts/privacy-build-gate";
+import { resolveDatabaseUrl } from "@repo/database/keys";
+import {
+  decidePrivacyBuildGate,
+  gateConnectionString,
+} from "@repo/database/scripts/privacy-build-gate";
 import type { PrivacyTableVerdict } from "@repo/database/scripts/privacy-table-gate";
 import { describe, expect, it, vi } from "vitest";
 
@@ -69,7 +73,33 @@ describe("decidePrivacyBuildGate", () => {
     expect(d.message).not.toContain("u:p");
   });
 
-  it("⛔ 운영인데 DATABASE_URL 이 없으면 실패", async () => {
+  it("FINDABLE_DATABASE_URL 이 있으면 런타임처럼 그 DB 를 검사한다(DATABASE_URL 보다 우선)", async () => {
+    const read = vi.fn().mockResolvedValue(okVerdict);
+    const findable = "postgresql://u:p@findable-prod.example/x";
+    const d = await decidePrivacyBuildGate(
+      { ...PROD, FINDABLE_DATABASE_URL: findable },
+      read
+    );
+    expect(d.action).toBe("pass");
+    expect(read).toHaveBeenCalledWith(findable);
+    expect(read).not.toHaveBeenCalledWith(PROD.DATABASE_URL);
+  });
+
+  it("게이트와 런타임이 같은 주소 선택 규칙을 쓴다", () => {
+    const cases = [
+      {
+        FINDABLE_DATABASE_URL: "postgresql://a",
+        DATABASE_URL: "postgresql://b",
+      },
+      { DATABASE_URL: "postgresql://b" },
+      {},
+    ];
+    for (const env of cases) {
+      expect(gateConnectionString(env)).toBe(resolveDatabaseUrl(env));
+    }
+  });
+
+  it("⛔ 운영인데 DB 주소(FINDABLE_DATABASE_URL·DATABASE_URL)가 없으면 실패", async () => {
     const read = vi.fn();
     const d = await decidePrivacyBuildGate(
       { VERCEL_ENV: "production", DATABASE_URL: "  " },

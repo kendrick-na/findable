@@ -4,10 +4,12 @@
 //   운영 빌드가 실패하면 Vercel 은 **이전 정상 배포를 그대로 유지**한다.
 // 규칙
 //  - VERCEL_ENV === "production" 일 때만 검사. 미리보기·로컬 빌드는 건너뛰고 한 줄 로그만.
-//  - 운영에서 표가 없거나, DB 연결 문자열이 없거나, 접속·조회가 실패하면 → 실패(exit 1). (fail-closed)
+//  - 검사 대상 DB = 앱 런타임과 같은 규칙(FINDABLE_DATABASE_URL 우선, 없으면 DATABASE_URL — `keys.ts`).
+//  - 운영에서 표가 없거나, DB 주소가 없거나, 접속·조회가 실패하면 → 실패(exit 1). (fail-closed)
 //  - 읽기 전용(`readPrivacyTables`: READ ONLY 트랜잭션 + information_schema). 연결 문자열은 출력하지 않는다.
 // 호출: apps/app `build` 스크립트(`bun ../../packages/database/scripts/privacy-build-gate.ts`).
 
+import { resolveDatabaseUrl } from "../keys";
 import { safeErrorLabel } from "../prisma/db-target-fingerprint";
 import {
   type PrivacyTableVerdict,
@@ -25,9 +27,12 @@ type Env = Record<string, string | undefined>;
 export const shouldCheck = (env: Env): boolean =>
   env.VERCEL_ENV === "production";
 
-/** 검사에 쓸 연결 문자열 — 앱이 실제로 쓰는 DATABASE_URL. */
+/**
+ * 검사에 쓸 연결 문자열 — **앱 런타임과 같은 규칙**(`keys.ts` 의 `resolveDatabaseUrl`:
+ * FINDABLE_DATABASE_URL 우선, 없으면 DATABASE_URL). 빈 값은 없음으로 본다.
+ */
 export const gateConnectionString = (env: Env): string | undefined =>
-  env.DATABASE_URL?.trim() || undefined;
+  resolveDatabaseUrl(env)?.trim() || undefined;
 
 /**
  * 게이트 판정(입출력 없음 — 시험 대상).
@@ -48,7 +53,7 @@ export async function decidePrivacyBuildGate(
     return {
       action: "fail",
       message:
-        "[privacy-build-gate] FAIL: DATABASE_URL 없음 — 운영 빌드에서 표 존재를 확인할 수 없어 중단",
+        "[privacy-build-gate] FAIL: DB 주소 없음(FINDABLE_DATABASE_URL·DATABASE_URL 둘 다 비어 있음) — 운영 빌드에서 표 존재를 확인할 수 없어 중단",
     };
   }
   try {
