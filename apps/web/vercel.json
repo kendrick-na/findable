@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/aeo-google-aio-pilot",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/purge-expired-ip",
+      "schedule": "30 16 * * *"
     }
   ]
 }

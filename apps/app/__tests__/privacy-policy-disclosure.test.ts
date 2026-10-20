@@ -71,7 +71,7 @@ const REQUIRED_PROCESSORS = [
   "Clerk", // 인증 (이메일·이름 보유)
   "PortOne", // 결제
   "Resend", // 메일 발송 (수신자 이메일)
-  "PostHog", // 이용 분석 (identify 로 이메일·이름·전화번호 전송)
+  "PostHog", // 이용 분석 (2026-10-20부터 identify 는 내부 id·가입 시각만 — 과거 전송분은 PostHog 에 남아 있음)
 ];
 
 const koBlock = source.slice(0, source.indexOf(EN_BLOCK_MARKER));

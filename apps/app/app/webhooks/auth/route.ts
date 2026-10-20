@@ -12,6 +12,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { env } from "@/env";
+import { eraseDeletedUser } from "@/lib/privacy/erase-deleted-user";
 
 // 20번(D2 근본): org/user를 Prisma DB에 정식 적재하는 소유 경로.
 //   기존엔 analytics만 발생시켜 DB가 비어 있었고, 그 탓에 Brand.organizationId FK가
@@ -39,19 +40,24 @@ const upsertUserToDb = async (data: UserJSON): Promise<void> => {
   }
 };
 
+/**
+ * 🔒 PostHog 로 보내는 사용자 속성 — **내부 id(distinctId) + 가입 시각만** (2026-10-20 대표 결정 ③).
+ *
+ * 예전엔 이메일·이름·전화번호·프로필 사진 주소를 그대로 보냈다. PostHog 는 이용 분석 도구라
+ * 그 값들이 필요 없고, 보내는 순간 해외 위탁처에 개인정보가 쌓인다.
+ * ⚠️ 여기에 개인 식별 칸을 다시 넣지 말 것 — `webhook-privacy-erasure.test.ts` 가 막는다.
+ * ⚠️ 과거에 이미 보낸 값은 PostHog 화면에서 직접 지워야 한다(범위표 4-2).
+ */
+const analyticsUserProperties = (data: UserJSON) => ({
+  createdAt: new Date(data.created_at),
+});
+
 const handleUserCreated = async (data: UserJSON): Promise<Response> => {
   await upsertUserToDb(data);
 
   analytics?.identify({
     distinctId: data.id,
-    properties: {
-      email: data.email_addresses.at(0)?.email_address,
-      firstName: data.first_name,
-      lastName: data.last_name,
-      createdAt: new Date(data.created_at),
-      avatar: data.image_url,
-      phoneNumber: data.phone_numbers.at(0)?.phone_number,
-    },
+    properties: analyticsUserProperties(data),
   });
 
   analytics?.capture({
@@ -67,14 +73,7 @@ const handleUserUpdated = async (data: UserJSON): Promise<Response> => {
 
   analytics?.identify({
     distinctId: data.id,
-    properties: {
-      email: data.email_addresses.at(0)?.email_address,
-      firstName: data.first_name,
-      lastName: data.last_name,
-      createdAt: new Date(data.created_at),
-      avatar: data.image_url,
-      phoneNumber: data.phone_numbers.at(0)?.phone_number,
-    },
+    properties: analyticsUserProperties(data),
   });
 
   analytics?.capture({
@@ -85,8 +84,38 @@ const handleUserUpdated = async (data: UserJSON): Promise<Response> => {
   return new Response("User updated", { status: 201 });
 };
 
-const handleUserDeleted = (data: DeletedObjectJSON) => {
+/**
+ * 🔴 탈퇴 = 회원 정보 즉시 삭제 (2026-10-20 대표 결정 ①).
+ *
+ * 예전엔 analytics 만 남기고 **DB 를 하나도 안 지웠다** — 처리방침은 「탈퇴 시 파기」를 약속하는데
+ * 이메일·이름이 그대로 남아 있었다. 지우는 범위는 `lib/privacy/erase-deleted-user.ts`
+ * (표: `docs/_적용/개인정보_삭제범위_20261020.md`).
+ *
+ * ⚠️ 다른 핸들러와 달리 **DB 실패를 삼키지 않고 500 을 돌려준다.** 삭제는 반드시 끝나야 하는
+ *   일이라 Clerk(Svix)가 다시 보내게 한다. 삭제는 한 트랜잭션·멱등이라 재시도해도 안전하다.
+ */
+const handleUserDeleted = async (
+  data: DeletedObjectJSON
+): Promise<Response> => {
   if (data.id) {
+    try {
+      const result = await eraseDeletedUser(database, data.id);
+      log.info("privacy.user_erase.done", { userId: data.id, ...result });
+      if (result.soleOwnerOrgIds.length > 0) {
+        // 혼자 쓰던 조직은 지우지 않았다 — 대표 결정 필요(범위표 3-1). 조직 id 만 남긴다.
+        log.warn("privacy.user_erase.sole_owner_orgs", {
+          userId: data.id,
+          orgIds: result.soleOwnerOrgIds,
+        });
+      }
+    } catch (error) {
+      log.error("privacy.user_erase.failed", {
+        userId: data.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return new Response("User erase failed", { status: 500 });
+    }
+
     analytics?.identify({
       distinctId: data.id,
       properties: {
@@ -135,9 +164,9 @@ const handleOrganizationCreated = async (
     groupKey: data.id,
     groupType: "company",
     distinctId: data.created_by,
+    // 조직 사진 주소는 보내지 않는다(개인 사진일 수 있음 — 2026-10-20).
     properties: {
       name: data.name,
-      avatar: data.image_url,
     },
   });
 
@@ -160,9 +189,9 @@ const handleOrganizationUpdated = async (
     groupKey: data.id,
     groupType: "company",
     distinctId: data.created_by,
+    // 조직 사진 주소는 보내지 않는다(개인 사진일 수 있음 — 2026-10-20).
     properties: {
       name: data.name,
-      avatar: data.image_url,
     },
   });
 
@@ -301,8 +330,8 @@ export const POST = async (request: Request): Promise<Response> => {
   //
   //   🔬 그럼 무엇을 남기나: 장애 조사에 **실제로 필요한 것만**(누가·무슨 이벤트).
   //   `id` 는 Clerk 식별자라 개인정보가 아니고, DB·PostHog 와 대조하는 열쇠다.
-  //   ⚠️ `analytics.identify`(위 `handleUserCreated`)가 개인정보를 보내는 것은
-  //      **의도된 것**이다 — 거긴 CRM 이고 여긴 운영 로그다. 목적이 다르다.
+  //   ⚠️ 2026-10-20: `analytics.identify` 도 더는 개인정보를 보내지 않는다
+  //      (`analyticsUserProperties` — 내부 id·가입 시각만).
   log.info("webhook.auth.received", { id, eventType });
 
   let response: Response = new Response("", { status: 201 });
@@ -317,7 +346,7 @@ export const POST = async (request: Request): Promise<Response> => {
       break;
     }
     case "user.deleted": {
-      response = handleUserDeleted(event.data);
+      response = await handleUserDeleted(event.data);
       break;
     }
     case "organization.created": {
