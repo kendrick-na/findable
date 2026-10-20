@@ -101,7 +101,8 @@ describe("읽기 전용 모드 route — 공식 정보 점검", () => {
   beforeEach(() => {
     vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
     vi.stubEnv("FINDABLE_MCP_TOKEN_REQUIRED", "true");
-    vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", TOKEN);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN", TOKEN);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT", "2099-01-01T00:00:00Z");
   });
 
   it("허용 도메인은 읽고, 임의 도메인은 요청 없이 거부한다", async () => {
@@ -276,7 +277,8 @@ describe("최종 직렬화 응답 크기 상한(64KB) — 실제 route 경로", 
   it("읽기 전용 모드: 큰 점검 결과는 항목을 줄이고 truncated:true 로 표시하며 직렬화 크기가 상한 이하다", async () => {
     vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
     vi.stubEnv("FINDABLE_MCP_TOKEN_REQUIRED", "true");
-    vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", TOKEN);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN", TOKEN);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT", "2099-01-01T00:00:00Z");
     mockHuge();
     const res = await facts("https://brand.example");
     const sc = res.structuredContent;
@@ -304,7 +306,8 @@ describe("허용 목록 호스트 정규화 회귀", () => {
   beforeEach(() => {
     vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
     vi.stubEnv("FINDABLE_MCP_TOKEN_REQUIRED", "true");
-    vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", TOKEN);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN", TOKEN);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT", "2099-01-01T00:00:00Z");
   });
 
   it("IPv6·IPv4 리터럴 주소는 등록 도메인이 아니므로 요청 없이 거부한다", async () => {

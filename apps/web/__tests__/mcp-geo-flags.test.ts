@@ -27,7 +27,8 @@ vi.mock("@repo/observability/log", () => ({
 function factsAuth() {
   const good = `t_${randomBytes(12).toString("hex")}`;
   vi.stubEnv("FINDABLE_MCP_TOKEN_REQUIRED", "true");
-  vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", good);
+  vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN", good);
+  vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT", "2099-01-01T00:00:00Z");
   return { authorization: `Bearer ${good}` };
 }
 
@@ -52,7 +53,8 @@ describe("7. 토큰 모드", () => {
 
   it("헤더 없음·형식 다름·값 다름은 401, 맞으면 통과한다", async () => {
     const good = token();
-    vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", good);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN", good);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT", "2099-01-01T00:00:00Z");
     expect((await rpc("tools/list")).status).toBe(401);
     expect((await rpc("tools/list", {}, { authorization: good })).status).toBe(
       401
@@ -81,7 +83,8 @@ describe("7. 토큰 모드", () => {
 
   it("거부 응답에 토큰 값이 들어 있지 않고 DB 도 건드리지 않는다", async () => {
     const good = token();
-    vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", good);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN", good);
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT", "2099-01-01T00:00:00Z");
     const wrong = token();
     const watched = makeWatchedDb({ brand: null, job: null });
     holder.db = watched.db;
@@ -101,7 +104,8 @@ describe("7. 토큰 모드", () => {
   });
 
   it("토큰 검사가 켜졌는데 서버 토큰이 없으면 아무도 통과하지 못한다", async () => {
-    vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", "");
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN", "");
+    vi.stubEnv("FINDABLE_MCP_PREVIEW_TOKEN_EXPIRES_AT", "2099-01-01T00:00:00Z");
     expect((await rpc("tools/list")).status).toBe(401);
     expect(
       (await rpc("tools/list", {}, { authorization: "Bearer " })).status

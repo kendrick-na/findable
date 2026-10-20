@@ -17,6 +17,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import { mcpEnabled } from "../../../lib/mcp/flags";
 import {
   checkReadonlyToken,
+  isProductionRuntime,
+  mcpReadonlyModeBlockedHere,
   mcpReadonlyModeEnabled,
   readonlyBrandAllowlist,
 } from "../../../lib/mcp/geo-flags";
@@ -74,6 +76,10 @@ function handle(request: NextRequest): Response | Promise<Response> {
   if (!isOriginAllowed(request.headers.get("origin"))) {
     return NextResponse.json({ error: "Forbidden origin" }, { status: 403 });
   }
+  if (mcpReadonlyModeBlockedHere()) {
+    // 프리뷰 한정 장치: 운영에서 읽기 전용 모드가 켜져 있으면 도구를 등록하지 않고 거부한다(기존 도구로 되돌아가지도 않는다).
+    return NextResponse.json({ error: "Not available" }, { status: 503 });
+  }
   if (mcpReadonlyModeEnabled()) {
     return handleReadonly(request);
   }
@@ -84,10 +90,15 @@ function handle(request: NextRequest): Response | Promise<Response> {
         client,
         deps: makeBridgeDeps(),
         // 공식 정보 점검은 허용 목록 브랜드의 등록 도메인만 읽는다(허용 목록이 비면 전부 거부).
-        factsGuard: {
-          allowlist: readonlyBrandAllowlist(),
-          db: toReadonlyDb(database),
-        },
+        // 운영 환경에서는 가드를 주지 않아 이 도구가 모든 주소를 거부한다(프리뷰 한정).
+        ...(isProductionRuntime()
+          ? {}
+          : {
+              factsGuard: {
+                allowlist: readonlyBrandAllowlist(),
+                db: toReadonlyDb(database),
+              },
+            }),
         log: { error: (event, data) => log.error(event, data) },
       }),
     {

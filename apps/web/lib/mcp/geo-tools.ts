@@ -59,7 +59,7 @@ import {
   searchSamplingVersionOf,
 } from "@repo/audit/search-sampling-version";
 import { z } from "zod";
-import { mcpTokenRequired } from "./geo-flags";
+import { isProductionRuntime, mcpTokenRequired } from "./geo-flags";
 import {
   type BreakdownData,
   breakdownDataSchema,
@@ -1502,7 +1502,7 @@ export function registerGeoReadonlyTools(
   );
 
   // 외부 주소를 서버가 직접 읽는 도구라, 토큰 검사가 꺼져 있으면 목록에서 뺀다(익명 공개 안 함, 대표 결정 P-1).
-  if (!(ctx.factsEnabled ?? mcpTokenRequired())) {
+  if (!(ctx.factsEnabled ?? (mcpTokenRequired() && !isProductionRuntime()))) {
     return;
   }
   server.registerTool(
