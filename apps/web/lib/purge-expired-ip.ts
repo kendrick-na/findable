@@ -8,6 +8,8 @@
  *
  * - 행은 지우지 않고 `ipAddress` 칸만 비운다(측정 결과·도메인 캐시는 그대로).
  * - **배치**: 오래된 것부터 1,000건씩(createdAt·id 순) 비우고, 시간 예산(기본 45초) 안에서 반복한다.
+ *   배치마다 별도 트랜잭션 + `pg_try_advisory_xact_lock` → 두 실행이 겹치면 늦은 쪽이 비켜선다(lockBusy).
+ *   배치 시작 전 남은 예산을 확인하고, 배치 1회는 min(남은 예산, 15초)를 넘으면 되돌려진다.
  *   다 못 끝내면 `done: false` 로 돌려주고 다음 실행이 이어서 한다(조건이 `not: null` 이라 자연히 이어짐).
  * - 멱등: 이미 비운 행은 조건에서 빠진다.
  * - 3개월 = **달력 기준, 월말 넘침 없음**(5-31 → 2-28/29, 8-31 → 5-31). UTC 로 계산한다.
@@ -15,6 +17,7 @@
  */
 
 import type { database } from "@repo/database";
+import { tryAdvisoryXactLock } from "@repo/database/advisory-lock";
 
 export const IP_RETENTION_MONTHS = 3;
 export const IP_PURGE_BATCH_SIZE = 1000;
@@ -48,9 +51,14 @@ export function ipRetentionCutoff(
   );
 }
 
-interface PurgeClient {
-  auditJob: Pick<typeof database.auditJob, "findMany" | "updateMany">;
-}
+type PurgeClient = Pick<typeof database, "$transaction">;
+
+/** 동시 실행 방지 잠금 키(배치마다 `pg_try_advisory_xact_lock`). */
+export const IP_PURGE_LOCK_KEY = "cron:purge-expired-ip";
+/** 남은 예산이 이보다 적으면 새 배치를 시작하지 않는다. */
+export const IP_PURGE_MIN_BATCH_MS = 2000;
+/** 배치 1회(트랜잭션)의 최대 시간. 넘으면 Prisma 가 그 배치를 되돌린다. */
+export const IP_PURGE_BATCH_TIMEOUT_MS = 15_000;
 
 export interface PurgeOptions {
   batchSize?: number;
@@ -63,10 +71,16 @@ export interface PurgeResult {
   batches: number;
   cleared: number;
   cutoff: Date;
-  /** false = 시간 예산이 다 돼 멈췄다(다음 실행이 이어서 한다). */
+  /** false = 시간 예산이 다 됐거나 다른 실행이 돌고 있어 멈췄다(다음 실행이 이어서 한다). */
   done: boolean;
+  /** 다른 실행이 잠금을 쥐고 있어 이번 실행은 비켜섰다. */
+  lockBusy: boolean;
 }
 
+/**
+ * 경계 정책: `createdAt < cutoff` 만 비운다. 기준 시각과 **정확히 같은** 행은 남긴다(다음 날 실행이 비운다).
+ * 배치마다: 남은 예산 확인 → 트랜잭션(잠금 시도 → 오래된 순 1,000건 id → 조건 재확인하며 비움).
+ */
 export async function purgeExpiredIpAddresses(
   client: PurgeClient,
   now: Date = new Date(),
@@ -81,28 +95,49 @@ export async function purgeExpiredIpAddresses(
 
   let cleared = 0;
   let batches = 0;
-  while (clock() - startedAt < budget) {
-    const ids = (
-      await client.auditJob.findMany({
-        where: expired,
-        select: { id: true },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        take: batchSize,
-      })
-    ).map((row) => row.id);
-    if (ids.length === 0) {
-      return { cutoff, cleared, batches, done: true };
+  for (;;) {
+    const remaining = budget - (clock() - startedAt);
+    if (remaining < IP_PURGE_MIN_BATCH_MS) {
+      return { cutoff, cleared, batches, done: false, lockBusy: false };
     }
-    // 조건을 다시 건다: 그 사이 다른 곳이 바꾼 행은 건드리지 않는다.
-    const result = await client.auditJob.updateMany({
-      where: { id: { in: ids }, ...expired },
-      data: { ipAddress: null },
-    });
-    cleared += result.count;
+    const batch = await client.$transaction(
+      async (tx) => {
+        if (!(await tryAdvisoryXactLock(tx, IP_PURGE_LOCK_KEY))) {
+          return null;
+        }
+        const ids = (
+          await tx.auditJob.findMany({
+            where: expired,
+            select: { id: true },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            take: batchSize,
+          })
+        ).map((row) => row.id);
+        if (ids.length === 0) {
+          return { found: 0, count: 0 };
+        }
+        // 조건을 다시 건다: 그 사이 다른 곳이 바꾼 행은 건드리지 않는다(건수가 실제 비운 수).
+        const result = await tx.auditJob.updateMany({
+          where: { id: { in: ids }, ...expired },
+          data: { ipAddress: null },
+        });
+        return { found: ids.length, count: result.count };
+      },
+      {
+        maxWait: IP_PURGE_MIN_BATCH_MS,
+        timeout: Math.min(remaining, IP_PURGE_BATCH_TIMEOUT_MS),
+      }
+    );
+    if (batch === null) {
+      return { cutoff, cleared, batches, done: false, lockBusy: true };
+    }
+    if (batch.found === 0) {
+      return { cutoff, cleared, batches, done: true, lockBusy: false };
+    }
+    cleared += batch.count;
     batches += 1;
-    if (ids.length < batchSize) {
-      return { cutoff, cleared, batches, done: true };
+    if (batch.found < batchSize) {
+      return { cutoff, cleared, batches, done: true, lockBusy: false };
     }
   }
-  return { cutoff, cleared, batches, done: false };
 }

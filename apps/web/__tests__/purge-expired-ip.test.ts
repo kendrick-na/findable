@@ -22,6 +22,9 @@ const h = vi.hoisted(() => ({
   rows: [] as JobRow[],
   calls: 0,
   updateBatches: 0,
+  lockFree: true,
+  lockQueries: [] as string[],
+  txTimeouts: [] as number[],
 }));
 
 interface ExpiredWhere {
@@ -70,7 +73,25 @@ const memoryAuditJob = {
   },
 };
 
-vi.mock("@repo/database", () => ({ database: { auditJob: memoryAuditJob } }));
+/** 이 기능이 쓰는 모양만 흉내 낸 Prisma: 배치 트랜잭션 + `pg_try_advisory_xact_lock`. */
+const memoryDb = {
+  $transaction: (
+    fn: (tx: unknown) => Promise<unknown>,
+    options?: { timeout?: number }
+  ) => {
+    h.txTimeouts.push(options?.timeout ?? -1);
+    return fn({
+      auditJob: memoryAuditJob,
+      $queryRaw: (strings: TemplateStringsArray) => {
+        h.lockQueries.push(strings.join("?"));
+        return Promise.resolve([{ locked: h.lockFree }]);
+      },
+      $executeRaw: () => Promise.resolve(0),
+    });
+  },
+};
+
+vi.mock("@repo/database", () => ({ database: memoryDb }));
 vi.mock("@repo/observability/log", () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -82,9 +103,7 @@ const { GET } = await import("../app/api/cron/purge-expired-ip/route");
 
 /** 메모리 updateMany 를 Prisma 시그니처로 맞춘다(이 기능이 쓰는 인자 모양만 구현). */
 const memClient = () =>
-  ({ auditJob: memoryAuditJob }) as unknown as Parameters<
-    typeof purgeExpiredIpAddresses
-  >[0];
+  memoryDb as unknown as Parameters<typeof purgeExpiredIpAddresses>[0];
 
 const NOW = new Date("2026-10-20T03:00:00.000Z");
 const at = (iso: string) => new Date(iso);
@@ -112,6 +131,9 @@ beforeEach(() => {
   h.rows = seedRows();
   h.calls = 0;
   h.updateBatches = 0;
+  h.lockFree = true;
+  h.lockQueries = [];
+  h.txTimeouts = [];
 });
 
 describe("ipRetentionCutoff — 달력 기준 3개월", () => {
@@ -189,6 +211,44 @@ describe("배치 처리", () => {
     expect(h.rows[1000].ipAddress).not.toBeNull();
     const rest = await purgeExpiredIpAddresses(memClient(), NOW);
     expect(rest).toMatchObject({ cleared: 1500, done: true });
+  });
+});
+
+describe("동시 실행 방지·배치 시간", () => {
+  it("배치마다 pg_try_advisory_xact_lock 을 시도한다", async () => {
+    await purgeExpiredIpAddresses(memClient(), NOW);
+    expect(h.lockQueries.length).toBeGreaterThan(0);
+    expect(h.lockQueries[0]).toContain("pg_try_advisory_xact_lock");
+  });
+
+  it("⛔ 다른 실행이 잠금을 쥐고 있으면 아무것도 바꾸지 않고 lockBusy 로 비켜선다", async () => {
+    h.lockFree = false;
+    const before = structuredClone(h.rows);
+    const r = await purgeExpiredIpAddresses(memClient(), NOW);
+    expect(r).toMatchObject({
+      cleared: 0,
+      batches: 0,
+      done: false,
+      lockBusy: true,
+    });
+    expect(h.rows).toEqual(before);
+    expect(h.updateBatches).toBe(0);
+  });
+
+  it("배치 트랜잭션 시간 = min(남은 예산, 15초) — 느린 배치가 함수 제한을 넘지 않게", async () => {
+    await purgeExpiredIpAddresses(memClient(), NOW, { timeBudgetMs: 8000 });
+    expect(h.txTimeouts[0]).toBeLessThanOrEqual(8000);
+    h.txTimeouts = [];
+    await purgeExpiredIpAddresses(memClient(), NOW);
+    expect(h.txTimeouts[0]).toBe(15_000);
+  });
+
+  it("남은 예산이 2초 미만이면 새 배치를 시작하지 않는다", async () => {
+    const r = await purgeExpiredIpAddresses(memClient(), NOW, {
+      timeBudgetMs: 1000,
+    });
+    expect(r).toMatchObject({ batches: 0, done: false, lockBusy: false });
+    expect(h.txTimeouts).toHaveLength(0);
   });
 });
 

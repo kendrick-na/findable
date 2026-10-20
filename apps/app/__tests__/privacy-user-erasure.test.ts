@@ -19,6 +19,7 @@ import {
   OWNER_DELETED_ERROR_CODE,
   REVOKED_MAILBOX_STATUS,
 } from "@/lib/privacy/erase-deleted-user";
+import { writeUnlessDeleted } from "@/lib/privacy/guarded-user-write";
 
 type Row = Record<string, unknown>;
 type Tables = Record<string, Row[]>;
@@ -156,8 +157,17 @@ const matchOne = (value: unknown, cond: unknown): boolean => {
 const matches = (row: Row, where: Row = {}): boolean =>
   Object.entries(where).every(([key, cond]) => matchOne(row[key], cond));
 
-function createMemoryDb(initial: Tables, failOn?: string) {
+interface MemoryOptions {
+  failOn?: string;
+  /** 잠금을 잡는 순간 호출 — 「잠금 직전에 다른 웹훅이 먼저 커밋한」 상황을 흉내 낸다. */
+  onLock?: (key: string, draft: Tables) => void;
+}
+
+function createMemoryDb(initial: Tables, opts: MemoryOptions | string = {}) {
+  const { failOn, onLock } =
+    typeof opts === "string" ? { failOn: opts, onLock: undefined } : opts;
   let state: Tables = structuredClone(initial);
+  const locks: string[] = [];
   const table = (s: Tables, name: string) => {
     s[name] ??= [];
     return s[name];
@@ -211,6 +221,24 @@ function createMemoryDb(initial: Tables, failOn?: string) {
       s[name] = table(s, name).filter((r) => !matches(r, where));
       return Promise.resolve({ count: before - s[name].length });
     },
+    upsert: ({
+      where,
+      create,
+      update,
+    }: {
+      where: Row;
+      create: Row;
+      update: Row;
+    }) => {
+      fail(`${name}.upsert`);
+      const row = table(s, name).find((r) => matches(r, where));
+      if (row) {
+        Object.assign(row, update);
+        return Promise.resolve(structuredClone(row));
+      }
+      table(s, name).push({ ...create });
+      return Promise.resolve(structuredClone(create));
+    },
     update: ({ where, data }: { where: Row; data: Row }) => {
       fail(`${name}.update`);
       const row = table(s, name).find((r) => matches(r, where));
@@ -233,7 +261,23 @@ function createMemoryDb(initial: Tables, failOn?: string) {
     },
   });
   const txFor = (s: Tables) =>
-    new Proxy({}, { get: (_t, name: string) => model(s, name) });
+    new Proxy(
+      {},
+      {
+        get: (_t, name: string) => {
+          if (name === "$executeRaw") {
+            // advisoryXactLock: SELECT pg_advisory_xact_lock(hashtext(${key}))
+            return (_strings: TemplateStringsArray, key: string) => {
+              fail("lock");
+              locks.push(key);
+              onLock?.(key, s);
+              return Promise.resolve(1);
+            };
+          }
+          return model(s, name);
+        },
+      }
+    );
 
   const client = {
     // 실패하면 작업본을 버린다 = 실제 트랜잭션 롤백과 같은 결과.
@@ -248,6 +292,7 @@ function createMemoryDb(initial: Tables, failOn?: string) {
     // 테스트 전용 가짜 Prisma 클라이언트(이 기능이 쓰는 메서드만 구현).
     client: client as unknown as Parameters<typeof eraseDeletedUser>[0],
     snapshot: () => structuredClone(state),
+    locks,
   };
 }
 
@@ -450,7 +495,12 @@ describe("eraseDeletedUser — 탈퇴 회원 정보 삭제", () => {
   });
 
   it("🔴 중간에 실패하면 아무것도 바뀌지 않고 오류를 던진다(웹훅이 500 → Clerk 재시도)", async () => {
-    for (const op of ["auditJob.updateMany", "organization.update"]) {
+    // deletedClerkUser.upsert 실패 = 표가 없는 환경(마이그레이션 미적용)과 같은 결과.
+    for (const op of [
+      "lock",
+      "deletedClerkUser.upsert",
+      "auditJob.updateMany",
+    ]) {
       const failing = createMemoryDb(seed(), op);
       const before = failing.snapshot();
       await expect(eraseDeletedUser(failing.client, USER)).rejects.toThrow(
@@ -469,6 +519,88 @@ describe("eraseDeletedUser — 탈퇴 회원 정보 삭제", () => {
     expect(db.snapshot().auditJob.map((j) => j.email)).toContain(
       "gone@example.com"
     );
+  });
+
+  it("🔴 탈퇴 표식을 트랜잭션 첫 단계에서 남기고, 같은 사용자 잠금을 먼저 잡는다", async () => {
+    await eraseDeletedUser(db.client, USER);
+    const s = db.snapshot();
+    expect(s.deletedClerkUser).toEqual([{ clerkId: USER }]);
+    expect(db.locks[0]).toBe(`clerk-user:${USER}`);
+    // 재실행해도 표식은 1개(멱등).
+    await eraseDeletedUser(db.client, USER);
+    expect(db.snapshot().deletedClerkUser).toHaveLength(1);
+  });
+
+  it("⛔ 표식 표가 없으면(기록 실패) 회원 행도 지우지 않고 던진다 → 웹훅 500 재시도", async () => {
+    const noTable = createMemoryDb(seed(), "deletedClerkUser.upsert");
+    const before = noTable.snapshot();
+    await expect(eraseDeletedUser(noTable.client, USER)).rejects.toThrow();
+    expect(noTable.snapshot()).toEqual(before);
+  });
+
+  it("🟡 새 소유자가 잠금 직전에 조직을 떠났으면 ownerId 를 바꾸지 않고 보류한다", async () => {
+    const racing = createMemoryDb(seed(), {
+      onLock: (key, draft) => {
+        if (key === `clerk-user:${OLDEST}`) {
+          // 동시에 도착한 membership.deleted 가 먼저 커밋된 상황.
+          const u = draft.user.find((x) => x.id === OLDEST);
+          if (u) {
+            u.organizationId = null;
+          }
+        }
+      },
+    });
+    const r = await eraseDeletedUser(racing.client, USER);
+    const s = racing.snapshot();
+    expect(byId(s.organization, "org_shared")?.ownerId).toBe(USER);
+    expect(r.ownershipHeld).toEqual([
+      { orgId: "org_shared", reason: "successor_left_during_transfer" },
+    ]);
+    expect(r.ownershipTransfers).toEqual([]);
+    // 회원 삭제 자체는 끝났다(조직 이전은 별도 트랜잭션).
+    expect(s.user.find((u) => u.id === USER)).toBeUndefined();
+  });
+
+  it("조직 이전이 오류로 실패해도 회원 삭제는 유지되고 그 조직만 보류된다(조직별 별도 트랜잭션)", async () => {
+    const failing = createMemoryDb(seed(), "organization.updateMany");
+    const r = await eraseDeletedUser(failing.client, USER);
+    const s = failing.snapshot();
+    expect(s.user.find((u) => u.id === USER)).toBeUndefined();
+    expect(s.deletedClerkUser).toHaveLength(1);
+    expect(byId(s.organization, "org_shared")?.ownerId).toBe(USER);
+    expect(r.ownershipHeld).toEqual([
+      { orgId: "org_shared", reason: "transfer_error" },
+    ]);
+    expect(r.soleOwnerOrgIds).toEqual(["org_solo"]);
+  });
+
+  it("🔴 삭제 뒤 늦게 온 user.updated(진짜 표식 확인 경로)는 회원 행을 다시 만들지 않는다", async () => {
+    await eraseDeletedUser(db.client, USER);
+    const late = await writeUnlessDeleted(
+      db.client as unknown as Parameters<typeof writeUnlessDeleted>[0],
+      USER,
+      (tx) =>
+        tx.user.upsert({
+          where: { id: USER },
+          create: { id: USER, email: "gone@example.com", name: "탈퇴자" },
+          update: { email: "gone@example.com", name: "탈퇴자" },
+        })
+    );
+    expect(late).toBe("tombstoned");
+    expect(db.snapshot().user.find((u) => u.id === USER)).toBeUndefined();
+    // 탈퇴하지 않은 사람은 평소대로 쓴다.
+    const normal = await writeUnlessDeleted(
+      db.client as unknown as Parameters<typeof writeUnlessDeleted>[0],
+      "user_new",
+      (tx) =>
+        tx.user.upsert({
+          where: { id: "user_new" },
+          create: { id: "user_new", email: "new@example.com", name: null },
+          update: {},
+        })
+    );
+    expect(normal).toBe("written");
+    expect(db.snapshot().user.some((u) => u.id === "user_new")).toBe(true);
   });
 
   it("빈 id 는 거절한다(전체 삭제 사고 방지)", async () => {

@@ -8,37 +8,78 @@ import type {
 } from "@repo/auth/server";
 import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
+import { captureOpsAlert } from "@repo/observability/ops-alert";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { env } from "@/env";
 import { clerkUserPresence } from "@/lib/privacy/clerk-user-presence";
 import { eraseDeletedUser } from "@/lib/privacy/erase-deleted-user";
+import {
+  GuardLookupError,
+  writeUnlessDeleted,
+} from "@/lib/privacy/guarded-user-write";
 
 // 20번(D2 근본): org/user를 Prisma DB에 정식 적재하는 소유 경로.
 //   기존엔 analytics만 발생시켜 DB가 비어 있었고, 그 탓에 Brand.organizationId FK가
 //   가리킬 Organization row가 없어 Tracking 적재가 불가능했다(근본원인 A).
 //   여기서 User/Organization을 DB에 upsert해 그 뿌리를 해소한다. best-effort:
-//   DB 실패가 웹훅 200을 막지 않도록 try/catch(analytics·응답은 그대로).
-const upsertUserToDb = async (data: UserJSON): Promise<void> => {
+//   DB 쓰기 실패가 웹훅 200을 막지 않도록 try/catch(analytics·응답은 그대로).
+//   🔴 2026-10-20: 탈퇴 표식(DeletedClerkUser)이 있으면 **절대 쓰지 않는다**(`writeUnlessDeleted`).
+//     표식 조회 자체가 실패하면(표 없음 포함) `GuardLookupError` 를 던진다 → 호출부가 500(fail-closed).
+const upsertUserToDb = async (
+  data: UserJSON
+): Promise<"tombstoned" | "written" | "write_failed"> => {
   const email = data.email_addresses.at(0)?.email_address;
-  if (!email) {
-    return; // email은 User @unique NOT NULL. 없으면 적재 불가 → skip.
-  }
   const name =
     [data.first_name, data.last_name].filter(Boolean).join(" ").trim() || null;
   try {
-    await database.user.upsert({
-      where: { id: data.id }, // User.id = Clerk user_id
-      create: { id: data.id, email, name },
-      update: { email, name },
+    return await writeUnlessDeleted(database, data.id, async (tx) => {
+      if (!email) {
+        return; // email은 User @unique NOT NULL. 없으면 적재 불가 → skip(표식 확인은 했다).
+      }
+      await tx.user.upsert({
+        where: { id: data.id }, // User.id = Clerk user_id
+        create: { id: data.id, email, name },
+        update: { email, name },
+      });
     });
   } catch (error) {
+    if (error instanceof GuardLookupError) {
+      throw error;
+    }
     log.error("webhook.user.upsert_failed", {
       userId: data.id,
       error: error instanceof Error ? error.message : String(error),
     });
+    return "write_failed";
   }
+};
+
+/**
+ * 가입·수정 공통: Clerk 존재 확인(보조) → 탈퇴 표식 확인 + 적재(주 방어).
+ * @returns 멈춰야 하면 Response, 계속(분석 전송)하면 null.
+ */
+const syncUserOrStop = async (data: UserJSON): Promise<Response | null> => {
+  const stop = await stopIfUserGone(data);
+  if (stop) {
+    return stop;
+  }
+  let outcome: Awaited<ReturnType<typeof upsertUserToDb>>;
+  try {
+    outcome = await upsertUserToDb(data);
+  } catch (error) {
+    log.error("webhook.user.tombstone_lookup_failed", {
+      userId: data.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return new Response("Tombstone lookup failed", { status: 500 });
+  }
+  if (outcome === "tombstoned") {
+    log.info("privacy.user_upsert.skipped_tombstone", { userId: data.id });
+    return new Response("Ignored: user was deleted", { status: 200 });
+  }
+  return null;
 };
 
 /**
@@ -76,11 +117,10 @@ const stopIfUserGone = async (data: UserJSON): Promise<Response | null> => {
 };
 
 const handleUserCreated = async (data: UserJSON): Promise<Response> => {
-  const stop = await stopIfUserGone(data);
+  const stop = await syncUserOrStop(data);
   if (stop) {
     return stop;
   }
-  await upsertUserToDb(data);
 
   analytics?.identify({
     distinctId: data.id,
@@ -96,11 +136,10 @@ const handleUserCreated = async (data: UserJSON): Promise<Response> => {
 };
 
 const handleUserUpdated = async (data: UserJSON): Promise<Response> => {
-  const stop = await stopIfUserGone(data);
+  const stop = await syncUserOrStop(data); // DB email/name 동기화(멱등) 포함.
   if (stop) {
     return stop;
   }
-  await upsertUserToDb(data); // DB email/name 동기화(멱등).
 
   analytics?.identify({
     distinctId: data.id,
@@ -142,6 +181,18 @@ const handleUserDeleted = async (
           auditJobIds: result.heldAuditJobIds,
           leadCount: result.heldLeadIds.length,
           leadIds: result.heldLeadIds,
+        });
+      }
+      for (const held of result.ownershipHeld) {
+        // 소유권 이전 보류 — ownerId 는 그대로다. 운영자가 확인해 직접 정한다(범위표 6절).
+        log.warn("privacy.owner_transfer.held", {
+          userId: data.id,
+          orgId: held.orgId,
+          reason: held.reason,
+        });
+        captureOpsAlert("privacy.owner_transfer.held", {
+          orgId: held.orgId,
+          reason: held.reason,
         });
       }
       if (result.soleOwnerOrgIds.length > 0) {
@@ -268,10 +319,14 @@ const linkUserToOrg = async (
   orgId: string | null
 ): Promise<void> => {
   try {
-    await database.user.update({
-      where: { id: userId },
-      data: { organizationId: orgId },
-    });
+    // 탈퇴·소유권 이전과 같은 잠금 안에서 쓴다(이전 중 새 소유자가 빠져나가는 경합 방지).
+    // 탈퇴 표식이 있으면 쓰지 않는다(어차피 회원 행이 없다).
+    await writeUnlessDeleted(database, userId, (tx) =>
+      tx.user.update({
+        where: { id: userId },
+        data: { organizationId: orgId },
+      })
+    );
   } catch (error) {
     // 아직 user.created 가 안 들어온 순서면 여기서 실패한다(정상 가능 경로).
     log.error("webhook.user.org_link_failed", {
@@ -416,6 +471,21 @@ export const POST = async (request: Request): Promise<Response> => {
   }
 
   await analytics?.shutdown();
+
+  if (response.status >= 500) {
+    // 🔎 실패 추적(2026-10-20): Clerk 가 다시 보낼 이벤트다. 개인정보 없이 이벤트 id·유형만 남긴다.
+    //   운영자 확인 절차: 범위표 6절(로그 검색 → Clerk 대시보드에서 같은 id 재전송 확인).
+    log.error("webhook.auth.failed", {
+      eventId: svixId,
+      eventType,
+      status: response.status,
+    });
+    captureOpsAlert("webhook.auth.failed", {
+      eventId: svixId,
+      eventType,
+      status: response.status,
+    });
+  }
 
   return response;
 };

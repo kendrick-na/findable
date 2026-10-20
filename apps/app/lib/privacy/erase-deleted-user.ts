@@ -12,12 +12,20 @@
  *  - 조직 공유 데이터(브랜드·측정·리포트)와 결제·계약 기록은 **건드리지 않는다**.
  *  - 이메일만으로 남의 기록을 바꾸지 않는다: 역할 주소(info@ 등)나 다른 회원과 같은 이메일이면
  *    무료 진단·리드 이메일을 **바꾸지 않고 보류**(id·건수만 돌려준다 — 이메일 원문은 남기지 않는다).
- *  - 조직 소유자였으면 가장 먼저 가입한 남은 구성원에게 넘긴다. 남은 구성원이 없으면 id 만 돌려준다
- *    (확정 방침 「정기결제 해지 → 30일 뒤 삭제」는 스키마 변경이 필요해 다음 단계).
- *  - 스키마 변경 없음.
+ *  - 3차(코덱스 2차 검토): 트랜잭션 **첫 단계**에서 탈퇴 표식(DeletedClerkUser)을 남긴다. 같은 사용자의
+ *    가입·수정·조직 연결과는 advisory lock(`clerkUserLockKey`)으로 한 줄로 세운다 → 늦은 웹훅이 되살리지 못한다.
+ *  - 조직 소유자였으면 가장 먼저 가입한 남은 구성원에게 넘긴다 — **조직마다 별도 트랜잭션**(한 조직 실패가
+ *    회원 삭제 전체를 되돌리지 않게). 새 소유자를 잠그고 아직 구성원인지 다시 확인한 뒤에만 바꾼다.
+ *    확인 실패·오류면 `ownerId` 를 바꾸지 않고 보류로 돌려준다. 남은 구성원이 없으면 id 만 돌려준다
+ *    (확정 방침 「정기결제 해지 → 30일 뒤 삭제」는 다음 단계).
+ *  - 스키마 변경: 추가 표 1개(DeletedClerkUser)뿐. 표가 없으면 첫 단계에서 실패 → 웹훅 500(fail-closed).
  */
 
 import type { database } from "@repo/database";
+import {
+  advisoryXactLock,
+  clerkUserLockKey,
+} from "@repo/database/advisory-lock";
 
 /** 무료 진단·리드 이메일을 바꿔 넣는 자리표시. `.invalid` 는 예약 최상위 도메인이라 실제로 배달되지 않는다. */
 export const ERASED_EMAIL = "deleted-user@deleted.invalid";
@@ -58,6 +66,12 @@ export const ROLE_EMAIL_LOCAL_PARTS: ReadonlySet<string> = new Set([
 const HELD_ID_LIMIT = 50;
 
 const TX_OPTIONS = { maxWait: 5000, timeout: 15_000 } as const;
+const TRANSFER_TX_OPTIONS = { maxWait: 5000, timeout: 10_000 } as const;
+
+export type OwnershipHoldReason =
+  | "successor_left_during_transfer"
+  | "owner_already_changed"
+  | "transfer_error";
 
 export type EmailHoldReason = "role_address" | "shared_with_other_user";
 
@@ -75,6 +89,8 @@ export interface EraseDeletedUserResult {
   leadEmailsErased: number;
   mailboxConnectionsRevoked: number;
   outreachDraftSendersCleared: number;
+  /** 소유권 이전을 보류한 조직(ownerId 그대로) — 운영자 확인 필요. */
+  ownershipHeld: Array<{ orgId: string; reason: OwnershipHoldReason }>;
   /** 소유권을 넘긴 조직: 조직 id → 새 소유자 id. */
   ownershipTransfers: Array<{ orgId: string; newOwnerId: string }>;
   partnerApplicationsDeleted: number;
@@ -99,6 +115,11 @@ const insensitive = (value: string) => ({
 
 type EraseClient = Pick<typeof database, "$transaction">;
 
+type MemberErasure = Omit<
+  EraseDeletedUserResult,
+  "ownershipHeld" | "ownershipTransfers" | "soleOwnerOrgIds"
+> & { ownedOrgIds: string[] };
+
 export async function eraseDeletedUser(
   client: EraseClient,
   userId: string
@@ -106,7 +127,91 @@ export async function eraseDeletedUser(
   if (!userId) {
     throw new Error("eraseDeletedUser: userId 가 비어 있다");
   }
+  const { ownedOrgIds, ...member } = await eraseMemberData(client, userId);
+
+  const ownershipTransfers: Array<{ orgId: string; newOwnerId: string }> = [];
+  const ownershipHeld: Array<{ orgId: string; reason: OwnershipHoldReason }> =
+    [];
+  const soleOwnerOrgIds: string[] = [];
+  for (const orgId of ownedOrgIds) {
+    let outcome: TransferOutcome;
+    try {
+      outcome = await transferOrgOwnership(client, orgId, userId);
+    } catch {
+      outcome = { kind: "held", reason: "transfer_error" };
+    }
+    if (outcome.kind === "transferred") {
+      ownershipTransfers.push({ orgId, newOwnerId: outcome.newOwnerId });
+    } else if (outcome.kind === "no_member") {
+      soleOwnerOrgIds.push(orgId);
+    } else {
+      ownershipHeld.push({ orgId, reason: outcome.reason });
+    }
+  }
+  return { ...member, ownershipTransfers, ownershipHeld, soleOwnerOrgIds };
+}
+
+type TransferOutcome =
+  | { kind: "transferred"; newOwnerId: string }
+  | { kind: "no_member" }
+  | { kind: "held"; reason: OwnershipHoldReason };
+
+/**
+ * 조직 1곳의 소유권을 가장 먼저 가입한 남은 구성원에게 넘긴다(별도 트랜잭션).
+ * 새 소유자를 잠근 뒤(조직 연결·해제와 같은 잠금) 아직 구성원인지 **다시** 확인하고,
+ * 소유자가 여전히 탈퇴자일 때만 바꾼다. 아니면 바꾸지 않고 보류.
+ */
+export async function transferOrgOwnership(
+  client: EraseClient,
+  orgId: string,
+  formerOwnerId: string
+): Promise<TransferOutcome> {
   return await client.$transaction(async (tx) => {
+    const candidate = await tx.user.findFirst({
+      where: { organizationId: orgId, id: { not: formerOwnerId } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    if (!candidate) {
+      return { kind: "no_member" } as const;
+    }
+    await advisoryXactLock(tx, clerkUserLockKey(candidate.id));
+    const stillMember = await tx.user.findFirst({
+      where: { id: candidate.id, organizationId: orgId },
+      select: { id: true },
+    });
+    if (!stillMember) {
+      return {
+        kind: "held",
+        reason: "successor_left_during_transfer",
+      } as const;
+    }
+    const changed = await tx.organization.updateMany({
+      where: { id: orgId, ownerId: formerOwnerId },
+      data: { ownerId: candidate.id },
+    });
+    if (changed.count !== 1) {
+      return { kind: "held", reason: "owner_already_changed" } as const;
+    }
+    return { kind: "transferred", newOwnerId: candidate.id } as const;
+  }, TRANSFER_TX_OPTIONS);
+}
+
+/** 회원 본인 정보 삭제(한 트랜잭션). 첫 단계에서 탈퇴 표식을 남긴다. */
+function eraseMemberData(
+  client: EraseClient,
+  userId: string
+): Promise<MemberErasure> {
+  return client.$transaction(async (tx) => {
+    // 0) 같은 사용자의 가입·수정·조직 연결 웹훅과 한 줄로 선다(잠금은 트랜잭션 끝에 풀린다).
+    await advisoryXactLock(tx, clerkUserLockKey(userId));
+    // 0-1) 탈퇴 표식 — 이후 늦게 온 user.created/updated 는 이 표식을 보고 적재하지 않는다.
+    //      표가 없으면(마이그레이션 미적용) 여기서 던진다 → 전체 롤백 → 웹훅 500(재시도).
+    await tx.deletedClerkUser.upsert({
+      where: { clerkId: userId },
+      create: { clerkId: userId },
+      update: {},
+    });
     // 이메일은 지우기 **전에** 읽는다 — 무료 진단 기록·초안 보낸사람에서 같은 주소를 찾는 열쇠다.
     const user = await tx.user.findUnique({
       where: { id: userId },
@@ -225,30 +330,11 @@ export async function eraseDeletedUser(
       }
     }
 
-    // ── 4) 조직 소유권: 남은 구성원 중 가장 먼저 가입한 사람에게 넘긴다 ──────
-    //   (회원 행을 위에서 지웠으므로 여기서 세는 구성원에 탈퇴자는 없다.)
+    // ── 4) 소유 조직 목록만 읽는다 — 이전은 조직마다 별도 트랜잭션(transferOrgOwnership).
     const owned = await tx.organization.findMany({
       where: { ownerId: userId },
       select: { id: true },
     });
-    const ownershipTransfers: Array<{ orgId: string; newOwnerId: string }> = [];
-    const soleOwnerOrgIds: string[] = [];
-    for (const org of owned) {
-      const successor = await tx.user.findFirst({
-        where: { organizationId: org.id },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: { id: true },
-      });
-      if (successor) {
-        await tx.organization.update({
-          where: { id: org.id },
-          data: { ownerId: successor.id },
-        });
-        ownershipTransfers.push({ orgId: org.id, newOwnerId: successor.id });
-      } else {
-        soleOwnerOrgIds.push(org.id);
-      }
-    }
 
     return {
       userFound: user !== null,
@@ -266,8 +352,7 @@ export async function eraseDeletedUser(
       emailHoldReason,
       heldAuditJobIds,
       heldLeadIds,
-      ownershipTransfers,
-      soleOwnerOrgIds,
+      ownedOrgIds: owned.map((org) => org.id),
     };
   }, TX_OPTIONS);
 }

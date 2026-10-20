@@ -16,6 +16,11 @@ const h = vi.hoisted(() => ({
   erase: vi.fn(),
   presence: vi.fn(),
   userUpsert: vi.fn(),
+  userUpdate: vi.fn(),
+  tombstones: new Set<string>(),
+  tombstoneLookup: vi.fn(),
+  locks: [] as string[],
+  opsAlert: vi.fn(),
   logError: vi.fn(),
   logWarn: vi.fn(),
 }));
@@ -46,11 +51,25 @@ vi.mock("@repo/analytics/server", () => ({
     shutdown: () => Promise.resolve(),
   },
 }));
-vi.mock("@repo/database", () => ({
-  database: {
-    user: { upsert: h.userUpsert },
-    organization: { upsert: vi.fn(() => Promise.resolve({})) },
-  },
+// 진짜 `writeUnlessDeleted`(잠금 → 표식 확인 → 쓰기)가 이 가짜 트랜잭션 위에서 돈다.
+vi.mock("@repo/database", () => {
+  const tx = {
+    $executeRaw: (_s: TemplateStringsArray, key: string) => {
+      h.locks.push(key);
+      return Promise.resolve(1);
+    },
+    deletedClerkUser: { findUnique: h.tombstoneLookup },
+    user: { upsert: h.userUpsert, update: h.userUpdate },
+  };
+  return {
+    database: {
+      $transaction: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+      organization: { upsert: vi.fn(() => Promise.resolve({})) },
+    },
+  };
+});
+vi.mock("@repo/observability/ops-alert", () => ({
+  captureOpsAlert: h.opsAlert,
 }));
 vi.mock("@repo/observability/log", () => ({
   log: { info: vi.fn(), warn: h.logWarn, error: h.logError },
@@ -118,6 +137,7 @@ const erased = {
   heldAuditJobIds: [] as string[],
   heldLeadIds: [] as string[],
   ownershipTransfers: [] as { orgId: string; newOwnerId: string }[],
+  ownershipHeld: [] as { orgId: string; reason: string }[],
   soleOwnerOrgIds: [] as string[],
 };
 
@@ -125,6 +145,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.presence.mockResolvedValue("exists");
   h.userUpsert.mockResolvedValue({});
+  h.userUpdate.mockResolvedValue({});
+  h.tombstones.clear();
+  h.locks.length = 0;
+  h.tombstoneLookup.mockImplementation(
+    ({ where }: { where: { clerkId: string } }) =>
+      Promise.resolve(
+        h.tombstones.has(where.clerkId) ? { clerkId: where.clerkId } : null
+      )
+  );
 });
 
 describe("② 늦은 가입·수정 웹훅이 탈퇴자를 되살리지 않는다", () => {
@@ -162,6 +191,91 @@ describe("② 늦은 가입·수정 웹훅이 탈퇴자를 되살리지 않는�
       "webhook.user.clerk_lookup_failed",
       expect.objectContaining({ userId: "user_1" })
     );
+  });
+});
+
+describe("②-2 탈퇴 표식(tombstone)이 주 방어다 — Clerk 확인은 보조", () => {
+  it.each([
+    "user.created",
+    "user.updated",
+  ])("🔴 표식이 있으면 Clerk 가 '있다'고 해도(경합) %s 는 행을 만들지 않는다", async (type) => {
+    h.tombstones.add("user_1");
+    h.presence.mockResolvedValueOnce("exists");
+    const res = await post(type, clerkUser);
+    expect(h.userUpsert).not.toHaveBeenCalled();
+    expect(h.identify).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    // 확인과 쓰기는 같은 사용자 잠금 안에서 일어난다(탈퇴 처리와 같은 키).
+    expect(h.locks).toEqual(["clerk-user:user_1"]);
+  });
+
+  it("⛔ 표식 조회가 실패하면(표 없음 등) 500 — 적재하지 않는다(fail-closed)", async () => {
+    h.tombstoneLookup.mockRejectedValueOnce(
+      new Error('relation "DeletedClerkUser" does not exist')
+    );
+    const res = await post("user.updated", clerkUser);
+    expect(res.status).toBe(500);
+    expect(h.userUpsert).not.toHaveBeenCalled();
+  });
+
+  it("실제 쓰기(upsert) 실패는 기존처럼 로그만 남기고 201(재시도 폭주 방지)", async () => {
+    h.userUpsert.mockRejectedValueOnce(new Error("unique email"));
+    const res = await post("user.updated", clerkUser);
+    expect(res.status).toBe(201);
+    expect(h.logError).toHaveBeenCalledWith(
+      "webhook.user.upsert_failed",
+      expect.objectContaining({ userId: "user_1" })
+    );
+  });
+
+  it("조직 연결도 같은 잠금 안에서 쓴다", async () => {
+    await post("organizationMembership.created", {
+      organization: { id: "org_1" },
+      public_user_data: { user_id: "user_9" },
+    });
+    expect(h.locks).toEqual(["clerk-user:user_9"]);
+    expect(h.userUpdate).toHaveBeenCalledWith({
+      where: { id: "user_9" },
+      data: { organizationId: "org_1" },
+    });
+  });
+});
+
+describe("④ 웹훅 실패 추적 — 이벤트 id·유형만", () => {
+  it("500 이면 webhook.auth.failed 로그·운영 알림에 이벤트 id·유형·상태만 남긴다", async () => {
+    h.erase.mockRejectedValueOnce(new Error("db down"));
+    await post("user.deleted", { id: "user_1", deleted: true });
+    const expected = {
+      eventId: "msg_1",
+      eventType: "user.deleted",
+      status: 500,
+    };
+    expect(h.logError).toHaveBeenCalledWith("webhook.auth.failed", expected);
+    expect(h.opsAlert).toHaveBeenCalledWith("webhook.auth.failed", expected);
+  });
+
+  it("성공이면 실패 로그를 남기지 않는다", async () => {
+    h.erase.mockResolvedValueOnce(erased);
+    await post("user.deleted", { id: "user_1", deleted: true });
+    expect(h.logError).not.toHaveBeenCalledWith(
+      "webhook.auth.failed",
+      expect.anything()
+    );
+  });
+
+  it("소유권 이전 보류는 경고 로그 + 운영 알림(조직 id·사유만)", async () => {
+    h.erase.mockResolvedValueOnce({
+      ...erased,
+      ownershipHeld: [
+        { orgId: "org_1", reason: "successor_left_during_transfer" },
+      ],
+    });
+    const res = await post("user.deleted", { id: "user_1", deleted: true });
+    expect(res.status).toBe(201);
+    expect(h.opsAlert).toHaveBeenCalledWith("privacy.owner_transfer.held", {
+      orgId: "org_1",
+      reason: "successor_left_during_transfer",
+    });
   });
 });
 

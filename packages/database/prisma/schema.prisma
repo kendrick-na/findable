@@ -61,6 +61,16 @@ model User {
   @@index([organizationId])
 }
 
+// 탈퇴한 Clerk 사용자 표식(tombstone) — migration 20261020_deleted_clerk_user (2026-10-20).
+//   user.deleted 처리 트랜잭션의 첫 단계에서 기록한다. 늦게 도착한 user.created/updated 는
+//   이 표에 id 가 있으면 회원 행을 절대 다시 만들지 않는다(개인정보 부활 방지).
+//   개인정보 없음: Clerk id 와 시각만. ⚠️ 의도적으로 relation 을 두지 않는다(User 행은 지워진다).
+//   ⚠️ 표가 없는 환경(마이그레이션 미적용)에서는 조회가 실패 → 웹훅 500(재시도)으로 닫힌다(fail-closed).
+model DeletedClerkUser {
+  clerkId   String   @id
+  deletedAt DateTime @default(now())
+}
+
 // ──────────────────────────────────────────────────
 // 운영 컨설팅 기록
 // ──────────────────────────────────────────────────
