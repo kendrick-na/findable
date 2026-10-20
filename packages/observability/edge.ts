@@ -7,6 +7,13 @@
 // biome-ignore lint/performance/noNamespaceImport: Sentry SDK convention
 import * as Sentry from "@sentry/nextjs";
 import { keys } from "./keys";
+import {
+  parseTracesSampleRate,
+  sanitizeSentryBreadcrumb,
+  sanitizeSentryEvent,
+  sanitizeSentryLog,
+  sanitizeSentryTransaction,
+} from "./privacy";
 
 export const initializeSentry = (): ReturnType<typeof Sentry.init> =>
   Sentry.init({
@@ -15,8 +22,16 @@ export const initializeSentry = (): ReturnType<typeof Sentry.init> =>
     // Enable logging
     enableLogs: true,
 
-    // Adjust this value in production, or use tracesSampler for greater control
-    tracesSampleRate: 1,
+    // 운영 비용·개인정보를 고려해 기본 10%. 환경변수로 덮어쓸 수 있다.
+    tracesSampleRate: parseTracesSampleRate(
+      process.env.SENTRY_TRACES_SAMPLE_RATE
+    ),
+
+    // 개인정보 청소 — 오류·성능·이동기록·로그 모두 전송 전에 통과시킨다.
+    beforeSend: sanitizeSentryEvent,
+    beforeSendTransaction: sanitizeSentryTransaction,
+    beforeBreadcrumb: sanitizeSentryBreadcrumb,
+    beforeSendLog: sanitizeSentryLog,
 
     // Setting this option to true will print useful information to the console while you're setting up Sentry.
     debug: false,

@@ -926,8 +926,8 @@ function AuditResultBody({
             });
           }
           // 진단 품질 지표는 별도 이벤트로 유지한다(퍼널 단계와 성능 지표는 다른 질문).
+          // jobId 는 결과 열람 열쇠라 분석 도구로 보내지 않는다.
           analytics.capture("audit_result_quality", {
-            jobId,
             domain: data.domain,
             language: data.language,
             sov: data.result.metrics?.sov,

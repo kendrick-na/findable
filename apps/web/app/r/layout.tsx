@@ -8,8 +8,11 @@ import type { ReactNode } from "react";
 
 // 고객 웹 리포트 전용 **루트 레이아웃**(2026-09-28).
 //
-// 왜 `[locale]` 밖인가: `[locale]/layout.tsx` 는 사이트 푸터·다크 테마·분석 스크립트를 붙인다.
+// 왜 `[locale]` 밖인가: `[locale]/layout.tsx` 는 사이트 푸터·다크 테마·GA 스크립트를 붙인다.
 // 이 페이지는 A4 문서를 그대로 인쇄(PDF)해야 해서 **아무것도 덧붙지 않은 빈 HTML** 이 필요하다.
+// 분석: 전역 `instrumentation-client.ts` 가 PostHog·Sentry 를 켜지만, PostHog 는 `/r/` 로 진입하면
+// 초기화하지 않고(packages/analytics/instrumentation-client.ts), Sentry 는 주소의 토큰을 치환한다
+// (packages/observability/privacy.ts). GA 는 이 경로에 싣지 않는다.
 // (app/ 루트에 layout 이 없어 폴더마다 자기 루트 레이아웃을 가질 수 있다.)
 
 export const metadata: Metadata = {
