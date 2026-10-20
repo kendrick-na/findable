@@ -49,8 +49,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
+// 토큰 검사가 꺼져 있으면 check_official_facts 는 등록되지 않는다(fail-closed).
 const NEW_TOOLS = [
-  "check_official_facts",
   "get_answer_verdict_breakdown",
   "get_brand_measurement_summary",
 ];

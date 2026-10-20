@@ -23,6 +23,14 @@ vi.mock("@repo/observability/log", () => ({
   log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
 
+/** 토큰 검사를 켜고(check_official_facts 는 그때만 등록된다) 맞는 Authorization 헤더를 돌려준다. */
+function factsAuth() {
+  const good = `t_${randomBytes(12).toString("hex")}`;
+  vi.stubEnv("FINDABLE_MCP_TOKEN_REQUIRED", "true");
+  vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", good);
+  return { authorization: `Bearer ${good}` };
+}
+
 const token = () => `t_${randomBytes(12).toString("hex")}`;
 
 beforeEach(() => {
@@ -365,10 +373,11 @@ describe("M-facts — 읽기 전용 모드 안에서의 점검", () => {
       "https://brand.example.evil.test",
       "not a url",
     ]) {
-      const out = await rpc("tools/call", {
-        name: "check_official_facts",
-        arguments: { url },
-      });
+      const out = await rpc(
+        "tools/call",
+        { name: "check_official_facts", arguments: { url } },
+        factsAuth()
+      );
       expect(out.body.result.isError).toBe(true);
       expect(JSON.stringify(out.body.result.content)).toContain(
         "not_available"
@@ -376,13 +385,69 @@ describe("M-facts — 읽기 전용 모드 안에서의 점검", () => {
     }
   });
 
-  it("허용 목록이 비어 있으면 등록 도메인이어도 거부한다", async () => {
+  it("토큰 검사가 꺼져 있으면 check_official_facts 는 목록에 없고 호출해도 없는 도구다(fail-closed)", async () => {
     vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
-    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", "");
-    const out = await rpc("tools/call", {
+    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", BRAND_ID);
+    const list = await rpc("tools/list");
+    const names = (list.body.result.tools as { name: string }[]).map(
+      (t) => t.name
+    );
+    expect(names).not.toContain("check_official_facts");
+    expect(names.sort()).toEqual([
+      "get_answer_verdict_breakdown",
+      "get_brand_measurement_summary",
+    ]);
+    const call = await rpc("tools/call", {
       name: "check_official_facts",
       arguments: { url: "https://brand.example" },
     });
+    expect(
+      call.body.error !== undefined || call.body.result?.isError === true
+    ).toBe(true);
+  });
+
+  it("토큰 검사가 켜져 있으면 check_official_facts 가 목록에 있다", async () => {
+    vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
+    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", BRAND_ID);
+    const list = await rpc("tools/list", {}, factsAuth());
+    const names = (list.body.result.tools as { name: string }[]).map(
+      (t) => t.name
+    );
+    expect(names).toContain("check_official_facts");
+  });
+
+  it("읽기 전용 모드에서는 기존 registerFindableTools(직접 경로)가 한 번도 불리지 않는다", async () => {
+    vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
+    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", BRAND_ID);
+    const spy = vi.fn();
+    vi.doMock("../lib/mcp/tools", () => ({ registerFindableTools: spy }));
+    for (const method of ["tools/list", "tools/call"]) {
+      await rpc(
+        method,
+        method === "tools/call"
+          ? {
+              name: "check_official_facts",
+              arguments: { url: "https://brand.example" },
+            }
+          : {},
+        factsAuth()
+      );
+    }
+    expect(spy).not.toHaveBeenCalled();
+    vi.doUnmock("../lib/mcp/tools");
+  });
+
+  it("허용 목록이 비어 있으면 등록 도메인이어도 거부한다", async () => {
+    vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
+    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", "");
+    const out = await rpc(
+      "tools/call",
+      {
+        name: "check_official_facts",
+        arguments: { url: "https://brand.example" },
+      },
+      factsAuth()
+    );
     expect(out.body.result.isError).toBe(true);
     expect(JSON.stringify(out.body.result.content)).toContain("not_available");
   });
@@ -394,10 +459,11 @@ describe("M-facts — 읽기 전용 모드 안에서의 점검", () => {
       brand: { id: BRAND_ID, name: "시험브랜드", domain: "localhost" },
       job: makeJob(),
     }).db;
-    const out = await rpc("tools/call", {
-      name: "check_official_facts",
-      arguments: { url: "http://localhost" },
-    });
+    const out = await rpc(
+      "tools/call",
+      { name: "check_official_facts", arguments: { url: "http://localhost" } },
+      factsAuth()
+    );
     expect(out.body.result.isError).toBe(true);
     expect(JSON.stringify(out.body.result.content)).toMatch(
       /url_unsafe|private_address|url_invalid/

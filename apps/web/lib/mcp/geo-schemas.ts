@@ -188,6 +188,12 @@ export const evidenceEnvelopeSchema = z.strictObject({
 // [응답 봉투(ok / unverifiable)]
 
 // 키 순서가 곧 응답의 키 순서다: 요약 문장(message_ko)을 맨 앞에 두고 근거 봉투는 뒤에 둔다(응답이 커서).
+const truncationSchema = z.strictObject({
+  source_urls_returned: count.optional(),
+  source_urls_total: count.optional(),
+  truncated: z.boolean(),
+});
+
 export function okResponseSchema<T extends z.ZodType>(data: T) {
   return z.strictObject({
     message_ko: z.string(),
@@ -199,13 +205,7 @@ export function okResponseSchema<T extends z.ZodType>(data: T) {
     limits_en: z.string(),
     evidence: evidenceEnvelopeSchema,
     // 출처 URL 을 개수·길이·응답 크기 상한으로 줄였는지(줄였으면 truncated:true 와 개수).
-    truncation: z
-      .strictObject({
-        source_urls_returned: count,
-        source_urls_total: count,
-        truncated: z.boolean(),
-      })
-      .optional(),
+    truncation: truncationSchema.optional(),
   });
 }
 
@@ -219,6 +219,7 @@ export const unverifiableResponseSchema = z.strictObject({
   limits_ko: z.string(),
   limits_en: z.string(),
   evidence: evidenceEnvelopeSchema,
+  truncation: truncationSchema.optional(),
 });
 
 // [도구별 data — 화이트리스트: 여기 없는 키는 응답에 실리지 않는다]

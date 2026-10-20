@@ -704,3 +704,153 @@ describe("출처 URL 정리와 상한", () => {
     );
   });
 });
+
+describe("출처 URL 경로의 토큰성 조각 제거", () => {
+  const citedOne = (url: string) =>
+    repeatRows().map((r, i) =>
+      i === 0
+        ? {
+            ...r,
+            usage: { webSearchRequests: 1 },
+            citedSources: [{ url }],
+          }
+        : r
+    );
+
+  it("24자 이상 영숫자·16진·대소문자 숫자 혼합 조각은 [생략]으로 바꾸고 사람이 읽는 슬러그는 유지한다", async () => {
+    const hex = "0123456789abcdef0123456789abcdef";
+    const mixed = "aB3dE5gH7jK9mN1pQ3rS";
+    const plain = "abcdefghijklmnopqrstuvwxyz1234";
+    setJobs([
+      makeJob(
+        makeResult(
+          citedOne(
+            `https://b.example/p/findable/how-to-measure-ai-search-visibility/${hex}/${mixed}/${plain}`
+          )
+        )
+      ),
+    ]);
+    const res = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    const urls: string[] = res.evidence.retrieval.value.source_urls;
+    expect(urls).toEqual([
+      "https://b.example/p/findable/how-to-measure-ai-search-visibility/[생략]/[생략]/[생략]",
+    ]);
+    const text = JSON.stringify(res);
+    expect(text).not.toContain(hex);
+    expect(text).not.toContain(mixed);
+  });
+
+  it("공개 페이지 슬러그(하이픈·소문자·연도 표기)는 그대로 둔다", async () => {
+    setJobs([
+      makeJob(
+        makeResult(citedOne("https://b.example/ko/report/k-beauty-geo-2026q2"))
+      ),
+    ]);
+    const res = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    expect(res.evidence.retrieval.value.source_urls).toEqual([
+      "https://b.example/ko/report/k-beauty-geo-2026q2",
+    ]);
+  });
+});
+
+describe("응답 하드 상한", () => {
+  const baseResponse = (n: number) => ({
+    message_ko: "x",
+    status: "ok",
+    tool: "get_brand_measurement_summary",
+    language: { language: "ko", script: "Hang" },
+    data: { brand_id: "b" },
+    limits_ko: "한계",
+    limits_en: "limits",
+    evidence: {
+      retrieval: {
+        status: "known",
+        value: { by_engine: {}, retrieval_used: "used", source_urls: [] },
+      },
+      engine_model: {
+        status: "known",
+        value: Array.from({ length: n }, (_v, i) => ({
+          engine_id: `engine-${i}`,
+          call_source: null,
+          engine_set: null,
+          model_id: {
+            status: "unavailable",
+            reason: "not_recorded",
+            detail_ko: "x",
+            as_of: null,
+          },
+        })),
+      },
+      unmeasured: Array.from({ length: n }, (_v, i) => ({
+        action_ko: "a",
+        code: `c${i}`,
+        count: 1,
+        denominator: 1,
+        label_ko: "l",
+        rate: 1,
+      })),
+    },
+    truncation: {
+      source_urls_returned: 0,
+      source_urls_total: 0,
+      truncated: false,
+    },
+  });
+  const bytes = (v: unknown) => Buffer.byteLength(JSON.stringify(v), "utf8");
+
+  it("상한 이하이면 그대로 둔다", async () => {
+    const { enforceHardCap } = await import("../lib/mcp/geo-tools");
+    const r = baseResponse(3);
+    expect(enforceHardCap(r, 100_000)).toBe(r);
+  });
+
+  it("상한을 넘으면 목록을 줄이고 truncated:true 로 표시하며 반환 크기가 상한 이하다", async () => {
+    const { enforceHardCap } = await import("../lib/mcp/geo-tools");
+    const r = baseResponse(60);
+    const cap = Math.floor(bytes(r) / 2);
+    const out = enforceHardCap(r, cap) as any;
+    expect(bytes(out)).toBeLessThanOrEqual(cap);
+    expect(out.truncation.truncated).toBe(true);
+  });
+
+  it("그래도 넘으면 숫자 없는 확인 불가 최소 응답으로 바꾸고 상한 이하이며 truncated:true", async () => {
+    const { enforceHardCap } = await import("../lib/mcp/geo-tools");
+    // 줄일 수 있는 목록으로는 못 줄이는 큰 data(예: 비정상적으로 큰 값)를 가정한다.
+    const r = { ...baseResponse(60), data: { blob: "x".repeat(20_000) } };
+    const out = enforceHardCap(r, 12_000) as any;
+    expect(out.status).toBe("unverifiable");
+    expect(out.data).toBeNull();
+    expect(out.truncation.truncated).toBe(true);
+    expect(bytes(out)).toBeLessThanOrEqual(12_000);
+  });
+});
+
+describe("점검 요청 직전 재검증", () => {
+  it("등록 도메인이어도 요청 직전 확인에서 사설 주소로 판정되면 요청을 보내지 않는다", async () => {
+    vi.doMock("@repo/audit/public-url-security", async (importOriginal) => {
+      const real =
+        await importOriginal<
+          typeof import("@repo/audit/public-url-security")
+        >();
+      return {
+        ...real,
+        assertPublicUrl: vi.fn(() => Promise.reject(new Error("URL_PRIVATE"))),
+      };
+    });
+    const { confinedFetch } = await import("../lib/mcp/geo-tools");
+    const inner = vi.fn(() => Promise.resolve(new Response("ok")));
+    const guarded = confinedFetch(
+      new Set(["brand.example"]),
+      inner as unknown as typeof fetch
+    );
+    await expect(guarded("https://brand.example/robots.txt")).rejects.toThrow(
+      /blocked/
+    );
+    expect(inner).not.toHaveBeenCalled();
+    vi.doUnmock("@repo/audit/public-url-security");
+  });
+});

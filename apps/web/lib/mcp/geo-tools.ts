@@ -47,6 +47,7 @@ import type {
   UnavailableReason,
   UnmeasuredRow,
 } from "@repo/audit/proof-types";
+import { assertPublicUrl } from "@repo/audit/public-url-security";
 import {
   aggregateRepeats,
   type CohortAggregate,
@@ -58,7 +59,7 @@ import {
   searchSamplingVersionOf,
 } from "@repo/audit/search-sampling-version";
 import { z } from "zod";
-
+import { mcpTokenRequired } from "./geo-flags";
 import {
   type BreakdownData,
   breakdownDataSchema,
@@ -134,6 +135,8 @@ export function toReadonlyDb(db: unknown): ReadonlyDb {
 export interface GeoToolContext {
   allowlist: ReadonlySet<string>;
   db: ReadonlyDb;
+  /** check_official_facts 등록 여부. 생략하면 토큰 검사가 켜져 있을 때만 등록한다(fail-closed). */
+  factsEnabled?: boolean;
   fetchImpl?: FetchLike;
   log: { error: (event: string, data?: Record<string, unknown>) => void };
   /** 같은 조건 반복의 최소 횟수. 생략하면 사전 등록 확정값 3. */
@@ -360,6 +363,26 @@ const MAX_SOURCE_URL_LENGTH = 300;
 /** 응답 전체 바이트 상한. 넘으면 출처 URL 을 줄이고 truncated 로 표시한다. */
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
+const REDACTED_SEGMENT = "[생략]";
+// 토큰·해시·식별자처럼 보이는 경로 조각: 하이픈 없는 24자 이상 영숫자, 32자 이상 16진(UUID 포함),
+// 대문자·소문자·숫자가 모두 섞인 20자 이상. 사람이 읽는 슬러그(소문자 단어를 하이픈으로 이음)는 해당 없다.
+const LONG_PLAIN_RE = /^[A-Za-z0-9_]{24,}$/;
+const LONG_HEX_RE = /^[0-9a-f-]{32,}$/i;
+const MIXED_TOKEN_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)[A-Za-z0-9_-]{20,}$/;
+
+function redactPath(pathname: string): string {
+  return pathname
+    .split("/")
+    .map((seg) =>
+      LONG_PLAIN_RE.test(seg) ||
+      LONG_HEX_RE.test(seg) ||
+      MIXED_TOKEN_RE.test(seg)
+        ? REDACTED_SEGMENT
+        : seg
+    )
+    .join("/");
+}
+
 /** 쿼리·해시·로그인 정보는 버린다(개인정보가 섞일 수 있음). http(s)가 아니거나 읽을 수 없으면 null. */
 function safeSourceUrl(raw: string | null | undefined): string | null {
   if (!raw) {
@@ -368,7 +391,7 @@ function safeSourceUrl(raw: string | null | undefined): string | null {
   try {
     const u = new URL(raw);
     return u.protocol === "http:" || u.protocol === "https:"
-      ? `${u.origin}${u.pathname}`
+      ? `${u.origin}${redactPath(u.pathname)}`
       : null;
   } catch {
     return null;
@@ -877,6 +900,85 @@ export function withTruncation(
   };
 }
 
+function shrinkList(list: unknown, keep: number): unknown {
+  return Array.isArray(list) ? list.slice(0, keep) : list;
+}
+
+const OMITTED_BY_CAP = "응답 크기 상한으로 생략했습니다.";
+
+/**
+ * 직렬화 크기의 하드 상한. 출처 URL 을 줄여도 넘으면 단계적으로 줄인다:
+ *  1) 못 잰 사유·엔진 모델·엔진별 검색 정보 목록을 20개로, 2) 엔진 모델·검색 정보를 「생략」으로 바꾸고 못 잰 사유를 5개로,
+ *  3) 그래도 넘으면 숫자 없이 「확인 불가」 최소 응답. 줄였으면 truncation.truncated 를 true 로 둔다.
+ * 줄인 사실은 숨기지 않는다(생략한 칸은 Known.unavailable 로 이유를 적는다).
+ */
+export function enforceHardCap(
+  response: Record<string, unknown>,
+  maxBytes: number = MAX_RESPONSE_BYTES
+): Record<string, unknown> {
+  if (sizeOf(response) <= maxBytes) {
+    return response;
+  }
+  const evidence = { ...(response.evidence as Record<string, unknown>) };
+  const truncation = {
+    ...(response.truncation as Record<string, unknown> | undefined),
+    truncated: true,
+  };
+  const withEvidence = (e: Record<string, unknown>) => ({
+    ...response,
+    evidence: e,
+    truncation,
+  });
+  const retrieval = evidence.retrieval as
+    | { status?: string; value?: Record<string, unknown> }
+    | undefined;
+  if (retrieval?.status === "known" && retrieval.value) {
+    const by = retrieval.value.by_engine as Record<string, unknown>;
+    evidence.retrieval = {
+      ...retrieval,
+      value: {
+        ...retrieval.value,
+        by_engine: Object.fromEntries(Object.entries(by).slice(0, 20)),
+      },
+    };
+  }
+  const engineModel = evidence.engine_model as
+    | { status?: string; value?: unknown }
+    | undefined;
+  if (engineModel?.status === "known") {
+    evidence.engine_model = {
+      ...engineModel,
+      value: shrinkList(engineModel.value, 20),
+    };
+  }
+  evidence.unmeasured = shrinkList(evidence.unmeasured, 20);
+  let out = withEvidence(evidence);
+  if (sizeOf(out) <= maxBytes) {
+    return out;
+  }
+  const omitted = {
+    as_of: null,
+    detail_ko: OMITTED_BY_CAP,
+    reason: "not_recorded",
+    status: "unavailable",
+  };
+  evidence.retrieval = omitted;
+  evidence.engine_model = omitted;
+  evidence.unmeasured = shrinkList(evidence.unmeasured, 5);
+  out = withEvidence(evidence);
+  if (sizeOf(out) <= maxBytes) {
+    return out;
+  }
+  const tool = response.tool as McpReadonlyToolName;
+  return {
+    ...(unverifiable(tool, "not_recorded", OMITTED_BY_CAP) as Record<
+      string,
+      unknown
+    >),
+    truncation,
+  };
+}
+
 type GroupRate = {
   denominator: number;
   exposure_count: number;
@@ -1005,21 +1107,23 @@ export async function runSummary(
   const data = summaryDataOf(loaded.brand, run);
   const message_ko = summaryMessageOf(run);
   return {
-    response: finalize(
-      tool,
-      summaryDataSchema,
-      withTruncation(
-        {
-          message_ko,
-          tool,
-          status: "ok",
-          language: run.language,
-          data,
-          evidence: run.evidence,
-          limits_ko: LIMITS_KO,
-          limits_en: LIMITS_EN,
-        },
-        run
+    response: enforceHardCap(
+      finalize(
+        tool,
+        summaryDataSchema,
+        withTruncation(
+          {
+            message_ko,
+            tool,
+            status: "ok",
+            language: run.language,
+            data,
+            evidence: run.evidence,
+            limits_ko: LIMITS_KO,
+            limits_en: LIMITS_EN,
+          },
+          run
+        )
       )
     ),
   };
@@ -1112,21 +1216,23 @@ export async function runBreakdown(
     ? `같은 조건으로 저장된 ${run.cohort.repeat_count}회 측정을 묶은`
     : `저장된 최신 측정 1회(${run.measuredAt.slice(0, 10)}) 기준`;
   return {
-    response: finalize(
-      tool,
-      breakdownDataSchema,
-      withTruncation(
-        {
-          message_ko: `${scope} AI 답변 ${aiGroup.total}건의 분류입니다. 비율은 판정이 끝난 ${aiGroup.adjudicated}건만 분모로 하며, 측정 실패와 판정 보류는 건수만 보여 줍니다.`,
-          tool,
-          status: "ok",
-          language: run.language,
-          data,
-          evidence: run.evidence,
-          limits_ko: LIMITS_KO,
-          limits_en: LIMITS_EN,
-        },
-        run
+    response: enforceHardCap(
+      finalize(
+        tool,
+        breakdownDataSchema,
+        withTruncation(
+          {
+            message_ko: `${scope} AI 답변 ${aiGroup.total}건의 분류입니다. 비율은 판정이 끝난 ${aiGroup.adjudicated}건만 분모로 하며, 측정 실패와 판정 보류는 건수만 보여 줍니다.`,
+            tool,
+            status: "ok",
+            language: run.language,
+            data,
+            evidence: run.evidence,
+            limits_ko: LIMITS_KO,
+            limits_en: LIMITS_EN,
+          },
+          run
+        )
       )
     ),
   };
@@ -1164,13 +1270,18 @@ function hostOnly(value: string): string | null {
 /**
  * 점검이 보내는 모든 요청(리다이렉트로 따라가는 주소 포함)이 허용 목록 브랜드의 등록 도메인 안에 머물게 하는 fetch 래퍼.
  * 다른 호스트로 가는 요청은 보내지 않고(= 읽지 않고) 네트워크 실패로 돌려, 해당 점검 항목이 「확인 불가」가 된다.
+ * 등록 도메인이어도 요청 직전에 해석된 주소가 사설·루프백·링크로컬이 아닌지 한 번 더 확인한다(assertPublicUrl).
  * official-facts.ts 는 수정하지 않는다(리다이렉트를 수동으로 따라가며 매 단계 fetch 를 부르는 구조를 이용).
+ *
+ * ⚠️ 한계(숨기지 않는다): 여기서 확인한 주소와 실제 연결 사이에 DNS 응답이 바뀌는 재바인딩은 완전히 막지 못한다.
+ *   fetch 가 연결 때 호스트를 다시 해석하고, 해석된 IP 로 연결을 고정(핀)할 수단이 이 구조에는 없다.
+ *   그래서 이 도구는 토큰 검사가 켜져 있을 때만 등록하고(fail-closed), 등록 도메인만 점검하며, 확인 횟수를 늘려 창을 줄일 뿐이다.
  */
 export function confinedFetch(
   domains: ReadonlySet<string>,
   inner: FetchLike
 ): FetchLike {
-  return ((
+  return (async (
     input: Parameters<FetchLike>[0],
     init?: Parameters<FetchLike>[1]
   ) => {
@@ -1180,9 +1291,14 @@ export function confinedFetch(
         : input.url;
     const host = hostOnly(target);
     if (host === null || !domains.has(host)) {
-      return Promise.reject(new TypeError("blocked: host not registered"));
+      throw new TypeError("blocked: host not registered");
     }
-    return inner(input, init);
+    try {
+      await assertPublicUrl(new URL(target));
+    } catch {
+      throw new TypeError("blocked: address not public");
+    }
+    return await inner(input, init);
   }) as FetchLike;
 }
 
@@ -1331,6 +1447,10 @@ export function registerGeoReadonlyTools(
     }
   );
 
+  // 외부 주소를 서버가 직접 읽는 도구라, 토큰 검사가 꺼져 있으면 목록에서 뺀다(익명 공개 안 함, 대표 결정 P-1).
+  if (!(ctx.factsEnabled ?? mcpTokenRequired())) {
+    return;
+  }
   server.registerTool(
     "check_official_facts",
     {
