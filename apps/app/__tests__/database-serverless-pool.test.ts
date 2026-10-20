@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "../../..");
 const DATABASE_CLIENT = readFileSync(
-  join(ROOT, "packages/database/index.ts"),
+  join(ROOT, "packages/database/create-client.ts"),
   "utf8"
 );
 

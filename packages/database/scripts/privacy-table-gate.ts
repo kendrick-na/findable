@@ -4,8 +4,7 @@
 //   돌린다(fail-closed). 그래서 **마이그레이션 적용 확인 → 배포** 순서를 사람 기억이 아니라 이 점검으로 고정한다.
 // 방식: READ ONLY 트랜잭션에서 information_schema.tables 만 조회. 쓰기 0, 데이터 0, 연결 문자열 출력 0.
 
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../generated/client";
+import { createPrismaClient } from "../create-client";
 import { connectionSchema } from "../prisma/db-target-fingerprint";
 
 /** 이 앱이 웹훅을 처리하려면 반드시 있어야 하는 표. 새로 추가하면 여기에도 적는다. */
@@ -37,12 +36,10 @@ export async function readPrivacyTables(
   connectionString: string
 ): Promise<PrivacyTableVerdict> {
   const schema = connectionSchema(connectionString);
-  const prisma = new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString,
-      max: 1,
-      connectionTimeoutMillis: PRIVACY_GATE_CONNECT_TIMEOUT_MS,
-    }),
+  // 🔴 런타임과 **같은 함수**로 만든다(Supabase sslmode 제거 + CA 고정 + max 1). 직접 new PrismaClient/PrismaPg 금지 —
+  //   2026-10-20 운영 빌드가 여기서 TLS 검증 실패(P1011)로 막혔던 원인이다.
+  const prisma = createPrismaClient(connectionString, {
+    connectionTimeoutMillis: PRIVACY_GATE_CONNECT_TIMEOUT_MS,
   });
   try {
     const rows = await prisma.$transaction(
