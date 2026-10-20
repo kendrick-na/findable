@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
+import { unstable_cache } from "next/cache";
 import Link from "next/link";
-import { loadHomeInsights } from "./home-insights-data";
+import { listPublishedContent } from "@/lib/content";
 
 interface HomeInsightsProps {
   locale?: string;
@@ -8,7 +9,12 @@ interface HomeInsightsProps {
 
 // 공개 홈에서는 게시글 목록이 매 방문마다 DB 응답을 기다릴 이유가 없다.
 // 콘텐츠 발행은 ISR 재검증으로 반영하고, 첫 화면은 CDN에서 즉시 제공한다.
-// 캐시·실패 처리는 home-insights-data.ts(실패하면 빈 목록 + 로그).
+const getHomeInsights = unstable_cache(
+  async (locale: string) =>
+    (await listPublishedContent(locale, "findable")).slice(0, 3),
+  ["landing-insights"],
+  { revalidate: 1800 }
+);
 
 /**
  * 랜딩의 "사례"를 임의의 고객 로고로 채우지 않는다.
@@ -18,7 +24,7 @@ interface HomeInsightsProps {
 export const HomeInsights = async ({ locale = "ko" }: HomeInsightsProps) => {
   const isKo = locale.startsWith("ko");
   const prefix = isKo ? "/ko" : "/en";
-  const posts = await loadHomeInsights(locale);
+  const posts = await getHomeInsights(locale);
 
   return (
     <section
