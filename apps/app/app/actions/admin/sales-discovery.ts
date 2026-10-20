@@ -8,6 +8,8 @@ import { z } from "zod";
 import { withDiscovery } from "@/lib/ax-mail/discovery/guard";
 import { prismaCompanyStore } from "@/lib/ax-mail/discovery/ingest";
 import {
+  API_SOURCES,
+  type ApiSource,
   defaultFetchers,
   type IngestSourceResult,
   runDiscoveryIngest,
@@ -347,12 +349,27 @@ export async function measureCompany(
 
 // ── 데이터 불러오기 ───────────────────────────────────────────────────────
 
-export async function ingestDiscoverySources(): Promise<
-  { ok: true; results: IngestSourceResult[] } | Failure
-> {
+type IngestSource = ApiSource;
+const ingestSourceSchema = z.enum(API_SOURCES);
+
+/**
+ * 원천 하나씩 부른다(화면이 5번 호출). 한 번에 5개를 돌리면 서버 액션 120초 제한을 넘어 실패한다.
+ * source 를 안 주면 전체(예전 동작)를 그대로 돈다.
+ */
+export async function ingestDiscoverySources(
+  source?: IngestSource
+): Promise<{ ok: true; results: IngestSourceResult[] } | Failure> {
   const adminId = await requireAdmin();
+  const parsed =
+    source === undefined ? undefined : ingestSourceSchema.safeParse(source);
+  if (parsed && !parsed.success) {
+    return { ok: false, error: "invalid" };
+  }
+  const only = parsed?.success ? [parsed.data] : undefined;
   const guarded = await withDiscovery(() =>
-    runDiscoveryIngest(prismaCompanyStore(database), defaultFetchers())
+    runDiscoveryIngest(prismaCompanyStore(database), defaultFetchers(), {
+      sources: only,
+    })
   );
   if (guarded.state !== "ready") {
     return blocked(guarded.state);

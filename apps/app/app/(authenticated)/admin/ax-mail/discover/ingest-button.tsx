@@ -4,10 +4,22 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ingestDiscoverySources } from "@/app/actions/admin/sales-discovery";
-import type { IngestSourceResult } from "@/lib/ax-mail/discovery/ingest-runner";
+import type {
+  ApiSource,
+  IngestSourceResult,
+} from "@/lib/ax-mail/discovery/ingest-runner";
 import type { AppDictionary } from "@/lib/i18n";
 
 type Labels = AppDictionary["salesDiscover"];
+
+/** 원천을 하나씩 부른다(서버 액션 120초 제한 — 한 번에 다 부르면 시간 초과). 순서는 서버 API_SOURCES 와 같다. */
+const SOURCES: ApiSource[] = [
+  "fsc",
+  "nps",
+  "mfds",
+  "ftc_mail_order",
+  "opendart",
+];
 
 function line(labels: Labels, r: IngestSourceResult): string {
   const name = labels.sourceShort[r.source];
@@ -32,16 +44,24 @@ export function IngestButton({ labels }: { labels: Labels }) {
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
+            const done: string[] = [];
             try {
-              const result = await ingestDiscoverySources();
-              setLines(
-                result.ok
-                  ? result.results.map((r) => line(labels, r))
-                  : [labels.errors[result.error]]
-              );
+              for (const source of SOURCES) {
+                const result = await ingestDiscoverySources(source);
+                if (!result.ok) {
+                  done.push(labels.errors[result.error]);
+                  setLines([...done]);
+                  break;
+                }
+                for (const r of result.results) {
+                  done.push(line(labels, r));
+                }
+                setLines([...done]);
+              }
               router.refresh();
             } catch {
-              setLines([labels.errors.unexpected]);
+              done.push(labels.errors.unexpected);
+              setLines([...done]);
             }
           })
         }
