@@ -40,7 +40,7 @@ export const generateMetadata = async ({
       ? "K-뷰티 5사 AI 가시성 시뮬레이션 · Findable Case Study"
       : "K-Beauty AI Search Visibility Simulation | Findable",
     description: ko
-      ? "메디큐브·라운드랩·아누아·조선미녀·달바 5사의 7 AI 엔진 실측 데이터 + Princeton GEO 알고리즘 시뮬레이션. AI 시대 K-뷰티 가시성 분석."
+      ? "메디큐브·라운드랩·아누아·조선미녀·달바 5사의 2026년 5월 측정 당시 7개 채널(AI 5곳·검색 2곳) 실측 데이터 + Princeton GEO 알고리즘 시뮬레이션. AI 시대 K-뷰티 가시성 분석."
       : "Observed AI search visibility for five K-beauty brands across seven engines, with a separately labeled simulation based on published GEO research.",
     locale: ko ? "ko" : "en",
     pathname: "/case/a-brand",
@@ -296,8 +296,8 @@ export default async function ABrandCasePage({
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               {ko
-                ? "한국 K-뷰티 D2C 5사 · 7 AI 엔진 실측 + 시뮬레이션"
-                : "Five K-beauty D2C brands · Seven AI engines · Measured results and simulation"}
+                ? "한국 K-뷰티 D2C 5사 · 7개 채널(2026년 5월 측정) 실측 + 시뮬레이션"
+                : "Five K-beauty D2C brands · 7 channels (measured May 2026) · Measured results and simulation"}
             </span>
           </div>
           <h1
@@ -317,8 +317,8 @@ export default async function ABrandCasePage({
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             {ko
-              ? "메디큐브·라운드랩·아누아·조선미녀·달바 5사의 ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X·네이버·다음 7 AI 엔진 실측 데이터를 기반으로, Princeton KDD'24 GEO 알고리즘을 적용했을 때 예상되는 변화를 정리한 산업 분석 리포트입니다."
-              : "This case study separates observed responses for Medicube, Round Lab, Anua, Beauty of Joseon, and d'Alba across seven AI engines from a projected scenario informed by Princeton's KDD '24 GEO research."}
+              ? "메디큐브·라운드랩·아누아·조선미녀·달바 5사의 ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X·네이버·다음 7개 채널(2026년 5월 측정) 실측 데이터를 기반으로, Princeton KDD'24 GEO 알고리즘을 적용했을 때 예상되는 변화를 정리한 산업 분석 리포트입니다."
+              : "This case study separates observed responses for Medicube, Round Lab, Anua, Beauty of Joseon, and d'Alba across 7 channels (measured May 2026) from a projected scenario informed by Princeton's KDD '24 GEO research."}
           </p>
           <div
             className="mt-6 inline-flex items-start gap-2 rounded-md border border-[var(--findable-hairline)] bg-[var(--findable-surface-1)] px-3 py-2 text-[12px] text-[var(--findable-ink-muted)]"

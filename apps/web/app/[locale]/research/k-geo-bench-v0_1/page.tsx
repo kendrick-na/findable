@@ -29,9 +29,9 @@ import { FooterCTA } from "../../(home)/components/footer-cta";
 import { PublicLandingHeader } from "../../components/public-landing-header";
 
 const DESCRIPTION =
-  "한국어 GEO 측정 공개 데이터셋. K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트 = 140 측정 응답. CC BY 4.0.";
+  "한국어 GEO 측정 공개 데이터셋. K-뷰티 5사 × 7개 채널(2026년 5월 측정, AI 5곳·검색 2곳) × 4 프롬프트 = 140 측정 응답. CC BY 4.0.";
 const EN_DESCRIPTION =
-  "An open dataset for Korean-language GEO measurement: five K-beauty brands, seven AI engines, four prompts, and 140 measured responses. CC BY 4.0.";
+  "An open dataset for Korean-language GEO measurement: five K-beauty brands, 7 channels (measured May 2026), four prompts, and 140 measured responses. CC BY 4.0.";
 const PATHNAME = "/research/k-geo-bench-v0_1";
 const SITE_URL = "https://www.findable.co.kr";
 const canonicalFor = (locale: string) =>
@@ -229,8 +229,8 @@ export default async function KGeoBenchPage({
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             {ko
-              ? "K-뷰티 5사 × 7 AI 엔진 × 4 프롬프트로 수집한 140개 측정 응답입니다. 한국어 AI 검색 가시성을 재현하고 비교할 수 있도록 측정 결과와 조건을 공개합니다."
-              : "This dataset contains 140 measured responses across five K-beauty brands, seven AI engines, and four prompts. We publish the results and measurement conditions so others can reproduce and compare Korean-language AI search visibility."}
+              ? "K-뷰티 5사 × 7개 채널(2026년 5월 측정, AI 5곳·검색 2곳) × 4 프롬프트로 수집한 140개 측정 응답입니다. 한국어 AI 검색 가시성을 재현하고 비교할 수 있도록 측정 결과와 조건을 공개합니다."
+              : "This dataset contains 140 measured responses across five K-beauty brands, 7 channels (measured May 2026), and four prompts. We publish the results and measurement conditions so others can reproduce and compare Korean-language AI search visibility."}
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -271,7 +271,7 @@ export default async function KGeoBenchPage({
             className="mb-8 font-medium text-[24px] leading-tight tracking-tight md:text-[32px]"
             style={{ fontFamily: "var(--findable-font-display)" }}
           >
-            5 brands · 7 engines · 4 prompts = 140 responses.
+            5 brands · 7 channels (measured May 2026) · 4 prompts = 140 responses.
           </h2>
           <div className="grid grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
             <div>

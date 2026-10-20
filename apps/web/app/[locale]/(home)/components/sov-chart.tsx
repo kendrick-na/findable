@@ -35,8 +35,8 @@ export const SoVChart = ({ locale = "ko" }: SoVChartProps) => {
   const data = loadSoVChartData();
 
   const chartTitle = isKo
-    ? "7개 AI 엔진별 브랜드 인용률"
-    : "Brand citation rate across 7 AI engines";
+    ? "2026년 5월 측정 당시 7개 채널(AI 5곳·검색 2곳)별 브랜드 인용률"
+    : "Brand citation rate across 7 channels (measured May 2026)";
 
   // 🔴 "한국 엔진 평균이 낮다"는 **데이터를 잘못 요약한 것**이다.
   //   실측: HyperCLOVA 81% · 네이버 92% 로 오히려 높고, **다음만 41%** 로 혼자 떨어진다.

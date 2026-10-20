@@ -33,8 +33,8 @@ export const generateMetadata = async ({
       ? "무료 AI 가시성 진단 · Findable"
       : "Free AI Visibility Audit · Findable",
     description: isKo
-      ? "도메인을 입력하면 보통 2~3분, 길면 4분쯤 뒤에 AI 답변 4곳(ChatGPT·Claude·Perplexity·Gemini)과 네이버·다음 검색 노출에서 우리 브랜드의 위치를 PDF로 받아보세요."
-      : "Drop in your domain. In about 2–3 minutes (up to 4), get a 1-page PDF showing where your brand stands across 4 AI engines plus Naver and Daum search exposure.",
+      ? "도메인을 입력하면 보통 2~3분 뒤에 AI 답변 4곳(ChatGPT·Claude·Perplexity·Gemini)과 네이버·다음 검색 노출에서 우리 브랜드의 위치를 PDF로 받아보세요."
+      : "Drop in your domain. Usually in 2–3 minutes, get a 1-page PDF showing where your brand stands across 4 AI engines plus Naver and Daum search exposure.",
     locale,
     pathname: "/audit",
   });
@@ -85,8 +85,8 @@ const AuditPage = async ({ params }: AuditPageProps) => {
               → 기본값(한국어+영어=7곳)이라는 **조건을 밝힌다**. 선택별 정확한 수는
                 폼의 선택지·안내문이 책임진다(서버 컴포넌트라 선택 상태를 알 수 없다). */}
           {isKo
-            ? "도메인만 입력하면 AI 답변 점유율을 보통 2~3분, 길면 4분쯤이면 진단해드려요. 한국어와 영어를 함께 측정하면 AI 답변 4곳과 네이버·다음 검색 노출까지 봅니다."
-            : "Drop in your domain for a Share-of-Voice diagnosis in about 2–3 minutes (up to 4). Measuring Korean and English together covers 4 AI engines plus Naver and Daum search."}
+            ? "도메인만 입력하면 AI 답변 점유율을 보통 2~3분이면 진단해드려요. 한국어와 영어를 함께 측정하면 AI 답변 4곳과 네이버·다음 검색 노출까지 봅니다."
+            : "Drop in your domain for a Share-of-Voice diagnosis that usually takes 2–3 minutes. Measuring Korean and English together covers 4 AI engines plus Naver and Daum search."}
         </p>
 
         <div className="mt-10 rounded-xl bg-[var(--findable-surface-1)] p-6 md:p-8">
@@ -108,8 +108,8 @@ const AuditPage = async ({ params }: AuditPageProps) => {
               // 🔴 S7-a — 「영어만」이면 4곳이다. 선택에 따라 달라지므로 수를 못 박지 않는다
               //   (정확한 수는 폼의 선택지가 말한다).
               body: isKo
-                ? "고른 AI 엔진에 동시 호출 (보통 2~3분, 길면 4분쯤)"
-                : "Selected engines run in parallel (usually 2–3 min, up to 4)",
+                ? "고른 AI 엔진에 동시 호출 (보통 2~3분)"
+                : "Selected engines run in parallel (usually 2–3 min)",
             },
             {
               n: "3",

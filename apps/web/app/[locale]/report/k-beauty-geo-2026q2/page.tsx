@@ -31,7 +31,7 @@ import { FooterCTA } from "../../(home)/components/footer-cta";
 import { PublicLandingHeader } from "../../components/public-landing-header";
 
 const DESCRIPTION =
-  "한국 K-뷰티 5사 (메디큐브·라운드랩·아누아·조선미녀·달바)의 7 AI 엔진 가시성 측정 + Princeton GEO 시뮬레이션. 광고주·마케터를 위한 산업 인사이트.";
+  "한국 K-뷰티 5사 (메디큐브·라운드랩·아누아·조선미녀·달바)의 2026년 5월 측정 당시 7개 채널(AI 5곳·검색 2곳) 가시성 측정 + Princeton GEO 시뮬레이션. 광고주·마케터를 위한 산업 인사이트.";
 const EN_DESCRIPTION =
   "AI search visibility measured for five K-beauty brands across seven engines, alongside clearly labeled findings from Princeton's GEO research.";
 const PATHNAME = "/report/k-beauty-geo-2026q2";
@@ -313,8 +313,8 @@ export default async function KBeautyReportPage({
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               {ko
-                ? "한국 K-뷰티 5사 · 7 AI 엔진 · 2026년 5월 측정 기준"
-                : "Five K-beauty brands · Seven AI engines · Measured in May 2026"}
+                ? "한국 K-뷰티 5사 · 7개 채널(AI 5곳·검색 2곳) · 2026년 5월 측정 기준"
+                : "Five K-beauty brands · 7 channels (5 AI, 2 search) · Measured in May 2026"}
             </span>
           </div>
           <h1
@@ -334,7 +334,7 @@ export default async function KBeautyReportPage({
             style={{ fontFamily: "var(--findable-font-sans)" }}
           >
             {ko
-              ? "메디큐브·라운드랩·아누아·조선미녀·달바 5사를 ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X·네이버·다음 7개 엔진에서 측정한 결과와 Princeton KDD'24 GEO 실험에서 검증한 편집 전략을 구분해 정리했습니다."
+              ? "메디큐브·라운드랩·아누아·조선미녀·달바 5사를 ChatGPT·Claude·Perplexity·Gemini·HyperCLOVA X·네이버·다음 7개 채널(2026년 5월 측정)에서 측정한 결과와 Princeton KDD'24 GEO 실험에서 검증한 편집 전략을 구분해 정리했습니다."
               : "We measured Medicube, Round Lab, Anua, Beauty of Joseon, and d'Alba across ChatGPT, Claude, Perplexity, Gemini, HyperCLOVA X, Naver, and Daum. We report those observations separately from editorial techniques tested in Princeton's KDD '24 GEO study."}
           </p>
           <div
@@ -612,10 +612,10 @@ export default async function KBeautyReportPage({
                 style={{ fontFamily: "var(--findable-font-display)" }}
               >
                 {ko
-                  ? "우리 브랜드는 7 AI 답변에서"
+                  ? "우리 브랜드는 AI 답변과 검색에서"
                   : "Where does your brand appear"}
                 <br />
-                {ko ? "어디에 있을까요?" : "across seven AI engines?"}
+                {ko ? "어디에 있을까요?" : "across AI answers and search?"}
               </h2>
               <Link
                 className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"
