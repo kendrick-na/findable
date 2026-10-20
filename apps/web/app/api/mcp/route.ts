@@ -9,11 +9,22 @@
 // 인증: 1단계는 무인증(공개 데이터). 호출 IP 가 Claude·ChatGPT 서버라 IP 별 제한은 쓰지 않고
 //   도메인 캐시·MCP 일일 상한·전역 예산으로 막는다(`lib/mcp/audit-bridge.ts`).
 
+import { database } from "@repo/database";
 import { log } from "@repo/observability/log";
 import { createMcpHandler } from "mcp-handler";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { mcpEnabled } from "../../../lib/mcp/flags";
+import {
+  checkReadonlyToken,
+  mcpReadonlyModeEnabled,
+  readonlyBrandAllowlist,
+} from "../../../lib/mcp/geo-flags";
+import { READONLY_ERROR_MESSAGES_KO } from "../../../lib/mcp/geo-schemas";
+import {
+  registerGeoReadonlyTools,
+  toReadonlyDb,
+} from "../../../lib/mcp/geo-tools";
 import {
   detectClient,
   isOriginAllowed,
@@ -26,12 +37,45 @@ export const dynamic = "force-dynamic";
 // 측정 자체는 응답 뒤(`after`)에서 도는 기존 방식과 같다(POST /api/audit 과 동일한 상한).
 export const maxDuration = 300;
 
+// 읽기 전용 모드(FINDABLE_MCP_READONLY_MODE_ENABLED): 토큰 검사 뒤 읽기 도구 3개만 등록한다.
+// start_*·get_ai_visibility_result 는 등록하지 않고, 쓰기 가능한 의존성(makeBridgeDeps)도 만들지 않는다.
+function handleReadonly(request: NextRequest): Response | Promise<Response> {
+  if (checkReadonlyToken(request.headers.get("authorization")) !== "ok") {
+    return NextResponse.json(
+      {
+        error: {
+          code: "unauthorized",
+          message_ko: READONLY_ERROR_MESSAGES_KO.unauthorized,
+        },
+      },
+      { status: 401 }
+    );
+  }
+  const handler = createMcpHandler(
+    (server) =>
+      registerGeoReadonlyTools(server, {
+        allowlist: readonlyBrandAllowlist(),
+        db: toReadonlyDb(database),
+        log: { error: (event, data) => log.error(event, data) },
+      }),
+    {
+      serverInfo: { name: "findable", version: "1.0.0" },
+      instructions:
+        "Findable: 허용 목록 브랜드의 저장된 AI 노출 측정 결과를 읽기 전용으로 제공합니다. 새 측정을 시작하지 않습니다.",
+    }
+  );
+  return handler(request);
+}
+
 function handle(request: NextRequest): Response | Promise<Response> {
   if (!mcpEnabled()) {
     return NextResponse.json({ error: "Not available" }, { status: 503 });
   }
   if (!isOriginAllowed(request.headers.get("origin"))) {
     return NextResponse.json({ error: "Forbidden origin" }, { status: 403 });
+  }
+  if (mcpReadonlyModeEnabled()) {
+    return handleReadonly(request);
   }
   const client = detectClient(request.headers.get("user-agent"));
   const handler = createMcpHandler(
