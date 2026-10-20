@@ -56,6 +56,21 @@ export interface StoredRunsByPeriod {
   before: readonly StoredRun[];
 }
 
+export interface OtherCohortReport {
+  cohort_id: string;
+  job_ids: string[];
+  reason: "not_latest_cohort";
+}
+
+export interface FromStoredRunsDetailed {
+  /** 처방 후 회차 중 집계에 넣지 못한 회차(언어 기록 없음 등)와 사유. */
+  excluded_runs: ExcludedRun[];
+  /** 처방 후 회차에서 선택하지 않은 코호트(조건이 달라 합치지 않음). */
+  other_cohorts: OtherCohortReport[];
+  selected_cohort_id: string | null;
+  sheet: EvidenceSheetInput;
+}
+
 const UNKNOWN_LANGUAGE: LanguageKey = { language: "unknown", script: null };
 
 function gone<T>(
@@ -66,13 +81,16 @@ function gone<T>(
   return { as_of: asOf, detail_ko, reason, status: "unavailable" };
 }
 
-/** 마지막으로 끝난 코호트(관찰값에 쓴다). 없으면 null. */
-function latestCohort(agg: RepeatAggregateResult): CohortAggregate | null {
-  return (
-    [...agg.cohorts].sort(
-      (a, b) =>
-        Date.parse(b.last_completed_at) - Date.parse(a.last_completed_at)
-    )[0] ?? null
+/**
+ * 최신 코호트 선택 규칙(결정적): ① 마지막 완료 시각이 가장 늦은 것 → ② 같으면 반복 수가 많은 것 → ③ 같으면 cohort_id 사전순.
+ * 선택되지 않은 코호트는 합치지 않고 `other_cohorts` 로 보고한다(조용히 버리지 않는다).
+ */
+function rankedCohorts(agg: RepeatAggregateResult): CohortAggregate[] {
+  return [...agg.cohorts].sort(
+    (a, b) =>
+      Date.parse(b.last_completed_at) - Date.parse(a.last_completed_at) ||
+      b.repeat_count - a.repeat_count ||
+      a.cohort_id.localeCompare(b.cohort_id)
   );
 }
 
@@ -137,6 +155,14 @@ export function fromStoredRuns(
   runs: StoredRunsByPeriod,
   options: FromStoredRunsOptions
 ): EvidenceSheetInput {
+  return fromStoredRunsDetailed(runs, options).sheet;
+}
+
+/** fromStoredRuns + 선택한 코호트·선택하지 않은 코호트·제외 회차 보고. */
+export function fromStoredRunsDetailed(
+  runs: StoredRunsByPeriod,
+  options: FromStoredRunsOptions
+): FromStoredRunsDetailed {
   const aggOptions = {
     brand_domain: options.brand_domain ?? null,
     is_publishable: options.is_publishable,
@@ -145,19 +171,35 @@ export function fromStoredRuns(
   };
   const beforeAgg = aggregateRepeats(runs.before, aggOptions);
   const afterAgg = aggregateRepeats(runs.after, aggOptions);
-  const before = latestCohort(beforeAgg);
-  const after = latestCohort(afterAgg);
+  const before = rankedCohorts(beforeAgg)[0] ?? null;
+  const afterRanked = rankedCohorts(afterAgg);
+  const afterAny = afterRanked[0] ?? null;
+  // 숫자를 못 낸 코호트(게시 불가 등)에서는 시각·질문 수·출처 같은 봉투 칸도 같이 「확인 불가」로 낮춘다.
+  const after =
+    afterAny && afterAny.observed.ai_brand.status === "known" ? afterAny : null;
+  const withheld =
+    afterAny && afterAny.observed.ai_brand.status === "unavailable"
+      ? afterAny.observed.ai_brand
+      : null;
+  const lowered = <T>(): Known<T> | undefined =>
+    withheld
+      ? gone<T>(
+          withheld.reason,
+          "숫자를 내지 못한 묶음이라 이 칸도 확인 불가로 둡니다.",
+          null
+        )
+      : undefined;
 
-  const pair = pairOf(before, after, options);
+  const pair = pairOf(before, afterAny, options);
   const unmeasured = buildUnmeasuredBreakdown(
     runs.after.map((r) => ({ job_id: r.job_id, result: r.result }))
   ).rows;
 
-  const sheet = assembleEvidenceSheet({
+  const built = assembleEvidenceSheet({
     as_of: options.as_of,
     before_after: { as_of: options.as_of, status: "known", value: pair },
     brand_ref: options.brand_ref,
-    language: after?.cohort.language ?? UNKNOWN_LANGUAGE,
+    language: (after ?? afterAny)?.cohort.language ?? UNKNOWN_LANGUAGE,
     limits: options.limits,
     measured_at: after
       ? {
@@ -168,7 +210,7 @@ export function fromStoredRuns(
             last: after.last_completed_at,
           },
         }
-      : undefined,
+      : lowered(),
     method_version: after
       ? {
           as_of: after.last_completed_at,
@@ -182,9 +224,9 @@ export function fromStoredRuns(
                 : null,
           },
         }
-      : undefined,
+      : lowered(),
     min_repeats: options.min_repeats,
-    observed: observedOf(after, afterAgg.excluded_runs, options.as_of),
+    observed: observedOf(afterAny, afterAgg.excluded_runs, options.as_of),
     source_ids: after
       ? {
           as_of: after.last_completed_at,
@@ -196,17 +238,33 @@ export function fromStoredRuns(
             sample_count: after.repeat_count,
           },
         }
-      : undefined,
+      : lowered(),
     ui_language: options.ui_language,
     unmeasured,
   });
-  return {
-    ...sheet,
-    question_count: questionCountOf(after),
+  const sheet: EvidenceSheetInput = {
+    ...built,
+    question_count: withheld
+      ? gone(
+          withheld.reason,
+          "숫자를 내지 못한 묶음이라 질문 수도 확인 불가로 둡니다.",
+          null
+        )
+      : questionCountOf(after),
     region: gone(
       "not_recorded",
       "측정 지역은 저장 결과에 기록되어 있지 않습니다.",
       null
     ),
+  };
+  return {
+    excluded_runs: afterAgg.excluded_runs,
+    other_cohorts: afterRanked.slice(1).map((c) => ({
+      cohort_id: c.cohort_id,
+      job_ids: c.job_ids,
+      reason: "not_latest_cohort" as const,
+    })),
+    selected_cohort_id: afterAny?.cohort_id ?? null,
+    sheet,
   };
 }

@@ -5,7 +5,7 @@ import {
   flattenView,
   scanBannedPhrases,
 } from "./evidence-copy";
-import { fromStoredRuns } from "./from-stored-runs";
+import { fromStoredRuns, fromStoredRunsDetailed } from "./from-stored-runs";
 import { GAP_LABEL_KO } from "./measurement-gap";
 import type { PairArm } from "./proof-types";
 import { normalizeQuestionText, type StoredRun } from "./repeat-aggregate";
@@ -263,5 +263,74 @@ describe("증거 한 장 최종 출력 금칙어 훑기", () => {
         expect(scanBannedPhrases(flattenView(view))).toEqual([]);
       }
     });
+  });
+});
+
+describe("여러 코호트·게시 불가 봉투 일관성", () => {
+  it("최신 코호트 규칙: 마지막 완료 시각이 가장 늦은 묶음을 고르고 나머지는 합치지 않고 보고한다", () => {
+    const old3 = after3(); // 판정 버전 2, 10/25~27
+    const newer = runs("v", ["28", "29"], rowsFor(AFTER), {
+      mentionVerdictVersion: 3,
+    });
+    const out = fromStoredRunsDetailed(
+      { after: [...old3, ...newer], before: before3() },
+      OPTIONS
+    );
+    expect(out.other_cohorts).toHaveLength(1);
+    expect(out.other_cohorts[0]).toMatchObject({
+      job_ids: ["a1", "a2", "a3"],
+      reason: "not_latest_cohort",
+    });
+    // 선택된 묶음은 v1·v2 두 회차뿐이라 반복 부족 → 비교 불가(옛 3회와 합치지 않는다)
+    expect(out.sheet.finding_kind).toBe("not_comparable");
+    const obs = out.sheet.envelope.observed;
+    expect(obs.status === "known" && obs.value.collection.repeat_count).toBe(2);
+    expect(out.selected_cohort_id).not.toBeNull();
+    expect(out.excluded_runs).toEqual([]);
+  });
+
+  it("마지막 완료 시각이 같으면 반복 수가 많은 묶음을 고른다(결정적)", () => {
+    const three = runs("x", ["25", "26", "27"], rowsFor(AFTER));
+    const two = runs("y", ["26", "27"], rowsFor(AFTER), {
+      mentionVerdictVersion: 3,
+    });
+    const out = fromStoredRunsDetailed(
+      { after: [...two, ...three], before: before3() },
+      OPTIONS
+    );
+    expect(out.other_cohorts[0]?.job_ids).toEqual(["y1", "y2"]);
+    const obs = out.sheet.envelope.observed;
+    expect(obs.status === "known" && obs.value.collection.repeat_count).toBe(3);
+    // 입력 순서를 바꿔도 같은 선택
+    const again = fromStoredRunsDetailed(
+      { after: [...three, ...two], before: before3() },
+      OPTIONS
+    );
+    expect(again.selected_cohort_id).toBe(out.selected_cohort_id);
+  });
+
+  it("게시 불가 묶음이면 측정 시각·방식·출처·질문 수도 모두 확인 불가로 낮춘다", () => {
+    const few = runs("f", ["25", "26", "27"], rowsFor(AFTER).slice(0, 4));
+    const sheet = fromStoredRuns(
+      { after: few, before: before3() },
+      { ...OPTIONS, is_publishable: undefined }
+    );
+    const env = sheet.envelope;
+    for (const key of [
+      "observed",
+      "measured_at",
+      "method_version",
+      "source_ids",
+    ] as const) {
+      expect(env[key], key).toMatchObject({
+        reason: "withheld_not_publishable",
+        status: "unavailable",
+      });
+    }
+    expect(sheet.question_count).toMatchObject({
+      reason: "withheld_not_publishable",
+      status: "unavailable",
+    });
+    expect(sheet.finding_kind).toBe("not_comparable");
   });
 });

@@ -249,3 +249,101 @@ describe("DB 손잡이 경계", () => {
     expect(watched.reads.length).toBeGreaterThan(0);
   });
 });
+
+describe("최종 직렬화 응답 크기 상한(64KB) — 실제 route 경로", () => {
+  const huge = {
+    checked_at: "2026-10-20T00:00:00.000Z",
+    checked_url: "https://brand.example",
+    items: Array.from({ length: 5000 }, (_v, i) => ({
+      detail: `상세 ${"가".repeat(200)}`,
+      key: `k${i}`,
+      status: "found",
+    })),
+    limits_ko: "한계",
+    summary_ko: "원문 요약",
+  };
+  const mockHuge = () =>
+    vi.doMock("../lib/mcp/official-facts", async (importOriginal) => {
+      const real =
+        await importOriginal<typeof import("../lib/mcp/official-facts")>();
+      return {
+        ...real,
+        checkOfficialFacts: vi.fn(() => Promise.resolve(huge)),
+      };
+    });
+  const bytes = (v: unknown) => Buffer.byteLength(JSON.stringify(v), "utf8");
+
+  it("읽기 전용 모드: 큰 점검 결과는 항목을 줄이고 truncated:true 로 표시하며 직렬화 크기가 상한 이하다", async () => {
+    vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
+    vi.stubEnv("FINDABLE_MCP_TOKEN_REQUIRED", "true");
+    vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", TOKEN);
+    mockHuge();
+    const res = await facts("https://brand.example");
+    const sc = res.structuredContent;
+    expect(sc.truncation).toMatchObject({ truncated: true });
+    expect(sc.data.items.length).toBeLessThanOrEqual(20);
+    expect(bytes(sc)).toBeLessThanOrEqual(64 * 1024);
+    expect(bytes(res.content)).toBeLessThanOrEqual(2 * 64 * 1024);
+    vi.doUnmock("../lib/mcp/official-facts");
+  });
+
+  it("기존 직접 경로: 큰 점검 결과는 항목을 비우고 truncated:true 로 응답하며 크기가 상한 이하다", async () => {
+    mockHuge();
+    const res = await facts("https://brand.example", {});
+    const sc = res.structuredContent;
+    expect(sc.truncated).toBe(true);
+    expect(sc.items).toEqual([]);
+    expect(bytes(sc)).toBeLessThanOrEqual(64 * 1024);
+    vi.doUnmock("../lib/mcp/official-facts");
+  });
+});
+
+// 허용 목록 정규화 정책: 대소문자·끝 점·`www.` 접두사는 같은 호스트로 본다. IDN 은 punycode 로 정규화해 비교한다.
+// 서브도메인(brand.example 의 하위가 아닌 위장 포함)·포트·사용자정보·IP 리터럴은 같은 호스트로 보지 않는다.
+describe("허용 목록 호스트 정규화 회귀", () => {
+  beforeEach(() => {
+    vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
+    vi.stubEnv("FINDABLE_MCP_TOKEN_REQUIRED", "true");
+    vi.stubEnv("FINDABLE_MCP_READONLY_TOKEN", TOKEN);
+  });
+
+  it("IPv6·IPv4 리터럴 주소는 등록 도메인이 아니므로 요청 없이 거부한다", async () => {
+    for (const url of [
+      "http://[::1]/",
+      "https://[2001:db8::1]/",
+      "http://127.0.0.1/",
+      "http://[::ffff:127.0.0.1]/",
+    ]) {
+      const res = await facts(url);
+      expect(res.isError, url).toBe(true);
+    }
+    expect(holder.fetched).toEqual([]);
+  });
+
+  it("정책: 끝 점·대문자·www. 는 같은 호스트로 본다", async () => {
+    for (const url of [
+      "https://brand.example.",
+      "https://BRAND.example",
+      "https://www.brand.example",
+    ]) {
+      const res = await facts(url);
+      expect(res.isError, url).not.toBe(true);
+    }
+  });
+
+  it("IDN: 등록된 한글·악센트 도메인은 유니코드와 punycode 표기 모두 같은 호스트이고, 비슷하게 생긴 다른 문자는 거부한다", async () => {
+    setDb("bränd.example");
+    for (const url of [
+      "https://bränd.example",
+      "https://xn--brnd-moa.example",
+    ]) {
+      const res = await facts(url);
+      expect(res.isError, url).not.toBe(true);
+    }
+    holder.fetched.length = 0;
+    // 키릴 문자 а(U+0430)를 섞은 위장 도메인
+    const spoof = await facts("https://brаnd.example");
+    expect(spoof.isError).toBe(true);
+    expect(holder.fetched.some((u) => u.includes("xn--br"))).toBe(false);
+  });
+});

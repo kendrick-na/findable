@@ -96,7 +96,7 @@ export function registerFindableTools(
     {
       title: "공식 사실·AI 크롤러 점검",
       description:
-        "공개된 브랜드 사이트가 AI 검색엔진이 읽기 좋은 상태인지 점검합니다. llms.txt, robots.txt의 AI 크롤러 허용 여부, 구조화 데이터(JSON-LD), sitemap.xml 유무를 확인합니다. AI 엔진에 질의하지 않으며 보통 몇 초 걸립니다. / Checks whether a public brand site is AI-search friendly (llms.txt, AI crawler rules in robots.txt, JSON-LD, sitemap).",
+        "허용 목록에 등록된 브랜드의 공개 사이트에서 AI 검색엔진 관련 파일·설정 항목의 유무를 확인합니다. llms.txt, robots.txt의 AI 크롤러 허용 여부, 구조화 데이터(JSON-LD), sitemap.xml 유무를 확인합니다. AI 엔진에 질의하지 않으며 보통 몇 초 걸립니다. / Checks which AI-search related files and settings exist on the registered public site of an allow-listed brand (llms.txt, AI crawler rules in robots.txt, JSON-LD, sitemap).",
       inputSchema: z.object({ url: urlField, brand_name: brandField }),
       outputSchema: factsOutput,
       annotations: {

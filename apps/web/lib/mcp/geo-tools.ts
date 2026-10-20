@@ -362,6 +362,9 @@ const MAX_SOURCE_URLS = 50;
 const MAX_SOURCE_URL_LENGTH = 300;
 /** 응답 전체 바이트 상한. 넘으면 출처 URL 을 줄이고 truncated 로 표시한다. */
 const MAX_RESPONSE_BYTES = 64 * 1024;
+/** 공식 정보 점검 응답의 항목 수·항목 설명 길이 상한(정상 응답은 4개·짧은 문장이라 닿지 않는다). */
+const MAX_FACT_ITEMS = 20;
+const MAX_FACT_DETAIL = 500;
 
 const REDACTED_SEGMENT = "[생략]";
 // 토큰·해시·식별자처럼 보이는 경로 조각: 하이픈 없는 24자 이상 영숫자, 32자 이상 16진(UUID 포함),
@@ -1403,18 +1406,25 @@ export async function runFacts(
       value: { kind: "live_fetch" as const, checked_url: out.checked_url },
     },
   };
+  const trimmedItems = out.items.slice(0, MAX_FACT_ITEMS).map((i) => ({
+    key: i.key,
+    status: i.status,
+    detail:
+      i.detail.length > MAX_FACT_DETAIL
+        ? `${i.detail.slice(0, MAX_FACT_DETAIL)}…`
+        : i.detail,
+  }));
+  const itemsTrimmed =
+    out.items.length > MAX_FACT_ITEMS ||
+    out.items.some((i) => i.detail.length > MAX_FACT_DETAIL);
   const data: FactsData = {
     checked_at: out.checked_at,
     checked_url: out.checked_url,
-    items: out.items.map((i) => ({
-      key: i.key,
-      status: i.status,
-      detail: i.detail,
-    })),
+    items: trimmedItems,
     limits_ko: out.limits_ko,
     summary_ko,
   };
-  const response = finalize(tool, factsDataSchema, {
+  const finalized = finalize(tool, factsDataSchema, {
     message_ko: summary_ko,
     tool,
     status: "ok",
@@ -1424,7 +1434,11 @@ export async function runFacts(
     limits_ko: LIMITS_KO,
     limits_en: LIMITS_EN,
   });
-  return { response };
+  // 응답 하드 상한(64KB): 항목을 줄였으면 표시하고, 그래도 넘으면 숫자 없는 확인 불가 최소 응답.
+  const marked = itemsTrimmed
+    ? { ...finalized, truncation: { truncated: true } }
+    : finalized;
+  return { response: enforceHardCap(marked) };
 }
 
 // [등록]
@@ -1496,7 +1510,7 @@ export function registerGeoReadonlyTools(
     {
       title: "공식 사실·AI 크롤러 점검",
       description:
-        "허용 목록에 등록된 브랜드의 도메인에 한해, 공개 사이트가 AI 검색엔진이 읽기 좋은 상태인지 점검합니다. 등록되지 않은 주소는 거부합니다. llms.txt, robots.txt의 AI 크롤러 허용 여부, 구조화 데이터(JSON-LD), sitemap.xml 유무를 확인합니다. 입력한 주소의 공개 페이지를 서버가 직접 읽으며(응답 512KB, 요청당 5초, 리다이렉트 3회, 사설 주소 차단) AI 엔진에는 질의하지 않습니다. / Checks whether the registered domain of an allow-listed brand is AI-search friendly (llms.txt, AI crawler rules in robots.txt, JSON-LD, sitemap).",
+        "허용 목록에 등록된 브랜드의 도메인에 한해, 공개 사이트의 AI 검색엔진 관련 파일·설정 항목 유무를 확인합니다. 등록되지 않은 주소는 거부합니다. llms.txt, robots.txt의 AI 크롤러 허용 여부, 구조화 데이터(JSON-LD), sitemap.xml 유무를 확인합니다. 입력한 주소의 공개 페이지를 서버가 직접 읽으며(응답 512KB, 요청당 5초, 리다이렉트 3회, 사설 주소 차단) AI 엔진에는 질의하지 않습니다. / Checks which AI-search related files and settings exist on the registered domain of an allow-listed brand (llms.txt, AI crawler rules in robots.txt, JSON-LD, sitemap).",
       inputSchema: z.object({
         url: z
           .string()
