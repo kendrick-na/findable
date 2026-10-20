@@ -12,7 +12,7 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import { createServer as createHttpsServer } from "node:https";
+import { createServer as createHttpsServer, globalAgent } from "node:https";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +20,7 @@ import type { TLSSocket } from "node:tls";
 import { gzipSync } from "node:zlib";
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -41,6 +42,7 @@ vi.mock("@repo/audit/public-url-security", async (importOriginal) => {
 import { confinedFetch } from "@/lib/mcp/geo-tools";
 import { checkOfficialFacts } from "@/lib/mcp/official-facts";
 import {
+  canonicalAddress,
   createPinnedFetch,
   type PinnedFetchOptions,
   type ResolvedAddress,
@@ -416,3 +418,137 @@ describe("평문 http 도 같은 핀을 쓴다", () => {
     );
   });
 });
+
+describe("주소 표기 정규화", () => {
+  it("IPv4 매핑 IPv6 는 안의 IPv4 와 같은 주소로 본다", () => {
+    expect(canonicalAddress("::ffff:127.0.0.1")).toBe("127.0.0.1");
+    expect(canonicalAddress("::FFFF:93.184.216.34")).toBe("93.184.216.34");
+    expect(canonicalAddress("2606:4700::1")).toBe("2606:4700::1");
+    expect(canonicalAddress("::ffff:zz")).toBe("::ffff:zz");
+  });
+});
+
+describe.skipIf(!tls)(
+  "코덱스 재검증 반영 — Agent 격리·family·Host·프록시·전체 deadline",
+  () => {
+    const resolveAll = dnsOf({
+      "pinned.test": [{ address: PUBLIC_IP, family: 4 }],
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    });
+
+    it("같은 호스트에 연속 요청해도 요청마다 새 소켓(서버 연결 수 = 요청 수), 전역 Agent 는 쓰지 않는다", async () => {
+      const globalSpy = vi.spyOn(globalAgent, "createConnection");
+      const seen: (string | undefined)[] = [];
+      state.handler = (req, res) => {
+        seen.push(req.headers.connection);
+        res.end("ok");
+      };
+      const pinned = make({ resolveAll });
+      for (let i = 0; i < 3; i += 1) {
+        expect(await (await pinned("https://pinned.test/", GET)).text()).toBe(
+          "ok"
+        );
+      }
+      expect(state.requests).toBe(3);
+      expect(state.connections).toBe(3);
+      expect(seen).toEqual(["close", "close", "close"]);
+      expect(globalSpy).not.toHaveBeenCalled();
+    });
+
+    it("핀 주소가 IPv4 매핑 IPv6 표기여도 같은 상대면 연결을 거부하지 않는다", async () => {
+      const mapped = dnsOf({
+        "pinned.test": [{ address: `::ffff:${PUBLIC_IP}`, family: 6 }],
+      });
+      const res = await make({ resolveAll: mapped })(
+        "https://pinned.test/",
+        GET
+      );
+      expect(await res.text()).toBe("ok");
+    });
+
+    it("Host 헤더는 호출자 값을 무시하고 지금 URL(기본 포트가 아니면 포트 포함)로 보낸다", async () => {
+      const hosts: (string | undefined)[] = [];
+      state.handler = (req, res) => {
+        hosts.push(req.headers.host);
+        res.end("ok");
+      };
+      const pinned = make({ resolveAll });
+      await (
+        await pinned("https://pinned.test/", {
+          ...GET,
+          headers: { host: "evil.test", Host: "evil.test" },
+        })
+      ).text();
+      await (await pinned("https://pinned.test:8443/", GET)).text();
+      expect(hosts).toEqual(["pinned.test", "pinned.test:8443"]);
+    });
+
+    it("프록시 환경변수가 있어도 무시하고 직접 연결한다", async () => {
+      for (const name of [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "ALL_PROXY",
+      ]) {
+        vi.stubEnv(name, "http://127.0.0.1:9");
+      }
+      vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+      vi.stubEnv("NO_PROXY", "");
+      const res = await make({ resolveAll })("https://pinned.test/", GET);
+      expect(await res.text()).toBe("ok");
+      expect(state.requests).toBe(1);
+    });
+
+    it("점검 전체가 하나의 deadline signal 을 공유한다(4개 경로·모든 리다이렉트 단계)", async () => {
+      state.handler = (req, res) => {
+        if (req.url === "/") {
+          res.writeHead(302, { location: "https://pinned.test/next" });
+          res.end();
+          return;
+        }
+        res.end("ok");
+      };
+      const signals: (AbortSignal | null | undefined)[] = [];
+      const inner = make({ resolveAll });
+      const recording = ((input, init) => {
+        signals.push(init?.signal);
+        return inner(input, init);
+      }) as typeof fetch;
+      await checkOfficialFacts("https://pinned.test", recording);
+      expect(signals.length).toBe(5); // 4개 경로 + "/" 의 리다이렉트 1단계
+      expect(signals[0]).toBeInstanceOf(AbortSignal);
+      expect(new Set(signals).size).toBe(1);
+    });
+
+    it("단계마다 새 시간이 생기지 않는다 — 느린 리다이렉트 3단계는 전체 deadline 에서 끊긴다", async () => {
+      state.handler = (req, res) => {
+        const hop = Number((req.url ?? "").replace("/r", "")) || 0;
+        setTimeout(() => {
+          if (req.url === "/" || (req.url ?? "").startsWith("/r")) {
+            res.writeHead(302, { location: `https://pinned.test/r${hop + 1}` });
+            res.end();
+            return;
+          }
+          res.writeHead(404);
+          res.end();
+        }, 150);
+      };
+      const started = Date.now();
+      const out = await checkOfficialFacts(
+        "https://pinned.test",
+        make({ resolveAll, timeoutMs: 5000 }),
+        () => new Date(),
+        300
+      );
+      const elapsed = Date.now() - started;
+      // 단계마다 5초가 새로 생겼다면 150ms × 4단계 = 600ms 이상 걸린다. 전체 300ms 에서 끊겨야 한다.
+      expect(elapsed).toBeLessThan(550);
+      expect(out.items.find((i) => i.key === "json_ld")?.status).toBe("error");
+    });
+  }
+);

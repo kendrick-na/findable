@@ -1,7 +1,8 @@
 // 공식 사실·AI 크롤러 점검 — AI 엔진에 질의하지 않는다(원가 0). 공개 페이지만 읽는다.
 //
 // 보안: 사설 주소 차단(`assertPublicUrl`)을 **리다이렉트마다** 다시 건다(SSRF).
-// 읽는 양·시간 상한을 둔다(응답 512KB, 요청당 5초, 리다이렉트 3회).
+// 읽는 양·시간 상한을 둔다(응답 512KB, 리다이렉트 3회, **점검 전체 8초 deadline 하나**).
+// deadline 은 점검 시작 때 한 번 만들고 4개 경로·모든 리다이렉트 단계·DNS·TLS·헤더·본문 읽기가 함께 쓴다(단계마다 새 시간 없음).
 // 기본 fetchImpl 은 연결 주소 고정(DNS 핀) fetch(`pinned-fetch.ts`) — 검사한 IP 로만 연결해 DNS 재바인딩 창을 닫는다.
 // 시험·호출자는 fetchImpl 을 주입해 바꿀 수 있다(주입 구조 유지).
 
@@ -11,10 +12,10 @@ import {
 } from "@repo/audit/public-url-security";
 
 import { FACTS_LIMITS_KO } from "./messages";
-import { pinnedFetch } from "./pinned-fetch";
+import { pinnedFetch, untilAborted } from "./pinned-fetch";
 
 const MAX_BYTES = 512 * 1024;
-const TIMEOUT_MS = 5000;
+const DEADLINE_MS = 8000;
 const MAX_REDIRECTS = 3;
 const USER_AGENT = "FindableBot/1.0 (+https://findable.co.kr)";
 
@@ -92,20 +93,36 @@ function nextRedirectTarget(current: URL, location: string): URL | null {
   }
 }
 
-async function safeGet(startUrl: URL, fetchImpl: FetchLike): Promise<Fetched> {
+/** 리다이렉트가 아닌 응답: 본문을 상한까지 읽는다. 읽다 deadline 이 지나거나 끊기면 「확인 불가」(점검 전체를 깨뜨리지 않는다). */
+async function finalResult(response: Response): Promise<Fetched> {
+  try {
+    const text = response.ok ? await readLimited(response) : "";
+    return { ok: true, status: response.status, text };
+  } catch (error) {
+    return { ok: false, reason: failureReason(error) };
+  }
+}
+
+async function safeGet(
+  startUrl: URL,
+  fetchImpl: FetchLike,
+  deadline: AbortSignal
+): Promise<Fetched> {
   let current = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     try {
-      await assertPublicUrl(current);
-    } catch {
-      return { ok: false, reason: "blocked" };
+      await untilAborted(assertPublicUrl(current), deadline);
+    } catch (error) {
+      return deadline.aborted
+        ? { ok: false, reason: failureReason(error) }
+        : { ok: false, reason: "blocked" };
     }
     let response: Response;
     try {
       response = await fetchImpl(current.toString(), {
         headers: { "user-agent": USER_AGENT, accept: "*/*" },
         redirect: "manual",
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: deadline,
       });
     } catch (error) {
       return { ok: false, reason: failureReason(error) };
@@ -113,8 +130,7 @@ async function safeGet(startUrl: URL, fetchImpl: FetchLike): Promise<Fetched> {
     const isRedirect = response.status >= 300 && response.status < 400;
     const location = response.headers.get("location");
     if (!isRedirect) {
-      const text = response.ok ? await readLimited(response) : "";
-      return { ok: true, status: response.status, text };
+      return await finalResult(response);
     }
     if (!location) {
       return { ok: true, status: response.status, text: "" };
@@ -309,18 +325,26 @@ function sitemapItem(sitemap: Fetched): FactItem {
 export async function checkOfficialFacts(
   rawUrl: string,
   fetchImpl: FetchLike = pinnedFetch,
-  now: () => Date = () => new Date()
+  now: () => Date = () => new Date(),
+  deadlineMs: number = DEADLINE_MS
 ): Promise<OfficialFactsResult> {
   // 입력 검증 오류(URL_*)는 호출자가 mapUrlError 로 변환한다.
   const base = normalizePublicUrl(rawUrl);
-  await assertPublicUrl(base);
+  // 점검 전체에 하나의 deadline — 아래 모든 단계가 이 signal 을 같이 쓴다.
+  const deadline = AbortSignal.timeout(deadlineMs);
+  try {
+    await untilAborted(assertPublicUrl(base), deadline);
+  } catch (error) {
+    // 첫 주소 확인이 deadline 안에 끝나지 않으면 DNS 실패로 본다(그 밖의 URL_* 오류는 그대로).
+    throw deadline.aborted ? new Error("URL_DNS") : error;
+  }
   const origin = base.origin;
 
   const [home, llms, robots, sitemap] = await Promise.all([
-    safeGet(new URL("/", origin), fetchImpl),
-    safeGet(new URL("/llms.txt", origin), fetchImpl),
-    safeGet(new URL("/robots.txt", origin), fetchImpl),
-    safeGet(new URL("/sitemap.xml", origin), fetchImpl),
+    safeGet(new URL("/", origin), fetchImpl, deadline),
+    safeGet(new URL("/llms.txt", origin), fetchImpl, deadline),
+    safeGet(new URL("/robots.txt", origin), fetchImpl, deadline),
+    safeGet(new URL("/sitemap.xml", origin), fetchImpl, deadline),
   ]);
 
   const items = [

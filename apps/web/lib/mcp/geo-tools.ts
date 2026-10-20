@@ -76,7 +76,7 @@ import {
 } from "./geo-schemas";
 import { ERROR_MESSAGES_KO, LIMITS_KO, mapUrlError } from "./messages";
 import { checkOfficialFacts, type FetchLike } from "./official-facts";
-import { pinnedFetch } from "./pinned-fetch";
+import { pinnedFetch, untilAborted } from "./pinned-fetch";
 
 // [읽기 전용 DB 손잡이]
 
@@ -1302,9 +1302,14 @@ export function confinedFetch(
     if (host === null || !domains.has(host)) {
       throw new TypeError("blocked: host not registered");
     }
+    const signal = init?.signal ?? undefined;
     try {
-      await assertPublicUrl(new URL(target));
-    } catch {
+      // 사전 확인 DNS 도 점검 전체 deadline 안에서만 기다린다.
+      await untilAborted(assertPublicUrl(new URL(target)), signal);
+    } catch (error) {
+      if (signal?.aborted) {
+        throw error;
+      }
       throw new TypeError("blocked: address not public");
     }
     return await inner(input, init);

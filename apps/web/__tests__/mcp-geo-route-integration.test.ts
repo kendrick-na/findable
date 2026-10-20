@@ -52,7 +52,8 @@ vi.mock("@repo/audit/public-url-security", async (importOriginal) => {
 
 // 운영 경로의 기본 fetch 는 DNS 핀 fetch(pinned-fetch.ts). 이 시험은 그 아래 네트워크를 가짜 전역 fetch 로 바꿔 끼운다
 // (핀 자체는 mcp-pinned-fetch.test.ts 가 로컬 모의 서버로 검증). route 가 핀 fetch 를 거치는지는 pinnedCalls 로 본다.
-vi.mock("@/lib/mcp/pinned-fetch", () => ({
+vi.mock("@/lib/mcp/pinned-fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/mcp/pinned-fetch")>()),
   pinnedFetch: (input: string | URL | Request, init?: RequestInit) => {
     holder.pinnedCalls += 1;
     return globalThis.fetch(input, init);

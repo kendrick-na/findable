@@ -16,10 +16,15 @@
 
 import { lookup as dnsLookup } from "node:dns/promises";
 import type { IncomingMessage } from "node:http";
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
-import { isIP, connect as netConnect, type Socket } from "node:net";
-import { connect as tlsConnect } from "node:tls";
+import { Agent as HttpAgent, request as httpRequest } from "node:http";
+import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
+import {
+  isIP,
+  type NetConnectOpts,
+  connect as netConnect,
+  type Socket,
+} from "node:net";
+import { type ConnectionOptions, connect as tlsConnect } from "node:tls";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { isPrivateAddress } from "@repo/audit/public-url-security";
 
@@ -41,7 +46,10 @@ export interface PinnedFetchOptions {
   portOverride?: number;
   /** 이름 해석. 기본 = dns.lookup(all:true, verbatim:true). 시험에서 모의로 바꾼다. */
   resolveAll?: (hostname: string) => Promise<ResolvedAddress[]>;
-  /** 전체 시간 제한(연결+헤더+본문). 기본 5초. */
+  /**
+   * 호출자가 signal 을 주지 않았을 때만 쓰는 시간 제한(연결+헤더+본문). 기본 5초.
+   * signal 을 주면(official-facts 의 점검 전체 deadline) 그 signal 하나만 따른다 — 단계마다 새 시간을 만들지 않는다.
+   */
   timeoutMs?: number;
 }
 
@@ -73,6 +81,48 @@ function abortError(signal: AbortSignal): Error {
   return err;
 }
 
+/**
+ * 비교용 주소 표기: 소문자, IPv4 매핑 IPv6(::ffff:a.b.c.d)는 안의 IPv4 로 바꾼다.
+ * (같은 상대인데 표기만 달라 정상 연결을 거부하지 않게)
+ */
+export function canonicalAddress(address: string): string {
+  const lower = address.toLowerCase();
+  if (lower.startsWith("::ffff:")) {
+    const rest = lower.slice("::ffff:".length);
+    if (isIP(rest) === 4) {
+      return rest;
+    }
+  }
+  return lower;
+}
+
+/** abort 되면 바로 거부되는 Promise — DNS·사전 확인처럼 signal 을 직접 받지 않는 대기에 전체 deadline 을 건다. */
+export function untilAborted<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined
+): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(abortError(signal));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError(signal));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      }
+    );
+  });
+}
+
 /** URL.hostname → 연결용 호스트(대괄호·끝 점 제거). */
 function bareHost(url: URL): string {
   const raw = url.hostname.toLowerCase();
@@ -85,7 +135,8 @@ function bareHost(url: URL): string {
 async function resolvePinned(
   host: string,
   resolveAll: (hostname: string) => Promise<ResolvedAddress[]>,
-  isPrivate: (address: string) => boolean
+  isPrivate: (address: string) => boolean,
+  signal: AbortSignal | undefined
 ): Promise<ResolvedAddress> {
   const literal = isIP(host);
   if (literal) {
@@ -96,9 +147,12 @@ async function resolvePinned(
   }
   let records: ResolvedAddress[];
   try {
-    records = await resolveAll(host);
-  } catch {
-    throw new TypeError("dns lookup failed");
+    records = await untilAborted(resolveAll(host), signal);
+  } catch (error) {
+    if (signal?.aborted) {
+      throw abortError(signal);
+    }
+    throw new TypeError("dns lookup failed", { cause: error });
   }
   if (records.length === 0 || records.some((r) => isPrivate(r.address))) {
     throw blocked("address not public");
@@ -151,29 +205,53 @@ interface ConnectPlan {
 function openSocket(plan: ConnectPlan): Socket {
   const lookup = pinnedLookup(plan.host, plan.pinned);
   const literal = isIP(plan.host) !== 0;
-  const socket: Socket = plan.secure
-    ? tlsConnect({
-        host: plan.host,
-        port: plan.port,
-        lookup,
-        // IP 직접 주소에는 SNI 를 보내지 않는다(규격상 금지). 인증서 검증은 그대로 켜져 있다.
-        servername: literal ? undefined : plan.host,
-        ALPNProtocols: ["http/1.1"],
-        ca: plan.ca,
-        rejectUnauthorized: true,
-      })
-    : netConnect({
-        host: plan.host,
-        port: plan.port,
-        lookup,
-      });
+  // 주소 하나만, 핀 주소의 family 로만 연결한다(자동 family 선택·Happy Eyeballs 끔 — Node 기본값에 기대지 않는다).
+  const base = {
+    host: plan.host,
+    port: plan.port,
+    family: plan.pinned.family,
+    autoSelectFamily: false,
+    lookup,
+  };
+  let socket: Socket;
+  if (plan.secure) {
+    const tlsOptions: ConnectionOptions & { autoSelectFamily: boolean } = {
+      ...base,
+      // IP 직접 주소에는 SNI 를 보내지 않는다(규격상 금지). 인증서 검증은 그대로 켜져 있다.
+      servername: literal ? undefined : plan.host,
+      ALPNProtocols: ["http/1.1"],
+      ca: plan.ca,
+      rejectUnauthorized: true,
+    };
+    socket = tlsConnect(tlsOptions);
+  } else {
+    const netOptions: NetConnectOpts = base;
+    socket = netConnect(netOptions);
+  }
+  const expected = canonicalAddress(plan.pinned.address);
   socket.once("connect", () => {
     const remote = socket.remoteAddress;
-    if (!remote || plan.isPrivate(remote) || remote !== plan.pinned.address) {
+    if (
+      !remote ||
+      plan.isPrivate(remote) ||
+      canonicalAddress(remote) !== expected
+    ) {
       socket.destroy(blocked("connected address not public"));
     }
   });
   return socket;
+}
+
+/**
+ * 요청마다 새 Agent(keepAlive 끔·소켓 1개)를 만들고 그 Agent 의 소켓 생성만 핀 소켓으로 바꾼다.
+ * 전역 Agent(globalAgent)·연결 풀을 절대 거치지 않는다. 요청이 끝나면 destroy 한다.
+ */
+function isolatedAgent(plan: ConnectPlan): HttpAgent {
+  const agent = plan.secure
+    ? new HttpsAgent({ keepAlive: false, maxSockets: 1 })
+    : new HttpAgent({ keepAlive: false, maxSockets: 1 });
+  agent.createConnection = () => openSocket(plan);
+  return agent;
 }
 
 function toHeaders(res: IncomingMessage, decoded: boolean): Headers {
@@ -349,6 +427,8 @@ function validateRequest(
   });
   headers["accept-encoding"] = "gzip, deflate, br";
   headers.connection = "close";
+  // Host 는 호출자 값을 무시하고 지금 URL 로 강제한다(연결 대상·SNI 와 다른 Host 를 보내지 않게).
+  headers.host = url.host;
   return { headers, method, signal, url };
 }
 
@@ -405,9 +485,13 @@ function sendPinned({
   return new Promise<Response>((resolve, reject) => {
     let settled = false;
     let bodyFail: ((error: Error) => void) | null = null;
+    const agent = isolatedAgent(plan);
     const cleanup = () => {
-      clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
       signal?.removeEventListener("abort", onAbort);
+      agent.destroy();
     };
     const stop = (error: Error) => {
       req.destroy();
@@ -420,14 +504,15 @@ function sendPinned({
       reject(error);
     };
     const onAbort = () => stop(signal ? abortError(signal) : timeoutError());
-    const timer = setTimeout(() => stop(timeoutError()), timeoutMs);
+    // 호출자 signal(전체 deadline)이 있으면 그것만 따른다. 없을 때만 자체 시간 제한.
+    const timer = signal
+      ? undefined
+      : setTimeout(() => stop(timeoutError()), timeoutMs);
     signal?.addEventListener("abort", onAbort, { once: true });
 
     const requestFn = plan.secure ? httpsRequest : httpRequest;
     const req = requestFn({
-      // agent 를 주지 않고 createConnection 만 준다 → 연결 풀(keep-alive) 없이 요청마다 새 소켓.
-      // (agent:false 를 주면 Node 가 새 Agent 를 만들어 createConnection 을 무시하므로 주지 않는다.)
-      createConnection: () => openSocket(plan),
+      agent,
       headers,
       host: plan.host,
       method,
@@ -475,7 +560,12 @@ export function createPinnedFetch(options: PinnedFetchOptions = {}): FetchLike {
     const request = validateRequest(input, init);
     const host = bareHost(request.url);
     const secure = request.url.protocol === "https:";
-    const pinned = await resolvePinned(host, resolveAll, isPrivate);
+    const pinned = await resolvePinned(
+      host,
+      resolveAll,
+      isPrivate,
+      request.signal
+    );
     const urlPort = request.url.port
       ? Number(request.url.port)
       : defaultPort(secure);
