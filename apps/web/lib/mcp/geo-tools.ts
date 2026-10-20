@@ -1452,7 +1452,7 @@ export function registerGeoReadonlyTools(
     {
       title: "브랜드 측정 요약 조회",
       description:
-        "허용 목록에 있는 브랜드의 저장된 최신 측정 1회에서 AI 답변 노출률, 수집률, 측정하지 못한 이유를 읽어 돌려줍니다. 새 측정을 시작하지 않고 AI 엔진에 질의하지 않습니다. 응답에 근거 봉투(측정 시각, 방식, 측정하지 못한 항목)가 붙고, 값이 없는 칸은 0이 아니라 확인 불가로 표시됩니다. / Returns the exposure rate, collection rate and unmeasured reasons from the latest stored measurement of an allow-listed brand. Starts no measurement and queries no AI engine.",
+        "허용 목록에 있는 브랜드의 저장된 최신 측정 1회에서 AI 답변 노출률, 수집률, 측정하지 못한 이유를 읽어 돌려줍니다. 새 측정을 시작하지 않고 AI 엔진에 질의하지 않습니다. 응답에 근거 정보(측정 시각, 방식, 측정하지 못한 항목)가 붙고, 값이 없는 칸은 0이 아니라 확인 불가로 표시됩니다. / Returns the exposure rate, collection rate and unmeasured reasons from the latest stored measurement of an allow-listed brand. Starts no measurement and queries no AI engine.",
       inputSchema: z.object({ brand_id: brandIdField }),
       outputSchema: anyOutput,
       annotations: {

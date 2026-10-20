@@ -62,7 +62,7 @@ function hasSources(cited: unknown): boolean {
 
 /**
  * 최신 1회차 행 → 엔진별 「응답 수 / 출처가 붙은 응답 수」.
- * 측정 실패 행(errorMessage)은 응답이 아니므로 센다고 하지 않는다("못 잰 것"을 응답으로 세지 않는다).
+ * 측정 실패 행(errorMessage)은 응답이 아니므로 센다고 하지 않는다("측정하지 못한 것"을 응답으로 세지 않는다).
  */
 export function summarizeEngineSources(
   rows: TodayEngineSourceRow[],

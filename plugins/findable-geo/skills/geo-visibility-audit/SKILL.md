@@ -31,7 +31,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 
 응답은 `status` 로 먼저 가른다.
 
-- `ok`: `data` 와 `evidence`(근거 봉투)가 같이 온다.
+- `ok`: `data` 와 `evidence`(근거 정보)가 같이 온다.
 - `unverifiable`: `data` 는 null 이다. **숫자를 만들어 채우지 않는다.** `message_ko` 와 `reason` 을 그대로 전한다.
 - `error`(`error.code`): 「확인 불가」가 아니라 **오류**다. 오류 문구를 전하고 추측으로 이어 쓰지 않는다. 허용 목록 밖 브랜드와 없는 브랜드는 같은 오류로 보이는 것이 정상이다 — 둘을 구별하려 하지 않는다.
 
@@ -46,7 +46,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 
 **「측정하지 못함」은 0이 아니다.** `unavailable` 인 값을 0, 없음, 낮음으로 바꿔 쓰지 않는다. 값마다 `as_of`(기준일)가 있으면 같이 쓰고, `as_of` 가 null 이면 「기준일 모름」이라고 쓴다(최신이라는 뜻이 아니다).
 
-### 3-2. 근거 봉투 필드
+### 3-2. 근거 정보 필드
 
 | 필드 | 요약에 쓰는 법 |
 |---|---|
@@ -110,7 +110,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 
 ## 8. 영어 응답을 만들 때
 
-영어로 요약해야 하면 `GUARDRAILS.md` 의 English guardrail 문단을 따른다. 영어 측정 코호트 검증은 아직 0건이다(설계 방향일 뿐 끝난 검증이 아님).
+영어로 요약해야 하면 `GUARDRAILS.md` 의 English guardrail 문단을 따른다. 영어 측정 조건 묶음 검증은 아직 0건이다(설계 방향일 뿐 끝난 검증이 아님).
 
 ## 9. 점검표 (보내기 전)
 

@@ -69,7 +69,7 @@ export interface AssignBrandOwnerInput {
   brandId?: string;
   /**
    * 등록만 하고 **측정은 시작하지 않는다**(2026-10-13 · 대표 승인). 경쟁사·질문을 고르는 단계를
-   * 건너뛰고 이름 질문만으로 재는 길이 없게 한다(프란츠 사건). 측정은 설정 뒤 `startOrgTracking` 이 시작한다.
+   * 건너뛰고 이름 질문만으로 측정하는 길이 없게 한다(프란츠 사건). 측정은 설정 뒤 `startOrgTracking` 이 시작한다.
    */
   deferMeasurement?: boolean;
   domain: string;

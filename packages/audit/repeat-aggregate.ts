@@ -327,7 +327,7 @@ function observedFor(
   if (buckets === null) {
     return unavailable(
       "not_applicable",
-      "이 코호트에는 이 묶음에 해당하는 답변이 없음",
+      "이 측정 조건에는 이 묶음에 해당하는 답변이 없음",
       asOf
     );
   }
@@ -505,7 +505,7 @@ function buildCohort(
       used.length === 0
         ? unavailable(
             "withheld_not_publishable",
-            "이 코호트의 회차가 모두 게시 불가 판정이라 숫자를 내지 않음",
+            "이 측정 조건 묶음의 회차가 모두 게시 불가 판정이라 숫자를 내지 않음",
             lastUsed
           )
         : observedFor(
@@ -557,7 +557,7 @@ export function aggregateRepeats(
     const iso = toIso(run.completed_at);
     if (iso === null) {
       excluded.push({
-        detail_ko: "완료 시각을 읽을 수 없어 어느 코호트에도 넣지 않음",
+        detail_ko: "완료 시각을 읽을 수 없어 어느 측정 조건 묶음에도 넣지 않음",
         job_id: run.job_id,
         reason: "not_recorded",
       });
@@ -565,7 +565,7 @@ export function aggregateRepeats(
     }
     if (!isRecord(run.result)) {
       excluded.push({
-        detail_ko: "저장 결과가 없어 어느 코호트에도 넣지 않음",
+        detail_ko: "저장 결과가 없어 어느 측정 조건 묶음에도 넣지 않음",
         job_id: run.job_id,
         reason: "source_missing",
       });
@@ -575,7 +575,7 @@ export function aggregateRepeats(
     if (language === "not_recorded") {
       excluded.push({
         detail_ko:
-          "질문 언어 기록(promptLang)이 없는 회차라 코호트에 넣지 않음(언어를 추정하지 않음)",
+          "질문 언어 기록(promptLang)이 없는 회차라 측정 조건 묶음에 넣지 않음(언어를 추정하지 않음)",
         job_id: run.job_id,
         reason: "not_recorded",
       });
@@ -583,7 +583,8 @@ export function aggregateRepeats(
     }
     if (language.language === "mixed") {
       excluded.push({
-        detail_ko: "한 회차가 ko·en 을 섞어 물어 어떤 코호트와도 합치지 않음",
+        detail_ko:
+          "한 회차가 ko·en 을 섞어 물어 어떤 측정 조건 묶음과도 합치지 않음",
         job_id: run.job_id,
         reason: "mixed_cohort",
       });
@@ -592,7 +593,7 @@ export function aggregateRepeats(
     if (language.language === "unknown") {
       excluded.push({
         detail_ko:
-          "질문 언어를 알 수 없는 회차라 어떤 코호트와도 합치지 않음(언어를 추정하지 않음)",
+          "질문 언어를 알 수 없는 회차라 어떤 측정 조건 묶음과도 합치지 않음(언어를 추정하지 않음)",
         job_id: run.job_id,
         reason: "not_recorded",
       });

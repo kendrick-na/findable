@@ -232,7 +232,7 @@ export const AssignBrandForm = ({
         marketScope: selectedMarketScope,
         source: isOnboarding ? "onboarding" : "brand_create",
         // 🔴 2026-10-13 — 등록만 하고 측정은 **질문·경쟁사를 고른 뒤** 시작한다(온보딩 6단계).
-        //   등록 즉시 측정하면 그 단계를 건너뛰고 이름 질문만으로 재는 길이 생긴다(프란츠 사건).
+        //   등록 즉시 측정하면 그 단계를 건너뛰고 이름 질문만으로 측정하는 길이 생긴다(프란츠 사건).
         deferMeasurement: true,
       });
       if ("error" in result) {

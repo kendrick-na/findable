@@ -216,7 +216,7 @@ export function AuditForm({ locale }: AuditFormProps) {
           {language === "en" && (
             <p className="text-[color:var(--findable-ink-subtle,#8a8f98)] text-xs">
               {isKo
-                ? "영어 질문은 글로벌 AI 4곳(ChatGPT·Claude·Perplexity·Gemini)에서만 측정해요. 네이버·다음 검색 노출은 한국어 질문에서만 재요."
+                ? "영어 질문은 글로벌 AI 4곳(ChatGPT·Claude·Perplexity·Gemini)에서만 측정해요. 네이버·다음 검색 노출은 한국어 질문에서만 측정해요."
                 : "English questions are measured across 4 global engines (ChatGPT, Claude, Perplexity, Gemini). Naver and Daum search exposure are measured for Korean questions."}
             </p>
           )}

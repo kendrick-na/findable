@@ -122,7 +122,7 @@ const AdminOpsPage = async () => {
     database.tracking.count(),
     // 🔴 **원가 계기**(세션N-47). 여기 오기 전엔 측정 1건 원가를 **아무도 몰랐다**
     //   (`cost.ts` 는 있었는데 프로덕션 호출 0곳 · 토큰을 저장조차 안 했다).
-    //   ⚠️ `costKrw: { not: null }` 로 **못 잰 회차를 분모에서 뺀다** —
+    //   ⚠️ `costKrw: { not: null }` 로 **측정하지 못한 회차를 분모에서 뺀다** —
     //   null 을 0원으로 더하면 "공짜로 돌고 있다"는 착각을 만든다(📕 최다 사고 유형).
     database.tracking.aggregate({
       _sum: { costKrw: true, inputTokens: true, outputTokens: true },
@@ -231,15 +231,15 @@ const AdminOpsPage = async () => {
         <Section
           note={
             costMeasured === 0
-              ? "아직 원가를 잰 측정이 없어요. 다음 측정부터 쌓입니다(기존 회차는 소급 불가)."
-              : `원가를 잰 측정 ${fmt(costMeasured)}건 기준 · 단가는 추정이라 청구서로 보정해야 해요`
+              ? "아직 원가가 기록된 측정이 없어요. 다음 측정부터 쌓입니다(기존 회차는 소급 불가)."
+              : `원가가 기록된 측정 ${fmt(costMeasured)}건 기준 · 단가는 추정이라 청구서로 보정해야 해요`
           }
           title="측정 원가"
         >
           <CardGrid>
-            {/* ⚠️ 0건일 때 `0원`을 찍지 않는다 — 「공짜」가 아니라 「아직 못 쟀다」이다. */}
+            {/* ⚠️ 0건일 때 `0원`을 찍지 않는다 — 「공짜」가 아니라 「아직 못 측정했다」이다. */}
             <StatCard
-              hint="원가를 잰 회차 합계"
+              hint="원가가 기록된 회차 합계"
               label="누적 원가"
               value={
                 costMeasured === 0 ? "—" : `₩${fmt(Math.round(totalCostKrw))}`
@@ -264,7 +264,7 @@ const AdminOpsPage = async () => {
               }
             />
             <StatCard
-              hint="원가를 못 잰 회차 — 0원이 아니다"
+              hint="원가가 기록되지 않은 회차 — 0원이 아니다"
               label="미측정"
               muted
               tone={unmeasuredCount > 0 ? "warn" : "ok"}

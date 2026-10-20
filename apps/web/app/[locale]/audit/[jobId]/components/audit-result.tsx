@@ -2938,7 +2938,9 @@ function ActionCenterEmpty({ jobId, isKo }: { jobId: string; isKo: boolean }) {
   return (
     <div className="mt-4">
       <p className="font-semibold text-sm text-zinc-100 leading-relaxed">
-        {isKo ? "무엇부터 손볼지 뽑아드릴게요" : "Let's find what to fix first"}
+        {isKo
+          ? "무엇부터 손볼지 골라 드릴게요"
+          : "Let's find what to fix first"}
       </p>
       <p className="mt-1.5 text-xs text-zinc-400 leading-relaxed">
         {isKo

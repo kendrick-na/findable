@@ -294,7 +294,7 @@ const KO: EvidenceCopyDict = {
   first_line:
     "AI가 우리 브랜드를 어떻게 말하고, 무엇을 빠뜨리는지 한 장으로 확인하세요.",
   footer_line:
-    "기준일 {as_of} · 출처 식별자 {ids} · 코호트 키 {cohort} · 효과 입증 아님",
+    "기준일 {as_of} · 출처 식별자 {ids} · 측정 조건 키 {cohort} · 효과 입증 아님",
   group_label: {
     ai_brand: "제대로 앎 비율",
     discovery: "이름 없이 추천된 비율",

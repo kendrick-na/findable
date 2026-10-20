@@ -19,8 +19,8 @@
 //   Peec 도 감성을 *"what's going well, and **what requires improvements**"* 로 설명한다.
 //
 // ⚠️ **부정 0건을 성과로 팔지 않는다.** 분류기가 키워드 휴리스틱이라 부정을 거의 못 잡는다
-//   (전 데이터셋 negative 0건). "부정 없음 = 좋음" 으로 읽히게 두면 **못 잰 걸 좋은 소식으로
-//   파는 것**이다 — 이 저장소가 반복해 온 "못 잰 것을 0점이라 부르기"와 같은 잘못.
+//   (전 데이터셋 negative 0건). "부정 없음 = 좋음" 으로 읽히게 두면 **측정하지 못한 걸 좋은 소식으로
+//   파는 것**이다 — 이 저장소가 반복해 온 "측정하지 못한 것을 0점이라 부르기"와 같은 잘못.
 
 import type { AppDictionary } from "@/lib/i18n";
 import { fillRich } from "@/lib/rich-text";

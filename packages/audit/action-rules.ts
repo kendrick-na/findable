@@ -587,7 +587,7 @@ export function awarenessActions(sig: RuleSignals): GeoAction[] {
           evidence,
           how:
             "우리 업종의 한 주제만 정해, 고객이 실제로 묻는 질문에 도움이 되는 글을 꾸준히 올리세요. 첫 문단에 답을 먼저 쓰고, 회사 이름을 정확히 적습니다. " +
-            "한 사례 분석(네이버 AI 브리핑 인용 272건)에서는 검색 상위 10위 밖 문서도 인용됐습니다. 그 분석은 기업 블로그 게시의 효과를 잰 것이 아니어서, 이 카드는 Findable의 실행 가설입니다.",
+            "한 사례 분석(네이버 AI 브리핑 인용 272건)에서는 검색 상위 10위 밖 문서도 인용됐습니다. 그 분석은 기업 블로그 게시의 효과를 측정한 것이 아니어서, 이 카드는 Findable의 실행 가설입니다.",
           where: "네이버 블로그(회사 공식 계정)",
           verification: naverVerification,
         },

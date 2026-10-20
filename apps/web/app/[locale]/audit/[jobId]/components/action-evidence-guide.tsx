@@ -126,7 +126,7 @@ export function ActionEvidenceGuide({
       storedRuleValue(guide.effectLag),
     ],
     [
-      isKo ? "다시 잴 숫자" : "Metric to remeasure",
+      isKo ? "다시 측정할 숫자" : "Metric to remeasure",
       storedRuleValue(guide.remeasureMetric),
     ],
     [

@@ -86,7 +86,7 @@ export const 감성_부정많음: Story = {
 /**
  * 측정은 됐는데 감성 분류가 **전부 null** 인 경우(total 0).
  * ⚠️ 실측상 negative 는 전 데이터셋 **0건**이다(분류기 한계) —
- * "부정 0 = 문제 없음" 으로 읽히면 못 잰 걸 좋은 소식으로 파는 것이다.
+ * "부정 0 = 문제 없음" 으로 읽히면 측정하지 못한 걸 좋은 소식으로 파는 것이다.
  */
 export const 감성_없음: Story = {
   args: { data: { ...base, sentiment: null } },

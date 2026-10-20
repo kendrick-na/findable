@@ -46,7 +46,7 @@ const KIND_TONE: Record<SourceKind, string> = {
 // 🔴 `export`(세션N-34): 감성 섹션도 같은 이름표를 쓴다. 복제하면 한 화면은
 //   `naver`, 다른 화면은 `네이버` 라고 부르게 된다(이 저장소의 "이름 4개" 사고와 같은 유형).
 //   (2026-09-29) 이름은 `@repo/audit/engine-labels` 한 곳이 정한다 — 네이버는 「네이버 검색 노출」,
-//   다음은 「다음 검색 노출」처럼 **실제로 잰 것**을 부른다.
+//   다음은 「다음 검색 노출」처럼 **실제로 측정한 것**을 부른다.
 export function engineLabel(id: string, isKo = true): string {
   return engineDisplayName(id, isKo);
 }
@@ -61,7 +61,7 @@ function percent(part: number, total: number): number {
 // 권역 표시 순서 — **한국을 먼저** 세운다.
 // ⭐ 경쟁사 4곳(Profound·Peec·Otterly·Scrunch) 랜딩 라이브 fetch 결과
 //   `naver|hyperclova|clova|daum|kakao` 언급이 **전부 0건**이다(재설계안 v4 §1111).
-//   한국 엔진은 우리만 재는 축이므로 목록 아래로 밀지 않는다.
+//   한국 엔진은 우리만 측정하는 축이므로 목록 아래로 밀지 않는다.
 const REGION_ORDER = ["korea", "global"] as const;
 
 /**
@@ -81,7 +81,7 @@ const REGION_ORDER = ["korea", "global"] as const;
  *   **47/47**, gemini 가 **64/65** 로 출처가 비어 있었다. 그런데 화면은 이 둘을
  *   *"낼 수 있는 엔진"* 으로 분류해 **「인용 0」** 을 찍고 있었다 —
  *   고객에겐 *"이 AI 가 우리를 안 읽었다"* 로 읽힌다. 진실은 *"우리가 안 받아왔다"* 다.
- *   📕 이 저장소 최다 사고 — **못 잰 것을 0이라 부르기**.
+ *   📕 이 저장소 최다 사고 — **측정하지 못한 것을 0이라 부르기**.
  *
  * 판정은 `@repo/audit/market-scope` 단독 담당 — 여기서 엔진 id 를 비교하지 않는다.
  */
@@ -128,7 +128,7 @@ const EngineRow = ({
         //   `not_collected` 는 **우리가 그라운딩을 안 켜서** 출처가 안 온 상태다
         //   (프로덕션 실측: perplexity 47/47 · gemini 64/65 가 이 경우였다).
         //   여기에 `인용 0` 을 찍으면 고객은 *"이 AI 가 우리를 안 읽었다"* 로 읽는다.
-        //   📕 이 저장소 최다 사고 — **못 잰 것을 0이라 부르기**. 정직하게 갈라 말한다.
+        //   📕 이 저장소 최다 사고 — **측정하지 못한 것을 0이라 부르기**. 정직하게 갈라 말한다.
         //   ⭐ 그라운딩을 켜면 이 분기는 **저절로 사라진다**(플래그를 보고 판정한다).
         <span className="shrink-0 text-right text-[color:var(--findable-ink-tertiary,#7e8289)] text-xs">
           {state === "never" ? t.neverSource : t.notCollected}
@@ -181,7 +181,7 @@ export const SourcesBoard = ({
       </p>
       {/* Mention vs Citation — 이 화면의 존재 이유. 두 축을 나란히 세운다. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {/* 🔴 분모가 0이면 `0%` 를 찍지 않는다 — 못 잰 것을 "0점"이라 부르는 것이다
+        {/* 🔴 분모가 0이면 `0%` 를 찍지 않는다 — 측정하지 못한 것을 "0점"이라 부르는 것이다
             (apple.com 사고 유형 · `measurement-coverage.ts` 머리말).
             바로 옆 카드는 이미 `—` 로 막고 있었는데 이 카드만 안 막혀 있었다
             = 같은 파일 안에 규칙이 두 벌(재설계안 v4 §4-a-1 ⑤). */}
@@ -285,7 +285,7 @@ export const SourcesBoard = ({
             (e) => engineRegion(e.engineId) === region
           );
           // 🔴 빈 권역은 섹션째 렌더하지 않는다 — 측정 안 한 곳에 `0%` 를 찍으면
-          //   "못 잰 것"이 "0점"으로 읽힌다(apple.com 사고 유형).
+          //   "측정하지 못한 것"이 "0점"으로 읽힌다(apple.com 사고 유형).
           if (group.length === 0) {
             return null;
           }
