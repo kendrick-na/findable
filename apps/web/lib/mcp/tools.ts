@@ -27,7 +27,12 @@ export interface ToolContext {
    * check_official_facts 가 읽어도 되는 브랜드(허용 목록 + 읽기 전용 DB 손잡이). **없으면 이 도구는 모든 주소를 거부한다(fail-closed).**
    * 임의 URL·사설 주소·허용 도메인 밖 리다이렉트는 읽지 않는다(코덱스 4차 판정, 대표 결정 P-1).
    */
-  factsGuard?: { allowlist: ReadonlySet<string>; db: ReadonlyDb };
+  factsGuard?: {
+    allowlist: ReadonlySet<string>;
+    db: ReadonlyDb;
+    /** brandId → 기대 도메인. 없거나 비면 모든 주소를 거부한다(도메인 고정). */
+    domainPins?: ReadonlyMap<string, string>;
+  };
   fetchImpl?: FetchLike;
   log: { error: (event: string, data?: Record<string, unknown>) => void };
 }

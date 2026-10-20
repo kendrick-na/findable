@@ -187,6 +187,7 @@ describe("M-facts — 읽기 전용 모드 안에서의 점검", () => {
     const out = await runFacts(
       {
         allowlist: new Set([BRAND_ID]),
+        domainPins: new Map([[BRAND_ID, "brand.example"]]),
         db: toReadonlyDb(
           makeWatchedDb({
             brand: {
@@ -246,6 +247,7 @@ describe("M-facts — 읽기 전용 모드 안에서의 점검", () => {
       const out = await runFacts(
         {
           allowlist: new Set([BRAND_ID]),
+          domainPins: new Map([[BRAND_ID, domain]]),
           db: toReadonlyDb(
             makeWatchedDb({
               ...registered,
@@ -458,14 +460,21 @@ describe("M-facts — 읽기 전용 모드 안에서의 점검", () => {
 
   it("등록 도메인이 사설 주소로 풀리면 기존 방어가 그대로 거절한다", async () => {
     vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
-    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", BRAND_ID);
+    // 도메인 고정: 기대 도메인 쌍이 있어야 점검까지 간다(점 없는 localhost 는 쌍으로 적을 수 없다).
+    vi.stubEnv(
+      "FINDABLE_MCP_READONLY_BRAND_ALLOWLIST",
+      `${BRAND_ID}=intranet.local`
+    );
     holder.db = makeWatchedDb({
-      brand: { id: BRAND_ID, name: "시험브랜드", domain: "localhost" },
+      brand: { id: BRAND_ID, name: "시험브랜드", domain: "intranet.local" },
       job: makeJob(),
     }).db;
     const out = await rpc(
       "tools/call",
-      { name: "check_official_facts", arguments: { url: "http://localhost" } },
+      {
+        name: "check_official_facts",
+        arguments: { url: "http://intranet.local" },
+      },
       factsAuth()
     );
     expect(out.body.result.isError).toBe(true);

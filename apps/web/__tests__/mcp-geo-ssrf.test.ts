@@ -108,6 +108,7 @@ describe("공식 정보 점검 — 사설 해석이면 네트워크 요청이 �
     return await guardedOfficialFacts(
       {
         allowlist: new Set([BRAND_ID]),
+        domainPins: new Map([[BRAND_ID, domain]]),
         db: toReadonlyDb(
           makeWatchedDb({
             brand: { id: BRAND_ID, name: "시험브랜드", domain },

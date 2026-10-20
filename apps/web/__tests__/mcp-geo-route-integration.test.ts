@@ -88,7 +88,11 @@ beforeEach(() => {
   holder.dns.clear();
   holder.fetched.length = 0;
   vi.stubEnv("FINDABLE_MCP_ENABLED", "true");
-  vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", BRAND_ID);
+  // 도메인 고정: 점검 도구는 「brandId=기대도메인」 쌍이 있어야 접속한다.
+  vi.stubEnv(
+    "FINDABLE_MCP_READONLY_BRAND_ALLOWLIST",
+    `${BRAND_ID}=brand.example`
+  );
   setDb();
   stubFetch();
 });
@@ -159,6 +163,22 @@ describe("읽기 전용 모드 route — 공식 정보 점검", () => {
       status: string;
     }[];
     expect(items.find((i) => i.key === "llms_txt")?.status).toBe("found");
+  });
+
+  it("도메인 고정: brandId 만 적혔거나 DB 도메인이 기대 도메인과 다르면 요청 없이 거부한다", async () => {
+    vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", BRAND_ID);
+    const bare = await facts("https://brand.example");
+    expect(bare.isError).toBe(true);
+    expect(JSON.stringify(bare.content)).toContain("not_available");
+    vi.stubEnv(
+      "FINDABLE_MCP_READONLY_BRAND_ALLOWLIST",
+      `${BRAND_ID}=brand.example`
+    );
+    setDb("attacker.example");
+    const swapped = await facts("https://attacker.example");
+    expect(swapped.isError).toBe(true);
+    expect(JSON.stringify(swapped.content)).toContain("not_available");
+    expect(holder.fetched).toEqual([]);
   });
 
   it("다른 브랜드 ID·허용 목록 밖은 요약 도구에서도 같은 not_available", async () => {
@@ -336,6 +356,10 @@ describe("허용 목록 호스트 정규화 회귀", () => {
 
   it("IDN: 등록된 한글·악센트 도메인은 유니코드와 punycode 표기 모두 같은 호스트이고, 비슷하게 생긴 다른 문자는 거부한다", async () => {
     setDb("bränd.example");
+    vi.stubEnv(
+      "FINDABLE_MCP_READONLY_BRAND_ALLOWLIST",
+      `${BRAND_ID}=bränd.example`
+    );
     for (const url of [
       "https://bränd.example",
       "https://xn--brnd-moa.example",

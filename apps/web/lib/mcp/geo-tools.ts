@@ -135,6 +135,11 @@ export function toReadonlyDb(db: unknown): ReadonlyDb {
 export interface GeoToolContext {
   allowlist: ReadonlySet<string>;
   db: ReadonlyDb;
+  /**
+   * brandId → 기대 도메인(정규화된 호스트). 공식 사실 점검은 여기 있고 DB 의 Brand.domain 이 이것과 같은 브랜드만 읽는다.
+   * 생략하거나 비어 있으면 점검은 모든 주소를 거부한다(fail-closed). 요약·분포 조회는 쓰지 않는다.
+   */
+  domainPins?: ReadonlyMap<string, string>;
   /** check_official_facts 등록 여부. 생략하면 토큰 검사가 켜져 있을 때만 등록한다(fail-closed). */
   factsEnabled?: boolean;
   fetchImpl?: FetchLike;
@@ -1305,18 +1310,31 @@ export function confinedFetch(
   }) as FetchLike;
 }
 
-/** 허용 목록 브랜드의 등록된 도메인 집합(Brand.domain). 허용 목록이 비면 빈 집합. */
+/**
+ * 허용 목록 브랜드의 등록된 도메인 집합(Brand.domain). 도메인 고정: 기대 도메인 쌍(domainPins)이 있는 브랜드만,
+ * 그리고 DB 의 Brand.domain 을 정규화한 값이 기대 도메인과 **같을 때만** 넣는다.
+ * 쌍이 없거나 DB 값이 바뀌었으면(오염·실수) 그 브랜드는 빠진다 → 점검 거부, 접속 0.
+ */
 async function registeredDomains(
-  ctx: Pick<GeoToolContext, "allowlist" | "db">
+  ctx: Pick<GeoToolContext, "allowlist" | "db" | "domainPins">
 ): Promise<Set<string>> {
   const domains = new Set<string>();
+  const pins = ctx.domainPins;
+  if (!pins || pins.size === 0) {
+    return domains;
+  }
   for (const id of ctx.allowlist) {
+    const pin = pins.get(id);
+    const expected = pin === undefined ? null : hostOnly(pin);
+    if (expected === null) {
+      continue;
+    }
     const brand = await ctx.db.brand.findFirst({
       where: { id },
       select: { id: true, domain: true },
     });
     const host = brand ? hostOnly(brand.domain) : null;
-    if (host) {
+    if (host !== null && host === expected) {
       domains.add(host);
     }
   }
@@ -1334,7 +1352,7 @@ async function registeredDomains(
  * 요약 문구는 이 함수가 직접 쓴다: 「양호」 같은 평가가 아니라 규칙 기준 통과 건수만 말한다.
  */
 export async function guardedOfficialFacts(
-  ctx: Pick<GeoToolContext, "allowlist" | "db" | "fetchImpl">,
+  ctx: Pick<GeoToolContext, "allowlist" | "db" | "domainPins" | "fetchImpl">,
   url: string
 ): Promise<
   | { error: "not_available" }

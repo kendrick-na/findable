@@ -21,6 +21,7 @@ import {
   mcpReadonlyModeBlockedHere,
   mcpReadonlyModeEnabled,
   readonlyBrandAllowlist,
+  readonlyBrandDomainPins,
 } from "../../../lib/mcp/geo-flags";
 import { READONLY_ERROR_MESSAGES_KO } from "../../../lib/mcp/geo-schemas";
 import {
@@ -58,6 +59,7 @@ function handleReadonly(request: NextRequest): Response | Promise<Response> {
       registerGeoReadonlyTools(server, {
         allowlist: readonlyBrandAllowlist(),
         db: toReadonlyDb(database),
+        domainPins: readonlyBrandDomainPins(),
         log: { error: (event, data) => log.error(event, data) },
       }),
     {
@@ -97,6 +99,7 @@ function handle(request: NextRequest): Response | Promise<Response> {
               factsGuard: {
                 allowlist: readonlyBrandAllowlist(),
                 db: toReadonlyDb(database),
+                domainPins: readonlyBrandDomainPins(),
               },
             }),
         log: { error: (event, data) => log.error(event, data) },
