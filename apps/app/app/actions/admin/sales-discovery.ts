@@ -3,11 +3,14 @@
 import { requireAdmin } from "@repo/auth/admin";
 import { database, type Prisma } from "@repo/database";
 import { log } from "@repo/observability/log";
+import { createTimeBudget } from "@repo/observability/time-budget";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { withDiscovery } from "@/lib/ax-mail/discovery/guard";
 import { prismaCompanyStore } from "@/lib/ax-mail/discovery/ingest";
 import {
+  API_SOURCES,
+  type ApiSource,
   defaultFetchers,
   type IngestSourceResult,
   runDiscoveryIngest,
@@ -347,12 +350,36 @@ export async function measureCompany(
 
 // ── 데이터 불러오기 ───────────────────────────────────────────────────────
 
-export async function ingestDiscoverySources(): Promise<
-  { ok: true; results: IngestSourceResult[] } | Failure
-> {
+type IngestSource = ApiSource;
+const ingestSourceSchema = z.enum(API_SOURCES);
+
+/**
+ * 원천 하나씩 부른다(화면이 5번 호출). 한 번에 5개를 돌리면 서버 액션 120초 제한을 넘어 실패한다.
+ * source 를 안 주면 전체(예전 동작)를 그대로 돈다.
+ */
+export async function ingestDiscoverySources(
+  source?: IngestSource,
+  startIndex?: number
+): Promise<{ ok: true; results: IngestSourceResult[] } | Failure> {
   const adminId = await requireAdmin();
+  const parsed =
+    source === undefined ? undefined : ingestSourceSchema.safeParse(source);
+  if (parsed && !parsed.success) {
+    return { ok: false, error: "invalid" };
+  }
+  const only = parsed?.success ? [parsed.data] : undefined;
+  const start =
+    startIndex !== undefined && Number.isInteger(startIndex) && startIndex >= 0
+      ? startIndex
+      : 0;
+  // 서버 액션 제한 120초 안에서 끝내려고 90초만 쓴다(나머지 30초는 마무리·응답용).
+  const budget = createTimeBudget(120_000, { reserveMs: 30_000 });
   const guarded = await withDiscovery(() =>
-    runDiscoveryIngest(prismaCompanyStore(database), defaultFetchers())
+    runDiscoveryIngest(prismaCompanyStore(database), defaultFetchers(), {
+      budget,
+      sources: only,
+      startIndex: start,
+    })
   );
   if (guarded.state !== "ready") {
     return blocked(guarded.state);

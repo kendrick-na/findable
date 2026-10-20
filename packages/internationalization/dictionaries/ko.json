@@ -2214,7 +2214,14 @@
       "ingestStatus": {
         "ok": "{fetched}행 → 새 회사 {created} · 갱신 {updated} · 보류 {ambiguous}",
         "unavailable": "키 없음 또는 응답 없음",
-        "error": "오류"
+        "error": "오류",
+        "partial": "시간 예산을 다 써서 중간에 멈춤 — 다음 행부터 자동으로 이어서 불러옵니다"
+      },
+      "ingestReason": {
+        "ok": "처리 완료",
+        "timeout": "시간 예산 초과로 중단 — 다음 행부터 이어서 불러옵니다",
+        "source_unavailable": "원천 키가 없거나 응답이 없습니다",
+        "error": "원천 처리 중 오류 (다른 원천은 계속합니다)"
       },
       "errors": {
         "disabled": "회사 찾기가 꺼져 있습니다.",
