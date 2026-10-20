@@ -33,8 +33,8 @@ export const generateMetadata = async ({
       ? "무료 AI 가시성 진단 · Findable"
       : "Free AI Visibility Audit · Findable",
     description: isKo
-      ? "도메인을 입력하면 3분 안에 AI 답변 4곳(ChatGPT·Claude·Perplexity·Gemini)과 네이버·다음 검색 노출에서 우리 브랜드의 위치를 PDF로 받아보세요."
-      : "Drop in your domain. In 3 minutes, get a 1-page PDF showing where your brand stands across 4 AI engines plus Naver and Daum search exposure.",
+      ? "도메인을 입력하면 보통 2~3분, 길면 4분쯤 뒤에 AI 답변 4곳(ChatGPT·Claude·Perplexity·Gemini)과 네이버·다음 검색 노출에서 우리 브랜드의 위치를 PDF로 받아보세요."
+      : "Drop in your domain. In about 2–3 minutes (up to 4), get a 1-page PDF showing where your brand stands across 4 AI engines plus Naver and Daum search exposure.",
     locale,
     pathname: "/audit",
   });
@@ -56,7 +56,7 @@ const AuditPage = async ({ params }: AuditPageProps) => {
           className="text-[12px] text-[var(--findable-primary)] uppercase tracking-[0.18em]"
           style={{ fontFamily: "var(--findable-font-sans)" }}
         >
-          {isKo ? "무료 진단 · 1회 무료" : "Free Audit · 1 free run"}
+          {isKo ? "무료 진단" : "Free Audit"}
         </p>
         <h1
           className="mt-4"
@@ -85,8 +85,8 @@ const AuditPage = async ({ params }: AuditPageProps) => {
               → 기본값(한국어+영어=7곳)이라는 **조건을 밝힌다**. 선택별 정확한 수는
                 폼의 선택지·안내문이 책임진다(서버 컴포넌트라 선택 상태를 알 수 없다). */}
           {isKo
-            ? "도메인만 입력하면 AI 답변 점유율을 3분 안에 진단해드려요. 한국어와 영어를 함께 측정하면 AI 답변 4곳과 네이버·다음 검색 노출까지 봅니다."
-            : "Drop in your domain for a 30-second Share-of-Voice diagnosis. Measuring Korean and English together covers 4 AI engines plus Naver and Daum search."}
+            ? "도메인만 입력하면 AI 답변 점유율을 보통 2~3분, 길면 4분쯤이면 진단해드려요. 한국어와 영어를 함께 측정하면 AI 답변 4곳과 네이버·다음 검색 노출까지 봅니다."
+            : "Drop in your domain for a Share-of-Voice diagnosis in about 2–3 minutes (up to 4). Measuring Korean and English together covers 4 AI engines plus Naver and Daum search."}
         </p>
 
         <div className="mt-10 rounded-xl bg-[var(--findable-surface-1)] p-6 md:p-8">
@@ -99,8 +99,8 @@ const AuditPage = async ({ params }: AuditPageProps) => {
               n: "1",
               label: isKo ? "입력" : "Submit",
               body: isKo
-                ? "이메일과 도메인 입력 (30초)"
-                : "Enter your email and domain (30s)",
+                ? "이메일과 도메인 입력"
+                : "Enter your email and domain",
             },
             {
               n: "2",
@@ -108,8 +108,8 @@ const AuditPage = async ({ params }: AuditPageProps) => {
               // 🔴 S7-a — 「영어만」이면 4곳이다. 선택에 따라 달라지므로 수를 못 박지 않는다
               //   (정확한 수는 폼의 선택지가 말한다).
               body: isKo
-                ? "고른 AI 엔진에 동시 호출 (2~3분)"
-                : "Selected engines run in parallel (2-3 min)",
+                ? "고른 AI 엔진에 동시 호출 (보통 2~3분, 길면 4분쯤)"
+                : "Selected engines run in parallel (usually 2–3 min, up to 4)",
             },
             {
               n: "3",
@@ -155,8 +155,8 @@ const AuditPage = async ({ params }: AuditPageProps) => {
           style={{ fontFamily: "var(--findable-font-sans)" }}
         >
           {isKo
-            ? "Findable v1.0 베타 · 같은 이메일 24시간 내 1회 제한 · 결과 데이터는 GEO 모델 학습에 활용될 수 있어요 (개인정보 제외)."
-            : "Findable v1.0 beta · 1 audit per email per 24h · Anonymized results may be used for GEO model training."}
+            ? "Findable v1.0 베타 · 같은 이메일·같은 도메인은 24시간에 1번만 진단할 수 있어요."
+            : "Findable v1.0 beta · The same email and domain can be audited once every 24 hours."}
         </p>
       </div>
     </div>

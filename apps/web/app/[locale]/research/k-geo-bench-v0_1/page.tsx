@@ -480,8 +480,8 @@ export default async function KGeoBenchPage({
                 style={{ fontFamily: "var(--findable-font-sans)" }}
               >
                 {ko
-                  ? "인큐베이팅 6개월 동안 K-뷰티 50사 → v0.5 (2026.09). K-뷰티·K-패션·K-콘텐츠 200사 → v1.0 (2026.12). 네이버 R&D 공동 발표 검토."
-                  : "Planned expansion: 50 K-beauty brands in v0.5 (September 2026), then 200 brands across K-beauty, K-fashion, and K-content in v1.0 (December 2026). A joint R&D publication with Naver is under consideration; it is not confirmed."}
+                  ? "다음 버전 계획은 추후 공지합니다."
+                  : "Plans for the next version will be announced later."}
               </p>
             </article>
           </div>
