@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import { isSensitivePath, redactPath } from "../observability/url-privacy";
+import {
+  isSensitivePath,
+  redactPath,
+  redactUrl,
+} from "../observability/url-privacy";
 
 interface SafeGoogleAnalyticsProps {
   readonly gaId: string;
@@ -46,7 +50,29 @@ const watchPathname = (onChange: (pathname: string) => void) => {
   };
 };
 
-const ensureGtag = (w: GtagWindow & Record<string, unknown>, gaId: string) => {
+export type SafeGaWindow = GtagWindow & Record<string, unknown>;
+
+interface DocumentLike {
+  createElement: (tag: "script") => {
+    async: boolean;
+    id: string;
+    src: string;
+  };
+  getElementById: (id: string) => unknown;
+  head: { appendChild: (node: never) => unknown };
+  querySelector: (selector: string) => unknown;
+  referrer: string;
+}
+
+/**
+ * gtag 함수·스크립트를 준비한다. 이미 window.gtag 가 있어도(다른 코드가 만든 경우)
+ * 이 Measurement ID 의 config 는 한 번 보장하고, 스크립트는 중복으로 싣지 않는다.
+ */
+export const ensureGtag = (
+  w: SafeGaWindow,
+  doc: DocumentLike,
+  gaId: string
+) => {
   if (!w.gtag) {
     w.dataLayer = w.dataLayer ?? [];
     // gtag.js 는 배열이 아니라 Arguments 객체를 dataLayer 에 쌓아야 인식한다.
@@ -55,33 +81,62 @@ const ensureGtag = (w: GtagWindow & Record<string, unknown>, gaId: string) => {
       w.dataLayer?.push(arguments);
     };
     w.gtag("js", new Date());
+  }
+  const configuredKey = `safe-ga-configured-${gaId}`;
+  if (!w[configuredKey]) {
+    w[configuredKey] = true;
     w.gtag("config", gaId, { send_page_view: false });
   }
-  if (!document.getElementById(GA_SCRIPT_ID)) {
-    const script = document.createElement("script");
+  const src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaId)}`;
+  if (
+    !(
+      doc.getElementById(GA_SCRIPT_ID) ||
+      doc.querySelector(`script[src="${src}"]`)
+    )
+  ) {
+    const script = doc.createElement("script");
     script.id = GA_SCRIPT_ID;
     script.async = true;
-    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaId)}`;
-    document.head.appendChild(script);
+    script.src = src;
+    doc.head.appendChild(script as never);
   }
+};
+
+/** 치환한 경로·위치·이전 주소만으로 page_view 를 보낸다(비밀 경로면 아무것도 안 보냄). */
+export const sendSafePageView = (
+  w: SafeGaWindow,
+  doc: DocumentLike,
+  origin: string,
+  pathname: string,
+  gaId: string
+) => {
+  const sensitive = isSensitivePath(pathname);
+  w[`ga-disable-${gaId}`] = sensitive;
+  if (sensitive) {
+    return;
+  }
+  ensureGtag(w, doc, gaId);
+  const safePath = redactPath(pathname);
+  w.gtag?.("event", "page_view", {
+    page_path: safePath,
+    page_location: `${origin}${safePath}`,
+    // 이전 주소도 치환(빈 값이면 빈 값). 쿼리·비밀 경로가 referrer 로 새지 않게 한다.
+    page_referrer: redactUrl(doc.referrer),
+  });
 };
 
 export const SafeGoogleAnalytics = ({ gaId }: SafeGoogleAnalyticsProps) => {
   useEffect(() => {
-    const w = window as unknown as GtagWindow & Record<string, unknown>;
-    return watchPathname((pathname) => {
-      const sensitive = isSensitivePath(pathname);
-      w[`ga-disable-${gaId}`] = sensitive;
-      if (sensitive) {
-        return;
-      }
-      ensureGtag(w, gaId);
-      const safePath = redactPath(pathname);
-      w.gtag?.("event", "page_view", {
-        page_path: safePath,
-        page_location: `${window.location.origin}${safePath}`,
-      });
-    });
+    const w = window as unknown as SafeGaWindow;
+    return watchPathname((pathname) =>
+      sendSafePageView(
+        w,
+        document as unknown as DocumentLike,
+        window.location.origin,
+        pathname,
+        gaId
+      )
+    );
   }, [gaId]);
 
   return null;

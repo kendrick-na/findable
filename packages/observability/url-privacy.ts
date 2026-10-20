@@ -52,3 +52,36 @@ export const isSensitivePath = (pathname: string): boolean =>
 /** 비밀 경로 중 「토큰 경로(/r/…)」만 판정 — 분석 초기화를 건너뛸 대상. */
 export const isReportTokenPath = (pathname: string): boolean =>
   REPORT_ROOT.test(pathname);
+
+const TEXT_REPORT_PATH = /(\/r\/)[A-Za-z0-9_-]{8,}/g;
+const TEXT_AUDIT_PATH = /(\/audit\/)(?!\[jobId\])[A-Za-z0-9_-]{8,}/g;
+const TEXT_QUERY = /\?[A-Za-z0-9_.%-]+=[^\s"'#]*/g;
+
+/** 문장·HTML 조각 안에 섞인 주소(/r/토큰, /audit/id, ?key=value 쿼리)를 치환한다. */
+export const redactText = (text: string): string =>
+  text
+    .replace(TEXT_REPORT_PATH, "$1[token]")
+    .replace(TEXT_AUDIT_PATH, "$1[jobId]")
+    .replace(TEXT_QUERY, "");
+
+const MAX_DEPTH = 10;
+
+/**
+ * 객체·배열 안의 모든 문자열을 제자리에서 치환한다(깊이 10까지).
+ * Sentry 의 contexts·extra·breadcrumb·span, PostHog 의 autocapture 속성
+ * ($el_text·$el_href·$elements_chain 등) 공통.
+ */
+export const redactDeep = (value: unknown, depth = 0): void => {
+  if (value === null || typeof value !== "object" || depth > MAX_DEPTH) {
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    const item = record[key];
+    if (typeof item === "string") {
+      record[key] = redactText(item);
+    } else {
+      redactDeep(item, depth + 1);
+    }
+  }
+};

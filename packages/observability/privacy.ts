@@ -5,23 +5,12 @@ import type {
   init,
   Log,
 } from "@sentry/nextjs";
-import { redactUrl } from "./url-privacy";
+import { redactDeep, redactText, redactUrl } from "./url-privacy";
 
 /** Sentry 가 이름 붙여 내보내지 않는 트랜잭션 이벤트 타입을 init 옵션에서 꺼낸다. */
 type TransactionEvent = Parameters<
   NonNullable<NonNullable<Parameters<typeof init>[0]>["beforeSendTransaction"]>
 >[0];
-
-/** 문장 안에 섞인 주소 조각(/r/토큰, /audit/id, ?쿼리)을 치환한다. */
-const TEXT_REPORT_PATH = /(\/r\/)[A-Za-z0-9_-]{8,}/g;
-const TEXT_AUDIT_PATH = /(\/audit\/)(?!\[jobId\])[A-Za-z0-9_-]{8,}/g;
-const TEXT_TOKEN_QUERY = /([?&](?:token|t|jobId|id)=)[^\s&#"']+/gi;
-
-const redactUrlsInText = (text: string): string =>
-  text
-    .replace(TEXT_REPORT_PATH, "$1[token]")
-    .replace(TEXT_AUDIT_PATH, "$1[jobId]")
-    .replace(TEXT_TOKEN_QUERY, "$1[Filtered]");
 
 const SENSITIVE_HEADERS = new Set([
   "authorization",
@@ -136,14 +125,14 @@ const redactRequestUrls = (request: ErrorEvent["request"]) => {
 const redactBreadcrumbUrls = (crumb: Breadcrumb) => {
   redactRecordUrls(crumb.data);
   if (crumb.message) {
-    crumb.message = redactUrlsInText(crumb.message);
+    crumb.message = redactText(crumb.message);
   }
 };
 
 const redactSpanUrls = (spans: TransactionEvent["spans"]) => {
   for (const span of spans ?? []) {
     if (span.description) {
-      span.description = redactUrlsInText(span.description);
+      span.description = redactText(span.description);
     }
     redactRecordUrls(span.data as Record<string, unknown> | undefined);
   }
@@ -168,6 +157,12 @@ const redactEventUrls = <T extends ErrorEvent | TransactionEvent>(
   redactRecordUrls(
     event.contexts?.trace?.data as Record<string, unknown> | undefined
   );
+  // 마지막 안전망: contexts·extra·tags·breadcrumb·span 의 모든 문자열을 재귀 치환.
+  redactDeep(event.contexts);
+  redactDeep(event.extra);
+  redactDeep(event.tags);
+  redactDeep(event.breadcrumbs);
+  redactDeep((event as TransactionEvent).spans);
   return event;
 };
 
@@ -179,18 +174,19 @@ export const sanitizeSentryTransaction = (
 /** 이동 기록(breadcrumb)용: 주소를 담은 필드를 치환한다. */
 export const sanitizeSentryBreadcrumb = (crumb: Breadcrumb): Breadcrumb => {
   redactBreadcrumbUrls(crumb);
+  redactDeep(crumb.data);
   return crumb;
 };
 
 /** 로그 연동(enableLogs)용: 메시지·속성 안의 주소를 치환한다. */
 export const sanitizeSentryLog = (log: Log): Log => {
-  log.message = redactUrlsInText(String(log.message));
+  log.message = redactText(String(log.message));
   const attributes = log.attributes as Record<string, unknown> | undefined;
   if (attributes) {
     for (const key of Object.keys(attributes)) {
       const value = attributes[key];
       if (typeof value === "string") {
-        attributes[key] = redactUrlsInText(value);
+        attributes[key] = redactText(value);
       }
     }
   }

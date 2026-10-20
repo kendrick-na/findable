@@ -25,6 +25,10 @@ vi.mock("@repo/observability/keys", () => ({
 }));
 
 import { sanitizePostHogEvent } from "@repo/analytics/privacy";
+import {
+  ensureGtag,
+  sendSafePageView,
+} from "@repo/analytics/safe-google-analytics";
 import { initializeSentry as initClient } from "@repo/observability/client";
 import { initializeSentry as initEdge } from "@repo/observability/edge";
 import {
@@ -166,7 +170,7 @@ describe("PostHog", () => {
   test("before_send 가 주소 속성을 치환한다", () => {
     const out = sanitizePostHogEvent({
       properties: {
-        $current_url: `https://findable.co.kr/r/${TOKEN}?t=1`,
+        $current_url: "https://findable.co.kr/ko/pricing?t=1",
         $pathname: `/ko/audit/${JOB}`,
         $referrer: `https://findable.co.kr/ko/audit/${JOB}?x=1`,
         $initial_current_url: `https://findable.co.kr/r/${TOKEN}`,
@@ -175,8 +179,8 @@ describe("PostHog", () => {
         plan: "free",
       },
     });
-    expect(out.properties).toMatchObject({
-      $current_url: "https://findable.co.kr/r/[token]",
+    expect(out?.properties).toMatchObject({
+      $current_url: "https://findable.co.kr/ko/pricing",
       $pathname: "/ko/audit/[jobId]",
       $referrer: "https://findable.co.kr/ko/audit/[jobId]",
       $initial_current_url: "https://findable.co.kr/r/[token]",
@@ -206,5 +210,116 @@ describe("PostHog", () => {
     );
     initializeAnalytics();
     expect(posthogInit).not.toHaveBeenCalled();
+  });
+});
+
+describe("2차 보강(코덱스 검토)", () => {
+  test("Sentry Replay 는 기본 끔(0)", () => {
+    initClient();
+    const options = sentryInit.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(options.replaysSessionSampleRate).toBe(0);
+    expect(options.replaysOnErrorSampleRate).toBe(0);
+  });
+
+  test("PostHog: SPA 로 /r/ 에 들어가 발생한 이벤트는 버린다", () => {
+    expect(
+      sanitizePostHogEvent({
+        properties: { $pathname: `/r/${TOKEN}`, $current_url: "x" },
+      })
+    ).toBeNull();
+    expect(
+      sanitizePostHogEvent({
+        properties: { $current_url: `https://findable.co.kr/r/${TOKEN}?a=1` },
+      })
+    ).toBeNull();
+    expect(
+      sanitizePostHogEvent({ properties: { $pathname: "/ko/pricing" } })
+    ).not.toBeNull();
+  });
+
+  test("PostHog: autocapture 속성 안의 주소도 재귀로 치환", () => {
+    const out = sanitizePostHogEvent({
+      properties: {
+        $el_text: `/ko/audit/${JOB}`,
+        $el_href: `/r/${TOKEN}?t=1`,
+        $elements_chain: `a:href="/r/${TOKEN}"attr__href="/ko/audit/${JOB}"`,
+        $elements: [{ attr__href: `/r/${TOKEN}` }],
+      },
+    });
+    const text = JSON.stringify(out);
+    expect(text).not.toContain(TOKEN);
+    expect(text).not.toContain(JOB);
+    expect(text).toContain("/r/[token]");
+  });
+
+  test("Sentry: contexts·extra·span data 의 중첩 문자열도 치환", () => {
+    const event = sanitizeSentryTransaction({
+      type: "transaction",
+      contexts: { custom: { deep: { link: `/r/${TOKEN}` } } },
+      extra: { list: [`https://x.kr/ko/audit/${JOB}?token=abc`] },
+      spans: [{ data: { nested: { u: `/r/${TOKEN}` } } }],
+    } as unknown as Parameters<typeof sanitizeSentryTransaction>[0]);
+    const text = JSON.stringify(event);
+    expect(text).not.toContain(TOKEN);
+    expect(text).not.toContain(JOB);
+    expect(text).not.toContain("token=abc");
+  });
+
+  const makeDoc = (referrer = "") => {
+    const appended: unknown[] = [];
+    return {
+      appended,
+      doc: {
+        referrer,
+        head: { appendChild: (node: unknown) => appended.push(node) },
+        createElement: () => ({ async: false, id: "", src: "" }),
+        getElementById: (id: string) =>
+          appended.find((n) => (n as { id: string }).id === id) ?? null,
+        querySelector: () => null,
+      },
+    };
+  };
+
+  test("GA: 기존 gtag 가 있어도 현재 ID config 를 보장하고 스크립트는 한 번만", () => {
+    const calls: unknown[][] = [];
+    const w: Record<string, unknown> = {
+      gtag: (...args: unknown[]) => calls.push(args),
+    };
+    const { doc, appended } = makeDoc();
+    ensureGtag(w, doc, "G-TEST");
+    ensureGtag(w, doc, "G-TEST");
+    const configs = calls.filter((c) => c[0] === "config");
+    expect(configs).toHaveLength(1);
+    expect(configs[0]?.[1]).toBe("G-TEST");
+    expect(configs[0]?.[2]).toEqual({ send_page_view: false });
+    expect(appended).toHaveLength(1);
+  });
+
+  test("GA: page_referrer 치환·비밀 경로에서는 전송 안 함", () => {
+    const calls: unknown[][] = [];
+    const w: Record<string, unknown> = {
+      gtag: (...args: unknown[]) => calls.push(args),
+    };
+    const { doc } = makeDoc(`https://findable.co.kr/ko/audit/${JOB}?x=1`);
+    sendSafePageView(w, doc, "https://findable.co.kr", "/ko/pricing", "G-T");
+    const view = calls.find((c) => c[0] === "event");
+    expect(view?.[2]).toMatchObject({
+      page_path: "/ko/pricing",
+      page_referrer: "https://findable.co.kr/ko/audit/[jobId]",
+    });
+
+    calls.length = 0;
+    sendSafePageView(
+      w,
+      doc,
+      "https://findable.co.kr",
+      `/ko/audit/${JOB}`,
+      "G-T"
+    );
+    expect(calls.find((c) => c[0] === "event")).toBeUndefined();
+    expect(w["ga-disable-G-T"]).toBe(true);
   });
 });
