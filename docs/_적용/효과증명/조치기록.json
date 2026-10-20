@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "_notes_ko": [
+    "처방 조치 기록 — 빈 양식(2026-10-20). 조치 4건 목록 승인(#17)과 대표의 「시작」 신호 전에는 채우지 않는다.",
+    "칸 정의·검증은 packages/audit/proof-plan.ts (validateActionLog). 사전 등록 문서(사전등록_20261020.md)는 관제탑 소유이며 여기서 건드리지 않는다.",
+    "한 조치 칸 예시(값은 대표가 정함): action_id, action_type(content_evidence|format_only), change_summary_ko, target_page_url, target_question_ids, already_indexed(yes|no|unknown), index_check_method, index_checked_at, expected_path(web_search_index|model_knowledge|both|unknown), planned_at, executed_at, verdict_version, not_comparable_expected, not_comparable_reason, weak_effect_possible, weak_effect_note_ko",
+    "format_only 는 weak_effect_possible=true 와 weak_effect_note_ko 가 필수. 색인이 no·unknown 이면 not_comparable_expected=true."
+  ],
+  "prereg_id": null,
+  "start_signal_at": null,
+  "actions": []
+}
