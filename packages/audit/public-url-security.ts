@@ -156,7 +156,11 @@ function isSpecialIpv6Range(
 }
 
 export function isPrivateAddress(address: string): boolean {
-  const normalized = address.toLowerCase().split("%")[0] ?? address;
+  // 영역 표시(zone ID)가 붙은 주소는 장치 한정 주소라 무조건 사설로 본다.
+  if (address.includes("%")) {
+    return true;
+  }
+  const normalized = address.toLowerCase();
   const ipv4 = parseIpv4(normalized);
   if (ipv4) {
     return isPrivateIpv4Parts(ipv4);
@@ -220,7 +224,16 @@ export async function assertPublicUrl(url: URL): Promise<void> {
     throw new Error("URL_UNSAFE");
   }
 
-  const hostname = url.hostname.toLowerCase().replace(TRAILING_DOT_RE, "");
+  // IPv6 리터럴은 URL.hostname 에 대괄호가 붙어 온다([2606:…]). 벗긴 뒤 IP 로 판정한다(벗기지 않으면 DNS 이름으로 오인).
+  const rawHost = url.hostname.toLowerCase();
+  const bracketed = rawHost.startsWith("[") && rawHost.endsWith("]");
+  const hostname = bracketed
+    ? rawHost.slice(1, -1)
+    : rawHost.replace(TRAILING_DOT_RE, "");
+  // 영역 표시(zone ID, `%en0`)가 붙은 주소는 특정 장치에 묶인 내부 주소라 거부한다.
+  if (hostname.includes("%") || (bracketed && isIP(hostname) !== 6)) {
+    throw new Error("URL_PRIVATE");
+  }
   if (
     hostname === "localhost" ||
     BLOCKED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix))

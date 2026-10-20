@@ -18,7 +18,11 @@ vi.mock("node:dns/promises", () => ({
   }),
 }));
 
-import { assertPublicUrl, isPrivateAddress } from "./public-url-security";
+import {
+  assertPublicUrl,
+  isPrivateAddress,
+  normalizePublicUrl,
+} from "./public-url-security";
 
 beforeEach(() => {
   dns.records.clear();
@@ -140,5 +144,83 @@ describe("공개 대조군 — 계속 통과해야 한다", () => {
     await expect(
       assertPublicUrl(new URL("https://ok6.example/"))
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("IPv6 리터럴 주소(대괄호)·영역 표시", () => {
+  const forged = (hostname: string) =>
+    ({
+      protocol: "http:",
+      username: "",
+      password: "",
+      port: "",
+      hostname,
+    }) as URL;
+
+  it("공개 IPv6 리터럴은 DNS 조회 없이 통과한다", async () => {
+    for (const url of [
+      "https://[2606:4700:4700::1111]/",
+      "https://[2001:4860:4860:0:0:0:0:8888]/",
+      "http://[64:ff9b::8.8.8.8]/",
+    ]) {
+      await expect(assertPublicUrl(new URL(url)), url).resolves.toBeUndefined();
+    }
+  });
+
+  it("사설·루프백·매핑·변환 IPv6 리터럴은 URL_PRIVATE 로 막는다(압축·IPv4 꼬리 조합 포함)", async () => {
+    for (const url of [
+      "http://[::1]/",
+      "http://[0:0:0:0:0:0:0:1]/",
+      "http://[::ffff:127.0.0.1]/",
+      "http://[0:0:0:0:0:ffff:169.254.169.254]/",
+      "http://[::127.0.0.1]/",
+      "http://[64:ff9b::10.0.0.1]/",
+      "http://[64:ff9b:0:0:0:0:a9fe:a9fe]/",
+      "http://[2002:c0a8:101::]/",
+      "http://[fe80::1]/",
+      "http://[fd12:3456::1]/",
+    ]) {
+      await expect(assertPublicUrl(new URL(url)), url).rejects.toThrow(
+        "URL_PRIVATE"
+      );
+    }
+  });
+
+  it("영역 표시(%)가 붙은 주소는 거부한다", async () => {
+    // WHATWG URL 은 [fe80::1%25en0] 자체를 만들지 못한다 → 입력 단계에서 URL_INVALID.
+    expect(() => normalizePublicUrl("http://[fe80::1%25en0]/")).toThrow(
+      "URL_INVALID"
+    );
+    // URL 객체를 거치지 않고 들어와도 막는다.
+    await expect(assertPublicUrl(forged("[fe80::1%en0]"))).rejects.toThrow(
+      "URL_PRIVATE"
+    );
+    await expect(
+      assertPublicUrl(forged("[2606:4700:4700::1111%eth0]"))
+    ).rejects.toThrow("URL_PRIVATE");
+    expect(isPrivateAddress("fe80::1%en0")).toBe(true);
+    expect(isPrivateAddress("2606:4700:4700::1111%eth0")).toBe(true);
+  });
+
+  it("대괄호 안이 IPv6 가 아니면 거부한다", async () => {
+    await expect(assertPublicUrl(forged("[brand.example]"))).rejects.toThrow(
+      "URL_PRIVATE"
+    );
+  });
+
+  it("DNS 결과가 공개 IPv6 이면 통과, 공개+사설 혼합이면 막는다", async () => {
+    dns.records.set("v6only.example", [
+      { address: "2001:4860:4860::8888", family: 6 },
+    ]);
+    await expect(
+      assertPublicUrl(new URL("https://v6only.example/"))
+    ).resolves.toBeUndefined();
+    dns.records.set("v6mix.example", [
+      { address: "2001:4860:4860::8888", family: 6 },
+      { address: "64:ff9b::7f00:1", family: 6 },
+    ]);
+    await expect(
+      assertPublicUrl(new URL("https://v6mix.example/"))
+    ).rejects.toThrow("URL_PRIVATE");
   });
 });
