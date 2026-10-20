@@ -14,13 +14,13 @@ export const FooterCTA = ({ locale = "ko" }: FooterCTAProps) => {
   // ⚠️ 2026-08-19(N-44) 문구 정정 — 이 CTA 는 `/sign-up` 으로 간다(무료 진단 폼이 아님).
   //   👤 결정 A: 무료 진단(`/audit`)은 **접는다**(페이지는 남기되 동선에서 뺀다).
   //   버튼이 "진단받기"라고 하고 가입 화면을 여는 것은 **문구가 거짓말**이었다.
-  const eyebrow = isKo ? "3분이면 시작" : "Start in 3 minutes";
+  const eyebrow = isKo ? "약 3분이면 시작" : "Start in about 3 minutes";
   const headingLines = isKo
     ? ["AI는 지금, 우리 브랜드를", "어떻게 답할까요?"]
     : ["How does AI answer about", "your brand right now?"];
   const sub = isKo
-    ? "이메일만 입력하면 3분이면 끝납니다. 카드 등록도 필요 없습니다."
-    : "Just your email, done in 3 minutes. No card required.";
+    ? "이메일만 입력하면 약 3분이면 끝납니다. 카드 등록도 필요 없습니다."
+    : "Just your email, done in about 3 minutes. No card required.";
   const ctaPrimary = isKo ? "무료로 시작하기" : "Start free";
   const ctaSecondary = isKo ? "상담 예약하기" : "Book a call";
   return (

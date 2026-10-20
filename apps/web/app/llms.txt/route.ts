@@ -48,7 +48,7 @@ const pricingTiersLine = (freeAuditPublic: boolean): string =>
 
 const baseBody = (freeAuditPublic: boolean): string => `# 파인더블 (Findable)
 
-> 한국어 브랜드가 ChatGPT·Perplexity·Gemini·네이버 등 AI 답변에 얼마나, 어떻게 인용되는지 측정하고 개선하는 GEO(생성형엔진최적화) 도구입니다. 도메인만 입력하면 AI 답변 4곳과 네이버·다음 검색을 병렬로 확인해 3분 안에 결과를 제공합니다.
+> 한국어 브랜드가 ChatGPT·Perplexity·Gemini·네이버 등 AI 답변에 얼마나, 어떻게 인용되는지 측정하고 개선하는 GEO(생성형엔진최적화) 도구입니다. 도메인만 입력하면 AI 답변 4곳과 네이버·다음 검색을 병렬로 확인해 약 3분 뒤 결과를 제공합니다.
 
 검색 결과의 노출·클릭과 AI 답변의 언급·인용은 다른 지표입니다. 파인더블은
 AI 답변에서 브랜드가 등장한 방식과 인용 출처를 측정하고 개선 우선순위를 제안합니다.

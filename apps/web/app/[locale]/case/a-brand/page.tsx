@@ -560,7 +560,7 @@ export default async function ABrandCasePage({
                   ? "우리 브랜드는 어디에 있을까."
                   : "Where does your brand appear?"}
                 <br />
-                {ko ? "3분이면 측정 끝." : "Check it in three minutes."}
+                {ko ? "약 3분이면 측정 끝." : "Check it in about three minutes."}
               </h2>
               <Link
                 className="inline-flex items-center gap-1.5 rounded-md bg-[var(--findable-primary)] px-5 py-2.5 font-medium text-[14px] text-[var(--findable-canvas)] transition hover:bg-[var(--findable-primary-hover)]"

@@ -472,7 +472,7 @@ export default async function KGeoBenchPage({
                   className="font-medium text-[16px]"
                   style={{ fontFamily: "var(--findable-font-sans)" }}
                 >
-                  {ko ? "로드맵 (v0.2~v1.0)" : "Roadmap (v0.2–v1.0)"}
+                  {ko ? "로드맵" : "Roadmap"}
                 </h3>
               </div>
               <p

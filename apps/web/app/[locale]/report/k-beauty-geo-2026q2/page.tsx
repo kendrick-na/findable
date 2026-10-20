@@ -313,8 +313,8 @@ export default async function KBeautyReportPage({
               style={{ fontFamily: "var(--findable-font-sans)" }}
             >
               {ko
-                ? "한국 K-뷰티 5사 · 7 AI 엔진"
-                : "Five K-beauty brands · Seven AI engines"}
+                ? "한국 K-뷰티 5사 · 7 AI 엔진 · 2026년 5월 측정 기준"
+                : "Five K-beauty brands · Seven AI engines · Measured in May 2026"}
             </span>
           </div>
           <h1

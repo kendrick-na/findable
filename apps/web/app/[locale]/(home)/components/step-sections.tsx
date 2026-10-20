@@ -10,7 +10,7 @@ const SECTIONS_KO = [
     stage: "측정",
     en: "Measure",
     title: "도메인만 입력하면 끝.",
-    body: "AI 답변 4곳과 네이버·다음 검색 노출을 동시에 모아서, 3분 안에 결과를 드립니다. 한국어와 영어, 둘 다 추적합니다.",
+    body: "AI 답변 4곳과 네이버·다음 검색 노출을 동시에 모아서, 약 3분 뒤 결과를 드립니다. 한국어와 영어, 둘 다 추적합니다.",
     bullets: [
       "AI 답변 4곳 + 네이버·다음 검색 노출 병렬 수집",
       "판별된 답변 중 브랜드가 확인된 비율(답변 등장률) 측정",
@@ -70,7 +70,7 @@ const SECTIONS_EN = [
     ...SECTIONS_KO[0],
     stage: "Measure",
     title: "Just enter your domain.",
-    body: "We pull answers from 4 AI engines plus Naver and Daum search in parallel and return results within 3 minutes, tracking both Korean and English.",
+    body: "We pull answers from 4 AI engines plus Naver and Daum search in parallel and return results in about 3 minutes, tracking both Korean and English.",
     bullets: [
       "4 AI engines + Naver/Daum search exposure, collected in parallel",
       "Appearance rate: share of classified answers that verify the brand",

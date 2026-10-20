@@ -4772,7 +4772,7 @@ function buildUpsellCopy({
       return {
         headline: `${brandName}의 AI 검색 성적표예요 — 우리 브랜드는 어떨까요?`,
         bodyCopy: freeAuditPublic
-          ? `${measuredSentence} 도메인만 넣으면 3분 만에 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`
+          ? `${measuredSentence} 도메인만 넣으면 약 3분이면 같은 진단을 받아보실 수 있어요. 무료이고 카드도 필요 없어요.`
           : measuredSentence,
       };
     }
