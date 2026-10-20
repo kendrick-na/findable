@@ -13,7 +13,7 @@
  *  - 이메일만으로 남의 기록을 바꾸지 않는다: 역할 주소(info@ 등)나 다른 회원과 같은 이메일이면
  *    무료 진단·리드 이메일을 **바꾸지 않고 보류**(id·건수만 돌려준다 — 이메일 원문은 남기지 않는다).
  *  - 3차(코덱스 2차 검토): 트랜잭션 **첫 단계**에서 탈퇴 표식(DeletedClerkUser)을 남긴다. 같은 사용자의
- *    가입·수정·조직 연결과는 advisory lock(`clerkUserLockKey`)으로 한 줄로 세운다 → 늦은 웹훅이 되살리지 못한다.
+ *    가입·수정·조직 연결과는 advisory lock(`clerkUserLock` — 두 int4 키)으로 한 줄로 세운다 → 늦은 웹훅이 되살리지 못한다.
  *  - 조직 소유자였으면 가장 먼저 가입한 남은 구성원에게 넘긴다 — **조직마다 별도 트랜잭션**(한 조직 실패가
  *    회원 삭제 전체를 되돌리지 않게). 새 소유자를 잠그고 아직 구성원인지 다시 확인한 뒤에만 바꾼다.
  *    확인 실패·오류면 `ownerId` 를 바꾸지 않고 보류로 돌려준다. 남은 구성원이 없으면 id 만 돌려준다
@@ -22,10 +22,7 @@
  */
 
 import type { database } from "@repo/database";
-import {
-  advisoryXactLock,
-  clerkUserLockKey,
-} from "@repo/database/advisory-lock";
+import { advisoryXactLock, clerkUserLock } from "@repo/database/advisory-lock";
 
 /** 무료 진단·리드 이메일을 바꿔 넣는 자리표시. `.invalid` 는 예약 최상위 도메인이라 실제로 배달되지 않는다. */
 export const ERASED_EMAIL = "deleted-user@deleted.invalid";
@@ -156,10 +153,13 @@ type TransferOutcome =
   | { kind: "no_member" }
   | { kind: "held"; reason: OwnershipHoldReason };
 
+/** 소유권 후보를 몇 명까지 시도하나(앞 후보가 이전 도중 조직을 떠난 경우 다음 사람). */
+export const OWNER_TRANSFER_MAX_CANDIDATES = 3;
+
 /**
  * 조직 1곳의 소유권을 가장 먼저 가입한 남은 구성원에게 넘긴다(별도 트랜잭션).
- * 새 소유자를 잠근 뒤(조직 연결·해제와 같은 잠금) 아직 구성원인지 **다시** 확인하고,
- * 소유자가 여전히 탈퇴자일 때만 바꾼다. 아니면 바꾸지 않고 보류.
+ * 후보를 잠근 뒤(조직 연결·해제와 같은 잠금) 아직 구성원인지 **다시** 확인하고, 빠졌으면
+ * 다음 후보를 시도한다(최대 3명). 소유자가 여전히 탈퇴자일 때만 바꾼다. 모두 실패하면 바꾸지 않고 보류.
  */
 export async function transferOrgOwnership(
   client: EraseClient,
@@ -167,33 +167,37 @@ export async function transferOrgOwnership(
   formerOwnerId: string
 ): Promise<TransferOutcome> {
   return await client.$transaction(async (tx) => {
-    const candidate = await tx.user.findFirst({
+    const candidates = await tx.user.findMany({
       where: { organizationId: orgId, id: { not: formerOwnerId } },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { id: true },
+      take: OWNER_TRANSFER_MAX_CANDIDATES,
     });
-    if (!candidate) {
+    if (candidates.length === 0) {
       return { kind: "no_member" } as const;
     }
-    await advisoryXactLock(tx, clerkUserLockKey(candidate.id));
-    const stillMember = await tx.user.findFirst({
-      where: { id: candidate.id, organizationId: orgId },
-      select: { id: true },
-    });
-    if (!stillMember) {
-      return {
-        kind: "held",
-        reason: "successor_left_during_transfer",
-      } as const;
+    for (const candidate of candidates) {
+      await advisoryXactLock(tx, clerkUserLock(candidate.id));
+      const stillMember = await tx.user.findFirst({
+        where: { id: candidate.id, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!stillMember) {
+        continue; // 이전 도중 조직을 떠났다 → 다음 후보.
+      }
+      const changed = await tx.organization.updateMany({
+        where: { id: orgId, ownerId: formerOwnerId },
+        data: { ownerId: candidate.id },
+      });
+      if (changed.count !== 1) {
+        return { kind: "held", reason: "owner_already_changed" } as const;
+      }
+      return { kind: "transferred", newOwnerId: candidate.id } as const;
     }
-    const changed = await tx.organization.updateMany({
-      where: { id: orgId, ownerId: formerOwnerId },
-      data: { ownerId: candidate.id },
-    });
-    if (changed.count !== 1) {
-      return { kind: "held", reason: "owner_already_changed" } as const;
-    }
-    return { kind: "transferred", newOwnerId: candidate.id } as const;
+    return {
+      kind: "held",
+      reason: "successor_left_during_transfer",
+    } as const;
   }, TRANSFER_TX_OPTIONS);
 }
 
@@ -204,7 +208,7 @@ function eraseMemberData(
 ): Promise<MemberErasure> {
   return client.$transaction(async (tx) => {
     // 0) 같은 사용자의 가입·수정·조직 연결 웹훅과 한 줄로 선다(잠금은 트랜잭션 끝에 풀린다).
-    await advisoryXactLock(tx, clerkUserLockKey(userId));
+    await advisoryXactLock(tx, clerkUserLock(userId));
     // 0-1) 탈퇴 표식 — 이후 늦게 온 user.created/updated 는 이 표식을 보고 적재하지 않는다.
     //      표가 없으면(마이그레이션 미적용) 여기서 던진다 → 전체 롤백 → 웹훅 500(재시도).
     await tx.deletedClerkUser.upsert({

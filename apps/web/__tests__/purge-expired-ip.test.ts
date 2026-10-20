@@ -82,8 +82,8 @@ const memoryDb = {
     h.txTimeouts.push(options?.timeout ?? -1);
     return fn({
       auditJob: memoryAuditJob,
-      $queryRaw: (strings: TemplateStringsArray) => {
-        h.lockQueries.push(strings.join("?"));
+      $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) => {
+        h.lockQueries.push(`${strings.join("?")} | ${values.join(",")}`);
         return Promise.resolve([{ locked: h.lockFree }]);
       },
       $executeRaw: () => Promise.resolve(0),
@@ -100,6 +100,9 @@ const { ipRetentionCutoff, purgeExpiredIpAddresses } = await import(
   "../lib/purge-expired-ip"
 );
 const { GET } = await import("../app/api/cron/purge-expired-ip/route");
+const { ADVISORY_LOCK_NAMESPACE } = await import(
+  "@repo/database/advisory-lock"
+);
 
 /** 메모리 updateMany 를 Prisma 시그니처로 맞춘다(이 기능이 쓰는 인자 모양만 구현). */
 const memClient = () =>
@@ -219,6 +222,10 @@ describe("동시 실행 방지·배치 시간", () => {
     await purgeExpiredIpAddresses(memClient(), NOW);
     expect(h.lockQueries.length).toBeGreaterThan(0);
     expect(h.lockQueries[0]).toContain("pg_try_advisory_xact_lock");
+    // 두 int4 키: IP cron 네임스페이스 + 고정 id.
+    expect(h.lockQueries[0]).toContain(
+      `| ${ADVISORY_LOCK_NAMESPACE.IP_PURGE_CRON},purge-expired-ip`
+    );
   });
 
   it("⛔ 다른 실행이 잠금을 쥐고 있으면 아무것도 바꾸지 않고 lockBusy 로 비켜선다", async () => {

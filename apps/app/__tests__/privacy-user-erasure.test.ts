@@ -11,6 +11,8 @@
  *
  * @vitest-environment node
  */
+
+import { ADVISORY_LOCK_NAMESPACE } from "@repo/database/advisory-lock";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   ERASED_EMAIL,
@@ -20,6 +22,9 @@ import {
   REVOKED_MAILBOX_STATUS,
 } from "@/lib/privacy/erase-deleted-user";
 import { writeUnlessDeleted } from "@/lib/privacy/guarded-user-write";
+
+/** 잠금 기록 문자열: `<네임스페이스>:<id>` (두 int4 키). */
+const userLock = (id: string) => `${ADVISORY_LOCK_NAMESPACE.CLERK_USER}:${id}`;
 
 type Row = Record<string, unknown>;
 type Tables = Record<string, Row[]>;
@@ -157,6 +162,34 @@ const matchOne = (value: unknown, cond: unknown): boolean => {
 const matches = (row: Row, where: Row = {}): boolean =>
   Object.entries(where).every(([key, cond]) => matchOne(row[key], cond));
 
+interface FindArgs {
+  orderBy?: Record<string, "asc" | "desc">[];
+  where: Row;
+}
+
+/** where 로 거르고 orderBy(오름차순만) 로 정렬한다. */
+const sortRows = (
+  rows: Row[],
+  where: Row,
+  orderBy: FindArgs["orderBy"]
+): Row[] => {
+  const keys = (orderBy ?? []).map((o) => Object.keys(o)[0]);
+  const sortKey = (v: unknown) =>
+    v instanceof Date ? v.toISOString() : String(v);
+  return rows
+    .filter((r) => matches(r, where))
+    .sort((a, b) => {
+      for (const k of keys) {
+        const av = sortKey(a[k]);
+        const bv = sortKey(b[k]);
+        if (av !== bv) {
+          return av < bv ? -1 : 1;
+        }
+      }
+      return 0;
+    });
+};
+
 interface MemoryOptions {
   failOn?: string;
   /** 잠금을 잡는 순간 호출 — 「잠금 직전에 다른 웹훅이 먼저 커밋한」 상황을 흉내 낸다. */
@@ -182,34 +215,14 @@ function createMemoryDb(initial: Tables, opts: MemoryOptions | string = {}) {
       Promise.resolve(
         structuredClone(table(s, name).find((r) => matches(r, where)) ?? null)
       ),
-    findFirst: ({
-      where,
-      orderBy,
-    }: {
-      where: Row;
-      orderBy?: Record<string, "asc" | "desc">[];
-    }) => {
-      const rows = table(s, name).filter((r) => matches(r, where));
-      const keys = (orderBy ?? []).map((o) => Object.keys(o)[0]);
-      const sortKey = (v: unknown) =>
-        v instanceof Date ? v.toISOString() : String(v);
-      rows.sort((a, b) => {
-        for (const k of keys) {
-          const av = sortKey(a[k]);
-          const bv = sortKey(b[k]);
-          if (av !== bv) {
-            return av < bv ? -1 : 1;
-          }
-        }
-        return 0;
-      });
-      // 실제 Prisma 처럼 사본을 돌려준다(나중 쓰기가 읽은 값을 바꾸지 않게).
-      return Promise.resolve(structuredClone(rows[0] ?? null));
-    },
-    findMany: ({ where, take }: { where: Row; take?: number }) =>
+    findFirst: ({ where, orderBy }: FindArgs) =>
       Promise.resolve(
-        table(s, name)
-          .filter((r) => matches(r, where))
+        structuredClone(sortRows(table(s, name), where, orderBy)[0] ?? null)
+      ),
+    // 실제 Prisma 처럼 사본을 돌려준다(나중 쓰기가 읽은 값을 바꾸지 않게).
+    findMany: ({ where, orderBy, take }: FindArgs & { take?: number }) =>
+      Promise.resolve(
+        sortRows(table(s, name), where, orderBy)
           .slice(0, take ?? Number.POSITIVE_INFINITY)
           .map((r) => structuredClone(r))
       ),
@@ -266,8 +279,13 @@ function createMemoryDb(initial: Tables, opts: MemoryOptions | string = {}) {
       {
         get: (_t, name: string) => {
           if (name === "$executeRaw") {
-            // advisoryXactLock: SELECT pg_advisory_xact_lock(hashtext(${key}))
-            return (_strings: TemplateStringsArray, key: string) => {
+            // advisoryXactLock: SELECT pg_advisory_xact_lock(${namespace}::int4, hashtext(${id}))
+            return (
+              _strings: TemplateStringsArray,
+              namespace: number,
+              id: string
+            ) => {
+              const key = `${namespace}:${id}`;
               fail("lock");
               locks.push(key);
               onLock?.(key, s);
@@ -525,7 +543,7 @@ describe("eraseDeletedUser — 탈퇴 회원 정보 삭제", () => {
     await eraseDeletedUser(db.client, USER);
     const s = db.snapshot();
     expect(s.deletedClerkUser).toEqual([{ clerkId: USER }]);
-    expect(db.locks[0]).toBe(`clerk-user:${USER}`);
+    expect(db.locks[0]).toBe(userLock(USER));
     // 재실행해도 표식은 1개(멱등).
     await eraseDeletedUser(db.client, USER);
     expect(db.snapshot().deletedClerkUser).toHaveLength(1);
@@ -538,17 +556,60 @@ describe("eraseDeletedUser — 탈퇴 회원 정보 삭제", () => {
     expect(noTable.snapshot()).toEqual(before);
   });
 
-  it("🟡 새 소유자가 잠금 직전에 조직을 떠났으면 ownerId 를 바꾸지 않고 보류한다", async () => {
-    const racing = createMemoryDb(seed(), {
-      onLock: (key, draft) => {
-        if (key === `clerk-user:${OLDEST}`) {
-          // 동시에 도착한 membership.deleted 가 먼저 커밋된 상황.
-          const u = draft.user.find((x) => x.id === OLDEST);
+  /** 이 사용자 잠금을 잡는 순간 그 사람이 조직을 떠난 것처럼 만든다(먼저 커밋된 membership.deleted). */
+  const leavesOnLock =
+    (...ids: string[]) =>
+    (key: string, draft: Tables) => {
+      for (const id of ids) {
+        if (key === userLock(id)) {
+          const u = draft.user.find((x) => x.id === id);
           if (u) {
             u.organizationId = null;
           }
         }
-      },
+      }
+    };
+
+  it("첫 후보가 잠금 직전에 조직을 떠났으면 다음 후보에게 넘긴다", async () => {
+    const racing = createMemoryDb(seed(), { onLock: leavesOnLock(OLDEST) });
+    const r = await eraseDeletedUser(racing.client, USER);
+    expect(byId(racing.snapshot().organization, "org_shared")?.ownerId).toBe(
+      NEWER
+    );
+    expect(r.ownershipTransfers).toEqual([
+      { orgId: "org_shared", newOwnerId: NEWER },
+    ]);
+    expect(r.ownershipHeld).toEqual([]);
+  });
+
+  it("후보는 최대 3명까지만 시도한다", async () => {
+    const tables = seed();
+    for (const [i, id] of ["user_c3", "user_c4"].entries()) {
+      tables.user.push({
+        id,
+        email: `${id}@example.com`,
+        organizationId: "org_shared",
+        createdAt: d(`2026-07-0${i + 1}T00:00:00Z`),
+      });
+    }
+    // 앞의 3명(OLDEST·NEWER·user_c3)이 모두 빠지면, 4번째(user_c4)가 있어도 보류.
+    const racing = createMemoryDb(tables, {
+      onLock: leavesOnLock(OLDEST, NEWER, "user_c3"),
+    });
+    const r = await eraseDeletedUser(racing.client, USER);
+    expect(r.ownershipHeld).toEqual([
+      { orgId: "org_shared", reason: "successor_left_during_transfer" },
+    ]);
+    expect(racing.locks.filter((k) => k !== userLock(USER))).toEqual([
+      userLock(OLDEST),
+      userLock(NEWER),
+      userLock("user_c3"),
+    ]);
+  });
+
+  it("🟡 후보가 모두 잠금 직전에 조직을 떠났으면 ownerId 를 바꾸지 않고 보류한다", async () => {
+    const racing = createMemoryDb(seed(), {
+      onLock: leavesOnLock(OLDEST, NEWER),
     });
     const r = await eraseDeletedUser(racing.client, USER);
     const s = racing.snapshot();

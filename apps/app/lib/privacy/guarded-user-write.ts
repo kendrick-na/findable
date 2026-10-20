@@ -1,7 +1,7 @@
 /**
  * 탈퇴 표식(tombstone)을 지키는 회원 쓰기 — 2026-10-20 (코덱스 2차 검토 반영).
  *
- * 탈퇴 처리(`eraseDeletedUser`)와 **같은 잠금**(`clerkUserLockKey`)을 잡은 뒤 표식을 확인하고 쓴다.
+ * 탈퇴 처리(`eraseDeletedUser`)와 **같은 잠금**(`clerkUserLock`)을 잡은 뒤 표식을 확인하고 쓴다.
  * 그래서 「확인 → 쓰기」 사이에 탈퇴가 끼어들 수 없다(둘 중 하나가 끝날 때까지 다른 쪽이 기다린다).
  *
  * - 표식 있음 → 쓰지 않고 `"tombstoned"`.
@@ -10,10 +10,7 @@
  */
 
 import type { database } from "@repo/database";
-import {
-  advisoryXactLock,
-  clerkUserLockKey,
-} from "@repo/database/advisory-lock";
+import { advisoryXactLock, clerkUserLock } from "@repo/database/advisory-lock";
 
 export class GuardLookupError extends Error {
   constructor(cause: unknown) {
@@ -41,7 +38,7 @@ export async function writeUnlessDeleted(
   return await client.$transaction(async (tx) => {
     let tombstoned: boolean;
     try {
-      await advisoryXactLock(tx, clerkUserLockKey(clerkId));
+      await advisoryXactLock(tx, clerkUserLock(clerkId));
       tombstoned =
         (await tx.deletedClerkUser.findUnique({
           where: { clerkId },

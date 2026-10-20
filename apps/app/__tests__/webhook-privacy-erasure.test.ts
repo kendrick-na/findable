@@ -54,8 +54,8 @@ vi.mock("@repo/analytics/server", () => ({
 // 진짜 `writeUnlessDeleted`(잠금 → 표식 확인 → 쓰기)가 이 가짜 트랜잭션 위에서 돈다.
 vi.mock("@repo/database", () => {
   const tx = {
-    $executeRaw: (_s: TemplateStringsArray, key: string) => {
-      h.locks.push(key);
+    $executeRaw: (_s: TemplateStringsArray, namespace: number, id: string) => {
+      h.locks.push(`${namespace}:${id}`);
       return Promise.resolve(1);
     },
     deletedClerkUser: { findUnique: h.tombstoneLookup },
@@ -82,6 +82,10 @@ vi.mock("@/lib/privacy/clerk-user-presence", () => ({
 }));
 
 const { POST } = await import("../app/webhooks/auth/route");
+const { ADVISORY_LOCK_NAMESPACE } = await import(
+  "@repo/database/advisory-lock"
+);
+const CLERK_USER_NS = ADVISORY_LOCK_NAMESPACE.CLERK_USER;
 
 const post = (type: string, data: object) => {
   h.event = { type, data };
@@ -206,7 +210,7 @@ describe("②-2 탈퇴 표식(tombstone)이 주 방어다 — Clerk 확인은 �
     expect(h.identify).not.toHaveBeenCalled();
     expect(res.status).toBe(200);
     // 확인과 쓰기는 같은 사용자 잠금 안에서 일어난다(탈퇴 처리와 같은 키).
-    expect(h.locks).toEqual(["clerk-user:user_1"]);
+    expect(h.locks).toEqual([`${CLERK_USER_NS}:user_1`]);
   });
 
   it("⛔ 표식 조회가 실패하면(표 없음 등) 500 — 적재하지 않는다(fail-closed)", async () => {
@@ -233,11 +237,42 @@ describe("②-2 탈퇴 표식(tombstone)이 주 방어다 — Clerk 확인은 �
       organization: { id: "org_1" },
       public_user_data: { user_id: "user_9" },
     });
-    expect(h.locks).toEqual(["clerk-user:user_9"]);
+    expect(h.locks).toEqual([`${CLERK_USER_NS}:user_9`]);
     expect(h.userUpdate).toHaveBeenCalledWith({
       where: { id: "user_9" },
       data: { organizationId: "org_1" },
     });
+  });
+});
+
+describe("⛔ 조직 연결 웹훅도 표식 조회 실패를 삼키지 않는다(fail-closed)", () => {
+  it.each([
+    "organizationMembership.created",
+    "organizationMembership.deleted",
+  ])("%s: 잠금·표식 조회 실패면 500 + 실패 추적 로그", async (type) => {
+    h.tombstoneLookup.mockRejectedValueOnce(
+      new Error('relation "DeletedClerkUser" does not exist')
+    );
+    const res = await post(type, {
+      organization: { id: "org_1" },
+      public_user_data: { user_id: "user_9" },
+    });
+    expect(res.status).toBe(500);
+    expect(h.userUpdate).not.toHaveBeenCalled();
+    expect(h.logError).toHaveBeenCalledWith("webhook.auth.failed", {
+      eventId: "msg_1",
+      eventType: type,
+      status: 500,
+    });
+  });
+
+  it("회원 행이 아직 없는 정상 순서 문제(update 실패)는 기존처럼 201", async () => {
+    h.userUpdate.mockRejectedValueOnce(new Error("Record not found"));
+    const res = await post("organizationMembership.created", {
+      organization: { id: "org_1" },
+      public_user_data: { user_id: "user_9" },
+    });
+    expect(res.status).toBe(201);
   });
 });
 

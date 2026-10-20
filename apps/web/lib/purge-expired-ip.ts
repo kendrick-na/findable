@@ -17,7 +17,10 @@
  */
 
 import type { database } from "@repo/database";
-import { tryAdvisoryXactLock } from "@repo/database/advisory-lock";
+import {
+  ipPurgeCronLock,
+  tryAdvisoryXactLock,
+} from "@repo/database/advisory-lock";
 
 export const IP_RETENTION_MONTHS = 3;
 export const IP_PURGE_BATCH_SIZE = 1000;
@@ -53,8 +56,6 @@ export function ipRetentionCutoff(
 
 type PurgeClient = Pick<typeof database, "$transaction">;
 
-/** 동시 실행 방지 잠금 키(배치마다 `pg_try_advisory_xact_lock`). */
-export const IP_PURGE_LOCK_KEY = "cron:purge-expired-ip";
 /** 남은 예산이 이보다 적으면 새 배치를 시작하지 않는다. */
 export const IP_PURGE_MIN_BATCH_MS = 2000;
 /** 배치 1회(트랜잭션)의 최대 시간. 넘으면 Prisma 가 그 배치를 되돌린다. */
@@ -102,7 +103,7 @@ export async function purgeExpiredIpAddresses(
     }
     const batch = await client.$transaction(
       async (tx) => {
-        if (!(await tryAdvisoryXactLock(tx, IP_PURGE_LOCK_KEY))) {
+        if (!(await tryAdvisoryXactLock(tx, ipPurgeCronLock()))) {
           return null;
         }
         const ids = (

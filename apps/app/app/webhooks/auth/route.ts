@@ -328,6 +328,11 @@ const linkUserToOrg = async (
       })
     );
   } catch (error) {
+    // 🔴 잠금·탈퇴 표식 조회 실패(표 없음·DB 장애)는 삼키지 않는다 → 호출부가 500(재시도).
+    //   삼키면 마이그레이션 누락·DB 장애가 「조용한 조직 연결 누락」이 된다(코덱스 3차).
+    if (error instanceof GuardLookupError) {
+      throw error;
+    }
     // 아직 user.created 가 안 들어온 순서면 여기서 실패한다(정상 가능 경로).
     log.error("webhook.user.org_link_failed", {
       userId,
@@ -436,38 +441,47 @@ export const POST = async (request: Request): Promise<Response> => {
 
   let response: Response = new Response("", { status: 201 });
 
-  switch (eventType) {
-    case "user.created": {
-      response = await handleUserCreated(event.data);
-      break;
+  // 🔴 탈퇴 표식·잠금 조회 실패(GuardLookupError)는 어느 이벤트에서든 500 — 조용히 201 로 넘기지 않는다.
+  try {
+    switch (eventType) {
+      case "user.created": {
+        response = await handleUserCreated(event.data);
+        break;
+      }
+      case "user.updated": {
+        response = await handleUserUpdated(event.data);
+        break;
+      }
+      case "user.deleted": {
+        response = await handleUserDeleted(event.data);
+        break;
+      }
+      case "organization.created": {
+        response = await handleOrganizationCreated(event.data);
+        break;
+      }
+      case "organization.updated": {
+        response = await handleOrganizationUpdated(event.data);
+        break;
+      }
+      case "organizationMembership.created": {
+        response = await handleOrganizationMembershipCreated(event.data);
+        break;
+      }
+      case "organizationMembership.deleted": {
+        response = await handleOrganizationMembershipDeleted(event.data);
+        break;
+      }
+      default: {
+        break;
+      }
     }
-    case "user.updated": {
-      response = await handleUserUpdated(event.data);
-      break;
+  } catch (error) {
+    if (!(error instanceof GuardLookupError)) {
+      throw error;
     }
-    case "user.deleted": {
-      response = await handleUserDeleted(event.data);
-      break;
-    }
-    case "organization.created": {
-      response = await handleOrganizationCreated(event.data);
-      break;
-    }
-    case "organization.updated": {
-      response = await handleOrganizationUpdated(event.data);
-      break;
-    }
-    case "organizationMembership.created": {
-      response = await handleOrganizationMembershipCreated(event.data);
-      break;
-    }
-    case "organizationMembership.deleted": {
-      response = await handleOrganizationMembershipDeleted(event.data);
-      break;
-    }
-    default: {
-      break;
-    }
+    log.error("webhook.auth.tombstone_lookup_failed", { id, eventType });
+    response = new Response("Tombstone lookup failed", { status: 500 });
   }
 
   await analytics?.shutdown();
