@@ -1001,6 +1001,161 @@ function homepageFailure(
   };
 }
 
+export interface HomepageTextResult {
+  /** 읽은 쪽 수(첫 쪽 포함) */
+  pagesRead: number;
+  status: "ok" | "blocked_by_robots" | "refused" | "unavailable" | "skipped";
+  /** 읽은 쪽들의 본문(사람이 보는 글). ok 가 아니면 항상 빈 문자열 */
+  text: string;
+  url: string | null;
+}
+
+/** 사업자정보가 흔히 적힌 쪽 — 회사소개·개인정보처리방침·이용약관·사업자정보·오시는 길. */
+const COMPANY_INFO_LINK_RE =
+  /회사\s*소개|기업\s*소개|about|company|corporate|개인\s*정보|privacy|이용\s*약관|terms|사업자\s*정보|오시는\s*길|찾아\s*오|location|contact|문의/i;
+
+function companyInfoPages(
+  html: string,
+  pageUrl: URL,
+  state: CrawlState
+): URL[] {
+  const picked = new Map<string, URL>();
+  for (const match of html.matchAll(ANCHOR_RE)) {
+    let url: URL;
+    try {
+      url = new URL(decodeEntities(match[1] ?? "").trim(), pageUrl);
+    } catch {
+      continue;
+    }
+    url.hash = "";
+    if (
+      !(
+        (url.protocol === "https:" || url.protocol === "http:") &&
+        state.allowedHosts.has(url.host)
+      ) ||
+      url.toString() === pageUrl.toString()
+    ) {
+      continue;
+    }
+    const path = decodeURIComponent(url.pathname + url.search).replace(
+      /%/g,
+      ""
+    );
+    if (SKIP_PATH_RE.test(path)) {
+      continue;
+    }
+    if (COMPANY_INFO_LINK_RE.test(`${path} ${htmlToText(match[2] ?? "")}`)) {
+      picked.set(url.toString(), url);
+    }
+  }
+  return [...picked.values()];
+}
+
+/**
+ * 첫 쪽 다음의 회사정보 쪽을 순서대로 읽어 texts 에 덧붙인다. 「무단수집 거부」를 만나면 true(읽은 글은 버린다).
+ */
+async function readCompanyInfoPages(
+  home: Extract<PageFetch, { kind: "ok" }>,
+  state: CrawlState,
+  texts: string[],
+  opts: {
+    delayMs: number;
+    maxPages: number;
+    stopWhen?: (text: string) => boolean;
+  }
+): Promise<boolean> {
+  const visited = new Set([home.url.toString()]);
+  for (const next of companyInfoPages(home.html, home.url, state)) {
+    if (visited.size >= opts.maxPages) {
+      return false;
+    }
+    if (visited.has(next.toString())) {
+      continue;
+    }
+    visited.add(next.toString());
+    // 상대 서버 부담을 줄이려고 순서대로·간격을 둔다(병렬 금지).
+    await sleep(opts.delayMs, state.outer);
+    const page = await fetchPage(next, state, false);
+    if (page.kind === "fail" && page.reason === "budget_exhausted") {
+      return false;
+    }
+    if (page.kind !== "ok") {
+      continue;
+    }
+    if (hasCollectionRefusal(page.html)) {
+      return true;
+    }
+    texts.push(htmlToText(page.html));
+    if (opts.stopWhen?.(texts.join("\n"))) {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * 회사 홈페이지의 글을 읽는다(사업자등록번호 대조용). throw 하지 않는다.
+ * 이메일 수집과 **같은 안전장치**를 그대로 쓴다 — robots.txt, 「무단수집 거부」 게시(어느 쪽에서든 보이면
+ * 읽은 글을 모두 버린다), 사설·내부 주소 차단, 같은 회사 도메인만, 리다이렉트·시간 제한,
+ * 쪽 사이 간격(기본 500ms), 쪽 수 상한(기본 1 = 첫 쪽만, 최대 5).
+ * `stopWhen`이 true 를 돌려주면(예: 사업자번호를 찾음) 더 읽지 않는다.
+ */
+export async function readHomepageText(
+  domain: string,
+  deps: FindContactEmailsDeps & {
+    maxPages?: number;
+    signal?: AbortSignal;
+    stopWhen?: (text: string) => boolean;
+  } = {}
+): Promise<HomepageTextResult> {
+  const bare = bareHost(domain);
+  const empty = (status: HomepageTextResult["status"]): HomepageTextResult => ({
+    pagesRead: 0,
+    status,
+    text: "",
+    url: null,
+  });
+  if (!bare.includes(".")) {
+    return empty("skipped");
+  }
+  const state: CrawlState = {
+    allowedHosts: new Set([bare, `www.${bare}`]),
+    assertUrl: deps.assertUrl ?? assertPublicUrl,
+    deadline: Date.now() + TOTAL_BUDGET_MS,
+    fetchImpl: deps.fetchImpl ?? fetch,
+    outer: deps.signal,
+    robots: new Map(),
+  };
+  const home = await fetchHomepage(bare, state);
+  if (home.kind === "robots") {
+    return empty("blocked_by_robots");
+  }
+  if (home.kind !== "ok") {
+    return empty("unavailable");
+  }
+  if (hasCollectionRefusal(home.html)) {
+    return empty("refused");
+  }
+  const texts = [htmlToText(home.html)];
+  const maxPages = Math.min(Math.max(deps.maxPages ?? 1, 1), MAX_PAGES);
+  if (maxPages > 1 && !deps.stopWhen?.(texts.join("\n"))) {
+    const refused = await readCompanyInfoPages(home, state, texts, {
+      delayMs: deps.delayMs ?? DEFAULT_DELAY_MS,
+      maxPages,
+      stopWhen: deps.stopWhen,
+    });
+    if (refused) {
+      return empty("refused");
+    }
+  }
+  return {
+    pagesRead: texts.length,
+    status: "ok",
+    text: texts.join("\n"),
+    url: home.url.href,
+  };
+}
+
 /**
  * 회사 홈페이지에서 공개 연락 메일 후보를 찾는다. throw 하지 않는다.
  * 순서: robots.txt → 홈페이지(푸터 사업자정보) → 홈페이지 링크 중 문의·제휴·회사소개(최대 5쪽).
