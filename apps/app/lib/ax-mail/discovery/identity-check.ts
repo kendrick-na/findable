@@ -1,3 +1,4 @@
+import { type IdentityLevel, judgeIdentity } from "../sources/company-identity";
 import type { FactInput, FactValue } from "./ingest";
 
 /**
@@ -120,4 +121,94 @@ export async function checkOneIdentity(deps: {
   };
   await deps.save(identityFactFor(result, deps.checkedOn, deps.fetchedAt));
   return result;
+}
+
+/** 홈페이지 읽기 결과(contact-email 의 상태)를 저장용 상태로 바꾼다. */
+export function toHomepageStatus(
+  status: "ok" | "blocked_by_robots" | "refused" | "unavailable" | "skipped"
+): HomepageRead["status"] {
+  if (status === "ok") {
+    return "ok";
+  }
+  if (status === "refused" || status === "blocked_by_robots") {
+    return "refused";
+  }
+  return "unavailable";
+}
+
+/** judgeIdentity 를 저장 모듈에서 부르는 얇은 래퍼(등급·사유만 돌려준다). */
+function judgeIdentityLazy(input: {
+  dartBizNo: string | null;
+  expoName: string;
+  homepageBizNos: readonly string[];
+}): { level: IdentityLevel; reasons: string[] } {
+  const v = judgeIdentity({
+    dart: { bizNo: input.dartBizNo, name: input.expoName },
+    expoName: input.expoName,
+    homepageBizNos: input.homepageBizNos,
+  });
+  return { level: v.level, reasons: v.reasons };
+}
+
+export type CompanyIdentityOutcome =
+  | { kind: "no_dart" }
+  | { kind: "no_revenue" }
+  | { kind: "ok"; level: IdentityCheckResult["level"]; pagesRead: number };
+
+/**
+ * 회사 한 곳 대조의 전체 흐름(순수 함수). 매출이 확인된 회사만, DART 고유번호가 있을 때만 대조한다.
+ * 홈페이지 읽기(readHomepageNumbers)는 호출하는 쪽이 준다 — 번호는 전체로 읽되 저장은 끝 4자리만.
+ */
+export async function runCompanyIdentityCheck(input: {
+  checkedOn: string;
+  company: {
+    businessNumber: string | null;
+    dartCorpCode: string | null;
+    legalName: string;
+  };
+  fetchedAt: Date;
+  hasRevenue: boolean;
+  readHomepageNumbers: () => Promise<{
+    numbers: string[];
+    pagesRead: number;
+    status: HomepageRead["status"];
+  }>;
+  save: (fact: FactInput) => Promise<void>;
+}): Promise<CompanyIdentityOutcome> {
+  if (!input.company.dartCorpCode) {
+    return { kind: "no_dart" };
+  }
+  if (!input.hasRevenue) {
+    return { kind: "no_revenue" };
+  }
+  let fullNumbers: string[] = [];
+  const result = await checkOneIdentity({
+    checkedOn: input.checkedOn,
+    dart: {
+      bizNo: input.company.businessNumber,
+      corpCode: input.company.dartCorpCode,
+    },
+    fetchedAt: input.fetchedAt,
+    judge: () => {
+      const v = judgeIdentityLazy({
+        dartBizNo: input.company.businessNumber,
+        expoName: input.company.legalName,
+        homepageBizNos: fullNumbers,
+      });
+      return v;
+    },
+    readHomepage: async () => {
+      const home = await input.readHomepageNumbers();
+      fullNumbers = home.numbers;
+      return {
+        bizTails: home.numbers
+          .map((n) => tailOf(n))
+          .filter((t): t is string => t !== null),
+        pagesRead: home.pagesRead,
+        status: home.status,
+      };
+    },
+    save: input.save,
+  });
+  return { kind: "ok", level: result.level, pagesRead: result.pagesRead };
 }

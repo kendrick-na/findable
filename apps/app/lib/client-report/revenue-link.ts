@@ -1,6 +1,11 @@
 import "server-only";
 
 import { database } from "@repo/database";
+import {
+  IDENTITY_FIELD,
+  type IdentityState,
+  identityStateOf,
+} from "@/lib/ax-mail/discovery/identity-check";
 import { bareDomain, issueClientReport, loadReportSource } from "./admin";
 import {
   type BlockDiffRow,
@@ -37,6 +42,12 @@ export type RevenueLinkResult =
   | {
       state: "no_revenue";
       company: CompanyCandidate;
+    }
+  | {
+      /** DART 출처 매출인데 동일성 확정(confirmed)이 아니면 리포트에 넣지 않는다. 직접 입력(input)은 제외. */
+      state: "identity_unconfirmed";
+      company: CompanyCandidate;
+      identity: IdentityState;
     }
   | {
       state: "ready";
@@ -217,6 +228,16 @@ export async function previewRevenueLink(input: {
   const revenue = pickLatestRevenue(facts);
   if (!revenue) {
     return { company, state: "no_revenue" };
+  }
+  if (revenue.basis !== "input") {
+    const identityFacts = await database.companyFact.findMany({
+      where: { companyId: company.id, field: IDENTITY_FIELD },
+      select: { asOf: true, field: true, source: true, value: true },
+    });
+    const identity = identityStateOf(identityFacts);
+    if (identity !== "confirmed") {
+      return { company, identity, state: "identity_unconfirmed" };
+    }
   }
   const { accuracy, note } = await reviewedAccuracy(
     input.auditJobId,

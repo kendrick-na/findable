@@ -276,6 +276,13 @@ export function RevenueLinkPanel({
           </ul>
         </div>
       )}
+      {result?.state === "identity_unconfirmed" && (
+        <p className={`${box} text-amber-300`}>
+          {result.company.legalName} 동일성 확정 전 — 매출 입력 불가. 영업 회사
+          카드에서 [홈페이지 대조]로 사업자번호가 맞는지 먼저 확인해 주세요(직접
+          입력은 출처 필수).
+        </p>
+      )}
       {result?.state === "no_revenue" && (
         <p className={`${box} text-amber-300`}>
           {result.company.legalName} 카드에 매출이 없습니다. 영업 회사 카드에서

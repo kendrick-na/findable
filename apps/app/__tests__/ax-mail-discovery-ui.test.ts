@@ -819,6 +819,7 @@ describe("④ 게이트 — 관리자 · 플래그 (소스 검사)", () => {
       });
     expect(fns.map((f) => f.name).sort()).toEqual([
       "addCompaniesToSalesList",
+      "checkCompanyIdentity",
       "findCompanyContacts",
       "ingestDiscoverySources",
       "lookupCompanyRevenue",
