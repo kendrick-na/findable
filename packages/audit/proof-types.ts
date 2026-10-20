@@ -48,8 +48,12 @@ export type ProofLanguage = (typeof PROOF_LANGUAGES)[number];
 export type ProofScript = "Hang" | "Latn";
 
 export interface LanguageKey {
-  /** "mixed" = 한 회차가 ko·en 을 섞어 물음(questionLanguagesOf 가 "ko-en"). 어떤 코호트와도 합치지 않는다. */
-  language: ProofLanguage | "mixed";
+  /**
+   * "mixed" = 한 회차가 ko·en 을 섞어 물음(questionLanguagesOf 가 "ko-en"). 어떤 코호트와도 합치지 않는다.
+   * "unknown" = 언어를 모르거나 언어와 무관한 응답(저장 기록에 언어 칸이 없음 등). 「섞임」이 아니다.
+   * 어떤 코호트와도 합치지 않는다(2026-10-20 대표 관제탑 승인, 하위 호환 추가).
+   */
+  language: ProofLanguage | "mixed" | "unknown";
   script: ProofScript | null;
 }
 
@@ -284,6 +288,10 @@ export interface EvidenceSheetInput {
   envelope: EvidenceEnvelope;
   finding_kind: FindingKind; // 반복값이 기준 미달이면 반드시 "not_comparable"
   footer: { as_of: string; not_effect_proof: true }; // true 리터럴 — 「효과 입증」으로 쓸 수 없게 타입으로 막음
+  /** 선택(2026-10-20 추가). 표시용 질문 수. 못 세면 unavailable — 0 이 아니다. */
+  question_count?: Known<number>;
+  /** 선택(2026-10-20 추가). 측정 지역 표기(예: 호출 지역). 기록 칸이 없으면 unavailable. */
+  region?: Known<string>;
   ui_language: ProofLanguage; // 문구 틀 언어(ko|en) — 측정 언어와 별개
 }
 

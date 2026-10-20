@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   type EvidenceEnvelope,
+  type EvidenceSheetInput,
   type Known,
+  type LanguageKey,
   MCP_READONLY_TOOL_NAMES,
   type McpReadonlyResponse,
   NOT_COMPARABLE_REASONS,
@@ -102,5 +104,35 @@ describe("proof-types.ts 컴파일 타임 모양", () => {
       res: McpReadonlyResponse<{ n: number }>
     ): EvidenceEnvelope => (res.status === "ok" ? res.evidence : res.evidence);
     expect(typeof narrow).toBe("function");
+  });
+
+  it("LanguageKey 는 unknown 과 mixed 를 구분하고 기존 값도 그대로 받는다", () => {
+    const keys: LanguageKey[] = [
+      { language: "ko", script: "Hang" },
+      { language: "en", script: "Latn" },
+      { language: "mixed", script: null },
+      { language: "unknown", script: null },
+    ];
+    expect(new Set(keys.map((k) => k.language)).size).toBe(4);
+  });
+
+  it("EvidenceSheetInput 의 question_count·region 은 선택이고 Known 이다", () => {
+    type Optionals = Pick<EvidenceSheetInput, "question_count" | "region">;
+    const none: Optionals = {};
+    const unavailable: Optionals = {
+      question_count: {
+        as_of: null,
+        detail_ko: "확인 필요",
+        reason: "not_recorded",
+        status: "unavailable",
+      },
+      region: { as_of: "2026-10-20", status: "known", value: "KR" },
+    };
+    expect(none.region).toBeUndefined();
+    expect(unavailable.question_count?.status).toBe("unavailable");
+  });
+
+  it("PROOF_LANGUAGES 는 그대로이고 unknown 을 넣지 않는다", () => {
+    expect([...PROOF_LANGUAGES]).toEqual(["ko", "en"]);
   });
 });
