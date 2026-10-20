@@ -211,7 +211,11 @@ function languageKeyOf(result: unknown): LanguageKey | "not_recorded" {
   if (langs === "en") {
     return { language: "en", script: "Latn" };
   }
-  return { language: "mixed", script: null };
+  // questionLanguagesOf 는 두 언어가 섞이면 정렬된 "en-ko" 를 낸다. 그 밖의 값은 언어를 모르는 것이다.
+  if (langs === "en-ko" || langs === "ko-en") {
+    return { language: "mixed", script: null };
+  }
+  return { language: "unknown", script: null };
 }
 
 function toIso(value: string | Date): string | null {
@@ -582,6 +586,15 @@ export function aggregateRepeats(
         detail_ko: "한 회차가 ko·en 을 섞어 물어 어떤 코호트와도 합치지 않음",
         job_id: run.job_id,
         reason: "mixed_cohort",
+      });
+      continue;
+    }
+    if (language.language === "unknown") {
+      excluded.push({
+        detail_ko:
+          "질문 언어를 알 수 없는 회차라 어떤 코호트와도 합치지 않음(언어를 추정하지 않음)",
+        job_id: run.job_id,
+        reason: "not_recorded",
       });
       continue;
     }

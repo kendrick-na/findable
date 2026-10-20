@@ -229,6 +229,15 @@ describe("assembleEvidenceSheet", () => {
         parts({ language: { language: "mixed", script: null } })
       )
     ).toEqual(["mixed_cohort"]);
+    const unknown = assembleEvidenceSheet(
+      parts({ language: { language: "unknown", script: null } })
+    );
+    expect(unknown.finding_kind).toBe("not_comparable");
+    expect(
+      notComparableReasonsOf(
+        parts({ language: { language: "unknown", script: null } })
+      )
+    ).toEqual(["mixed_cohort"]);
     const enUi = assembleEvidenceSheet(parts({ ui_language: "en" }));
     expect(enUi.ui_language).toBe("en");
     expect(enUi.envelope.language.language).toBe("ko");

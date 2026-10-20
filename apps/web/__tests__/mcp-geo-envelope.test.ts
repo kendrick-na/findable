@@ -252,6 +252,7 @@ describe("5. 근거 봉투", () => {
     expect(res.status).toBe("unverifiable");
     expect(res.reason).toBe("source_missing");
     expect(res.data).toBeNull();
+    expect(res.language).toEqual({ language: "unknown", script: null });
     const ev = res.evidence;
     for (const key of [
       "engine_model",

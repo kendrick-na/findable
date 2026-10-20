@@ -56,7 +56,7 @@ export function knownSchema<T extends z.ZodType>(value: T) {
 // [언어·코호트]
 
 const languageKeySchema = z.strictObject({
-  language: z.enum([...PROOF_LANGUAGES, "mixed"]),
+  language: z.enum([...PROOF_LANGUAGES, "mixed", "unknown"]),
   script: z.enum(["Hang", "Latn"]).nullable(),
 });
 
@@ -273,7 +273,7 @@ export type FactsData = z.infer<typeof factsDataSchema>;
 // [「확인 불가」 봉투]
 
 const UNKNOWN_LANGUAGE: EvidenceEnvelope["language"] = {
-  language: "mixed",
+  language: "unknown",
   script: null,
 };
 

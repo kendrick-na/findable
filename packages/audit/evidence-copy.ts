@@ -685,7 +685,11 @@ function notComparableTexts(input: EvidenceSheetInput, lang: ProofLanguage) {
   if (observed.value.denominator === 0) {
     out.push(dict.not_comparable_labels.denominator_zero);
   }
-  if (input.envelope.language.language === "mixed") {
+  if (
+    input.envelope.language.language === "mixed" ||
+    input.envelope.language.language === "unknown"
+  ) {
+    // K0 에 unknown 전용 사유가 없어 mixed_cohort 를 재사용한다(언어 칸은 languageText 가 구분해 표기).
     out.push(dict.not_comparable_labels.mixed_cohort);
   }
   if (out.length === 0) {
@@ -728,8 +732,18 @@ function languageText(
 ): string {
   const names =
     lang === "ko"
-      ? { en: "영어", ko: "한국어", mixed: "섞임(한국어+영어)" }
-      : { en: "English", ko: "Korean", mixed: "mixed (Korean + English)" };
+      ? {
+          en: "영어",
+          ko: "한국어",
+          mixed: "섞임(한국어+영어)",
+          unknown: "언어 미기록/무관",
+        }
+      : {
+          en: "English",
+          ko: "Korean",
+          mixed: "mixed (Korean + English)",
+          unknown: "language not recorded / not applicable",
+        };
   return names[key.language];
 }
 

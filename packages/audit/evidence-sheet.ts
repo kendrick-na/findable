@@ -102,7 +102,11 @@ export function notComparableReasonsOf(
   if (denominator === 0) {
     reasons.push("denominator_zero");
   }
-  if (parts.language.language === "mixed") {
+  if (
+    parts.language.language === "mixed" ||
+    parts.language.language === "unknown"
+  ) {
+    // K0 에 unknown 전용 사유가 없어 mixed_cohort 를 재사용한다(언어 표기는 evidence-copy 가 구분).
     reasons.push("mixed_cohort");
   }
   return reasons;
