@@ -20,7 +20,7 @@ import {
 import { readHomepageText } from "@/lib/ax-mail/sources/contact-email";
 import { fetchDart } from "@/lib/ax-mail/sources/opendart";
 import type { Checkpoint } from "./expo-revenue-lookup";
-import { stripInstitutionTag } from "./expo-revenue-run";
+import { stripInstitutionTag } from "./expo-revenue-lookup";
 
 const PAUSE_MS = 2000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

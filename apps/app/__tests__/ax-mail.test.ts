@@ -507,6 +507,7 @@ describe("sales email template", () => {
     ).toBeNull();
     const withRevenue = franzLike({
       annualRevenue: { krw: 7_260_000_000, source: "DART 2025 감사보고서" },
+      revenueIdentity: "confirmed",
     });
     expect(draftOf(withRevenue).body).toContain(
       "영향\n- 저희 추정으로는 프란츠 매출 중 월 약 4천만 원 규모가 AI 추천을 거쳐 결정되고 있습니다."

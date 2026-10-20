@@ -85,6 +85,11 @@ export interface Lead {
   measurement: LeadMeasurement | null;
   priority: number;
   reportUrl: string | null;
+  /**
+   * DART 매출의 동일성 등급(홈페이지 사업자번호 = DART 사업자번호인지).
+   * DART 출처 매출은 confirmed 일 때만 문장에 쓴다. 대표 확정 출처(NICE 등)에는 적용하지 않는다.
+   */
+  revenueIdentity?: "confirmed" | "probable" | "name_only" | "mismatch" | null;
   segment: string;
   track: LeadTrack;
 }
@@ -370,10 +375,29 @@ export function readableMonthlyAmount(krw: number): string | null {
   return magnitude === 7 ? `${digit}천만 원` : `${digit}백만 원`;
 }
 
+const DART_SOURCE_RE = /DART|전자공시|금융감독원/i;
+
+/** DART 공시에서 온 매출인가(출처 문구로 판단). */
+function fromDart(source: string): boolean {
+  return DART_SOURCE_RE.test(source);
+}
+
+/** 이 리드의 매출 숫자를 영업 문장에 써도 되는가(동일성 규칙). */
+export function leadRevenueAllowed(lead: Lead): boolean {
+  const src = lead.annualRevenue?.source ?? "";
+  if (!fromDart(src)) {
+    return true;
+  }
+  return lead.revenueIdentity === "confirmed";
+}
+
 /** 연매출 × 7% ÷ 12. 확인된 연매출이 없으면 null — 매출을 추정하지 않는다. */
 export function monthlyAiInfluencedRevenue(lead: Lead): string | null {
   const krw = lead.annualRevenue?.krw;
   if (!(krw && krw > 0 && lead.annualRevenue?.source.trim())) {
+    return null;
+  }
+  if (!leadRevenueAllowed(lead)) {
     return null;
   }
   return readableMonthlyAmount((krw * AI_INFLUENCED_REVENUE_RATE) / 12);
