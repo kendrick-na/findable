@@ -93,10 +93,24 @@ function nextRedirectTarget(current: URL, location: string): URL | null {
   }
 }
 
+/**
+ * 읽지 않을 본문은 바로 버린다(404·500·3xx 등). 버리지 않으면 요청별 연결(Agent·소켓)과 deadline 감시가
+ * 본문이 끝나거나 deadline 이 올 때까지 남는다(느린·끝나지 않는 본문이면 deadline 까지 누수).
+ */
+function discardBody(response: Response): void {
+  // 기다리지 않는다: cancel 은 호출 즉시 정리(소켓·Agent 닫기·감시 해제)를 시작하고,
+  // 복제(tee)된 본문은 모든 갈래가 취소될 때까지 Promise 가 끝나지 않을 수 있다.
+  response.body?.cancel().catch(() => undefined);
+}
+
 /** 리다이렉트가 아닌 응답: 본문을 상한까지 읽는다. 읽다 deadline 이 지나거나 끊기면 「확인 불가」(점검 전체를 깨뜨리지 않는다). */
 async function finalResult(response: Response): Promise<Fetched> {
+  if (!response.ok) {
+    discardBody(response);
+    return { ok: true, status: response.status, text: "" };
+  }
   try {
-    const text = response.ok ? await readLimited(response) : "";
+    const text = await readLimited(response);
     return { ok: true, status: response.status, text };
   } catch (error) {
     return { ok: false, reason: failureReason(error) };
@@ -132,6 +146,8 @@ async function safeGet(
     if (!isRedirect) {
       return await finalResult(response);
     }
+    // 3xx 본문은 쓰지 않는다 — 다음 단계로 가기 전에(또는 끝내기 전에) 연결을 닫는다.
+    discardBody(response);
     if (!location) {
       return { ok: true, status: response.status, text: "" };
     }

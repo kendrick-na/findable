@@ -552,3 +552,103 @@ describe.skipIf(!tls)(
     });
   }
 );
+
+describe.skipIf(!tls)(
+  "읽지 않는 본문(404·500·3xx)의 연결 정리 — 누수 없음",
+  () => {
+    const resolveAll = dnsOf({
+      "pinned.test": [{ address: PUBLIC_IP, family: 4 }],
+    });
+
+    function openConnections(): Promise<number> {
+      return new Promise((resolve, reject) =>
+        server.getConnections((error, count) =>
+          error ? reject(error) : resolve(count)
+        )
+      );
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      server.closeAllConnections();
+    });
+
+    it("404·500·Location 없는 3xx·본문 큰 3xx 를 반복해도 열린 소켓·deadline 감시가 남지 않는다", async () => {
+      // 모든 응답이 본문을 끝내지 않는다(느린·끝없는 본문) — 정리하지 않으면 deadline 까지 연결이 남는다.
+      const endless =
+        (status: number, headers: Record<string, string> = {}) =>
+        (res: ServerResponse) => {
+          res.writeHead(status, headers);
+          res.write(Buffer.alloc(64 * 1024, 120));
+        };
+      const routes: Record<string, (res: ServerResponse) => void> = {
+        "/": endless(404),
+        "/llms.txt": endless(500),
+        "/robots.txt": endless(302),
+        "/sitemap.xml": endless(302, { location: "https://pinned.test/s2" }),
+        "/s2": endless(404),
+      };
+      state.handler = (req, res) => routes[req.url ?? ""]?.(res);
+
+      // 점검 전체 deadline signal 의 abort 감시 등록·해제 수를 센다.
+      let added = 0;
+      let removed = 0;
+      const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+      vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+        const signal = realTimeout(ms);
+        const add = signal.addEventListener.bind(signal);
+        const remove = signal.removeEventListener.bind(signal);
+        signal.addEventListener = ((...args: Parameters<typeof add>) => {
+          if (args[0] === "abort") {
+            added += 1;
+          }
+          add(...args);
+        }) as typeof signal.addEventListener;
+        signal.removeEventListener = ((...args: Parameters<typeof remove>) => {
+          if (args[0] === "abort") {
+            removed += 1;
+          }
+          remove(...args);
+        }) as typeof signal.removeEventListener;
+        return signal;
+      });
+
+      const started = Date.now();
+      for (let round = 0; round < 3; round += 1) {
+        const out = await checkOfficialFacts(
+          "https://pinned.test",
+          make({ resolveAll }),
+          () => new Date(),
+          5000
+        );
+        expect(out.items.find((i) => i.key === "llms_txt")?.status).toBe(
+          "missing"
+        );
+      }
+      expect(Date.now() - started).toBeLessThan(3000); // deadline(5초)까지 기다리지 않는다
+      expect(state.requests).toBe(15); // 3회 × (4개 경로 + 리다이렉트 1단계)
+      await new Promise((r) => setTimeout(r, 100));
+      expect(await openConnections()).toBe(0);
+      expect(added).toBeGreaterThan(0);
+      expect(removed).toBe(added);
+    });
+
+    it("핀 fetch 단독: 본문을 cancel 하면 즉시 소켓을 닫고 abort 감시를 푼다", async () => {
+      state.handler = (_req, res) => {
+        res.writeHead(500);
+        res.write("partial");
+      };
+      const controller = new AbortController();
+      const removeSpy = vi.spyOn(controller.signal, "removeEventListener");
+      const res = await make({ resolveAll })("https://pinned.test/", {
+        ...GET,
+        signal: controller.signal,
+      });
+      expect(res.status).toBe(500);
+      await res.body?.cancel();
+      await new Promise((r) => setTimeout(r, 100));
+      expect(await openConnections()).toBe(0);
+      expect(removeSpy).toHaveBeenCalledWith("abort", expect.any(Function));
+    });
+  }
+);
