@@ -14,6 +14,8 @@ const h = vi.hoisted(() => ({
   groupIdentify: vi.fn(),
   capture: vi.fn(),
   erase: vi.fn(),
+  presence: vi.fn(),
+  userUpsert: vi.fn(),
   logError: vi.fn(),
   logWarn: vi.fn(),
 }));
@@ -46,7 +48,7 @@ vi.mock("@repo/analytics/server", () => ({
 }));
 vi.mock("@repo/database", () => ({
   database: {
-    user: { upsert: vi.fn(() => Promise.resolve({})) },
+    user: { upsert: h.userUpsert },
     organization: { upsert: vi.fn(() => Promise.resolve({})) },
   },
 }));
@@ -55,6 +57,9 @@ vi.mock("@repo/observability/log", () => ({
 }));
 vi.mock("@/lib/privacy/erase-deleted-user", () => ({
   eraseDeletedUser: h.erase,
+}));
+vi.mock("@/lib/privacy/clerk-user-presence", () => ({
+  clerkUserPresence: h.presence,
 }));
 
 const { POST } = await import("../app/webhooks/auth/route");
@@ -107,11 +112,78 @@ const erased = {
   contentRevisionsUnlinked: 0,
   auditJobEmailsErased: 0,
   leadEmailsErased: 0,
+  searchConnectionsRevoked: 0,
+  outreachDraftSendersCleared: 0,
+  emailHoldReason: null as "role_address" | "shared_with_other_user" | null,
+  heldAuditJobIds: [] as string[],
+  heldLeadIds: [] as string[],
+  ownershipTransfers: [] as { orgId: string; newOwnerId: string }[],
   soleOwnerOrgIds: [] as string[],
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.presence.mockResolvedValue("exists");
+  h.userUpsert.mockResolvedValue({});
+});
+
+describe("② 늦은 가입·수정 웹훅이 탈퇴자를 되살리지 않는다", () => {
+  it.each([
+    "user.created",
+    "user.updated",
+  ])("%s: Clerk 에 있으면 평소대로 적재한다", async (type) => {
+    const res = await post(type, clerkUser);
+    expect(h.presence).toHaveBeenCalledWith("user_1");
+    expect(h.userUpsert).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(201);
+  });
+
+  it.each([
+    "user.created",
+    "user.updated",
+  ])("🔴 삭제 뒤 늦게 온 %s: Clerk 에 없으면(404) 행을 만들지 않고 PostHog 에도 안 보낸다", async (type) => {
+    h.erase.mockResolvedValueOnce(erased);
+    await post("user.deleted", { id: "user_1", deleted: true });
+    vi.clearAllMocks();
+    h.presence.mockResolvedValueOnce("gone");
+
+    const res = await post(type, clerkUser);
+    expect(h.userUpsert).not.toHaveBeenCalled();
+    expect(h.identify).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+  });
+
+  it("🔴 Clerk 조회가 실패하면 500 — 모르는 채로 적재하지 않고 Clerk 재시도를 기다린다", async () => {
+    h.presence.mockRejectedValueOnce(new Error("network down"));
+    const res = await post("user.updated", clerkUser);
+    expect(res.status).toBe(500);
+    expect(h.userUpsert).not.toHaveBeenCalled();
+    expect(h.logError).toHaveBeenCalledWith(
+      "webhook.user.clerk_lookup_failed",
+      expect.objectContaining({ userId: "user_1" })
+    );
+  });
+});
+
+describe("이메일 보류 로그에는 id·건수만 남는다", () => {
+  it("보류 사유·건수·id 를 남기고 이메일 원문은 없다", async () => {
+    h.erase.mockResolvedValueOnce({
+      ...erased,
+      emailHoldReason: "role_address",
+      heldAuditJobIds: ["job_1", "job_2"],
+      heldLeadIds: ["lead_1"],
+    });
+    await post("user.deleted", { id: "user_1", deleted: true });
+    expect(h.logWarn).toHaveBeenCalledWith("privacy.user_erase.email_held", {
+      userId: "user_1",
+      reason: "role_address",
+      auditJobCount: 2,
+      auditJobIds: ["job_1", "job_2"],
+      leadCount: 1,
+      leadIds: ["lead_1"],
+    });
+    expect(JSON.stringify(h.logWarn.mock.calls)).not.toContain("@");
+  });
 });
 
 describe("③ PostHog 로 개인 식별 정보를 보내지 않는다", () => {

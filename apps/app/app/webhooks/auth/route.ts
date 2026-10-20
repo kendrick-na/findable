@@ -12,6 +12,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { env } from "@/env";
+import { clerkUserPresence } from "@/lib/privacy/clerk-user-presence";
 import { eraseDeletedUser } from "@/lib/privacy/erase-deleted-user";
 
 // 20번(D2 근본): org/user를 Prisma DB에 정식 적재하는 소유 경로.
@@ -52,7 +53,33 @@ const analyticsUserProperties = (data: UserJSON) => ({
   createdAt: new Date(data.created_at),
 });
 
+/**
+ * 🔴 늦은 웹훅 부활 방지(2026-10-20, 코덱스 검토). 적재 전에 Clerk 에 이 사용자가 아직 있는지 본다.
+ *   - 없음(404) → 이미 탈퇴한 사람의 늦은 이벤트 → 적재·분석 전송 없이 200 으로 끝낸다.
+ *   - 조회 실패 → 500 을 돌려 Clerk 가 나중에 다시 보내게 한다(모르는 채로 되살리지 않는다).
+ * @returns 처리를 멈춰야 하면 돌려줄 Response, 계속하면 null.
+ */
+const stopIfUserGone = async (data: UserJSON): Promise<Response | null> => {
+  try {
+    if ((await clerkUserPresence(data.id)) === "gone") {
+      log.info("privacy.user_upsert.skipped_deleted", { userId: data.id });
+      return new Response("Ignored: user no longer exists", { status: 200 });
+    }
+    return null;
+  } catch (error) {
+    log.error("webhook.user.clerk_lookup_failed", {
+      userId: data.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return new Response("Clerk lookup failed", { status: 500 });
+  }
+};
+
 const handleUserCreated = async (data: UserJSON): Promise<Response> => {
+  const stop = await stopIfUserGone(data);
+  if (stop) {
+    return stop;
+  }
   await upsertUserToDb(data);
 
   analytics?.identify({
@@ -69,6 +96,10 @@ const handleUserCreated = async (data: UserJSON): Promise<Response> => {
 };
 
 const handleUserUpdated = async (data: UserJSON): Promise<Response> => {
+  const stop = await stopIfUserGone(data);
+  if (stop) {
+    return stop;
+  }
   await upsertUserToDb(data); // DB email/name 동기화(멱등).
 
   analytics?.identify({
@@ -100,9 +131,22 @@ const handleUserDeleted = async (
   if (data.id) {
     try {
       const result = await eraseDeletedUser(database, data.id);
+      // 결과에는 id·건수만 있다(이메일 원문 없음).
       log.info("privacy.user_erase.done", { userId: data.id, ...result });
+      if (result.emailHoldReason) {
+        // 역할 주소·다른 회원과 같은 이메일 → 무료 진단·리드 이메일을 자동으로 바꾸지 않았다.
+        log.warn("privacy.user_erase.email_held", {
+          userId: data.id,
+          reason: result.emailHoldReason,
+          auditJobCount: result.heldAuditJobIds.length,
+          auditJobIds: result.heldAuditJobIds,
+          leadCount: result.heldLeadIds.length,
+          leadIds: result.heldLeadIds,
+        });
+      }
       if (result.soleOwnerOrgIds.length > 0) {
-        // 혼자 쓰던 조직은 지우지 않았다 — 대표 결정 필요(범위표 3-1). 조직 id 만 남긴다.
+        // 혼자 쓰던 조직은 지우지 않았다 — 확정 방침(정기결제 해지 → 30일 뒤 삭제)은
+        // 스키마 변경이 필요해 다음 단계(범위표 3-1). 조직 id 만 남긴다.
         log.warn("privacy.user_erase.sole_owner_orgs", {
           userId: data.id,
           orgIds: result.soleOwnerOrgIds,
@@ -123,6 +167,7 @@ const handleUserDeleted = async (
       },
     });
 
+    // ⚠️ Clerk 재전송 때 이 이벤트가 한 번 더 기록될 수 있다(DB 삭제는 멱등, 분석 이벤트는 아님 — 영향 낮음, 범위표 4-5).
     analytics?.capture({
       event: "User Deleted",
       distinctId: data.id,

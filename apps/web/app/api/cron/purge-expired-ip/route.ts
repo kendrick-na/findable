@@ -23,11 +23,21 @@ export const GET = async (request: NextRequest) => {
     return denied;
   }
   return await withCronHeartbeat("purge-expired-ip", SCHEDULE, async () => {
-    const { cutoff, cleared } = await purgeExpiredIpAddresses(database);
+    // 1,000건씩·45초 예산(maxDuration 60초 안). 다 못 끝내면 다음 날 실행이 이어서 한다.
+    const { cutoff, cleared, batches, done } =
+      await purgeExpiredIpAddresses(database);
     log.info("privacy.ip_purge.done", {
       cutoff: cutoff.toISOString(),
       cleared,
+      batches,
+      done,
     });
-    return Response.json({ ok: true, cutoff: cutoff.toISOString(), cleared });
+    return Response.json({
+      ok: true,
+      cutoff: cutoff.toISOString(),
+      cleared,
+      batches,
+      done,
+    });
   });
 };
