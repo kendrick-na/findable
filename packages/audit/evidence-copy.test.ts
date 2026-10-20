@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ANSWER_BUCKET_COPY_EN, ANSWER_BUCKET_COPY_KO } from "./answer-buckets";
 import {
@@ -311,5 +313,45 @@ describe("증거 한 장 묶음", () => {
     expect(text).toContain("미설정:");
     expect(text).toContain("확인 불가:");
     expect(text).toContain("기준일 불명");
+  });
+});
+
+describe("정적 샘플 증거(L0-EX)", () => {
+  const dir = join(
+    import.meta.dirname,
+    "..",
+    "..",
+    "docs",
+    "_적용",
+    "샘플증거"
+  );
+  const files = [
+    "샘플증거_A-30.ko.md",
+    "샘플증거_A-30.ko.html",
+    "샘플증거_A-30.en.md",
+    "샘플증거_A-30.en.html",
+    "sample-parts.json",
+  ];
+
+  it("샘플 표기가 있고, 고객명·자사 브랜드명·도메인이 없고, 금칙어가 없다", () => {
+    for (const name of files) {
+      const text = readFileSync(join(dir, name), "utf8");
+      if (name !== "sample-parts.json") {
+        expect(text, name).toMatch(/샘플|Sample/);
+        expect(scanBannedPhrases(text), name).toEqual([]);
+      }
+      for (const forbidden of [
+        "knowverse",
+        "노우버스",
+        "indigochild",
+        "인디고",
+        "findable.co.kr",
+        "http",
+      ]) {
+        expect(text.toLowerCase(), `${name}: ${forbidden}`).not.toContain(
+          forbidden.toLowerCase()
+        );
+      }
+    }
   });
 });

@@ -1,0 +1,31 @@
+{
+  "as_of": "2026-10-20",
+  "before_after": null,
+  "brand_ref": { "brand_id": "A-30", "display_name": null },
+  "engine_model": { "as_of": null, "detail_ko": "엔진·모델 버전이 저장되어 있지 않음", "reason": "not_recorded", "status": "unavailable" },
+  "index_check": { "as_of": null, "detail_ko": "색인 확인 방법이 설정되지 않음", "reason": "not_configured", "status": "unavailable" },
+  "language": { "language": "ko", "script": "Hang" },
+  "limits": { "limits_en": "", "limits_ko": "" },
+  "measured_at": { "as_of": "2026-09-28", "status": "known", "value": { "first": "2026-09-28T09:15:45.936Z", "last": "2026-09-28T09:15:45.936Z" } },
+  "method_version": { "as_of": "2026-09-28", "status": "known", "value": { "cohort": { "engine_set_key": null, "language": { "language": "ko", "script": "Hang" }, "question_set_key": null, "sampling_version": "미기록(옛 회차)", "verdict_version": null }, "interval_method": "wilson" } },
+  "min_repeats": 3,
+  "observed": {
+    "as_of": "2026-09-28",
+    "status": "known",
+    "value": {
+      "buckets": { "confirmed": 5, "different_entity": 5, "engine_error": 0, "unknown": 5, "unverified": 1 },
+      "collection": { "attempted": 8, "measured": 7, "rate": 0.875, "repeat_count": 1, "suppressed": false, "suppression_threshold": null, "unit": "engine" },
+      "denominator": 15,
+      "exposure_count": 5,
+      "exposure_rate": 0.3333333333333333,
+      "group": "ai_brand",
+      "interval": { "as_of": "2026-10-20", "status": "known", "value": { "confidence": 0.95, "high": 0.5828, "low": 0.1517, "method": "wilson" } }
+    }
+  },
+  "retrieval": { "as_of": null, "detail_ko": "검색 호출 여부가 저장되어 있지 않음", "reason": "not_recorded", "status": "unavailable" },
+  "source_ids": { "as_of": "2026-09-28", "status": "known", "value": { "audit_job_ids": ["A-30#1"], "kind": "audit_jobs", "question_set_key": null, "sample_count": 1 } },
+  "ui_language": "ko",
+  "unmeasured": [
+    { "action_ko": "엔진 키·한도·장애 확인 후 재측정(엔진별 오류 기록 참고)", "code": "engine_error", "count": 1, "denominator": 23, "label_ko": "엔진 응답 오류", "rate": 0.043478260869565216 }
+  ]
+}

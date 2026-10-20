@@ -770,7 +770,7 @@ function sampleSection(input: EvidenceSheetInput, lang: ProofLanguage) {
     fill(dict.sample_verdict, {
       v: describeKnown(env.method_version, lang, (m) =>
         m.cohort.verdict_version === null
-          ? "-"
+          ? dict.state_labels.unavailable
           : String(m.cohort.verdict_version)
       ),
     })
