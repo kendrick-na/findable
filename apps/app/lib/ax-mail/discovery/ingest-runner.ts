@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { TimeBudget } from "@repo/observability/time-budget";
+
 import { listFscCorps } from "../sources/fsc-corp";
 import { listFtcMailOrderSellers } from "../sources/ftc-mail-order";
 import {
@@ -44,7 +46,8 @@ export interface IngestSourceResult {
   fetched: number;
   result: IngestResult | null;
   source: ApiSource;
-  status: "ok" | "unavailable" | "error";
+  /** partial = 시간 예산이 다 되어 멈춤(result.nextIndex 부터 「이어서 불러오기」) */
+  status: "ok" | "partial" | "unavailable" | "error";
 }
 
 /** 한 번 누를 때 원천별로 받는 행 수 — 국민연금은 행마다 상세 1회가 더 들어 작게 둔다. */
@@ -95,7 +98,12 @@ export function defaultFetchers(pageNo = 1): Record<ApiSource, SourceFetcher> {
 export async function runDiscoveryIngest(
   store: CompanyStore,
   fetchers: Record<ApiSource, SourceFetcher>,
-  options: { fetchedAt?: Date; sources?: readonly ApiSource[] } = {}
+  options: {
+    fetchedAt?: Date;
+    sources?: readonly ApiSource[];
+    budget?: TimeBudget;
+    startIndex?: number;
+  } = {}
 ): Promise<IngestSourceResult[]> {
   const results: IngestSourceResult[] = [];
   for (const source of options.sources ?? API_SOURCES) {
@@ -111,9 +119,16 @@ export async function runDiscoveryIngest(
         continue;
       }
       const result = await ingestCompanies(store, items, {
+        budget: options.budget,
         fetchedAt: options.fetchedAt,
+        startIndex: options.startIndex,
       });
-      results.push({ fetched: items.length, result, source, status: "ok" });
+      results.push({
+        fetched: items.length,
+        result,
+        source,
+        status: result.nextIndex === undefined ? "ok" : "partial",
+      });
     } catch (error) {
       // 테이블 없음은 원천 문제가 아니다 — 화면이 「DB 준비 전」으로 바꾸도록 그대로 던진다.
       if (isMissingTableError(error)) {

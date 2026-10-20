@@ -3,6 +3,7 @@
 import { requireAdmin } from "@repo/auth/admin";
 import { database, type Prisma } from "@repo/database";
 import { log } from "@repo/observability/log";
+import { createTimeBudget } from "@repo/observability/time-budget";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { withDiscovery } from "@/lib/ax-mail/discovery/guard";
@@ -357,7 +358,8 @@ const ingestSourceSchema = z.enum(API_SOURCES);
  * source 를 안 주면 전체(예전 동작)를 그대로 돈다.
  */
 export async function ingestDiscoverySources(
-  source?: IngestSource
+  source?: IngestSource,
+  startIndex?: number
 ): Promise<{ ok: true; results: IngestSourceResult[] } | Failure> {
   const adminId = await requireAdmin();
   const parsed =
@@ -366,9 +368,17 @@ export async function ingestDiscoverySources(
     return { ok: false, error: "invalid" };
   }
   const only = parsed?.success ? [parsed.data] : undefined;
+  const start =
+    startIndex !== undefined && Number.isInteger(startIndex) && startIndex >= 0
+      ? startIndex
+      : 0;
+  // 서버 액션 제한 120초 안에서 끝내려고 90초만 쓴다(나머지 30초는 마무리·응답용).
+  const budget = createTimeBudget(120_000, { reserveMs: 30_000 });
   const guarded = await withDiscovery(() =>
     runDiscoveryIngest(prismaCompanyStore(database), defaultFetchers(), {
+      budget,
       sources: only,
+      startIndex: start,
     })
   );
   if (guarded.state !== "ready") {

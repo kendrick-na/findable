@@ -20,6 +20,37 @@ const SOURCES: ApiSource[] = [
   "ftc_mail_order",
   "opendart",
 ];
+/** 한 원천을 이어서 부르는 최대 횟수(무한 반복 방지). */
+const MAX_RESUMES = 20;
+
+/**
+ * 원천 하나를 부른다. 시간 예산에 걸려 partial 이면 nextIndex 부터 같은 원천을 다시 부른다
+ * (최대 MAX_RESUMES 번). 결과 줄은 push 로 화면에 쌓는다.
+ */
+async function ingestOneSource(
+  source: ApiSource,
+  labels: Labels,
+  push: (text: string) => void
+): Promise<void> {
+  let startIndex: number | undefined;
+  for (let attempt = 0; attempt <= MAX_RESUMES; attempt++) {
+    const result = await ingestDiscoverySources(source, startIndex);
+    if (!result.ok) {
+      push(labels.errors[result.error]);
+      return;
+    }
+    const r = result.results[0];
+    if (!r) {
+      return;
+    }
+    push(line(labels, r));
+    const next = r.result?.nextIndex;
+    if (r.status !== "partial" || next === undefined) {
+      return;
+    }
+    startIndex = next;
+  }
+}
 
 function line(labels: Labels, r: IngestSourceResult): string {
   const name = labels.sourceShort[r.source];
@@ -45,23 +76,17 @@ export function IngestButton({ labels }: { labels: Labels }) {
         onClick={() =>
           startTransition(async () => {
             const done: string[] = [];
+            const push = (text: string) => {
+              done.push(text);
+              setLines([...done]);
+            };
             try {
               for (const source of SOURCES) {
-                const result = await ingestDiscoverySources(source);
-                if (!result.ok) {
-                  done.push(labels.errors[result.error]);
-                  setLines([...done]);
-                  break;
-                }
-                for (const r of result.results) {
-                  done.push(line(labels, r));
-                }
-                setLines([...done]);
+                await ingestOneSource(source, labels, push);
               }
               router.refresh();
             } catch {
-              done.push(labels.errors.unexpected);
-              setLines([...done]);
+              push(labels.errors.unexpected);
             }
           })
         }

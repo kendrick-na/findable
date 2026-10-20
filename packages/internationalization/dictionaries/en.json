@@ -2214,7 +2214,8 @@
       "ingestStatus": {
         "ok": "{fetched} rows → {created} new · {updated} updated · {ambiguous} held",
         "unavailable": "no key or no response",
-        "error": "error"
+        "error": "error",
+        "partial": "Paused at the time limit — continuing automatically from the next row"
       },
       "errors": {
         "disabled": "Company discovery is off.",

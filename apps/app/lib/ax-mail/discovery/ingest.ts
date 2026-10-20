@@ -1,3 +1,4 @@
+import type { TimeBudget } from "@repo/observability/time-budget";
 import "server-only";
 
 import type { Industry, Prisma, PrismaClient } from "@repo/database";
@@ -97,6 +98,8 @@ export interface IngestResult {
   created: number;
   factsCreated: number;
   factsUpdated: number;
+  /** 시간 예산이 다 되어 멈춘 경우에만 있다: 다음에 이어서 시작할 행 번호(batch 기준) */
+  nextIndex?: number;
   /** 이름이 비어 정규화 후 남는 게 없는 행 */
   skipped: number;
   updated: number;
@@ -407,7 +410,7 @@ export async function resolveCompany(
 export async function ingestCompanies(
   store: CompanyStore,
   batch: DiscoveredCompany[],
-  options: { fetchedAt?: Date } = {}
+  options: { fetchedAt?: Date; budget?: TimeBudget; startIndex?: number } = {}
 ): Promise<IngestResult> {
   const fetchedAt = options.fetchedAt ?? new Date();
   const result: IngestResult = {
@@ -418,7 +421,13 @@ export async function ingestCompanies(
     skipped: 0,
     updated: 0,
   };
-  for (const item of batch) {
+  for (let i = options.startIndex ?? 0; i < batch.length; i++) {
+    // 예산이 다 됐으면 다음 행을 시작하지 않는다 — 여기서 멈추고 이어서 할 위치를 돌려준다.
+    if (options.budget?.expired()) {
+      result.nextIndex = i;
+      break;
+    }
+    const item = batch[i] as DiscoveredCompany;
     if (!normalizeCorpName(item.name)) {
       result.skipped++;
       continue;
