@@ -198,6 +198,14 @@ export function okResponseSchema<T extends z.ZodType>(data: T) {
     limits_ko: z.string(),
     limits_en: z.string(),
     evidence: evidenceEnvelopeSchema,
+    // 출처 URL 을 개수·길이·응답 크기 상한으로 줄였는지(줄였으면 truncated:true 와 개수).
+    truncation: z
+      .strictObject({
+        source_urls_returned: count,
+        source_urls_total: count,
+        truncated: z.boolean(),
+      })
+      .optional(),
   });
 }
 
@@ -279,7 +287,7 @@ const UNKNOWN_LANGUAGE: EvidenceEnvelope["language"] = {
 
 /**
  * 재료가 없을 때의 봉투: 모든 Known 을 unavailable 로 채운다. 응답을 거부하지 않는다.
- * 언어를 모를 때의 자리표시값은 K0 에 「모름」 값이 없어 `mixed`(어떤 코호트와도 합치지 않음)를 쓴다.
+ * 언어를 모를 때의 값은 K0 의 `unknown`(어떤 코호트와도 합치지 않음)이다.
  */
 export function unverifiableEnvelope(
   reason: UnavailableReason,

@@ -279,3 +279,71 @@ describe("교차 통합: 비교 불가·확인 불가가 끝까지 전파된다"
     expect(mcp.data).toBeNull();
   });
 });
+
+describe("교차 통합: 분류 도구 경로와 게시 불가 전파", () => {
+  it("get_answer_verdict_breakdown 의 분류 건수·구간이 집계 결과와 같다", async () => {
+    const after = jobsOf("a", ["25", "26", "27"], AFTER_CONFIRMED);
+    const afterAgg = aggregateRepeats(storedRuns(after), OPTIONS);
+    const observed = afterAgg.cohorts[0]?.observed.ai_brand;
+    expect(observed?.status).toBe("known");
+    setJobs(after);
+    const out = await rpc("tools/call", {
+      name: "get_answer_verdict_breakdown",
+      arguments: { brand_id: BRAND_ID },
+    });
+    const brk = out.body.result.structuredContent as Record<string, any>;
+    expect(brk.status).toBe("ok");
+    if (observed?.status === "known") {
+      expect(brk.data.groups.ai_brand.buckets).toEqual(observed.value.buckets);
+      expect(brk.data.groups.ai_brand.adjudicated).toBe(
+        observed.value.denominator
+      );
+      expect(asJson(brk.evidence.observed)).toEqual(asJson(observed));
+    }
+    // 손계산: 36건 중 확인 24건
+    expect(brk.data.groups.ai_brand.buckets.confirmed).toBe(24);
+  });
+
+  it("게시 불가 회차는 집계에서 숫자를 내지 않고 MCP 도 숫자 없이 확인 불가로 답한다(0 아님)", async () => {
+    // 실제 게시 기준(기본 is_publishable)을 쓴다: 답변 4건뿐인 회차는 게시 불가.
+    const few = rowsFor(AFTER_CONFIRMED).slice(0, 4);
+    const jobs = ["25", "26", "27"].map((day, i) =>
+      makeJob(makeResult(few), {
+        id: `few-${i + 1}`,
+        completedAt: `2026-10-${day}T01:00:00.000Z`,
+      })
+    );
+    const agg = aggregateRepeats(storedRuns(jobs), {
+      min_repeats: MIN_REPEATS,
+      suppression_threshold: null,
+    });
+    const cohort = agg.cohorts[0];
+    expect(cohort?.repeat_count).toBe(0);
+    expect(cohort?.comparable).toBe(false);
+    expect(cohort?.observed.ai_brand).toMatchObject({
+      reason: "withheld_not_publishable",
+      status: "unavailable",
+    });
+    setJobs(jobs);
+    const mcp = await mcpSummary();
+    expect(mcp.status).toBe("unverifiable");
+    expect(mcp.reason).toBe("withheld_not_publishable");
+    expect(mcp.data).toBeNull();
+    // 증거 한 장도 숫자 없이 비교 불가로 조립된다.
+    if (cohort) {
+      const sheet = assembleEvidenceSheet({
+        as_of: "2026-10-27",
+        before_after: null,
+        brand_ref: { brand_id: BRAND_ID, display_name: "시험브랜드" },
+        language: cohort.cohort.language,
+        limits: { limits_en: mcp.limits_en, limits_ko: mcp.limits_ko },
+        min_repeats: MIN_REPEATS,
+        observed: cohort.observed.ai_brand,
+        ui_language: "ko",
+        unmeasured: [],
+      });
+      expect(sheet.finding_kind).toBe("not_comparable");
+      expect(sheet.envelope.observed.status).toBe("unavailable");
+    }
+  });
+});

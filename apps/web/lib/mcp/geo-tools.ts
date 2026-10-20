@@ -136,7 +136,7 @@ export interface GeoToolContext {
   db: ReadonlyDb;
   fetchImpl?: FetchLike;
   log: { error: (event: string, data?: Record<string, unknown>) => void };
-  /** 같은 조건 반복의 최소 횟수(사전 등록 값). 생략하면 임시값 3. */
+  /** 같은 조건 반복의 최소 횟수. 생략하면 사전 등록 확정값 3. */
   minRepeats?: number;
 }
 
@@ -355,6 +355,10 @@ function retrievalOfRow(row: StoredRow): RetrievalState {
 }
 
 const MAX_SOURCE_URLS = 50;
+/** 이보다 긴 주소는 잘라내지 않고 그 항목을 뺀다(잘린 주소는 다른 주소가 되므로). */
+const MAX_SOURCE_URL_LENGTH = 300;
+/** 응답 전체 바이트 상한. 넘으면 출처 URL 을 줄이고 truncated 로 표시한다. */
+const MAX_RESPONSE_BYTES = 64 * 1024;
 
 /** 쿼리·해시·로그인 정보는 버린다(개인정보가 섞일 수 있음). http(s)가 아니거나 읽을 수 없으면 null. */
 function safeSourceUrl(raw: string | null | undefined): string | null {
@@ -371,17 +375,24 @@ function safeSourceUrl(raw: string | null | undefined): string | null {
   }
 }
 
-function sourceUrlsOf(rows: readonly StoredRow[]): string[] {
-  const out = new Set<string>();
+/** urls = 응답에 싣는 주소(길이·개수 상한 적용), total = 정리한 뒤 서로 다른 주소 수(상한 적용 전). */
+function sourceUrlsOf(rows: readonly StoredRow[]): {
+  total: number;
+  urls: string[];
+} {
+  const all = new Set<string>();
   for (const row of rows) {
     for (const item of row.citedSources ?? []) {
       const url = safeSourceUrl(item?.url);
       if (url) {
-        out.add(url);
+        all.add(url);
       }
     }
   }
-  return [...out].slice(0, MAX_SOURCE_URLS);
+  const urls = [...all]
+    .filter((u) => u.length <= MAX_SOURCE_URL_LENGTH)
+    .slice(0, MAX_SOURCE_URLS);
+  return { total: all.size, urls };
 }
 
 function engineStatesOf(
@@ -430,7 +441,7 @@ function overallRetrievalOf(
 function retrievalInfoOf(
   rows: readonly StoredRow[],
   asOf: string
-): Known<RetrievalInfo> {
+): { info: Known<RetrievalInfo>; sourceUrlsTotal: number } {
   const perEngine = engineStatesOf(rows);
   const overall = new Set<RetrievalState>();
   const by_engine: RetrievalInfo["by_engine"] = {};
@@ -442,20 +453,27 @@ function retrievalInfoOf(
   }
   if (overall.size === 0 || (overall.size === 1 && overall.has("unknown"))) {
     return {
-      as_of: null,
-      status: "unavailable",
-      reason: "not_recorded",
-      detail_ko: "웹 검색 사용 여부는 이 회차에 기록되어 있지 않습니다.",
+      info: {
+        as_of: null,
+        status: "unavailable",
+        reason: "not_recorded",
+        detail_ko: "웹 검색 사용 여부는 이 회차에 기록되어 있지 않습니다.",
+      },
+      sourceUrlsTotal: 0,
     };
   }
+  const { total, urls } = sourceUrlsOf(rows);
   return {
-    as_of: asOf,
-    status: "known",
-    value: {
-      by_engine,
-      retrieval_used: overallRetrievalOf(overall),
-      source_urls: sourceUrlsOf(rows),
+    info: {
+      as_of: asOf,
+      status: "known",
+      value: {
+        by_engine,
+        retrieval_used: overallRetrievalOf(overall),
+        source_urls: urls,
+      },
     },
+    sourceUrlsTotal: total,
   };
 }
 
@@ -507,7 +525,7 @@ function engineModelOf(
 
 // [같은 조건 반복 → 신뢰구간]
 
-/** 사전 등록 문서에 최소 반복 수가 적혀 있지 않다 — 임시값. [확인 필요] 확정되면 GeoToolContext.minRepeats 로 넘긴다. */
+/** 사전 등록 확정값 3(2026-10-20 확정, 사후 변경 금지). 바꾸려면 사전 등록 변경 기록이 먼저다. */
 const DEFAULT_MIN_REPEATS = 3;
 const HISTORY_LIMIT = 30;
 
@@ -579,6 +597,8 @@ export interface BrandRun {
   language: EvidenceEnvelope["language"];
   measuredAt: string;
   rows: StoredRow[];
+  /** 정리한 뒤 서로 다른 출처 주소 수(응답 상한 적용 전). */
+  sourceUrlsTotal: number;
   summary: ReturnType<typeof summarizeAnswerBuckets>;
 }
 
@@ -656,6 +676,7 @@ export function buildBrandRun(
     cohortJobs.length > 0
       ? cohortJobs.flatMap((h) => rowsOf(withRecomputedAuditMetrics(h.result)))
       : rows;
+  const retrieval = retrievalInfoOf(evidenceRows, measuredAt);
   const singleObserved: Known<ObservedValues> = {
     as_of: measuredAt,
     status: "known",
@@ -735,7 +756,7 @@ export function buildBrandRun(
       },
     },
     observed,
-    retrieval: retrievalInfoOf(evidenceRows, measuredAt),
+    retrieval: retrieval.info,
     schema_version: 1,
     source_ids: {
       as_of: measuredAt,
@@ -759,6 +780,7 @@ export function buildBrandRun(
       language,
       measuredAt,
       rows,
+      sourceUrlsTotal: retrieval.sourceUrlsTotal,
       summary,
     },
   };
@@ -822,6 +844,38 @@ const READONLY_ANNOTATIONS = {
 } as const;
 
 // [도구 본문 — 시험이 직접 부를 수 있게 분리]
+
+function sizeOf(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+/** 근거 봉투의 출처 URL 을 응답 바이트 상한 안으로 줄이고, 줄였거나 상한에 걸리면 truncated 로 표시한다. */
+export function withTruncation(
+  candidate: Record<string, unknown>,
+  run: Pick<BrandRun, "sourceUrlsTotal">,
+  maxBytes: number = MAX_RESPONSE_BYTES
+): Record<string, unknown> {
+  const retrieval = (
+    candidate.evidence as { retrieval?: { status?: string; value?: unknown } }
+  ).retrieval;
+  let urls: string[] = [];
+  if (retrieval?.status === "known") {
+    const value = retrieval.value as RetrievalInfo;
+    urls = [...value.source_urls];
+    while (urls.length > 0 && sizeOf({ ...candidate }) > maxBytes) {
+      urls = urls.slice(0, Math.floor(urls.length / 2));
+      value.source_urls = urls;
+    }
+  }
+  return {
+    ...candidate,
+    truncation: {
+      source_urls_returned: urls.length,
+      source_urls_total: run.sourceUrlsTotal,
+      truncated: urls.length < run.sourceUrlsTotal,
+    },
+  };
+}
 
 type GroupRate = {
   denominator: number;
@@ -913,9 +967,9 @@ function summaryMessageOf(run: BrandRun): string {
     return NO_ADJUDICATED_KO;
   }
   if (cohortAi) {
-    return `같은 조건으로 저장된 ${run.cohort?.repeat_count}회 측정을 묶어, 판정이 끝난 AI 답변 ${g.denominator}건 중 ${g.exposure_count}건에서 브랜드가 제대로 인식되었습니다. 반복은 독립 표본이 아니어서 신뢰구간은 참고용이며 숫자 하나로 판단할 수 없습니다.`;
+    return `같은 조건으로 저장된 ${run.cohort?.repeat_count}회 측정을 묶어, 판정이 끝난 AI 답변 ${g.denominator}건 중 ${g.exposure_count}건이 판정 분류 ‘제대로 앎’ 기준에 해당합니다. 반복은 독립 표본이 아니어서 신뢰구간은 참고용이며 숫자 하나로 판단할 수 없습니다.`;
   }
-  return `저장된 최신 측정 1회(${run.measuredAt.slice(0, 10)}) 기준, 판정이 끝난 AI 답변 ${g.denominator}건 중 ${g.exposure_count}건에서 브랜드가 제대로 인식되었습니다. 표본이 작고 반복은 독립이 아니어서 숫자 하나로 판단할 수 없습니다.`;
+  return `저장된 최신 측정 1회(${run.measuredAt.slice(0, 10)}) 기준, 판정이 끝난 AI 답변 ${g.denominator}건 중 ${g.exposure_count}건이 판정 분류 ‘제대로 앎’ 기준에 해당합니다. 표본이 작고 반복은 독립이 아니어서 숫자 하나로 판단할 수 없습니다.`;
 }
 
 export async function runSummary(
@@ -951,38 +1005,70 @@ export async function runSummary(
   const data = summaryDataOf(loaded.brand, run);
   const message_ko = summaryMessageOf(run);
   return {
-    response: finalize(tool, summaryDataSchema, {
-      message_ko,
+    response: finalize(
       tool,
-      status: "ok",
-      language: run.language,
-      data,
-      evidence: run.evidence,
-      limits_ko: LIMITS_KO,
-      limits_en: LIMITS_EN,
-    }),
+      summaryDataSchema,
+      withTruncation(
+        {
+          message_ko,
+          tool,
+          status: "ok",
+          language: run.language,
+          data,
+          evidence: run.evidence,
+          limits_ko: LIMITS_KO,
+          limits_en: LIMITS_EN,
+        },
+        run
+      )
+    ),
   };
 }
 
-function breakdownGroup(
-  g: ReturnType<typeof summarizeAnswerBuckets>["ai"]
+function breakdownGroupOf(
+  b: BreakdownData["groups"]["ai_brand"]["buckets"],
+  adjudicated: number
 ): BreakdownData["groups"]["ai_brand"] {
   return {
-    adjudicated: g.adjudicated,
-    buckets: {
+    adjudicated,
+    buckets: b,
+    rates: {
+      confirmed: rate(b.confirmed, adjudicated),
+      different_entity: rate(b.different_entity, adjudicated),
+      unknown: rate(b.unknown, adjudicated),
+    },
+    total: adjudicated + b.engine_error + b.unverified,
+  };
+}
+
+function singleBreakdownGroup(
+  g: ReturnType<typeof summarizeAnswerBuckets>["ai"]
+): BreakdownData["groups"]["ai_brand"] {
+  return breakdownGroupOf(
+    {
       confirmed: g.confirmed,
       different_entity: g.differentEntity,
       unknown: g.unknown,
       engine_error: g.engineError,
       unverified: g.unverified,
     },
-    rates: {
-      confirmed: rate(g.confirmed, g.adjudicated),
-      different_entity: rate(g.differentEntity, g.adjudicated),
-      unknown: rate(g.unknown, g.adjudicated),
-    },
-    total: g.total,
-  };
+    g.adjudicated
+  );
+}
+
+/** 같은 조건 반복이 충분하면(run.cohort) 요약 도구와 같은 묶음 값을, 아니면 최신 1회 값을 쓴다. */
+function breakdownGroupFor(
+  run: BrandRun,
+  group: "ai_brand" | "search"
+): BreakdownData["groups"]["ai_brand"] | null {
+  if (run.cohort) {
+    const k = run.cohort.observed[group];
+    return k.status === "known"
+      ? breakdownGroupOf(k.value.buckets, k.value.denominator)
+      : null;
+  }
+  const single = group === "ai_brand" ? run.summary.ai : run.summary.search;
+  return single ? singleBreakdownGroup(single) : null;
 }
 
 export async function runBreakdown(
@@ -1003,52 +1089,101 @@ export async function runBreakdown(
       ),
     };
   }
-  const built = buildBrandRun(loaded.brand, loaded.job);
+  const built = buildBrandRun(
+    loaded.brand,
+    loaded.job,
+    loaded.history,
+    ctx.minRepeats ?? DEFAULT_MIN_REPEATS
+  );
   if (!built.ok) {
     return {
       response: unverifiable(tool, built.reason, built.detail, built.language),
     };
   }
   const { run } = built;
+  const aiGroup =
+    breakdownGroupFor(run, "ai_brand") ?? singleBreakdownGroup(run.summary.ai);
   const data: BreakdownData = {
     brand_id: loaded.brand.id,
-    groups: {
-      ai_brand: breakdownGroup(run.summary.ai),
-      search: run.summary.search ? breakdownGroup(run.summary.search) : null,
-    },
-    measured_at: run.measuredAt,
+    groups: { ai_brand: aiGroup, search: breakdownGroupFor(run, "search") },
+    measured_at: run.cohort ? run.cohort.last_completed_at : run.measuredAt,
   };
-  const ai = run.summary.ai;
+  const scope = run.cohort
+    ? `같은 조건으로 저장된 ${run.cohort.repeat_count}회 측정을 묶은`
+    : `저장된 최신 측정 1회(${run.measuredAt.slice(0, 10)}) 기준`;
   return {
-    response: finalize(tool, breakdownDataSchema, {
-      message_ko: `저장된 최신 측정 1회(${run.measuredAt.slice(0, 10)}) 기준 AI 답변 ${ai.total}건의 분류입니다. 비율은 판정이 끝난 ${ai.adjudicated}건만 분모로 하며, 측정 실패와 판정 보류는 건수만 보여 줍니다.`,
+    response: finalize(
       tool,
-      status: "ok",
-      language: run.language,
-      data,
-      evidence: run.evidence,
-      limits_ko: LIMITS_KO,
-      limits_en: LIMITS_EN,
-    }),
+      breakdownDataSchema,
+      withTruncation(
+        {
+          message_ko: `${scope} AI 답변 ${aiGroup.total}건의 분류입니다. 비율은 판정이 끝난 ${aiGroup.adjudicated}건만 분모로 하며, 측정 실패와 판정 보류는 건수만 보여 줍니다.`,
+          tool,
+          status: "ok",
+          language: run.language,
+          data,
+          evidence: run.evidence,
+          limits_ko: LIMITS_KO,
+          limits_en: LIMITS_EN,
+        },
+        run
+      )
+    ),
   };
 }
 
 const LEADING_WWW = /^www\./;
 const TRAILING_DOT = /\.$/;
 
+/**
+ * 주소 → 비교용 호스트. 소문자·끝 점·www 접두사를 정리하고(IDN 은 URL 이 punycode 로 바꾼다)
+ * 사용자정보(user:pass@)·기본이 아닌 포트·http(s) 아닌 스킴이 있으면 null 로 거부한다.
+ */
 function hostOnly(value: string): string | null {
   const text = value.trim();
   if (text === "") {
     return null;
   }
   try {
-    const host = new URL(
-      text.includes("://") ? text : `https://${text}`
-    ).hostname.toLowerCase();
+    const u = new URL(text.includes("://") ? text : `https://${text}`);
+    if (
+      (u.protocol !== "https:" && u.protocol !== "http:") ||
+      u.username !== "" ||
+      u.password !== "" ||
+      u.port !== ""
+    ) {
+      return null;
+    }
+    const host = u.hostname.toLowerCase();
     return host.replace(LEADING_WWW, "").replace(TRAILING_DOT, "") || null;
   } catch {
     return null;
   }
+}
+
+/**
+ * 점검이 보내는 모든 요청(리다이렉트로 따라가는 주소 포함)이 허용 목록 브랜드의 등록 도메인 안에 머물게 하는 fetch 래퍼.
+ * 다른 호스트로 가는 요청은 보내지 않고(= 읽지 않고) 네트워크 실패로 돌려, 해당 점검 항목이 「확인 불가」가 된다.
+ * official-facts.ts 는 수정하지 않는다(리다이렉트를 수동으로 따라가며 매 단계 fetch 를 부르는 구조를 이용).
+ */
+export function confinedFetch(
+  domains: ReadonlySet<string>,
+  inner: FetchLike
+): FetchLike {
+  return ((
+    input: Parameters<FetchLike>[0],
+    init?: Parameters<FetchLike>[1]
+  ) => {
+    const target =
+      typeof input === "string" || input instanceof URL
+        ? String(input)
+        : input.url;
+    const host = hostOnly(target);
+    if (host === null || !domains.has(host)) {
+      return Promise.reject(new TypeError("blocked: host not registered"));
+    }
+    return inner(input, init);
+  }) as FetchLike;
 }
 
 /** 허용 목록 브랜드의 등록된 도메인 집합(Brand.domain). 허용 목록이 비면 빈 집합. */
@@ -1078,10 +1213,19 @@ export async function runFacts(
 ): Promise<ToolOutcome> {
   const tool: McpReadonlyToolName = "check_official_facts";
   const requested = hostOnly(url);
-  if (requested === null || !(await registeredDomains(ctx)).has(requested)) {
+  const domains = await registeredDomains(ctx);
+  if (requested === null || !domains.has(requested)) {
     return { error: "not_available" as const };
   }
-  const out = await checkOfficialFacts(url, ctx.fetchImpl);
+  const out = await checkOfficialFacts(
+    url,
+    confinedFetch(domains, ctx.fetchImpl ?? fetch)
+  );
+  // 요약 문구는 이 도구가 직접 쓴다: 「양호」 같은 평가가 아니라 규칙 기준 통과 건수만 말한다.
+  const passed = out.items.filter(
+    (i) => i.status === "found" || i.status === "allowed"
+  ).length;
+  const summary_ko = `점검한 ${out.items.length}개 항목 중 ${passed}개가 항목별 규칙 기준을 통과했습니다. 확인하지 못한 항목은 '없음'이 아니라 '확인 불가'로 표시했습니다.`;
   const gone = (detail_ko: string) => ({
     as_of: null,
     status: "unavailable" as const,
@@ -1112,10 +1256,10 @@ export async function runFacts(
       detail: i.detail,
     })),
     limits_ko: out.limits_ko,
-    summary_ko: out.summary_ko,
+    summary_ko,
   };
   const response = finalize(tool, factsDataSchema, {
-    message_ko: out.summary_ko,
+    message_ko: summary_ko,
     tool,
     status: "ok",
     language: evidence.language,

@@ -212,6 +212,150 @@ describe("M-facts — 읽기 전용 모드 안에서의 점검", () => {
     vi.doUnmock("@repo/audit/public-url-security");
   });
 
+  describe("주소 정규화·리다이렉트 가둠", () => {
+    const registered = {
+      brand: { id: BRAND_ID, name: "시험브랜드", domain: "brand.example" },
+      job: null,
+    };
+
+    async function facts(
+      url: string,
+      fetchImpl: typeof fetch,
+      domain = "brand.example"
+    ) {
+      vi.doMock("@repo/audit/public-url-security", async (importOriginal) => {
+        const real =
+          await importOriginal<
+            typeof import("@repo/audit/public-url-security")
+          >();
+        return { ...real, assertPublicUrl: vi.fn(async () => undefined) };
+      });
+      const { runFacts, toReadonlyDb } = await import("../lib/mcp/geo-tools");
+      const out = await runFacts(
+        {
+          allowlist: new Set([BRAND_ID]),
+          db: toReadonlyDb(
+            makeWatchedDb({
+              ...registered,
+              brand: { ...registered.brand, domain },
+            }).db
+          ),
+          fetchImpl,
+          log: { error: vi.fn() },
+        },
+        url
+      );
+      vi.doUnmock("@repo/audit/public-url-security");
+      return out;
+    }
+
+    const plainFetch = () =>
+      vi.fn(
+        async (input: unknown) =>
+          new Response(
+            String(input).endsWith("robots.txt")
+              ? "User-agent: *\n"
+              : "<html></html>",
+            { status: 200 }
+          )
+      ) as unknown as typeof fetch & { mock: { calls: unknown[][] } };
+
+    it("포트·사용자정보·유니코드 위장·서브도메인 위장·경로 속 호스트는 거부한다", async () => {
+      for (const url of [
+        "https://brand.example:8443",
+        "https://user:pw@brand.example",
+        "https://brand.example@evil.test",
+        "https://bränd.example",
+        "https://brand.example.evil.test",
+        "https://evil.test/brand.example",
+        "ftp://brand.example",
+      ]) {
+        const f = plainFetch();
+        const out = await facts(url, f);
+        expect(out, url).toEqual({ error: "not_available" });
+        expect(f.mock.calls.length, url).toBe(0);
+      }
+    });
+
+    it("대소문자·끝 점·www·유니코드 등록 도메인(punycode 동일)은 같은 호스트로 본다", async () => {
+      for (const url of [
+        "HTTPS://BRAND.EXAMPLE",
+        "https://brand.example.",
+        "https://www.brand.example",
+        "brand.example",
+      ]) {
+        const out = await facts(url, plainFetch());
+        expect("response" in out, url).toBe(true);
+      }
+      const idn = await facts(
+        "https://bränd.example",
+        plainFetch(),
+        "bränd.example"
+      );
+      expect("response" in idn).toBe(true);
+    });
+
+    it("허용→외부 리다이렉트는 따라가지 않고(요청도 안 보냄) 그 항목만 확인 불가로 둔다", async () => {
+      const seen: string[] = [];
+      const f = vi.fn((input: unknown) => {
+        const u = String(input);
+        seen.push(u);
+        if (u.endsWith("/llms.txt")) {
+          return Promise.resolve(
+            Response.redirect("https://evil.test/llms.txt", 302)
+          );
+        }
+        return Promise.resolve(new Response("<html></html>", { status: 200 }));
+      }) as unknown as typeof fetch;
+      const out = await facts("https://brand.example", f);
+      const res = ("response" in out ? out.response : {}) as Record<
+        string,
+        any
+      >;
+      expect(seen.some((u) => u.includes("evil.test"))).toBe(false);
+      const llms = res.data.items.find((i: any) => i.key === "llms_txt");
+      expect(llms.status).toBe("error");
+      expect(res.data.items.find((i: any) => i.key === "json_ld").status).toBe(
+        "missing"
+      );
+    });
+
+    it("허용→허용(www) 리다이렉트는 따라가서 읽는다", async () => {
+      const f = vi.fn((input: unknown) => {
+        const u = String(input);
+        if (u === "https://brand.example/llms.txt") {
+          return Promise.resolve(
+            Response.redirect("https://www.brand.example/llms.txt", 301)
+          );
+        }
+        return Promise.resolve(
+          new Response(u.endsWith("llms.txt") ? "# brand" : "<html></html>", {
+            status: 200,
+          })
+        );
+      }) as unknown as typeof fetch;
+      const out = await facts("https://brand.example", f);
+      const res = ("response" in out ? out.response : {}) as Record<
+        string,
+        any
+      >;
+      expect(res.data.items.find((i: any) => i.key === "llms_txt").status).toBe(
+        "found"
+      );
+    });
+
+    it("요약 문구는 「양호」 같은 평가 없이 규칙 기준 통과 건수만 말한다", async () => {
+      const out = await facts("https://brand.example", plainFetch());
+      const res = ("response" in out ? out.response : {}) as Record<
+        string,
+        any
+      >;
+      expect(res.message_ko).toContain("규칙 기준을 통과");
+      expect(res.message_ko).not.toContain("양호");
+      expect(res.data.summary_ko).toBe(res.message_ko);
+    });
+  });
+
   it("허용 목록에 없는 주소(사설·임의 URL 포함)는 not_available 로 거부한다", async () => {
     vi.stubEnv("FINDABLE_MCP_READONLY_MODE_ENABLED", "true");
     vi.stubEnv("FINDABLE_MCP_READONLY_BRAND_ALLOWLIST", BRAND_ID);

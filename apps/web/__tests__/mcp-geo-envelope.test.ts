@@ -569,3 +569,138 @@ describe("사전 등록 칸 — 저장된 필드에서만", () => {
     });
   });
 });
+
+describe("M-brk 는 M-sum 과 같은 묶음을 쓴다", () => {
+  it("3회 반복이면 분류 건수·분모·구간이 요약 도구와 같다", async () => {
+    setJobs(runsOf(3));
+    const brk = await callTool("get_answer_verdict_breakdown", {
+      brand_id: BRAND_ID,
+    });
+    const sum = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    expect(brk.status).toBe("ok");
+    // 36건 중 확인 18건, 모름 18건(손계산: 한 회차 12건 중 확인 6)
+    expect(brk.data.groups.ai_brand).toMatchObject({
+      adjudicated: 36,
+      buckets: {
+        confirmed: 18,
+        different_entity: 0,
+        unknown: 18,
+        engine_error: 0,
+        unverified: 0,
+      },
+      total: 36,
+    });
+    expect(brk.data.groups.ai_brand.rates.confirmed).toBeCloseTo(0.5, 12);
+    expect(brk.evidence.observed).toEqual(sum.evidence.observed);
+    expect(brk.evidence.observed.value.interval.status).toBe("known");
+    expect(brk.data.groups.ai_brand.adjudicated).toBe(
+      sum.data.exposure_denominator
+    );
+  });
+
+  it("반복이 부족하면(2회) 최신 1회 값과 확인 불가 구간을 쓴다", async () => {
+    setJobs(runsOf(2));
+    const brk = await callTool("get_answer_verdict_breakdown", {
+      brand_id: BRAND_ID,
+    });
+    expect(brk.data.groups.ai_brand.adjudicated).toBe(12);
+    expect(brk.evidence.observed.value.interval).toMatchObject({
+      reason: "insufficient_sample",
+      status: "unavailable",
+    });
+  });
+});
+
+describe("출처 URL 정리와 상한", () => {
+  const cited = (urls: string[]) =>
+    repeatRows().map((r, i) =>
+      i === 0
+        ? {
+            ...r,
+            usage: { webSearchRequests: 1 },
+            citedSources: urls.map((url) => ({ url })),
+          }
+        : r
+    );
+
+  it("쿼리·해시·사용자정보를 제거하고 http(s)가 아닌 주소는 뺀다", async () => {
+    setJobs([
+      makeJob(
+        makeResult(
+          cited([
+            "https://a.example/page?token=SECRET#frag",
+            "https://user:pw@b.example/x",
+            "ftp://c.example/file",
+            "not a url",
+          ])
+        )
+      ),
+    ]);
+    const res = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    const urls = res.evidence.retrieval.value.source_urls;
+    expect(urls.sort()).toEqual([
+      "https://a.example/page",
+      "https://b.example/x",
+    ]);
+    const text = JSON.stringify(res);
+    expect(text).not.toContain("SECRET");
+    expect(text).not.toContain("user:pw");
+    expect(res.truncation).toEqual({
+      source_urls_returned: 2,
+      source_urls_total: 2,
+      truncated: false,
+    });
+  });
+
+  it("300자를 넘는 주소는 잘라내지 않고 그 항목을 빼며, 50개 초과는 truncated 로 표시한다", async () => {
+    const long = `https://long.example/${"x".repeat(300)}`;
+    const many = Array.from(
+      { length: 60 },
+      (_v, i) => `https://s.example/p${i}`
+    );
+    setJobs([makeJob(makeResult(cited([long, ...many])))]);
+    const res = await callTool("get_brand_measurement_summary", {
+      brand_id: BRAND_ID,
+    });
+    const urls: string[] = res.evidence.retrieval.value.source_urls;
+    expect(urls).toHaveLength(50);
+    expect(urls.every((u) => u.length <= 300)).toBe(true);
+    expect(urls).not.toContain(long);
+    expect(urls.some((u) => u.includes("xxxx"))).toBe(false);
+    expect(res.truncation).toEqual({
+      source_urls_returned: 50,
+      source_urls_total: 61,
+      truncated: true,
+    });
+  });
+
+  it("응답 바이트 상한을 넘으면 출처 URL 을 줄이고 truncated:true 와 개수를 표시한다", async () => {
+    const { withTruncation } = await import("../lib/mcp/geo-tools");
+    const urls = Array.from(
+      { length: 40 },
+      (_v, i) => `https://s.example/p${i}`
+    );
+    const candidate = {
+      evidence: {
+        retrieval: {
+          status: "known",
+          value: { by_engine: {}, retrieval_used: "used", source_urls: urls },
+        },
+      },
+    };
+    const out = withTruncation(candidate, { sourceUrlsTotal: 40 }, 600) as any;
+    expect(out.evidence.retrieval.value.source_urls.length).toBeLessThan(40);
+    expect(out.truncation.truncated).toBe(true);
+    expect(out.truncation.source_urls_total).toBe(40);
+    expect(out.truncation.source_urls_returned).toBe(
+      out.evidence.retrieval.value.source_urls.length
+    );
+    expect(Buffer.byteLength(JSON.stringify(out), "utf8")).toBeLessThanOrEqual(
+      600 + 120
+    );
+  });
+});
