@@ -55,7 +55,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 | `observed.interval` | 구간이 `known` 이면 비율 옆에 구간을 쓴다. `unavailable` 이면 「구간 미제공」 |
 | `unmeasured` | **빈 배열도 말한다**(「못 잰 것 0건」). 행이 있으면 사유 라벨과 건수를 모두 쓴다 |
 | `method_version` | 판정 버전·측정 방식이 다른 값은 **합치지 않는다** |
-| `language` | 검증된 언어는 한국어뿐이다. `mixed`·`en` 은 다른 칸으로 따로 쓴다 |
+| `language` | 측정이 확인된 언어는 한국어뿐이다. `mixed`·`en` 은 다른 칸으로 따로 쓴다 |
 | `retrieval` | 웹 검색을 쓴 엔진과 모델 지식으로 답한 엔진을 **나눠** 쓴다. 섞어 평균내지 않는다 |
 | `engine_model` | 대부분 `not_recorded` 이다. 모델 버전을 짐작해서 쓰지 않는다 |
 | `index_check` | 지금은 대개 미설정이다. 「색인됨/안 됨」을 추측하지 않는다 |
@@ -88,7 +88,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 
 ## 5. 처방(조치)을 말해야 할 때
 
-- 처방은 **「시도해 볼 만한 조치」** 로만 쓴다. 「하면 올라간다」「덕분에」 금지.
+- 처방은 **「시도해 볼 만한 조치」** 로만 쓴다. 「하면 올라간다」 같은 인과 표현 금지(7절 목록).
 - 처방 카드(`packages/audit/prescription-cards.ts`)가 있으면 **근거 등급 라벨·실패 조건(`fails_when`)·한계(`limits_ko`)** 를 같이 말한다.
 - 연구에서 효과가 보고된 조건은 「이미 검색돼 AI의 맥락에 들어오는 문서에, 질문과 맞는 통계·인용 근거를 더하는 것」이다. **서식·FAQ·스키마만 손본 경우는 효과가 거의 없다고 보고됐다.** 그러나 **한국어·실제 브랜드·실제 엔진에서의 효과는 입증되지 않았다.**
 - 논문의 최대 개선치·평균 개선치를 **인용하지 않는다**(우리 효과처럼 읽히기 때문).
@@ -110,7 +110,7 @@ description: Findable의 읽기 전용 측정 응답(get_brand_measurement_summa
 
 ## 8. 영어 응답을 만들 때
 
-영어로 요약해야 하면 `GUARDRAILS.md` 의 English guardrail 문단을 따른다. 영어 측정 코호트 검증은 아직 0건이다(설계 방향일 뿐 검증된 것이 아님).
+영어로 요약해야 하면 `GUARDRAILS.md` 의 English guardrail 문단을 따른다. 영어 측정 코호트 검증은 아직 0건이다(설계 방향일 뿐 끝난 검증이 아님).
 
 ## 9. 점검표 (보내기 전)
 
