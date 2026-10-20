@@ -58,16 +58,19 @@ import {
   type SetupReadinessRecord,
   toSetupReadinessRecord,
 } from "@repo/audit/setup-readiness";
+import { isStabilityFlagOn } from "@repo/audit/stability-flags";
 import { planCapabilities } from "@repo/auth/plan";
 import type { Industry } from "@repo/database";
 import { database } from "@repo/database";
 import { notInternalOrg } from "@repo/database/internal-orgs";
 import { resend } from "@repo/email";
 import { TrackingDigestEmail } from "@repo/email/templates/tracking-digest";
+import { withCronHeartbeat } from "@repo/observability/cron-heartbeat";
 import { log } from "@repo/observability/log";
 import { denyIfNotCron } from "@repo/security/cron";
 import type { NextRequest } from "next/server";
 import { env } from "@/env";
+import { AUTO_REFRESH_MARK } from "@/lib/audit-queue/daily-cap";
 import {
   type AutoRefreshOrganization,
   loadAutoRefreshOrganizations,
@@ -462,7 +465,23 @@ async function attachCronSetup(due: readonly DueBrand[]): Promise<CronBrand[]> {
   return out;
 }
 
+/**
+ * 하트비트(2026-10-18 안정성 U4): cron 이 조용히 멈추는 것을 Sentry 모니터가 감지하게 체크인을 보낸다.
+ * 인증을 **먼저** 거치므로 거절된 호출은 체크인을 만들지 않는다(가짜 체크인으로 정지를 가리지 못하게).
+ * 플래그 `STABILITY_OPS_ALERTS_ENABLED` 꺼짐이면 본문만 그대로 실행한다(동작 동일).
+ */
 export const GET = async (request: NextRequest) => {
+  const denied = denyIfNotCron(request);
+  if (denied) {
+    return denied;
+  }
+  return await withCronHeartbeat("auto-refresh-tracking", "*/30 * * * *", () =>
+    runAutoRefresh(request)
+  );
+};
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 기존 cron 본문을 그대로 옮겼다(하트비트 래퍼 추가로 함수 이름만 바뀜).
+const runAutoRefresh = async (request: NextRequest) => {
   const invocationStartedAtMs = Date.now();
   // 🔒 원가가 나가기 전에 먼저 막는다(측정 1건 ~87원).
   const denied = denyIfNotCron(request);
@@ -579,6 +598,10 @@ export const GET = async (request: NextRequest) => {
         organizationId: item.orgId,
         brandId: item.brandId,
         industry: item.industryColumn,
+        // 수동 측정 일·월 상한에서 자동 측정을 빼기 위한 표식(2026-10-18 U2 후속). 플래그 꺼짐이면 기존과 같은 데이터.
+        ...(isStabilityFlagOn("STABILITY_ORG_DAILY_CAP_ENABLED")
+          ? { ipAddress: AUTO_REFRESH_MARK }
+          : {}),
       },
       select: { id: true },
     });

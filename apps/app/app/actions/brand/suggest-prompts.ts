@@ -5,6 +5,7 @@ import {
   resolveBrandIdentity,
 } from "@repo/ai/lib/brand-identity";
 import {
+  mergeSiteNote,
   normalizeTopic,
   type PromptSuggestions,
   type SuggestedPrompt,
@@ -108,14 +109,7 @@ export const suggestPromptsAction = async (input: {
     const readSite = await readSiteText(brand.domain);
     const note = cleanSiteNote(input.siteNote);
     // 고객이 적은 소개는 사이트 재료 앞에 붙인다(고객 본인의 말 — 대표 상품 질문의 근거로도 쓰인다).
-    const site = note
-      ? {
-          ...(readSite ?? {}),
-          bodySnippet: [note, readSite?.bodySnippet].filter(Boolean).join(" "),
-          description: [note, readSite?.description].filter(Boolean).join(" "),
-          thin: false,
-        }
-      : readSite;
+    const site = mergeSiteNote(readSite, note);
     const suggestions = await suggestTrackingPrompts({
       aliases: [...new Set([...aliases, ...identity.brandVariants])],
       brandName: identity.brandName,

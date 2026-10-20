@@ -11,6 +11,7 @@ import {
   isBlockedRequestUrl,
   isSiteRenderEnabled,
   renderSiteHtml,
+  siteRenderStatus,
 } from "./site-render";
 
 beforeEach(() => {
@@ -29,6 +30,15 @@ describe("isSiteRenderEnabled — 기본 off, Preview 에서는 항상 off", () 
   it("켜져 있어도 Vercel Preview 에서는 off", () => {
     h.enabled = true;
     expect(isSiteRenderEnabled({ VERCEL_ENV: "preview" })).toBe(false);
+  });
+});
+
+describe("siteRenderStatus — 로컬·운영 설정 불일치를 로그로 드러낸다", () => {
+  it("플래그 없음 → flag_off, 켜짐 → enabled, 켜져 있어도 Preview → vercel_preview", () => {
+    expect(siteRenderStatus({})).toBe("flag_off");
+    h.enabled = true;
+    expect(siteRenderStatus({})).toBe("enabled");
+    expect(siteRenderStatus({ VERCEL_ENV: "preview" })).toBe("vercel_preview");
   });
 });
 

@@ -265,6 +265,59 @@ describe("runAuditJob in stub mode", () => {
     });
   });
 
+  it("측정 구멍 기록: 꺼짐(기본)이면 결과에 gapDiagnostics 키가 없다", async () => {
+    seedJob();
+    await runAuditJob(input);
+    const result = job().result as { measurementContext: object };
+    expect("gapDiagnostics" in result.measurementContext).toBe(false);
+  });
+
+  it("측정 구멍 기록: 켜짐이면 시작 전 기록과 끝난 뒤 분류가 결과에 남는다(사이트 읽기 코드 포함)", async () => {
+    vi.stubEnv("MEASUREMENT_GAP_LOG_ENABLED", "true");
+    seedJob();
+    await runAuditJob({
+      ...input,
+      gapInput: { siteOutcome: "robots_blocked" },
+    });
+    expect(job().status).toBe("completed");
+    const result = job().result as {
+      measurementContext: {
+        gapDiagnostics?: {
+          brandQuestionCount: number;
+          codes: string[];
+          questionCount: number;
+          siteOutcome?: string;
+          warnings: string[];
+        };
+      };
+    };
+    const gap = result.measurementContext.gapDiagnostics;
+    expect(gap?.siteOutcome).toBe("robots_blocked");
+    expect(gap?.codes).toContain("robots_blocked");
+    expect(gap?.questionCount).toBeGreaterThan(0);
+    expect(JSON.stringify(gap)).not.toContain("example.com");
+  });
+
+  it("시작 불변식: 플래그+opt-in 이면 질문 8개 미만은 사유 코드가 붙은 측정 불가로 끝나고, 둘 중 하나라도 없으면 그대로 측정한다", async () => {
+    // 플래그 꺼짐 + opt-in → 예전처럼 측정
+    seedJob();
+    await runAuditJob({ ...input, requireQuestionInvariant: true });
+    expect(job().status).toBe("completed");
+
+    // 플래그 켜짐 + opt-in 없음 → 예전처럼 측정(고객 측정 경로)
+    vi.stubEnv("MEASUREMENT_INVARIANT_ENABLED", "true");
+    seedJob();
+    await runAuditJob(input);
+    expect(job().status).toBe("completed");
+
+    // 플래그 켜짐 + opt-in → 기본 질문 4개뿐이라 측정 불가(사유 코드)
+    seedJob();
+    await runAuditJob({ ...input, requireQuestionInvariant: true });
+    expect(job().status).toBe("failed");
+    expect(String(job().errorMessage)).toMatch(/^UNMEASURABLE:.*few_questions/);
+    expect(leakedCalls()).toEqual([]);
+  });
+
   it("is forced on Preview even with FINDABLE_AUDIT_STUB_MODE unset", async () => {
     vi.stubEnv("FINDABLE_AUDIT_STUB_MODE", undefined);
     seedJob();

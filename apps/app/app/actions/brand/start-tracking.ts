@@ -14,6 +14,9 @@ import { parseError } from "@repo/observability/error";
 import { log } from "@repo/observability/log";
 import { after } from "next/server";
 import { getAuditRuntimeReadiness } from "@/lib/audit/runtime-readiness";
+import { buildOrgRunInput } from "@/lib/audit-queue/run-input";
+import { admitJob } from "@/lib/audit-queue/slot-reservation";
+import { startGate } from "@/lib/audit-queue/start-gate";
 import { brandCapacityBlock } from "@/lib/brand/brand-capacity";
 import { requireOrg } from "@/lib/db/scoped";
 import { isValidDomain, normalizeDomain } from "@/lib/domain";
@@ -47,14 +50,6 @@ const brandErrors = async () => (await getAppDictionary()).brandErrors;
 //   **동기 함수를 export 할 수 없다** — 하면 tsc·lint 는 통과하고 빌드에서만 터진다).
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** DB JSON 필드에 저장된 별칭만 안전하게 러너 입력으로 넘긴다. */
-const stringList = (value: unknown): string[] =>
-  Array.isArray(value)
-    ? value.filter(
-        (item): item is string => typeof item === "string" && item.trim() !== ""
-      )
-    : [];
 
 /**
  * org row가 DB에 있도록 보장(lazy 적재). relationMode="prisma"라 FK가 강제되지 않아
@@ -369,6 +364,17 @@ export const startOrgTracking = async (
       return blocked;
     }
 
+    // 7-b) 안정성 U2(플래그 뒤 — 꺼져 있으면 DB 호출 0회, 기존 경로 그대로).
+    //   수동 측정의 고객별 일·월 상한 + 전역·고객별 동시 실행 입장 관리.
+    const gate = await startGate(orgId);
+    if (gate.overCap) {
+      // 뜻이 맞는 기존 문구가 없어 가장 가까운 기존 문구를 쓴다(새 문구 제안은 작업 보고서).
+      return {
+        error: (await brandErrors()).measureStartFailed,
+        code: "rate_limited",
+      };
+    }
+
     // 8) AuditJob 생성. email은 org 트리거 식별자(비로그인 intake와 스코프 구분).
     //    P5 8-b(2026-07-30): nullable FK forward-fill — org 트리거 job 을 그래프에 직접 연결.
     const job = await database.auditJob.create({
@@ -390,30 +396,38 @@ export const startOrgTracking = async (
       domain,
     });
 
+    // 8-b) 대기 — 실행하지 않고 성공으로 돌려준다(화면은 기존 「측정 대기 중」 표현).
+    //   전용 일꾼(/api/cron/audit-queue)이 상한 여유가 생기면 같은 입력(buildOrgRunInput)으로 시작한다.
+    //   시작 여부는 슬롯 예약(한 트랜잭션: 점유 수 확인 + 예약 표식)으로 정한다 — 같은 순간 몰려도 상한을 넘지 않는다.
+    const admission = gate.admissionOn
+      ? await admitJob({ jobId: job.id, orgId, plan: gate.plan })
+      : "start";
+    if (admission !== "start") {
+      log.info("audit.org.job_queued", {
+        jobId: job.id,
+        orgId,
+        admission,
+      });
+      return { ok: true, jobId: job.id };
+    }
+
     // 9) 백그라운드 실행 — P2 핵심: HTTP fetch 없이 러너를 app 서버에서 직접 호출.
     //    org/brandId를 서버 도출값으로 넘긴다(dual-write 게이트 충족).
     after(async () => {
       try {
-        await runAuditJob({
-          invocationStartedAtMs,
-          jobId: job.id,
-          domain,
-          language,
-          brandName,
-          // 가입/설정 단계에서 저장한 한글·영문·제품 별칭도 판정기에 전달한다.
-          // 비어 있으면 러너가 도메인 기반으로 추론한 별칭을 그대로 사용한다.
-          brandVariants: stringList(brandRecord?.entityVariants),
-          organizationId: orgId,
-          brandId,
-          // 동명이인 분별 단서(mention-verdict). 없으면 기존과 동일 동작.
-          industry: brandRecord?.industry ?? undefined,
-          // 점수 분모를 정하는 타깃 시장. 없으면 러너가 자동 추정.
-          marketScope: brandRecord?.marketScope ?? undefined,
-          // 마감으로 질문이 남으면 「이어가기 대기」로 멈춘다(2026-10-06).
-          //   측정 화면 폴링(continueOrgTracking)·30분 cron 이 남은 질문만 이어서 잰다.
-          continueWhenTruncated: true,
-          setupReadiness,
-        });
+        await runAuditJob(
+          buildOrgRunInput({
+            invocationStartedAtMs,
+            jobId: job.id,
+            domain,
+            language,
+            brandName,
+            brand: brandRecord,
+            organizationId: orgId,
+            brandId,
+            setupReadiness,
+          })
+        );
       } catch (jobError) {
         log.error("audit.org.job_uncaught", {
           jobId: job.id,

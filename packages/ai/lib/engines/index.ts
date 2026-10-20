@@ -1,5 +1,6 @@
 // Findable 7 엔진 라우터 + 병렬 호출 오케스트레이터
 
+import { isStabilityFlagOn } from "../stability-flags";
 import {
   type ApiSearchShadowHandle,
   isApiSearchMainEngine,
@@ -9,6 +10,7 @@ import {
   startApiSearchShadow,
   withApiSearchEngineSet,
 } from "./api-search-v1";
+import { CELL_RETRY_ENGINES, runCellGuarded } from "./cell-retry";
 import {
   chatgptRoutedAdapter,
   isChatgptWebShadowEnabled,
@@ -274,12 +276,29 @@ export async function queryAllEngines(
     engineIds.map(async (engineId) => {
       observe({ engineId, phase: "started" });
       try {
-        const response = await queryEngineWithTimeout(
-          { ...base, engineId },
+        const callTimeoutMs =
           ENGINE_CALL_TIMEOUT_MS[engineId] && options?.timeoutMs
             ? options.timeoutMs
-            : ENGINE_CALL_TIMEOUT_MS[engineId]
-        );
+            : ENGINE_CALL_TIMEOUT_MS[engineId];
+        const callOnce = () =>
+          queryEngineWithTimeout({ ...base, engineId }, callTimeoutMs);
+        // 안정성 U1(기본 꺼짐): 칸당 재시도·서킷브레이커. 늦은 칸 다시 묻기(options.timeoutMs)는 1회 상한 설계라 건드리지 않는다.
+        const retryOn =
+          !options?.timeoutMs &&
+          CELL_RETRY_ENGINES.has(engineId) &&
+          isStabilityFlagOn("STABILITY_CELL_RETRY_ENABLED");
+        const breakerOn =
+          !options?.timeoutMs &&
+          isStabilityFlagOn("STABILITY_ENGINE_BREAKER_ENABLED");
+        const response =
+          retryOn || breakerOn
+            ? await runCellGuarded(callOnce, {
+                breaker: breakerOn,
+                engineId,
+                retry: retryOn,
+                signal: base.signal,
+              })
+            : await callOnce();
         observe({ engineId, phase: "finished", status: "fulfilled" });
         return response;
       } catch (error) {

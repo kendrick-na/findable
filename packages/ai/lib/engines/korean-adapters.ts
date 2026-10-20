@@ -8,6 +8,8 @@
 // 환경변수 미설정 시 stub 응답.
 // Naver Cue: 직접 스크래핑은 D-004에 따라 v1.0 제외 (약관·법적 리스크).
 
+import { isStabilityFlagOn } from "../stability-flags";
+import { abortableSleep } from "./cell-retry";
 import { isAbortError } from "./provider-error";
 import { sanitizeEngineText } from "./sanitize";
 import type {
@@ -70,11 +72,16 @@ function makeErrorResponse(
 function makeEmptySearchResponse(
   engineId: EngineId,
   prompt: string,
-  durationMs: number
+  durationMs: number,
+  options: { includeQuery?: boolean } = {}
 ): EngineResponse {
   return {
     engineId,
-    rawResponse: `검색 결과가 없습니다.\n질의: ${prompt.slice(0, 200)}`,
+    // 질의를 글에 넣지 않는 쪽(다음)은 브랜드 이름 질문의 이름이 "근거 글"에 들어가 언급으로 읽히는 일을 막는다.
+    rawResponse:
+      options.includeQuery === false
+        ? "검색 결과가 없습니다."
+        : `검색 결과가 없습니다.\n질의: ${prompt.slice(0, 200)}`,
     brandMentioned: false,
     mentionPosition: null,
     mentionListSize: null,
@@ -194,6 +201,38 @@ interface NaverSearchResult {
   items: NaverSearchItem[];
 }
 
+/** 검색 API 요청 실패 재시도 간격(ms) — 요청이 무료라 짧게 1회만. */
+const SEARCH_REQUEST_RETRY_DELAY_MS = 1000;
+
+/**
+ * 안정성 U1(STABILITY_CELL_RETRY_ENABLED): 다음·네이버 검색 **요청 실패**(429·5xx·네트워크 오류)는
+ * 1초 뒤 1회 다시 보낸다. 결과 0건(정상 응답)은 요청 실패가 아니므로 여기서 다루지 않는다.
+ * 플래그가 꺼져 있으면 `send()` 를 그대로 한 번 부른다(기존과 동일). 중단(abort)이면 즉시 던진다.
+ */
+async function sendSearchRequest(
+  send: () => Promise<Response>,
+  signal: AbortSignal | undefined
+): Promise<Response> {
+  if (!isStabilityFlagOn("STABILITY_CELL_RETRY_ENABLED")) {
+    return await send();
+  }
+  let first: Response;
+  try {
+    first = await send();
+  } catch (error) {
+    if (isAbortError(error) || signal?.aborted) {
+      throw error;
+    }
+    await abortableSleep(SEARCH_REQUEST_RETRY_DELAY_MS, signal);
+    return await send();
+  }
+  if (first.ok || !(first.status === 429 || first.status >= 500)) {
+    return first;
+  }
+  await abortableSleep(SEARCH_REQUEST_RETRY_DELAY_MS, signal);
+  return await send();
+}
+
 async function naverSearch(
   query: string,
   signal?: AbortSignal
@@ -211,13 +250,17 @@ async function naverSearch(
   const results = await Promise.allSettled(
     endpoints.map(async (kind) => {
       const url = `https://openapi.naver.com/v1/search/${kind}.json?query=${encodeURIComponent(query)}&display=10`;
-      const resp = await fetch(url, {
-        headers: {
-          "X-Naver-Client-Id": clientId,
-          "X-Naver-Client-Secret": clientSecret,
-        },
-        signal,
-      });
+      const resp = await sendSearchRequest(
+        () =>
+          fetch(url, {
+            headers: {
+              "X-Naver-Client-Id": clientId,
+              "X-Naver-Client-Secret": clientSecret,
+            },
+            signal,
+          }),
+        signal
+      );
       if (!resp.ok) {
         throw new Error(`${kind} HTTP ${resp.status}`);
       }
@@ -347,16 +390,23 @@ export const daumAdapter: EngineAdapter = async (query) => {
 
   try {
     // 카카오 검색 헬퍼 — 주어진 쿼리로 web·blog·cafe 3개 동시 호출.
+    // 요청이 실제로 실패한 횟수(HTTP 오류·네트워크 오류). 0 이면 "검색은 정상인데 결과가 0건"이다(2026-10-18 ⑤).
+    let kakaoFailures = 0;
     const searchKakao = async (q: string): Promise<DaumSearchDoc[]> => {
       const endpoints = ["web", "blog", "cafe"];
       const res = await Promise.allSettled(
         endpoints.map(async (kind) => {
           const url = `https://dapi.kakao.com/v2/search/${kind}?query=${encodeURIComponent(q)}&size=10`;
-          const resp = await fetch(url, {
-            headers: { Authorization: `KakaoAK ${restKey}` },
-            signal: query.signal,
-          });
+          const resp = await sendSearchRequest(
+            () =>
+              fetch(url, {
+                headers: { Authorization: `KakaoAK ${restKey}` },
+                signal: query.signal,
+              }),
+            query.signal
+          );
           if (!resp.ok) {
+            kakaoFailures += 1;
             return [];
           }
           const data = (await resp.json()) as { documents?: DaumSearchDoc[] };
@@ -366,6 +416,7 @@ export const daumAdapter: EngineAdapter = async (query) => {
       if (query.signal?.aborted) {
         throw query.signal.reason ?? new DOMException("Aborted", "AbortError");
       }
+      kakaoFailures += res.filter((r) => r.status === "rejected").length;
       return res.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
     };
 
@@ -384,6 +435,18 @@ export const daumAdapter: EngineAdapter = async (query) => {
     ]);
 
     if (promptDocs.length === 0 && brandDocs.length === 0) {
+      // 검색 요청이 모두 정상이었는데 문서가 0건이면 "측정 실패"가 아니라 "다음에서 안 나옴(미노출)"이다.
+      //   (진단: 측정 못 함 칸 5개가 전부 다음 이름 질문의 0건 응답이었다.) 요청이 하나라도 실패했으면 예전처럼 오류.
+      if (kakaoFailures === 0) {
+        return makeEmptySearchResponse(
+          "daum",
+          query.prompt,
+          Date.now() - start,
+          {
+            includeQuery: false,
+          }
+        );
+      }
       return makeErrorResponse(
         "daum",
         "Daum/Kakao 검색 결과 없음",

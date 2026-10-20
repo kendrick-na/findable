@@ -205,6 +205,97 @@ export function defaultConsumerQuestions(input: {
   return [ko[0], ko[1], ko[3], en[0]] as DefaultConsumerQuestion[];
 }
 
+/**
+ * 업종이 `other`·미지정일 때, 사이트 근거로 검증된 '서비스 분야 이름'(categoryPhrase)으로 만든 기본 질문(2026-10-18, 진단 ③).
+ *
+ * 왜: 업종이 `other` 면 위 `defaultConsumerQuestions` 가 null 이라 기본 질문이 0개였다 — 생성기가 못 낸 날엔 질문이 통째로 비었다
+ *   (업종 '기타' 7곳 중 6곳 미측정). 분야 이름은 생성 호출이 이미 만들고 `vetCategoryPhrase` 가 사이트 문구와 대조한 값이라 추가 호출·원가가 없다.
+ * 한국어 분야 이름은 한국어 질문에만, 영어(한글 없는) 분야 이름은 영어 질문에만 쓴다 — 번역해서 지어내지 않는다.
+ * 업종이 있는 10개 경로는 이 함수를 타지 않는다(출력 불변).
+ */
+export function defaultConsumerQuestionsFromPhrase(input: {
+  brandName: string;
+  language: "en" | "ko";
+  phrase: string | null | undefined;
+}): DefaultConsumerQuestion[] | null {
+  const phrase = input.phrase?.trim();
+  if (!phrase) {
+    return null;
+  }
+  const hasHangul = HANGUL_RE.test(phrase);
+  if (input.language === "ko" && hasHangul) {
+    return [
+      { nameless: true, language: "ko", text: `${phrase} 추천해줘` },
+      { nameless: true, language: "ko", text: `${phrase} 뭐가 좋아?` },
+      {
+        nameless: true,
+        language: "ko",
+        text: `${phrase} 처음 고를 때 뭘 봐야 해?`,
+      },
+      {
+        nameless: false,
+        language: "ko",
+        text: `${input.brandName} 후기 어때?`,
+      },
+    ];
+  }
+  if (input.language === "en" && !hasHangul) {
+    return [
+      {
+        nameless: true,
+        language: "en",
+        text: `Can you recommend ${phrase} companies?`,
+      },
+      {
+        nameless: true,
+        language: "en",
+        text: `What are the best ${phrase} options?`,
+      },
+      {
+        nameless: true,
+        language: "en",
+        text: `What should I look for when choosing ${phrase}?`,
+      },
+      {
+        nameless: false,
+        language: "en",
+        text: `What do people say about ${input.brandName}?`,
+      },
+    ];
+  }
+  return null;
+}
+
+/**
+ * 이름 질문 보장용 고정 문형(2026-10-18, 진단 ⑥). 생성기가 이름 질문을 하나도 못 냈을 때만 코드가 채운다.
+ * 브랜드 이름은 입력 그대로 넣으므로 `brand_missing`(이름 표기가 어긋나 전부 폐기) 문제가 구조적으로 생기지 않는다.
+ */
+export function fixedBrandQuestions(
+  brandName: string,
+  scope: PlanMarketScope | null | undefined
+): PlanQuestion[] {
+  const name = brandName.trim();
+  if (name.length < 2) {
+    return [];
+  }
+  const forms = {
+    ko: [`${name} 후기 어때?`, `${name} 장단점 알려줘`, `${name} 어떤 곳이야?`],
+    en: [
+      `What do people say about ${name}?`,
+      `What are the pros and cons of ${name}?`,
+      `What is ${name} known for?`,
+    ],
+  } as const;
+  const targets = targetCounts(scope).brand;
+  return (["ko", "en"] as const).flatMap((language) =>
+    forms[language].slice(0, targets[language]).map((text) => ({
+      language,
+      text,
+      type: "brand" as const,
+    }))
+  );
+}
+
 // ── 자동 검사 ────────────────────────────────────────────────────────────
 const NON_IDENTITY_CHAR_RE = /[^a-z0-9가-힣]/g;
 const LIST_MARKER_RE = /^\s*[-*\d.)\s]+/;
@@ -268,6 +359,11 @@ export interface PlanGuardContext {
   allowEngineNames?: boolean;
   /** 우리 이름·별칭·사이트명·도메인 이름(질문에 들어가면 이름 없는 질문이 아니다). */
   brandNames: readonly string[];
+  /**
+   * 이름 질문(type=brand)을 **통과시킬 때만** 더 허용하는 표기 변형(법인 꼬리표 뗀 이름·제목 앞부분 등, 진단 ③).
+   * 이름 없는 질문의 「이름이 들어갔다」 판정에는 쓰지 않는다 → 이 값이 없거나 꺼져 있으면 예전과 같다.
+   */
+  brandVariants?: readonly string[];
   /** 승인·등록된 경쟁사 이름(있으면 비교·대안 질문에 쓸 수 있다). */
   competitors?: readonly string[];
   /** 업종 enum 값 — 업종별 금지 질문 틀을 고른다(없으면 중립 틀). */
@@ -297,6 +393,48 @@ function containsAnyName(text: string, names: readonly string[]): boolean {
     .map(compact)
     .filter((n) => n.length >= MIN_NAME_KEY_LENGTH)
     .some((n) => key.includes(n));
+}
+
+const CORP_AFFIX_RE =
+  /\(주\)|주식회사|㈜|\b(co|corp|corporation|inc|ltd|llc|company)\b\.?|코리아|korea|official|공식|\.com|\.co\.kr|\.kr/gi;
+const TITLE_SPLIT_RE = /\s*[|\-–—:·•]\s*/;
+const MIN_LATIN_VARIANT_LENGTH = 3;
+
+/**
+ * 이름 질문 표기 변형(진단 ③, 플래그 QUESTION_BRAND_VARIANT_ENABLED). 후보 9~18개 중 12~17개가 `brand_missing` 으로 버려진
+ * 원인은 이름 표기가 어긋나는 것으로 **추정**된다(모델이 법인 꼬리표·제목 앞부분만 쓰는 경우).
+ * 입력 이름·별칭·사이트 제목/H1 앞부분에서 **글자만 바꾸는** 변형(법인 꼬리표 제거·공백 첫 낱말)만 만든다 — 번역·음역은 하지 않는다.
+ */
+export function expandBrandVariants(
+  sources: readonly (string | null | undefined)[]
+): string[] {
+  const out = new Set<string>();
+  const add = (raw: string) => {
+    const key = compact(raw);
+    const latin = !HANGUL_RE.test(key);
+    if (
+      key.length >= MIN_NAME_KEY_LENGTH &&
+      (!latin || key.length >= MIN_LATIN_VARIANT_LENGTH) &&
+      !GENERIC_TOKENS.has(key)
+    ) {
+      out.add(raw.trim());
+    }
+  };
+  for (const source of sources) {
+    const value = (source ?? "").trim();
+    if (!value) {
+      continue;
+    }
+    const stripped = value.replace(CORP_AFFIX_RE, " ").trim();
+    add(stripped);
+    const head = value.split(TITLE_SPLIT_RE)[0] ?? "";
+    add(head.replace(CORP_AFFIX_RE, " "));
+    const words = stripped.split(WHITESPACE_RE).filter(Boolean);
+    if (words.length > 1 && words[0]) {
+      add(words[0]);
+    }
+  }
+  return [...out];
 }
 
 function hasSiteEvidence(text: string, siteText: string): boolean {
@@ -528,10 +666,25 @@ export function industryFrame(
 export function fixedAlternativeQuestions(
   industry: string | null | undefined,
   scope: PlanMarketScope | null | undefined,
-  categoryPhrase?: string | null
+  categoryPhrase?: string | null,
+  options: { phraseOnly?: boolean } = {}
 ): PlanQuestion[] {
   const label = industryLabel(industry);
   if (!label) {
+    // 업종이 `other`·미지정이어도(진단 ③) 사이트 근거로 검증된 한국어 분야 이름이 있으면 그 문형만 쓴다(영어는 지어내지 않는다).
+    if (
+      options.phraseOnly &&
+      categoryPhrase &&
+      HANGUL_RE.test(categoryPhrase)
+    ) {
+      return categoryAlternativeForms(categoryPhrase)
+        .slice(0, targetCounts(scope).alternative.ko)
+        .map((text) => ({
+          language: "ko" as const,
+          text,
+          type: "alternative" as const,
+        }));
+    }
     return [];
   }
   const forms = industryFrame(industry).alternativeForms;
@@ -716,6 +869,17 @@ export function findUnknownProperNoun(
 }
 
 /** 질문 1개를 유형 규칙에 비춰 검사한다. 통과면 null, 아니면 버리는 이유. */
+/** 이름 질문의 이름 확인 — 입력 이름이 없으면 표기 변형(플래그 켜짐일 때만 채워짐)도 인정한다. */
+function brandNameReason(
+  text: string,
+  hasName: boolean,
+  ctx: PlanGuardContext
+): DropReason | null {
+  return hasName || containsAnyName(text, ctx.brandVariants ?? [])
+    ? null
+    : "brand_missing";
+}
+
 export function checkQuestion(
   q: PlanQuestion,
   ctx: PlanGuardContext
@@ -749,7 +913,7 @@ export function checkQuestion(
   }
   const hasName = containsAnyName(text, ctx.brandNames);
   if (q.type === "brand") {
-    return hasName ? null : "brand_missing";
+    return brandNameReason(text, hasName, ctx);
   }
   if (hasName) {
     return "name_in_nameless";
