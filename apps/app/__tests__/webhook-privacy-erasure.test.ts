@@ -59,7 +59,7 @@ vi.mock("@repo/database", () => {
       return Promise.resolve(1);
     },
     deletedClerkUser: { findUnique: h.tombstoneLookup },
-    user: { upsert: h.userUpsert, update: h.userUpdate },
+    user: { upsert: h.userUpsert, updateMany: h.userUpdate },
   };
   return {
     database: {
@@ -149,7 +149,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.presence.mockResolvedValue("exists");
   h.userUpsert.mockResolvedValue({});
-  h.userUpdate.mockResolvedValue({});
+  h.userUpdate.mockResolvedValue({ count: 1 });
   h.tombstones.clear();
   h.locks.length = 0;
   h.tombstoneLookup.mockImplementation(
@@ -266,13 +266,64 @@ describe("⛔ 조직 연결 웹훅도 표식 조회 실패를 삼키지 않는�
     });
   });
 
-  it("회원 행이 아직 없는 정상 순서 문제(update 실패)는 기존처럼 201", async () => {
-    h.userUpdate.mockRejectedValueOnce(new Error("Record not found"));
+  it("회원 행이 아직 없는 정상 순서 문제(0건)만 201 로 둔다", async () => {
+    h.userUpdate.mockResolvedValueOnce({ count: 0 });
     const res = await post("organizationMembership.created", {
       organization: { id: "org_1" },
       public_user_data: { user_id: "user_9" },
     });
     expect(res.status).toBe(201);
+    expect(h.logWarn).toHaveBeenCalledWith(
+      "webhook.user.org_link_no_user_row",
+      {
+        userId: "user_9",
+        orgId: "org_1",
+      }
+    );
+  });
+
+  it.each([
+    "organizationMembership.created",
+    "organizationMembership.deleted",
+  ])("🔴 %s: 실제 DB 쓰기 실패는 500(재시도) — 분석 이벤트도 안 보낸다", async (type) => {
+    h.userUpdate.mockRejectedValueOnce(new Error("connection reset"));
+    const res = await post(type, {
+      organization: { id: "org_1" },
+      public_user_data: { user_id: "user_9" },
+    });
+    expect(res.status).toBe(500);
+    expect(h.groupIdentify).not.toHaveBeenCalled();
+    expect(h.capture).not.toHaveBeenCalled();
+    expect(h.logError).toHaveBeenCalledWith("webhook.auth.failed", {
+      eventId: "msg_1",
+      eventType: type,
+      status: 500,
+    });
+  });
+
+  it.each([
+    "organizationMembership.created",
+    "organizationMembership.deleted",
+  ])("🔴 %s: 탈퇴 표식이 있으면 쓰지 않고 groupIdentify·capture 도 보내지 않는다(200)", async (type) => {
+    h.tombstones.add("user_9");
+    const res = await post(type, {
+      organization: { id: "org_1" },
+      public_user_data: { user_id: "user_9" },
+    });
+    expect(res.status).toBe(200);
+    expect(h.userUpdate).not.toHaveBeenCalled();
+    expect(h.groupIdentify).not.toHaveBeenCalled();
+    expect(h.capture).not.toHaveBeenCalled();
+  });
+
+  it("정상 연결이면 201 + 분석 이벤트 전송", async () => {
+    const res = await post("organizationMembership.created", {
+      organization: { id: "org_1" },
+      public_user_data: { user_id: "user_9" },
+    });
+    expect(res.status).toBe(201);
+    expect(h.groupIdentify).toHaveBeenCalledTimes(1);
+    expect(h.capture).toHaveBeenCalledTimes(1);
   });
 });
 

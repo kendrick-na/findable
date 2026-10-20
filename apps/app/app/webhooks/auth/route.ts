@@ -314,38 +314,78 @@ const handleOrganizationUpdated = async (
  * ⚠️ DB 실패가 웹훅 200 을 막지 않게 한다(`upsertUserToDb` 와 같은 방침) —
  *   Clerk 가 재시도 폭주하는 것보다 로그를 남기고 넘어가는 편이 낫다.
  */
+/**
+ * 조직 연결 결과. 호출부가 이것으로 응답·분석 전송을 정한다(코덱스 4차).
+ *  - linked: 연결/해제함
+ *  - tombstoned: 탈퇴 표식 있음 → 쓰지 않음, **분석 이벤트도 보내지 않음**
+ *  - no_user_row: 회원 행이 아직 없음(user.created 보다 먼저 온 정상 순서 문제) → 201 유지
+ *  - write_failed: 실제 DB 쓰기 실패 → 500(Clerk 재시도)
+ * 잠금·표식 조회 실패(GuardLookupError)는 던진다 → POST 가 500.
+ */
+type OrgLinkResult = "linked" | "no_user_row" | "tombstoned" | "write_failed";
+
 const linkUserToOrg = async (
   userId: string,
   orgId: string | null
-): Promise<void> => {
+): Promise<OrgLinkResult> => {
+  let updated = 0;
   try {
     // 탈퇴·소유권 이전과 같은 잠금 안에서 쓴다(이전 중 새 소유자가 빠져나가는 경합 방지).
-    // 탈퇴 표식이 있으면 쓰지 않는다(어차피 회원 행이 없다).
-    await writeUnlessDeleted(database, userId, (tx) =>
-      tx.user.update({
-        where: { id: userId },
-        data: { organizationId: orgId },
-      })
-    );
+    // updateMany 라 회원 행이 없으면 오류 대신 0건 → 「아직 없음」과 「쓰기 실패」를 가른다.
+    const outcome = await writeUnlessDeleted(database, userId, async (tx) => {
+      updated = (
+        await tx.user.updateMany({
+          where: { id: userId },
+          data: { organizationId: orgId },
+        })
+      ).count;
+    });
+    if (outcome === "tombstoned") {
+      return "tombstoned";
+    }
+    if (updated === 0) {
+      // 아직 user.created 가 안 들어온 순서(정상 가능 경로) — 기존처럼 201.
+      log.warn("webhook.user.org_link_no_user_row", { userId, orgId });
+      return "no_user_row";
+    }
+    return "linked";
   } catch (error) {
-    // 🔴 잠금·탈퇴 표식 조회 실패(표 없음·DB 장애)는 삼키지 않는다 → 호출부가 500(재시도).
-    //   삼키면 마이그레이션 누락·DB 장애가 「조용한 조직 연결 누락」이 된다(코덱스 3차).
+    // 🔴 잠금·탈퇴 표식 조회 실패(표 없음·DB 장애)는 그대로 올린다 → POST 가 500(재시도).
     if (error instanceof GuardLookupError) {
       throw error;
     }
-    // 아직 user.created 가 안 들어온 순서면 여기서 실패한다(정상 가능 경로).
+    // 🔴 실제 쓰기 실패도 삼키지 않는다 → 호출부가 500(코덱스 4차). 예전엔 201 로 끝나 조용히 누락됐다.
     log.error("webhook.user.org_link_failed", {
       userId,
       orgId,
       error: error instanceof Error ? error.message : String(error),
     });
+    return "write_failed";
   }
+};
+
+/** 조직 연결 결과가 응답을 정해야 하면 그 Response, 계속(분석 전송)하면 null. */
+const stopForOrgLink = (result: OrgLinkResult): Response | null => {
+  if (result === "write_failed") {
+    return new Response("Organization link failed", { status: 500 });
+  }
+  if (result === "tombstoned") {
+    return new Response("Ignored: user was deleted", { status: 200 });
+  }
+  return null;
 };
 
 const handleOrganizationMembershipCreated = async (
   data: OrganizationMembershipJSON
 ) => {
-  await linkUserToOrg(data.public_user_data.user_id, data.organization.id);
+  const linked = await linkUserToOrg(
+    data.public_user_data.user_id,
+    data.organization.id
+  );
+  const stop = stopForOrgLink(linked);
+  if (stop) {
+    return stop;
+  }
 
   analytics?.groupIdentify({
     groupKey: data.organization.id,
@@ -367,7 +407,11 @@ const handleOrganizationMembershipDeleted = async (
   // 🔴 next-forge 기본 코드의 `// Need to unlink the user from the group` 이
   //   **주석으로만 남아 있었다**(N-46). 나가면 연결을 끊는다 — 안 끊으면 운영 콘솔이
   //   **이미 나간 사람을 가입자로** 계속 보여준다.
-  await linkUserToOrg(data.public_user_data.user_id, null);
+  const unlinked = await linkUserToOrg(data.public_user_data.user_id, null);
+  const stop = stopForOrgLink(unlinked);
+  if (stop) {
+    return stop;
+  }
 
   analytics?.capture({
     event: "Organization Member Deleted",
