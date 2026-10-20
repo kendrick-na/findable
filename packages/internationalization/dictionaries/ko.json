@@ -2217,6 +2217,13 @@
         "error": "오류",
         "partial": "시간 예산을 다 써서 중간에 멈춤 — 다음 행부터 자동으로 이어서 불러옵니다"
       },
+      "identity": {
+              "unchecked": "대조 전",
+              "confirmed": "확정(홈페이지 사업자번호 일치)",
+              "probable": "지역 일치·보류",
+              "name_only": "이름만 일치·보류",
+              "mismatch": "불일치"
+      },
       "ingestReason": {
         "ok": "처리 완료",
         "timeout": "시간 예산 초과로 중단 — 다음 행부터 이어서 불러옵니다",
