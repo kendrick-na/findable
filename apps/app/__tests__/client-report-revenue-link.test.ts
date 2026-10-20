@@ -183,21 +183,36 @@ describe("previewRevenueLink — 연결 규칙", () => {
       domain: "www.numbuzin.com",
     });
     db.brand.findUnique.mockResolvedValue({ businessNumber: null });
-    db.companyFact.findMany.mockResolvedValue([
-      {
-        asOf: "2025",
-        source: "opendart",
-        sourceRef: "20260331002615",
-        value: {
-          amount: 324_958_207_706,
-          basis: "audit_report",
-          currency: "KRW",
-          fiscalYear: "2025",
-          fsDiv: "CFS",
-          receiptNo: "20260331002615",
-        },
-      },
-    ]);
+    // DART 매출은 동일성(identity) 확정이 있어야 통과 — 매출 조회와 동일성 조회를 field 로 나눈다.
+    db.companyFact.findMany.mockImplementation(
+      ({ where }: { where: { field: string } }) =>
+        Promise.resolve(
+          where.field === "identity"
+            ? [
+                {
+                  asOf: "2026-10-21",
+                  field: "identity",
+                  source: "identity_check",
+                  value: { level: "confirmed" },
+                },
+              ]
+            : [
+                {
+                  asOf: "2025",
+                  source: "opendart",
+                  sourceRef: "20260331002615",
+                  value: {
+                    amount: 324_958_207_706,
+                    basis: "audit_report",
+                    currency: "KRW",
+                    fiscalYear: "2025",
+                    fsDiv: "CFS",
+                    receiptNo: "20260331002615",
+                  },
+                },
+              ]
+        )
+    );
   });
 
   test("번호 하나 + 같은 번호의 회사 하나 → 자동 확정, 미리보기까지", async () => {
@@ -296,5 +311,46 @@ describe("API 게이트", () => {
     expect(src).toContain("await requireAdmin()");
     expect(src).toContain("status: 403");
     expect(src).not.toMatch(/database\./);
+  });
+  test("DART 매출인데 동일성이 확정되지 않으면 identity_unconfirmed(숫자 안 만듦)", async () => {
+    db.auditJob.findUnique.mockResolvedValue({
+      brandId: "b1",
+      domain: "www.numbuzin.com",
+    });
+    db.brand.findUnique.mockResolvedValue({ businessNumber: null });
+    db.companyFact.findMany.mockImplementation(
+      ({ where }: { where: { field: string } }) =>
+        Promise.resolve(
+          where.field === "identity"
+            ? [
+                {
+                  asOf: "2026-10-21",
+                  field: "identity",
+                  source: "identity_check",
+                  value: { level: "name_only" },
+                },
+              ]
+            : [
+                {
+                  asOf: "2025",
+                  source: "opendart",
+                  sourceRef: "20260331002615",
+                  value: {
+                    amount: 324_958_207_706,
+                    basis: "audit_report",
+                    currency: "KRW",
+                    fiscalYear: "2025",
+                    fsDiv: "CFS",
+                    receiptNo: "20260331002615",
+                  },
+                },
+              ]
+        )
+    );
+    const out = await link.previewRevenueLink({
+      auditJobId: JOB,
+      companyId: null,
+    });
+    expect(out.state).toBe("identity_unconfirmed");
   });
 });

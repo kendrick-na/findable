@@ -17,6 +17,7 @@ import {
 } from "../sources/contact-email";
 import { composeCompanyDraft } from "./draft";
 import { isMissingTableError } from "./guard";
+import { type IdentityState, identityStateOf } from "./identity-check";
 import { syncLeadStages } from "./pipeline";
 import {
   buildCompanyWhere,
@@ -236,6 +237,8 @@ export interface CompanyCardData {
   defaultRecipients: string[];
   draft: { body: string; recipient: string; subject: string };
   facts: FactView[];
+  /** 동일성 대조 등급(저장된 값만 — 카드를 열 때 홈페이지를 읽지 않는다) */
+  identity: IdentityState;
   lastJob: {
     completedAt: string | null;
     createdAt: string;
@@ -325,7 +328,7 @@ interface RawFact {
 }
 
 /** 표에 따로 보여 주는 내부 기록 — 기본 정보 목록에서는 뺀다. */
-const HIDDEN_FIELDS = new Set(["sourceRecord", "subIndustry"]);
+const HIDDEN_FIELDS = new Set(["sourceRecord", "subIndustry", "identity"]);
 
 /**
  * 화면에 보일 사실 — (field, 원천)마다 기준일 가장 최근 것 1개를 고른 뒤,
@@ -567,6 +570,7 @@ export async function loadCompanyCard(
       reportUrl,
     }),
     facts: latestFacts(company.facts),
+    identity: identityStateOf(company.facts),
     subIndustries: subIndustryViews(company.facts),
     lastJob: lastJob
       ? {

@@ -189,3 +189,9 @@ function statusKo(s: RevenueStatus): string {
     not_found: "공시 없음",
   }[s];
 }
+
+/** 기관 꼬리표 「(서원대)」 「(소상공)」 「(건양대)」를 떼고 DART 조회 이름으로 쓴다. */
+const INSTITUTION_TAG_RE = /^\((서원대|소상공|건양대)\)\s*/;
+export function stripInstitutionTag(name: string): string {
+  return name.replace(INSTITUTION_TAG_RE, "");
+}

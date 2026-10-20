@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import {
   addCompaniesToSalesList,
+  checkCompanyIdentity,
   findCompanyContacts,
   lookupCompanyRevenue,
   saveCompanyRevenue,
@@ -168,6 +169,39 @@ function RevenueRow({
   const [pending, startTransition] = useTransition();
   const hasRevenue = card.facts.some((f) => f.field === "revenue");
 
+  const [identityMsg, setIdentityMsg] = useState<string | null>(null);
+  const identityText = labels.identity;
+  const checkIdentity = () =>
+    startTransition(async () => {
+      setIdentityMsg(null);
+      try {
+        const result = await checkCompanyIdentity(card.company.id);
+        if (!result.ok) {
+          setIdentityMsg(labels.identityCheck.failed);
+          return;
+        }
+        if (result.kind === "ok") {
+          setIdentityMsg(
+            labels.identityCheck.done.replace(
+              "{level}",
+              identityText[result.level as keyof typeof identityText] ??
+                result.level
+            )
+          );
+        } else {
+          const note: Record<string, string> = {
+            no_dart: labels.identityCheck.noDart,
+            no_domain: labels.identityCheck.noDomain,
+            no_revenue: labels.identityCheck.noRevenue,
+          };
+          setIdentityMsg(note[result.kind] ?? labels.identityCheck.failed);
+        }
+        router.refresh();
+      } catch {
+        setIdentityMsg(labels.identityCheck.failed);
+      }
+    });
+
   const lookup = () =>
     startTransition(async () => {
       try {
@@ -221,6 +255,21 @@ function RevenueRow({
           {text.title}
           {hasRevenue ? "" : ` · ${text.none}`}
         </span>
+        {identityMsg ? (
+          <span className={`text-xs ${subtle}`}>{identityMsg}</span>
+        ) : null}
+        <span className={`text-xs ${subtle}`} data-testid="identity-badge">
+          {identityText[card.identity]}
+        </span>
+        <Button
+          disabled={pending || !hasRevenue}
+          onClick={checkIdentity}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {labels.identityCheck.button}
+        </Button>
         <span className="flex gap-1.5">
           <Button
             disabled={pending}

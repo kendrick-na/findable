@@ -2217,6 +2217,22 @@
         "error": "오류",
         "partial": "시간 예산을 다 써서 중간에 멈춤 — 다음 행부터 자동으로 이어서 불러옵니다"
       },
+      "identityCheck": {
+        "button": "홈페이지 대조",
+        "checking": "대조 중…",
+        "failed": "대조하지 못했어요",
+        "noRevenue": "매출이 확인된 회사만 대조할 수 있어요",
+        "noDart": "DART 고유번호가 없어 대조할 수 없어요",
+        "noDomain": "홈페이지 주소가 없어요",
+        "done": "대조 완료 — {level}"
+      },
+      "identity": {
+        "unchecked": "대조 전",
+        "confirmed": "확정(홈페이지 사업자번호 일치)",
+        "probable": "지역 일치·보류",
+        "name_only": "이름만 일치·보류",
+        "mismatch": "불일치"
+      },
       "ingestReason": {
         "ok": "처리 완료",
         "timeout": "시간 예산 초과로 중단 — 다음 행부터 이어서 불러옵니다",

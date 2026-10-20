@@ -6,7 +6,12 @@ import { log } from "@repo/observability/log";
 import { createTimeBudget } from "@repo/observability/time-budget";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { seoulToday } from "@/lib/ax-mail/contact-basis";
 import { withDiscovery } from "@/lib/ax-mail/discovery/guard";
+import {
+  runCompanyIdentityCheck,
+  toHomepageStatus,
+} from "@/lib/ax-mail/discovery/identity-check";
 import { prismaCompanyStore } from "@/lib/ax-mail/discovery/ingest";
 import {
   API_SOURCES,
@@ -34,13 +39,17 @@ import {
   SALES_LEAD_STATUSES,
 } from "@/lib/ax-mail/discovery/view";
 import { withAuditRevenue } from "@/lib/ax-mail/sources/company-card";
+import { extractBizNumbers } from "@/lib/ax-mail/sources/company-identity";
 import {
   disclosedRevenueRow,
   type ManualRevenueUnit,
   parseManualRevenue,
   type RevenueFactRow,
 } from "@/lib/ax-mail/sources/company-revenue";
-import { findContactEmails } from "@/lib/ax-mail/sources/contact-email";
+import {
+  findContactEmails,
+  readHomepageText,
+} from "@/lib/ax-mail/sources/contact-email";
 import { fetchDart } from "@/lib/ax-mail/sources/opendart";
 import { runMeasureOne } from "./measure";
 
@@ -519,4 +528,112 @@ export async function saveCompanyRevenue(
   });
   revalidatePath(DISCOVER_PATH);
   return { ok: true, found: true };
+}
+
+/**
+ * 동일성 대조 1회 — 회사 한 곳, 홈페이지 최대 4쪽, 사업자번호를 찾으면 멈춘다.
+ * 매출이 확인된 회사(revenue 사실 있음)와 DART 고유번호가 있는 회사에만 돈다. 결과는 identity 사실 한 줄.
+ */
+export async function checkCompanyIdentity(
+  companyId: string
+): Promise<
+  | { ok: true; kind: "ok"; level: string; pagesRead: number }
+  | { ok: true; kind: "no_dart" | "no_revenue" | "no_domain" }
+  | { ok: false; error: "invalid" | "not_found" }
+  | Failure
+> {
+  const adminId = await requireAdmin();
+  if (!idSchema.safeParse(companyId).success) {
+    return { ok: false, error: "invalid" };
+  }
+  const now = new Date();
+  const guarded = await withDiscovery(async () => {
+    const company = await database.company.findUnique({
+      select: {
+        businessNumber: true,
+        dartCorpCode: true,
+        domain: true,
+        legalName: true,
+      },
+      where: { id: companyId },
+    });
+    if (!company) {
+      return { kind: "not_found" as const };
+    }
+    if (!company.domain) {
+      return { kind: "no_domain" as const };
+    }
+    const revenue = await database.companyFact.findFirst({
+      select: { id: true },
+      where: { companyId, field: "revenue" },
+    });
+    const outcome = await runCompanyIdentityCheck({
+      checkedOn: seoulToday(now),
+      company,
+      fetchedAt: now,
+      hasRevenue: revenue !== null,
+      readHomepageNumbers: async () => {
+        const home = await readHomepageText(company.domain as string, {
+          maxPages: 4,
+          stopWhen: (text) => extractBizNumbers(text).length > 0,
+        });
+        return {
+          numbers: extractBizNumbers(home.text),
+          pagesRead: home.pagesRead,
+          status: toHomepageStatus(home.status),
+        };
+      },
+      save: async (fact) => {
+        const value = fact.value as unknown as Prisma.InputJsonValue;
+        await database.companyFact.upsert({
+          create: {
+            asOf: fact.asOf,
+            companyId,
+            fetchedAt: fact.fetchedAt,
+            field: fact.field,
+            source: fact.source,
+            sourceRef: fact.sourceRef,
+            value,
+          },
+          update: {
+            fetchedAt: fact.fetchedAt,
+            sourceRef: fact.sourceRef,
+            value,
+          },
+          where: {
+            companyId_field_source_asOf: {
+              asOf: fact.asOf,
+              companyId,
+              field: fact.field,
+              source: fact.source,
+            },
+          },
+        });
+      },
+    });
+    return outcome.kind === "ok"
+      ? {
+          kind: "ok" as const,
+          level: outcome.level,
+          pagesRead: outcome.pagesRead,
+        }
+      : { kind: outcome.kind };
+  });
+  if (guarded.state !== "ready") {
+    return blocked(guarded.state);
+  }
+  const r = guarded.value;
+  if (r.kind === "not_found") {
+    return { ok: false, error: "not_found" };
+  }
+  log.info("admin.sales_discovery.identity", {
+    adminId,
+    companyId,
+    kind: r.kind,
+  });
+  revalidatePath(DISCOVER_PATH);
+  if (r.kind === "ok") {
+    return { ok: true, kind: "ok", level: r.level, pagesRead: r.pagesRead };
+  }
+  return { ok: true, kind: r.kind };
 }
